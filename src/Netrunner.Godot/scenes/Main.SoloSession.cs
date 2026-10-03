@@ -1,7 +1,6 @@
 using System.Globalization;
 using Godot;
 using Netrunner.AI;
-using Netrunner.Cards;
 using Netrunner.Match;
 
 namespace Netrunner.GodotClient;
@@ -87,10 +86,8 @@ public partial class Main
 	{
 		if (_soloSession is not null) return _soloSession;
 		if (!HasAuthenticatedOfficialContent()) throw new InvalidOperationException("Installed official game content is required to load saves.");
-		var behavior = GatewayBehaviorCatalog.Create();
-		CardDataSet data = _embeddedCardData!;
-		_soloSession = _applicationSoloSession ??= new(behavior, _runtimeCardCatalog!,
-			request => FullMatchDefinition.FromRequest(request, data, behavior), SoloSaveDirectory());
+		// D-EL-8: each save loads with the content of the format it records.
+		_soloSession = _applicationSoloSession ??= new(PlayFormats.SaveContent, SoloSaveDirectory());
 		if (_coordinator is not null) _soloSession.SetActiveSession(_coordinator);
 		return _soloSession;
 	}

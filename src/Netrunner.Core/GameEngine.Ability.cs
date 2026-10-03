@@ -30,12 +30,13 @@ public static partial class GameEngine
     /// </summary>
     internal static IReadOnlyList<AbilityActionParameters> MaterializeAbilityActionParameters(
         GameState state,
-        IBehaviorCatalog behaviorCatalog)
+        IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog? runtimeCardCatalog = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(behaviorCatalog);
         return new ReadOnlyCollection<AbilityActionParameters>(
-            MaterializeAbilityActionParameters(WorkingState.From(state, behaviorCatalog)).ToArray());
+            MaterializeAbilityActionParameters(WorkingState.From(state, behaviorCatalog, runtimeCardCatalog)).ToArray());
     }
 
     private static List<AbilityActionParameters> MaterializeAbilityActionParameters(WorkingState working)
@@ -54,8 +55,10 @@ public static partial class GameEngine
         var materialized = new List<AbilityActionParameters>();
         foreach ((CardInstanceState source, ZoneState sourceZone) in EnumerateAbilitySources(working))
         {
+            bool inRunnerScoreArea = sourceZone.Kind == ZoneKind.RunnerScore;
+            bool inArchives = sourceZone.Kind == ZoneKind.CorpDiscard;
             if (source.OwnerSide != window.ControllerSide
-                || sourceZone.OwnerSide != source.OwnerSide)
+                || sourceZone.OwnerSide != source.OwnerSide && !inRunnerScoreArea)
             {
                 continue;
             }
@@ -80,6 +83,12 @@ public static partial class GameEngine
 
             foreach (BehaviorPaidAbility ability in definition.PaidAbilities)
             {
+                if (inRunnerScoreArea && !ability.UsableFromRunnerScoreArea
+                    || inArchives && !ability.UsableFromArchives)
+                {
+                    continue;
+                }
+
                 if (!AbilityWindowMatches(window, ability)
                     || !AbilityConditionsMatch(working, source, window.ControllerId, ability.Conditions)
                     || !CanAffordAbility(working, source, window.ControllerId, ability))
@@ -280,7 +289,8 @@ public static partial class GameEngine
             || ability.Targets[0].Kind != BehaviorTargetKind.AccessedCard
             || window.RunTiming != BehaviorAbilityTiming.BreachAccessPaidWindow
             || working.RunState is not { Step: RunTimingStep.BreachAccessAbility } run
-            || !TryGetCurrentAccessCard(working, run, out CardInstanceState? card))
+            || !TryGetCurrentAccessCard(working, run, out CardInstanceState? card)
+            || !BehaviorCardMatches(working, card!.Id, ability.Targets[0].Filter))
         {
             return [];
         }
@@ -385,7 +395,8 @@ public static partial class GameEngine
 
         return !requireLiveSource
             || TryGetCurrentAccessCard(working, run, out CardInstanceState? card)
-                && card!.Id == frame.TargetCardIds[0];
+                && card!.Id == frame.TargetCardIds[0]
+                && BehaviorCardMatches(working, card.Id, declaration.Targets[0].Filter);
     }
 
     private static bool AdditionalCostSelectionsMatchDeclaration(
@@ -787,7 +798,8 @@ public static partial class GameEngine
             };
 
             bool corpServer = server is not null;
-            if (!runnerRig && !corpServer)
+            bool identityOrScore = IsIdentityOrScoreAbilityZone(zone);
+            if (!runnerRig && !corpServer && !identityOrScore)
             {
                 continue;
             }
@@ -813,9 +825,39 @@ public static partial class GameEngine
                 {
                     yield return (card, zone);
                 }
+                else if (identityOrScore && IsIdentityOrScoreAbilitySource(card, zone))
+                {
+                    yield return (card, zone);
+                }
             }
         }
     }
+
+    /// <summary>Identity zones and score areas, whose faceup cards may have paid abilities (Elevation).</summary>
+    internal static bool IsIdentityOrScoreAbilityZone(ZoneState zone) =>
+        zone.ServerId is null
+        && zone.Kind is ZoneKind.CorpIdentity or ZoneKind.RunnerIdentity or ZoneKind.CorpScore or ZoneKind.RunnerScore
+            or ZoneKind.CorpDiscard;
+
+    /// <summary>
+    /// A faceup identity in its owner's identity zone, or a Corp agenda in
+    /// either score area (an agenda's ability in the Runner's score area also
+    /// needs <see cref="BehaviorPaidAbility.UsableFromRunnerScoreArea"/>).
+    /// </summary>
+    internal static bool IsIdentityOrScoreAbilitySource(CardInstanceState card, ZoneState zone) =>
+        zone.ServerId is null
+        && zone.Kind == ZoneKind.CorpDiscard
+        && card.OwnerSide == PlayerSide.Corp
+        && zone.OwnerSide == PlayerSide.Corp
+        || card.FaceUp
+        && zone.ServerId is null
+        && zone.Kind switch
+        {
+            ZoneKind.CorpIdentity => card.OwnerSide == PlayerSide.Corp && zone.OwnerSide == PlayerSide.Corp,
+            ZoneKind.RunnerIdentity => card.OwnerSide == PlayerSide.Runner && zone.OwnerSide == PlayerSide.Runner,
+            ZoneKind.CorpScore or ZoneKind.RunnerScore => card.OwnerSide == PlayerSide.Corp,
+            _ => false,
+        };
 
     private static TurnFactsState? CurrentAbilityFacts(WorkingState working)
     {
@@ -850,6 +892,9 @@ public static partial class GameEngine
             BehaviorZone.RemovedFromGame => side == PlayerSide.Corp
                 ? ZoneKind.CorpRemovedFromGame
                 : ZoneKind.RunnerRemovedFromGame,
+            BehaviorZone.HostedFaceUp => side == PlayerSide.Corp
+                ? ZoneKind.CorpHostedFaceUp
+                : ZoneKind.RunnerHostedFaceUp,
             BehaviorZone.ServerIce or BehaviorZone.ServerRoot => null,
             _ => null,
         };
@@ -937,7 +982,9 @@ public static partial class GameEngine
             // A paid ability has no search continuation; a forged declaration
             // depending on one therefore fails closed.
             BehaviorConditionKind.FoundCard => false,
-            _ => false,
+            BehaviorConditionKind.SourceHostsAtLeast or BehaviorConditionKind.RezzedInstalledCopy
+                => OptionConditionMatches(working, controllerId, source.Id, condition),
+            _ => SharedConditionMatches(working, controllerId, condition) ?? false,
         };
     }
 
@@ -1272,7 +1319,7 @@ public static partial class GameEngine
         CardInstanceState source = GetCard(working, frame.SourceCardId);
 
         if (declaration.Instructions.Any(static instruction =>
-                instruction.Kind == BehaviorInstructionKind.ModifyEncounteredIceStrength)
+                BehaviorEncounterStrengthContracts.IsStrengthInstruction(instruction.Kind))
             && !BehaviorEncounterStrengthContracts.TryGetExecutableInstruction(
                 definition,
                 declaration.Key,
@@ -1379,7 +1426,8 @@ public static partial class GameEngine
             bool validLifecycleZone = (selfTrash && IsAbilityTrashZone(currentSourceZone, source))
                 || (selfRemove && IsAbilityRemoveZone(currentSourceZone, source))
                 || AbilityLifecycleRules.IsEmptyPoolSelfTrash(definition, declaration, frame,
-                    source, currentSourceZone, working.RulesState, working.Turn);
+                    source, currentSourceZone, working.RulesState, working.Turn)
+                || AbilityLifecycleRules.IsSelfPlay(declaration, frame, source, currentSourceZone);
             if (!paid || !validLifecycleZone || (selfTrash && selfRemove))
             {
                 throw new ResolutionFailureException("Ability source card moved outside its permitted lifecycle.");
@@ -1563,7 +1611,11 @@ public static partial class GameEngine
                     PayCreditCost(working, frame.Controller, cost.Amount);
                     break;
                 case BehaviorCostKind.Clicks:
-                    SpendClick(working, frame.Controller);
+                    for (int click = 0; click < cost.Amount; click++)
+                    {
+                        SpendClick(working, frame.Controller);
+                    }
+
                     break;
                 case BehaviorCostKind.LoseClick:
                     ApplyClickDelta(working, frame.Controller, checked(-cost.Amount));

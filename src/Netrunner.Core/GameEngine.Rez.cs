@@ -141,9 +141,15 @@ public static partial class GameEngine
                         RuntimeCardClass.Ice,
                         out int iceCost,
                         out CostQuote? iceQuote)
-                    && corp.Credits >= iceCost)
+                    && corp.Credits + DeclaredHostedCredits(working, PlayerSide.Corp, BehaviorHostedCreditUseKind.RezInServer, currentIce) >= iceCost
+                    && RezRequirementsMet(working, currentIce))
                 {
                     materialized.Add(new RezCardParameters(currentIce.Id, iceCost, iceQuote));
+                }
+
+                if (currentIce is not null && !currentIce.Rezzed && currentIce.ZoneId == attackedIceZone.Id)
+                {
+                    AddForfeitRezVariants(working, corp.Credits, currentIce, materialized);
                 }
             }
 
@@ -154,6 +160,42 @@ public static partial class GameEngine
         }
 
         return materialized;
+    }
+
+    /// <summary>
+    /// EL-REZ-COST-PAYMENT: one rez per agenda in the Corp's score area that
+    /// it can forfeit to pay part of the rez cost (Biawak), when the rest is
+    /// affordable.
+    /// </summary>
+    private static void AddForfeitRezVariants(
+        WorkingState working,
+        int corpCredits,
+        CardInstanceState ice,
+        List<RezCardParameters> materialized)
+    {
+        if (!working.BehaviorCatalog.TryGet(ice.DefinitionId, out CardBehaviorDefinition? definition)
+            || definition.RezForfeitDiscount <= 0
+            || !TryGetRezCostQuote(working, ice, RuntimeCardClass.Ice, out int fullCost, out _)
+            || working.Zones.FirstOrDefault(zone => zone.Kind == ZoneKind.CorpScore) is not { } scoreArea)
+        {
+            return;
+        }
+
+        int reduced = Math.Max(0, fullCost - definition.RezForfeitDiscount);
+        // The same affordability as the ordinary rez: the wallet and declared hosted credits (EL.6 review).
+        if (corpCredits + DeclaredHostedCredits(working, PlayerSide.Corp, BehaviorHostedCreditUseKind.RezInServer, ice) < reduced)
+        {
+            return;
+        }
+
+        foreach (CardInstanceId agendaId in scoreArea.CardIds)
+        {
+            if (working.RuntimeCardCatalog?.TryGet(GetCard(working, agendaId).DefinitionId, out CardRuntimeSpec? spec) == true
+                && spec.CardClass == RuntimeCardClass.Agenda)
+            {
+                materialized.Add(new RezCardParameters(ice.Id, reduced, forfeitAgendaId: agendaId));
+            }
+        }
     }
 
     private static IEnumerable<(ServerState Server, ZoneState Root)> PhysicalServerRoots(WorkingState working)
@@ -195,7 +237,8 @@ public static partial class GameEngine
                 || card.Rezzed
                 || (!isAsset && !isUpgrade)
                 || (isAsset && server.Kind != ServerKind.Remote)
-                || corpCredits < cost)
+                || corpCredits + DeclaredHostedCredits(working, PlayerSide.Corp, BehaviorHostedCreditUseKind.RezInServer, card) < cost
+                || !RezRequirementsMet(working, card))
             {
                 continue;
             }
@@ -264,6 +307,7 @@ public static partial class GameEngine
         RezCardParameters? issued = materialized.FirstOrDefault(candidate =>
             candidate.CardId == parameters.CardId
             && candidate.CreditCost == parameters.CreditCost
+            && candidate.ForfeitAgendaId == parameters.ForfeitAgendaId
             && CostQuotesEqual(candidate.CostQuote, parameters.CostQuote));
         if (issued is null)
         {
@@ -282,10 +326,12 @@ public static partial class GameEngine
         RunState? runParent = isTurnRez ? null : working.RunState;
         PlayerState corp = GetPlayer(working, PlayerSide.Corp);
         int effectiveCost = issued.CreditCost;
-        if (effectiveCost > 0)
+        if (issued.ForfeitAgendaId is { } forfeited)
         {
-            ApplyCreditDelta(working, corp.Id, -effectiveCost);
+            ForfeitScoredAgenda(working, PlayerSide.Corp, forfeited);
         }
+
+        PayCreditsWithDeclaredHosted(working, corp.Id, BehaviorHostedCreditUseKind.RezInServer, card, effectiveCost);
 
         ReplaceCard(working, new CardInstanceState(
             card.Id,
@@ -399,4 +445,11 @@ public static partial class GameEngine
         }
     }
 
+
+    /// <summary>Whether the Corp can pay one of a card's additional rez costs (Plutus).</summary>
+    private static bool RezRequirementsMet(WorkingState working, CardInstanceState card) =>
+        !working.BehaviorCatalog.TryGet(card.DefinitionId, out CardBehaviorDefinition? definition)
+        || definition.RezRequirements is not { } requirements
+        || requirements.Any(requirement =>
+            OptionConditionMatches(working, GetPlayer(working, PlayerSide.Corp).Id, card.Id, requirement));
 }

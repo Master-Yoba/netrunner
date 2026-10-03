@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "startup-2026",
+  "name": "Startup 2026",
+  "effectiveDate": "2026-05-01",
+  "complete": false,
+  "cardPool": "gateway-elevation",
+  "legalPacks": ["sg", "elev"],
+  "missingPacks": ["vantage_point"],
+  "restriction": {
+    "id": "startup-balance-update-26-05",
+    "banned": ["30006", "30040", "30051", "30067", "35045", "36066"],
+    "restricted": []
+  },
+  "deckRules": {
+    "maxCopiesByName": 3,
+    "highValueAgendaLimit": {
+      "minimumPoints": 3,
+      "maximumCards": 3
+    }
+  },
+  "source": {
+    "snapshotId": "startup_10",
+    "cardPoolId": "startup_vantage_point",
+    "note": "System Gateway, Elevation and Vantage Point. Incomplete until Vantage Point lands: it validates decks of the cards this build has but is not offered for play."
+  }
+}

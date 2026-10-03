@@ -43,6 +43,11 @@ public enum InstallInitiationKind
     IceSubroutineNormal = 2,
     /// <summary>Corp ICE install directly inward from a choice ICE subroutine.</summary>
     IceSubroutineInwardIgnoreCosts = 3,
+    /// <summary>
+    /// EL-BEHAVIOR-INSTALL: an install chosen in a <see cref="BehaviorInstallChoiceFrame"/>,
+    /// paid by that frame's cost rule.
+    /// </summary>
+    BehaviorZoneInstall = 4,
 }
 
 /// <summary>
@@ -86,6 +91,7 @@ public enum EffectResolutionStage
 [JsonDerivedType(typeof(BehaviorResolutionFrame), "card-behavior")]
 [JsonDerivedType(typeof(AbilityFrame), "ability")]
 [JsonDerivedType(typeof(IceSubroutineFrame), "ice-subroutine")]
+[JsonDerivedType(typeof(BehaviorInstallChoiceFrame), "behavior-install-choice")]
 public abstract record ResolutionFrame
 {
     protected ResolutionFrame(int version, string behaviorId)
@@ -710,13 +716,23 @@ public sealed record CardPlayFrame : ResolutionFrame
         ZoneId discardZoneId,
         int creditCost,
         string catalogFingerprint,
-        string definitionFingerprint)
+        string definitionFingerprint,
+        string? parentFrameIdentity = null,
+        bool removeAfterResolution = false)
         : base(version, behaviorId)
     {
         if (!Enum.IsDefined(side))
         {
             throw new ArgumentOutOfRangeException(nameof(side));
         }
+
+        if (parentFrameIdentity is not null && !StableIdentifier.TryValidate(parentFrameIdentity))
+        {
+            throw new ArgumentException("A nested card play names its stable parent frame identity.", nameof(parentFrameIdentity));
+        }
+
+        ParentFrameIdentity = parentFrameIdentity;
+        RemoveAfterResolution = removeAfterResolution;
 
         if (!Enum.IsDefined(cardClass))
         {
@@ -774,6 +790,22 @@ public sealed record CardPlayFrame : ResolutionFrame
             definitionFingerprint)
     {
     }
+
+    /// <summary>
+    /// EL-NESTED-PLAY: the behavior frame that played this card from inside
+    /// its own resolution (an ability, a trigger), or null for the play action.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ParentFrameIdentity { get; private set; }
+
+    /// <summary>"After it resolves, remove it from the game" (Petty Cash, Plutus).</summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool RemoveAfterResolution { get; private set; }
+
+    [JsonIgnore]
+    public bool IsNested => ParentFrameIdentity is not null;
 
     [JsonInclude]
     [JsonRequired]
@@ -1678,7 +1710,9 @@ public static class ResolutionFrameValidator
                 }
                 else if ((cardPlay.Side, cardPlay.SourceZoneKind) is not
                     (PlayerSide.Corp, ZoneKind.CorpHand)
-                    and not (PlayerSide.Runner, ZoneKind.RunnerGrip))
+                    and not (PlayerSide.Runner, ZoneKind.RunnerGrip)
+                    and not (PlayerSide.Runner, ZoneKind.RunnerHostedFaceUp)
+                    && !(cardPlay.IsNested && GameEngine.IsNestedPlaySourceKind(cardPlay.Side, cardPlay.SourceZoneKind)))
                 {
                     violations.Add(new StateInvariantViolation(
                         "resolution.invalid-source-zone-kind",
@@ -1735,6 +1769,18 @@ public static class ResolutionFrameValidator
             case IceSubroutineFrame iceSubroutine:
                 ValidateBehavior(frame, ResolutionBehaviorIds.IceSubroutine, path, violations);
                 ValidateIceSubroutineFrame(iceSubroutine, path, violations);
+                break;
+            case BehaviorInstallChoiceFrame behaviorInstall:
+                ValidateBehavior(frame, ResolutionBehaviorIds.BehaviorInstallChoice, path, violations);
+                ValidatePlayer(behaviorInstall.Owner, $"{path}.owner", violations);
+                if (behaviorInstall.Choices.Select(static choice => choice.CardId).Any(static id => !StableIdentifier.TryValidate(id.Value)))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "id.invalid",
+                        $"{path}.choices",
+                        "A behavior install choice names an invalid card ID."));
+                }
+
                 break;
             case EffectResolutionFrame effectResolution:
                 ValidateBehavior(frame, ResolutionBehaviorIds.EffectResolution, path, violations);
@@ -2322,7 +2368,7 @@ public static class ResolutionFrameValidator
                         || !hasClickCost
                         || hasLoseClickCost
                         || ability.Costs.Count(cost => cost is not null && cost.Kind == BehaviorCostKind.Clicks) != 1
-                        || ability.Costs.SingleOrDefault(cost => cost is not null && cost.Kind == BehaviorCostKind.Clicks)?.Amount != 1))
+                        || ability.Costs.SingleOrDefault(cost => cost is not null && cost.Kind == BehaviorCostKind.Clicks)?.Amount < 1))
                 {
                     violations.Add(new StateInvariantViolation(
                         "resolution.invalid-ability-combination",
@@ -2954,6 +3000,7 @@ public static class ResolutionFrameValidator
             or OccurrenceKind.CardRezzed
             or OccurrenceKind.ServerApproached
             or OccurrenceKind.IceEncountered
+            or OccurrenceKind.IceApproached
             or OccurrenceKind.RunSuccessful
             or OccurrenceKind.RunEnded
             or OccurrenceKind.AgendaScoredOrStolen
@@ -3002,7 +3049,7 @@ public static class ResolutionFrameValidator
                         "A ServerApproached occurrence must identify its server and must not identify a subject card."));
                 }
 
-                if (gameplay.Kind == OccurrenceKind.IceEncountered
+                if (gameplay.Kind is OccurrenceKind.IceEncountered or OccurrenceKind.IceApproached
                     && (gameplay.ServerId is null || gameplay.SubjectCardId is null))
                 {
                     violations.Add(new StateInvariantViolation(
@@ -3280,7 +3327,9 @@ internal static class ResolutionFrameCloner
             cardPlay.DiscardZoneId,
             cardPlay.CreditCost,
             cardPlay.CatalogFingerprint,
-            cardPlay.DefinitionFingerprint),
+            cardPlay.DefinitionFingerprint,
+            cardPlay.ParentFrameIdentity,
+            cardPlay.RemoveAfterResolution),
         RunTimingFrame runTiming => new RunTimingFrame(
             runTiming.Version,
             runTiming.BehaviorId,
@@ -3345,7 +3394,20 @@ internal static class ResolutionFrameCloner
             behavior.AbilityKey,
             behavior.TriggerKey,
             behavior.CatalogTriggerSourceMovedBeforeStart,
-            behavior.OccurrenceContinuation),
+            behavior.OccurrenceContinuation,
+            behavior.RecordedAmounts,
+            behavior.CatalogTriggerSourceMovedAfterStart),
+        BehaviorInstallChoiceFrame behaviorInstall => new BehaviorInstallChoiceFrame(
+            behaviorInstall.Version,
+            behaviorInstall.BehaviorId,
+            behaviorInstall.Owner,
+            behaviorInstall.FrameIdentity,
+            behaviorInstall.ParentFrameIdentity,
+            behaviorInstall.CostRule,
+            behaviorInstall.Discount,
+            behaviorInstall.Optional,
+            behaviorInstall.Stage,
+            behaviorInstall.Choices),
         AbilityFrame ability => new AbilityFrame(
             ability.Version,
             ability.BehaviorId,

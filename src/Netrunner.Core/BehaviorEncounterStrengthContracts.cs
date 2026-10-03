@@ -13,6 +13,11 @@ internal static class BehaviorEncounterStrengthContracts
     internal static string EffectBehaviorId(CardDefinitionId definitionId, string abilityKey) =>
         $"{EffectPrefix}{definitionId.Value}:{abilityKey}";
 
+    /// <summary>Whether an instruction kind is an encounter strength modifier.</summary>
+    internal static bool IsStrengthInstruction(BehaviorInstructionKind kind) =>
+        kind is BehaviorInstructionKind.ModifyEncounteredIceStrength
+            or BehaviorInstructionKind.ModifySourceStrength;
+
     internal static bool HasEffectPrefix(string behaviorId) =>
         behaviorId.StartsWith(EffectPrefix, StringComparison.Ordinal);
 
@@ -34,8 +39,7 @@ internal static class BehaviorEncounterStrengthContracts
         }
 
         BehaviorInstruction[] modifiers = ability.Instructions
-            .Where(static candidate =>
-                candidate.Kind == BehaviorInstructionKind.ModifyEncounteredIceStrength)
+            .Where(static candidate => IsStrengthInstruction(candidate.Kind))
             .ToArray();
         if (modifiers.Length != 1)
         {

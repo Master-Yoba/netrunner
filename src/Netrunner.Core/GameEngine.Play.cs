@@ -80,10 +80,13 @@ public static partial class GameEngine
         }
 
         var materialized = new List<PlayCardParameters>(source.CardIds.Count);
+        ZoneState handSource = source;
         // Deliberately retain the physical source-zone ordering.  This is the
         // authoritative order used by action issuance and later revalidation.
-        foreach (CardInstanceId cardId in source.CardIds)
+        // EL-HOSTED-FACEUP: Bling's hosted cards follow, as if in the grip.
+        foreach ((CardInstanceId cardId, ZoneState cardSource) in PlaySources(working, side, handSource))
         {
+            source = cardSource;
             CardInstanceState? card = working.Cards.FirstOrDefault(candidate => candidate.Id == cardId);
             if (card is null
                 || source.CardIds.Count(candidate => candidate == cardId) != 1
@@ -118,6 +121,31 @@ public static partial class GameEngine
 
         return materialized;
     }
+
+    private static IEnumerable<(CardInstanceId CardId, ZoneState Source)> PlaySources(
+        WorkingState working,
+        PlayerSide side,
+        ZoneState hand)
+    {
+        IEnumerable<(CardInstanceId, ZoneState)> sources = hand.CardIds.Select(cardId => (cardId, hand));
+        if (side != PlayerSide.Runner)
+        {
+            return sources;
+        }
+
+        ZoneState? hosted = working.Zones.FirstOrDefault(zone => zone.Kind == ZoneKind.RunnerHostedFaceUp && zone.ServerId is null);
+        return hosted is null
+            ? sources
+            : sources.Concat(GripLikeHostedCardIds(working).Select(cardId => (cardId, hosted))).ToArray();
+    }
+
+    /// <summary>The zone a turn play takes its card from: the grip or HQ, or a Bling-like host.</summary>
+    private static ZoneKind TurnPlaySourceKind(WorkingState working, PlayerSide side, CardInstanceId cardId) =>
+        side == PlayerSide.Corp
+            ? ZoneKind.CorpHand
+            : working.Cards.FirstOrDefault(card => card.Id == cardId) is { } card && IsGripLikeHosted(working, card)
+                ? ZoneKind.RunnerHostedFaceUp
+                : ZoneKind.RunnerGrip;
 
     private static bool TryBuildPlayCardPlan(
         WorkingState working,
@@ -162,6 +190,13 @@ public static partial class GameEngine
         {
             foreach (BehaviorCost behaviorCost in definition.Costs)
             {
+                // A "Double" card's additional cost spends a click on top of
+                // the click of the play action itself.
+                if (behaviorCost.Kind == BehaviorCostKind.Clicks)
+                {
+                    continue;
+                }
+
                 if (behaviorCost.Kind != BehaviorCostKind.Credits || behaviorCost.Amount < 0)
                 {
                     return false;
@@ -176,7 +211,8 @@ public static partial class GameEngine
         }
 
         if (cost != printedCost
-            || GetPlayer(working, side).Credits < cost)
+            || GetPlayer(working, side).Credits < cost
+            || GetPlayer(working, side).Clicks < 1 + AdditionalPlayClicks(definition))
         {
             return false;
         }
@@ -222,6 +258,7 @@ public static partial class GameEngine
             || spec.PlayCost is not int printedCost
             || printedCost < 0
             || runEvent.Cost != printedCost
+            || GetPlayer(working, PlayerSide.Runner).Clicks < 1 + runEvent.AdditionalClicks
             || GetPlayer(working, PlayerSide.Runner).Credits < runEvent.Cost
             || (playArea is not null && playArea.CardIds.Count != 0))
         {
@@ -335,7 +372,7 @@ public static partial class GameEngine
             return;
         }
 
-        ZoneKind sourceKind = side == PlayerSide.Corp ? ZoneKind.CorpHand : ZoneKind.RunnerGrip;
+        ZoneKind sourceKind = TurnPlaySourceKind(working, side, parameters.CardId);
         ZoneKind playAreaKind = side == PlayerSide.Corp ? ZoneKind.CorpPlayArea : ZoneKind.RunnerPlayArea;
         ZoneKind discardKind = side == PlayerSide.Corp ? ZoneKind.CorpDiscard : ZoneKind.RunnerHeap;
         if (!TryGetCanonicalZone(working, sourceKind, side, out ZoneState? source)
@@ -411,6 +448,11 @@ public static partial class GameEngine
             source.Id,
             playArea.Id,
             plan.CreditCost));
+        RecordTurnEvent(working, side, side == PlayerSide.Corp ? TurnEventKind.OperationPlayed : TurnEventKind.EventPlayed);
+        if (side == PlayerSide.Corp && ActiveTurnEventCount(working, TurnEventKind.OperationPlayed) == 1)
+        {
+            DeferOccurrence(working, OccurrenceKind.FirstOperationPlayedThisTurn, PlayerSide.Corp, plan.Card.Id);
+        }
 
         PushBehaviorChild(
             working,
@@ -432,7 +474,7 @@ public static partial class GameEngine
             throw new ResolutionFailureException("A run event requires the active Runner turn and no live run.");
         }
 
-        ZoneKind sourceKind = ZoneKind.RunnerGrip;
+        ZoneKind sourceKind = TurnPlaySourceKind(working, PlayerSide.Runner, parameters.CardId);
         ZoneKind discardKind = ZoneKind.RunnerHeap;
         if (!TryGetCanonicalZone(working, sourceKind, PlayerSide.Runner, out ZoneState? source)
             || !TryGetCanonicalZone(working, discardKind, PlayerSide.Runner, out ZoneState? discard)
@@ -461,6 +503,13 @@ public static partial class GameEngine
 
         PlayerState runner = GetPlayer(working, PlayerSide.Runner);
         SpendClick(working, runner.Id);
+        for (int extra = 0; extra < plan.RunEvent.AdditionalClicks; extra++)
+        {
+            // Double: the additional cost spends a click on top of the play action's.
+            SpendClick(working, runner.Id);
+        }
+
+        RecordTurnEvent(working, PlayerSide.Runner, TurnEventKind.EventPlayed);
         StartRunInWorkingState(
             working,
             targetServerId,
@@ -475,7 +524,15 @@ public static partial class GameEngine
         ZoneState playArea = working.Zones.Single(zone => zone.Id == frame.PlayAreaZoneId);
         ZoneState discard = working.Zones.Single(zone => zone.Id == frame.DiscardZoneId);
 
-        TrashCard(working, card, playArea, discard);
+        if (frame.RemoveAfterResolution)
+        {
+            MoveCard(working, card, playArea, GetBehaviorZone(working, BehaviorZone.RemovedFromGame, card.OwnerSide));
+        }
+        else
+        {
+            TrashCard(working, card, playArea, discard);
+        }
+
         Emit(working, EngineEventKinds.CardPlayCompleted, new CardPlayCompletedEventPayload(
             frame.Side,
             frame.CardId,
@@ -483,6 +540,25 @@ public static partial class GameEngine
             frame.PlayAreaZoneId,
             frame.DiscardZoneId));
         working.ResolutionStack.RemoveAt(working.ResolutionStack.Count - 1);
+        if (frame.IsNested)
+        {
+            if (working.ResolutionStack[^1] is not BehaviorResolutionFrame nestedParent
+                || !string.Equals(BehaviorFrameIdentity.Compute(nestedParent), frame.ParentFrameIdentity, StringComparison.Ordinal))
+            {
+                throw new ResolutionFailureException("The completed nested card play has no matching behavior parent.");
+            }
+
+            if (nestedParent.SourceCardId == frame.CardId)
+            {
+                // The behavior played its own source (Petty Cash from Archives):
+                // that play was its last act, and its source has left its zone.
+                working.ResolutionStack.RemoveAt(working.ResolutionStack.Count - 1);
+                return;
+            }
+
+            AdvanceBehaviorCursor(working, nestedParent);
+            return;
+        }
 
         if (working.ResolutionStack.Count == 0
             || working.ResolutionStack[^1] is not TurnFrame parent
@@ -511,9 +587,21 @@ public static partial class GameEngine
             throw new ResolutionFailureException("Card play requires an injected runtime card catalog.");
         }
 
-        if (working.ResolutionStack.Count < 2
-            || working.ResolutionStack[^1] is not CardPlayFrame
-            || working.ResolutionStack[^2] is not TurnFrame parent
+        if (working.ResolutionStack.Count < 2 || working.ResolutionStack[^1] is not CardPlayFrame)
+        {
+            throw new ResolutionFailureException("The card-play frame has no matching active turn action parent.");
+        }
+
+        if (frame.IsNested)
+        {
+            // EL-NESTED-PLAY: played from inside a behavior's resolution.
+            if (working.ResolutionStack[^2] is not BehaviorResolutionFrame nestedParent
+                || !string.Equals(BehaviorFrameIdentity.Compute(nestedParent), frame.ParentFrameIdentity, StringComparison.Ordinal))
+            {
+                throw new ResolutionFailureException("A nested card play has no matching behavior parent.");
+            }
+        }
+        else if (working.ResolutionStack[^2] is not TurnFrame parent
             || parent.Stage != TurnFrameStage.AwaitingAction
             || parent.ActiveSide != frame.Side
             || working.Turn.ActiveSide != frame.Side
@@ -527,7 +615,9 @@ public static partial class GameEngine
             || frame.Side is not (PlayerSide.Corp or PlayerSide.Runner)
             || frame.CardClass is not (RuntimeCardClass.Operation or RuntimeCardClass.Event)
             || frame.CreditCost < 0
-            || frame.SourceZoneKind != (frame.Side == PlayerSide.Corp ? ZoneKind.CorpHand : ZoneKind.RunnerGrip))
+            || !(frame.SourceZoneKind == (frame.Side == PlayerSide.Corp ? ZoneKind.CorpHand : ZoneKind.RunnerGrip)
+                || frame.Side == PlayerSide.Runner && frame.SourceZoneKind == ZoneKind.RunnerHostedFaceUp
+                || frame.IsNested && IsNestedPlaySourceKind(frame.Side, frame.SourceZoneKind)))
         {
             throw new ResolutionFailureException("The card-play frame contains unsupported frozen facts.");
         }
@@ -552,7 +642,7 @@ public static partial class GameEngine
             || source is null
             || discard is null
             || playArea is null
-            || source.Id != frame.SourceZoneId
+            || source.Id != frame.SourceZoneId && !frame.IsNested
             || discard.Id != frame.DiscardZoneId
             || playArea.Id != frame.PlayAreaZoneId
             || playArea.CardIds.Count != 1
@@ -598,6 +688,11 @@ public static partial class GameEngine
         {
             foreach (BehaviorCost cost in definition.Costs)
             {
+                if (cost.Kind == BehaviorCostKind.Clicks)
+                {
+                    continue;
+                }
+
                 if (cost.Kind != BehaviorCostKind.Credits || cost.Amount < 0)
                 {
                     throw new ResolutionFailureException("The card-play behavior has an unsupported cost.");
@@ -623,4 +718,130 @@ public static partial class GameEngine
         actual.CardId == expected.CardId
         && actual.CreditCost == expected.CreditCost
         && actual.TargetServerId == expected.TargetServerId;
+
+    /// <summary>Clicks a "Double" card's additional cost spends beyond the play action's click.</summary>
+    private static int AdditionalPlayClicks(CardBehaviorDefinition definition) =>
+        definition.Costs.Where(static cost => cost.Kind == BehaviorCostKind.Clicks).Sum(static cost => cost.Amount);
+
+    /// <summary>The zones a card played from inside a behavior may come from: HQ, Archives, the grip or the heap.</summary>
+    internal static bool IsNestedPlaySourceKind(PlayerSide side, ZoneKind kind) => side switch
+    {
+        PlayerSide.Corp => kind is ZoneKind.CorpHand or ZoneKind.CorpDiscard,
+        PlayerSide.Runner => kind is ZoneKind.RunnerGrip or ZoneKind.RunnerHeap or ZoneKind.RunnerHostedFaceUp,
+        _ => false,
+    };
+
+    /// <summary>
+    /// EL-NESTED-PLAY: plays the targeted operation or event from inside this
+    /// behavior (Humanoid Resources, Plutus, Petty Cash): no click for the
+    /// play itself, but its costs, extra clicks and play restrictions apply.
+    /// The parent resumes when the played card has resolved.
+    /// </summary>
+    private static void ResolveBehaviorPlay(
+        WorkingState working,
+        BehaviorResolutionFrame frame,
+        BehaviorInstruction instruction)
+    {
+        IReadOnlyList<CardInstanceId> chosen = instruction.Target is { Kind: BehaviorTargetKind.ChosenCard } chosenTarget
+            && IsProvenEmptyChosenCard(frame, chosenTarget)
+                ? []
+                : ResolveBehaviorCards(working, frame, instruction.Target);
+        if (chosen.Count == 0)
+        {
+            AdvanceBehaviorCursor(working, frame);
+            return;
+        }
+
+        if (chosen.Count != 1)
+        {
+            throw new ResolutionFailureException("A behavior plays exactly one card.");
+        }
+
+        PlayerState player = GetPlayer(working, frame.Controller);
+        PlayerSide side = player.Side;
+        CardInstanceState card = GetCard(working, chosen[0]);
+        ZoneState current = ZoneForCard(working, card.Id);
+        BehaviorSetAsideCard? frozen = frame.SetAside.SingleOrDefault(selected => selected.CardId == card.Id);
+        ZoneKind origin = frozen is not null
+            ? working.Zones.Single(zone => zone.Id == frozen.OriginalZoneId).Kind
+            : current.Kind;
+        if (working.RuntimeCardCatalog?.TryGet(card.DefinitionId, out CardRuntimeSpec? spec) != true
+            || card.OwnerSide != side
+            || spec!.CardClass != (side == PlayerSide.Corp ? RuntimeCardClass.Operation : RuntimeCardClass.Event)
+            || !IsNestedPlaySourceKind(side, origin)
+            || !working.BehaviorCatalog.TryGet(card.DefinitionId, out CardBehaviorDefinition? definition)
+            || definition.Controller != side)
+        {
+            throw new ResolutionFailureException("Only one of the controller's own operations or events can be played this way.");
+        }
+
+        ZoneKind playAreaKind = side == PlayerSide.Corp ? ZoneKind.CorpPlayArea : ZoneKind.RunnerPlayArea;
+        ZoneKind discardKind = side == PlayerSide.Corp ? ZoneKind.CorpDiscard : ZoneKind.RunnerHeap;
+        if (!TryGetCanonicalZone(working, discardKind, side, out ZoneState? discard)
+            || discard is null
+            || !TryGetCanonicalPlayArea(working, playAreaKind, side, out ZoneState? playArea))
+        {
+            throw new ResolutionFailureException("The canonical card-play zones are unavailable.");
+        }
+
+        int creditCost = definition.Costs.Where(static cost => cost.Kind == BehaviorCostKind.Credits).Sum(static cost => cost.Amount);
+        int clickCost = AdditionalPlayClicks(definition);
+        bool playable = (playArea is null || playArea.CardIds.Count == 0)
+            && player.Credits >= creditCost
+            && player.Clicks >= clickCost
+            && AreBehaviorPlayTargetsAvailable(working, definition)
+            && AbilityConditionsMatch(working, card, player.Id, definition.Conditions);
+        if (!playable)
+        {
+            // A card that can't be played now (a restriction, its costs) stays where it is.
+            AdvanceBehaviorCursor(working, frame);
+            return;
+        }
+
+        playArea ??= new ZoneState(working.Allocator.NextZoneId(), playAreaKind, side);
+        if (working.Zones.All(candidate => candidate.Id != playArea.Id))
+        {
+            working.Zones.Add(playArea);
+        }
+
+        // The card leaves the parent's selection: it is not reinserted when the parent completes.
+        BehaviorSetAsideCard[] remaining = frame.SetAside.Where(selected => selected.CardId != card.Id).ToArray();
+        frame = frame.With(setAside: remaining, clearSetAsideZone: remaining.Length == 0);
+        ReplaceTopFrame(working, frame);
+        working.ResolutionStack.Add(new CardPlayFrame(
+            1,
+            ResolutionBehaviorIds.CardPlay,
+            player.Id,
+            side,
+            card.Id,
+            card.DefinitionId,
+            spec.CardClass,
+            current.Id,
+            origin,
+            playArea.Id,
+            discard.Id,
+            creditCost,
+            working.BehaviorCatalog.Fingerprint,
+            working.BehaviorCatalog.GetDefinitionFingerprint(card.DefinitionId),
+            BehaviorFrameIdentity.Compute(frame),
+            removeAfterResolution: instruction.DestinationZone == BehaviorZone.RemovedFromGame));
+        ReplaceCard(working, new CardInstanceState(card.Id, card.DefinitionId, card.ZoneId, card.OwnerSide,
+            faceUp: true, rezzed: false, card.AdvancementCounters));
+        MoveCard(working, GetCard(working, card.Id), current, playArea);
+        if (current.Kind == ZoneKind.BehaviorSetAside
+            && working.Zones.SingleOrDefault(zone => zone.Id == current.Id) is { CardIds.Count: 0 } emptied)
+        {
+            working.Zones.Remove(emptied);
+        }
+
+        Emit(working, EngineEventKinds.CardPlayStarted, new CardPlayStartedEventPayload(
+            side, card.Id, card.DefinitionId, current.Id, playArea.Id, creditCost));
+        RecordTurnEvent(working, side, side == PlayerSide.Corp ? TurnEventKind.OperationPlayed : TurnEventKind.EventPlayed);
+        if (side == PlayerSide.Corp && ActiveTurnEventCount(working, TurnEventKind.OperationPlayed) == 1)
+        {
+            DeferOccurrence(working, OccurrenceKind.FirstOperationPlayedThisTurn, PlayerSide.Corp, card.Id);
+        }
+
+        PushBehaviorChild(working, new BehaviorInvocationContext(card.Id, player.Id, player.Id), definition, playArea);
+    }
 }

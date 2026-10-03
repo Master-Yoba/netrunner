@@ -1,0 +1,15 @@
+# Loop 2 of docs/BOT_IMPROVEMENT_PLAN.md: "NNN corp~runner seat", seat = Sonnet's side; seed 20261003, Standard bot.
+# Box baseline (the same deals every loop): the bot plays the named deck's side.
+001 elevation-box-nebula-fast-advance~elevation-box-topan runner
+002 elevation-box-untaian-shell-game~elevation-box-muslihat runner
+003 elevation-box-zwicky-supermodernism~elevation-box-magdalene runner
+004 elevation-box-leo-glacier~elevation-box-topan runner
+005 elevation-box-untaian-shell-game~elevation-box-topan corp
+006 elevation-box-leo-glacier~elevation-box-muslihat corp
+007 elevation-box-nebula-fast-advance~elevation-box-magdalene corp
+# NSG rotation, loop 2.
+201 nsg-core-fine-print~nsg-core-professional-opportunities runner
+202 nsg-core-gimbatul~nsg-core-bowel-movements runner
+203 nsg-core-hidden-funds~nsg-core-professional-opportunities corp
+204 nsg-core-fashion-lab~nsg-core-flow-and-ebb corp
+205 nsg-core-pork-chops~nsg-core-prick-thyself corp

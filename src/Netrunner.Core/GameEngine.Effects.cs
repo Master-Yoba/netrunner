@@ -579,6 +579,16 @@ public static partial class GameEngine
         }
 
         bool flatlined = effect.Amount > available;
+        if (effect.Amount > 0)
+        {
+            // The responsible player is the nearest damage effect's controller: a checkpoint frame can sit above it
+            // (bot loop 1: damage the Runner suffered to Semak-samun counted as the Corp's for AU Co.).
+            PlayerSide damagingSide = working.ResolutionStack.OfType<EffectResolutionFrame>().LastOrDefault() is { } damaging
+                ? GetPlayer(working, damaging.Controller).Side
+                : PlayerSide.Corp;
+            DeferOccurrence(working, OccurrenceKind.DamageDone, damagingSide);
+        }
+
         int? conditionalPrintedCost = DivinerPrintedCost(working);
         Emit(working, EngineEventKinds.DamageDealt, new DamageDealtEventPayload(
             effect.Target,
@@ -627,6 +637,10 @@ public static partial class GameEngine
             delta,
             (int)next));
         RecordTurnTagChange(working, target, delta);
+        if (delta < 0)
+        {
+            RecordFirstTimeOccurrence(working, TurnEventKind.TagRemoved, OccurrenceKind.FirstTagRemovalThisTurn, PlayerSide.Runner);
+        }
     }
 
     private static void ApplyBaseMemory(WorkingState working, PlayerId target, int delta)

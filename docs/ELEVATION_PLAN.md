@@ -116,6 +116,20 @@ occurrences; identity state; card sources and zones; information; and runs and I
 - **D-EL-8, the menu:**
   - *Default:* the Gateway decks stay; the new decks appear under a format choice (Gateway, Gateway + Elevation).
   - Random opponents draw from the chosen format.
+- **D-EL-9, NSG's Core Sets decks** (the user's decision, 3 October 2026): Null Signal Games does publish 21
+  System Gateway + Elevation sample decks, the "NSG Core Sets" decks, on its getting-started page (with NetrunnerDB
+  entries). They are built without the Startup ban list: 9 of the 12 Corp decks use a card banned in 26.05.
+  - Both formats ship. Gateway + Elevation keeps its ban list and our 14 decks (D-EL-4). A second format, NSG Core Sets
+    (`nsg-core-sets`), has the same pool and deck rules, no ban list, and NSG's 21 decks.
+  - NSG's lists are published decks, so the menu offers that format without a review gate.
+- **D-EL-10, the Core Battle Box** (the user's decision, 3 October 2026): real players' lists replace our 14 decks
+  (D-EL-4) as the Gateway + Elevation format's decks. The Core Battle Box by lunari (NetrunnerDB, featured on
+  [CardGamer](https://cardgamer.com/features/introducing-the-netrunner-core-battle-box/)) is seven decks, one per faction,
+  built to be played against each other; it topped NetrunnerDB's popularity sort for System Gateway + Elevation lists.
+  - Two of its Corp decks use cards banned in 26.05, so the format drops its ban list: Startup legality waits for the full
+    Startup format, when Vantage Point is in. Gateway + Elevation and NSG Core Sets now share rules; their decks differ.
+  - Our 14 decks are retired: kept in the catalog under their IDs, so older saves load and EL.8's seed replays still play,
+    but offered nowhere. The menu offers the box without a review gate.
 
 ## 4. Slices
 
@@ -253,17 +267,19 @@ M4's process ([M4 plan](history/M4_PLAN.md), section 6), plus three steps:
 
 ## 7. Milestone gate checklist
 
-- [ ] **Coverage:** 159 of 159 bound, tested and checklist-complete; no drift; CARD-401 green.
-- [ ] **E6:** each card batch at or above 80% with no Core change past its primitive slice; the whole-set report recorded.
-- [ ] **Formats:** the snapshots load and validate; Gateway + Elevation is playable with its decks.
-- [ ] **Decks:** each new deck validates, loads and plays human against bot through the client, on each side.
-- [ ] **Hardening:** 10,000 clean official fuzz games over the pool; the full `make m5-gate`; tactics; every suite green.
-- [ ] **Bots:**
+Status on 3 October 2026 (EL.8): see [the progress record](ELEVATION_PROGRESS.md#milestone-gate-section-7). The decklists' review (D-EL-4) is settled by D-EL-10: published lists replace ours.
+
+- [x] **Coverage:** 159 of 159 bound, tested and checklist-complete; no drift; CARD-401 green.
+- [x] **E6:** each card batch at or above 80% with no Core change past its primitive slice; the whole-set report recorded.
+- [x] **Formats:** the snapshots load and validate; Gateway + Elevation is playable with its decks.
+- [x] **Decks:** each new deck validates, loads and plays human against bot through the client, on each side.
+- [x] **Hardening:** 10,000 clean official fuzz games over the pool; the full `make m5-gate`; tactics; every suite green.
+- [x] **Bots:**
   - every Elevation card played without errors, with a non-default valuation;
   - the deck-pool ladder has no deck warning;
   - `ai-belief` is above its prior on the new pool.
-- [ ] **Client:** every new state presented; accessibility re-checked; the smoke matrices include a new deck.
-- [ ] `docs/ELEVATION_PROGRESS.md` complete, with evidence and deviations.
+- [x] **Client:** every new state presented; accessibility re-checked; the smoke matrices include a new deck.
+- [x] `docs/ELEVATION_PROGRESS.md` complete, with evidence and deviations.
 
 ## 8. Client work index
 

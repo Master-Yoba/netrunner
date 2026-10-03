@@ -24,9 +24,9 @@ public partial class Main
 
 		if (presetValue is not null)
 		{
-			if (presetValue is not ("basic" or "expanded"))
+			if (presetValue is not ("basic" or "expanded" or "elevation" or "nsg-core") && !IsElevationPairing(presetValue))
 			{
-				error = $"--preset requires 'basic' or 'expanded', found '{presetValue}'.";
+				error = $"--preset requires 'basic', 'expanded', 'elevation', 'nsg-core' or an Elevation pairing 'corp~runner', found '{presetValue}'.";
 				return false;
 			}
 
@@ -101,7 +101,7 @@ public partial class Main
 			(_runnerPreset, _runnerPresetIds, "runner"),
 		})
 		{
-			string requested = $"system-gateway-{_fullMatchSmokePreset}-{side}";
+			string requested = SmokePresetId(_fullMatchSmokePreset, side);
 			int[] matches = ids.Where(pair => pair.Value == requested).Select(pair => pair.Key).ToArray();
 			if (matches.Length != 1 || button.IsItemDisabled(matches[0]))
 			{
@@ -113,6 +113,28 @@ public partial class Main
 		}
 		return true;
 	}
+
+	/// <summary>
+	/// A smoke's deck for a side: the teaching decks by kind, for
+	/// <c>elevation</c> a Gateway + Elevation pairing (EL.8), or for
+	/// <c>nsg-core</c> an NSG Core Sets pairing.
+	/// </summary>
+	private static string SmokePresetId(string preset, string side) => preset switch
+	{
+		"elevation" => side == "corp" ? "elevation-box-nebula-fast-advance" : "elevation-box-magdalene",
+		"nsg-core" => side == "corp" ? "nsg-core-gimbatul" : "nsg-core-sabbatical",
+		_ when IsElevationPairing(preset) => preset.Split('~')[side == "corp" ? 0 : 1],
+		_ => $"system-gateway-{preset}-{side}",
+	};
+
+	/// <summary>
+	/// A <c>corp~runner</c> pairing of two decks of one Elevation-pool format: Gateway + Elevation
+	/// or NSG Core Sets (scripts/elevation-deck-smoke.sh).
+	/// </summary>
+	private static bool IsElevationPairing(string preset) =>
+		preset.Split('~') is [string corp, string runner]
+		&& PlayFormats.FormatOfPreset(corp) is CardFormatIds.GatewayElevation or CardFormatIds.NsgCoreSets
+		&& PlayFormats.FormatOfPreset(runner) == PlayFormats.FormatOfPreset(corp);
 
 	private bool HasAuthenticatedOfficialContent() =>
 		_embeddedCardData is not null
@@ -170,10 +192,8 @@ public partial class Main
 			_coordinator = CreateOfficialFullMatchCoordinator(
 				corpPresetId,
 				runnerPresetId,
-				_embeddedCardData!,
 				humanSide,
-				seed: seed,
-				officialPresets: _officialPresetCatalog!);
+				seed: seed);
 			AttachCoordinatorPublications();
 			_startButton.Disabled = true;
 			_status.Text = "Shuffling decks and dealing opening hands…";
@@ -299,7 +319,9 @@ public partial class Main
 			_reducedMotion.ButtonPressed = true;
 			var policy = FullMatchFactory.CreateContractPolicy(
 				side,
-				_m4FullMatchSmoke ? _runtimeCardCatalog : null);
+				_m4FullMatchSmoke
+					? PlayFormats.Get(PlayFormats.FormatOfPreset(SmokePresetId(_fullMatchSmokePreset, "corp"))).Runtime
+					: null);
 			while (true)
 			{
 				pollingSteps++;

@@ -99,7 +99,8 @@ public sealed class BehaviorCardFilter : IEquatable<BehaviorCardFilter>
         CardDefinitionId? definitionId = null,
         PlayerSide? ownerSide = null,
         string? subtype = null,
-        bool? rezzed = null)
+        bool? rezzed = null,
+        int? agendaPoints = null)
     {
         if (!Enum.IsDefined(cardType))
         {
@@ -125,6 +126,12 @@ public sealed class BehaviorCardFilter : IEquatable<BehaviorCardFilter>
             throw new ArgumentOutOfRangeException(nameof(ownerSide));
         }
 
+        if (agendaPoints is < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(agendaPoints));
+        }
+
+        AgendaPoints = agendaPoints;
         Rezzed = rezzed;
         CardType = cardType;
         DefinitionId = definitionId;
@@ -142,6 +149,10 @@ public sealed class BehaviorCardFilter : IEquatable<BehaviorCardFilter>
 
     public string? Subtype { get; }
 
+    /// <summary>A printed agenda point value the card must have (IP Enforcement's "equal to X").</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? AgendaPoints { get; }
+
     public static BehaviorCardFilter Any { get; } = new();
 
     public bool Equals(BehaviorCardFilter? other) =>
@@ -150,6 +161,7 @@ public sealed class BehaviorCardFilter : IEquatable<BehaviorCardFilter>
         && CardType == other.CardType
         && DefinitionId == other.DefinitionId
         && OwnerSide == other.OwnerSide
+        && AgendaPoints == other.AgendaPoints
         && string.Equals(Subtype, other.Subtype, StringComparison.Ordinal);
 
     public override bool Equals(object? obj) => Equals(obj as BehaviorCardFilter);
@@ -180,6 +192,12 @@ public enum BehaviorCardType
     Program,
     ProgramOrHardware,
     NonAgenda,
+
+    /// <summary>A card the Corp can advance: an agenda, or a card whose behavior permits advancement.</summary>
+    Advanceable,
+
+    /// <summary>A Runner resource or piece of hardware (Barry "Baz" Wong).</summary>
+    ResourceOrHardware,
 }
 
 /// <summary>
@@ -193,13 +211,35 @@ public enum BehaviorCardType
 public sealed class BehaviorAmountOperand : IEquatable<BehaviorAmountOperand>
 {
     [JsonConstructor]
-    public BehaviorAmountOperand(string sourceCounterName, int multiplier)
+    public BehaviorAmountOperand(
+        string? sourceCounterName,
+        int multiplier,
+        BehaviorAmountKind? kind = null,
+        string? recordedKey = null,
+        int offset = 0)
     {
-        if (!StableIdentifier.TryValidate(sourceCounterName))
+        if (kind is { } typed && !Enum.IsDefined(typed))
+        {
+            throw new ArgumentOutOfRangeException(nameof(kind));
+        }
+
+        BehaviorAmountKind effective = kind ?? BehaviorAmountKind.SourceCounter;
+        if (effective == BehaviorAmountKind.SourceCounter
+            ? !StableIdentifier.TryValidate(sourceCounterName)
+            : sourceCounterName is not null)
         {
             throw new ArgumentException(
-                "A dynamic amount source counter name must be a stable identifier.",
+                "A source-counter amount names a stable counter; other amount kinds name none.",
                 nameof(sourceCounterName));
+        }
+
+        if (effective == BehaviorAmountKind.Recorded
+            ? !StableIdentifier.TryValidate(recordedKey)
+            : recordedKey is not null)
+        {
+            throw new ArgumentException(
+                "A recorded amount names the stable key it reads; other amount kinds name none.",
+                nameof(recordedKey));
         }
 
         if (multiplier <= 0)
@@ -209,26 +249,83 @@ public sealed class BehaviorAmountOperand : IEquatable<BehaviorAmountOperand>
                 "A dynamic amount multiplier must be positive.");
         }
 
+        ArgumentOutOfRangeException.ThrowIfNegative(offset);
         SourceCounterName = sourceCounterName;
         Multiplier = multiplier;
+        Kind = kind;
+        RecordedKey = recordedKey;
+        Offset = offset;
     }
 
     [JsonInclude]
     [JsonRequired]
-    public string SourceCounterName { get; private set; }
+    public string? SourceCounterName { get; private set; }
 
     [JsonInclude]
     [JsonRequired]
     public int Multiplier { get; private set; }
 
+    /// <summary>
+    /// EL-AMOUNT: what the amount counts. Omitted for the legacy
+    /// source-counter shape, so its bytes are unchanged.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public BehaviorAmountKind? Kind { get; private set; }
+
+    /// <summary>The key a <see cref="BehaviorAmountKind.Recorded"/> amount reads.</summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? RecordedKey { get; private set; }
+
+    /// <summary>A constant added after multiplying ("1 plus 1 for each").</summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int Offset { get; private set; }
+
+    /// <summary>The amount a previous instruction of this behavior recorded, times a multiplier.</summary>
+    public static BehaviorAmountOperand Recorded(string key, int multiplier = 1, int offset = 0) =>
+        new(null, multiplier, BehaviorAmountKind.Recorded, key, offset);
+
+    public static BehaviorAmountOperand Of(BehaviorAmountKind kind, int multiplier = 1, int offset = 0) =>
+        new(null, multiplier, kind, null, offset);
+
     public bool Equals(BehaviorAmountOperand? other) =>
         other is not null
         && string.Equals(SourceCounterName, other.SourceCounterName, StringComparison.Ordinal)
-        && Multiplier == other.Multiplier;
+        && Multiplier == other.Multiplier
+        && Kind == other.Kind
+        && string.Equals(RecordedKey, other.RecordedKey, StringComparison.Ordinal)
+        && Offset == other.Offset;
 
     public override bool Equals(object? obj) => Equals(obj as BehaviorAmountOperand);
 
-    public override int GetHashCode() => HashCode.Combine(SourceCounterName, Multiplier);
+    public override int GetHashCode() => HashCode.Combine(SourceCounterName, Multiplier, Kind, RecordedKey, Offset);
+}
+
+/// <summary>EL-AMOUNT: what a dynamic amount counts.</summary>
+public enum BehaviorAmountKind
+{
+    /// <summary>A named counter on the behavior's source card.</summary>
+    SourceCounter,
+
+    /// <summary>An amount an earlier instruction of the same behavior recorded (credits lost, tags removed).</summary>
+    Recorded,
+
+    /// <summary>The controller's remaining clicks.</summary>
+    ControllerClicks,
+
+    /// <summary>The advancement counters on the behavior's source card.</summary>
+    SourceAdvancementCounters,
+
+    /// <summary>The printed install cost of the card bound by the behavior's choice.</summary>
+    ChosenCardInstallCost,
+
+    /// <summary>
+    /// EL-DIVIDENDS: the source agenda's advancement counters beyond its
+    /// advancement requirement (never negative).
+    /// </summary>
+    SourceExcessAdvancement,
 }
 
 /// <summary>
@@ -249,6 +346,9 @@ public enum BehaviorZone
     ServerIce,
     ServerRoot,
     RemovedFromGame,
+
+    /// <summary>EL-HOSTED-FACEUP: cards hosted faceup without being installed.</summary>
+    HostedFaceUp,
 }
 
 /// <summary>
@@ -271,7 +371,8 @@ public sealed class BehaviorChoiceOption : IEquatable<BehaviorChoiceOption>
         IReadOnlyList<BehaviorInstruction>? instructions = null,
         BehaviorTarget? target = null,
         IReadOnlyList<BehaviorCost>? costs = null,
-        BehaviorChoiceOptionSemantic? semantic = null)
+        BehaviorChoiceOptionSemantic? semantic = null,
+        BehaviorCondition? condition = null)
     {
         if (!StableIdentifier.TryValidate(key))
         {
@@ -290,9 +391,18 @@ public sealed class BehaviorChoiceOption : IEquatable<BehaviorChoiceOption>
         }
 
         Semantic = semantic;
+        Condition = condition;
     }
 
     public string Key { get; }
+
+    /// <summary>
+    /// When set, the option is offered only while this condition holds,
+    /// judged against the behavior's source card and the choice owner
+    /// ("remove up to 2 hosted counters" offers 2 only with 2 counters).
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public BehaviorCondition? Condition { get; }
 
     public IReadOnlyList<BehaviorInstruction> Instructions { get; }
 
@@ -320,7 +430,8 @@ public sealed class BehaviorChoiceOption : IEquatable<BehaviorChoiceOption>
         && BehaviorContractStructure.SequenceEquals(Instructions, other.Instructions, BehaviorContractStructure.AreEqual)
         && BehaviorContractStructure.AreEqual(Target, other.Target)
         && SequenceEquals(Costs, other.Costs)
-        && Semantic == other.Semantic;
+        && Semantic == other.Semantic
+        && Condition == other.Condition;
 
     public override bool Equals(object? obj) => Equals(obj as BehaviorChoiceOption);
 

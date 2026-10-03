@@ -16,4 +16,18 @@ internal static class AbilityLifecycleRules
         && definition.Triggers.Any(trigger => trigger.Occurrence == OccurrenceKind.HostedCreditPoolEmptied
             && trigger.Scope == BehaviorTriggerScope.Self && trigger.Mode == TriggerMode.Mandatory
             && trigger.Instructions.Count == 1 && trigger.Instructions[0].Kind == BehaviorInstructionKind.TrashSelf);
+
+    /// <summary>
+    /// EL-NESTED-PLAY: an ability that plays its own source (Petty Cash from
+    /// Archives) lets the source move to its play area, discard or
+    /// removed-from-game zone once its costs are paid.
+    /// </summary>
+    internal static bool IsSelfPlay(BehaviorPaidAbility? ability, AbilityFrame frame, CardInstanceState source, ZoneState? currentZone) =>
+        frame.Stage is AbilityLifecycleStage.AwaitingChild or AbilityLifecycleStage.Complete
+        && source.Id == frame.SourceCardId
+        && ability?.Key == frame.AbilityKey
+        && ability.Instructions.Any(static instruction => instruction.Kind == BehaviorInstructionKind.PlayCard
+            && instruction.Target is { Kind: BehaviorTargetKind.Self })
+        && currentZone?.Kind is ZoneKind.CorpPlayArea or ZoneKind.RunnerPlayArea or ZoneKind.CorpDiscard or ZoneKind.RunnerHeap
+            or ZoneKind.CorpRemovedFromGame or ZoneKind.RunnerRemovedFromGame;
 }

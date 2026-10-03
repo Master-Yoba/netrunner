@@ -20,6 +20,7 @@ public enum DecisionKind
     BehaviorChoice,
     IceSubroutineChoice,
     Setup,
+    BehaviorInstallChoice,
 }
 
 public enum ActionKind
@@ -94,6 +95,7 @@ public enum ActionKind
 [JsonDerivedType(typeof(BreachCandidateParameters), "breach-candidate")]
 [JsonDerivedType(typeof(BehaviorChoiceParameters), "behavior-choice")]
 [JsonDerivedType(typeof(IceSubroutineChoiceParameters), "ice-subroutine-choice")]
+[JsonDerivedType(typeof(BehaviorInstallChoiceParameters), "behavior-install-choice")]
 [JsonDerivedType(typeof(AbilityActionParameters), "ability")]
 public abstract record ActionParameters;
 
@@ -232,8 +234,14 @@ public sealed record RunServerParameters : ActionParameters
 public sealed record RezCardParameters : ActionParameters
 {
     [JsonConstructor]
-    public RezCardParameters(CardInstanceId cardId, int creditCost, CostQuote? costQuote = null)
+    public RezCardParameters(CardInstanceId cardId, int creditCost, CostQuote? costQuote = null, CardInstanceId? forfeitAgendaId = null)
     {
+        if (forfeitAgendaId is not null && costQuote is not null)
+        {
+            throw new ArgumentException("A rez paid partly by a forfeit carries its reduced cost alone.", nameof(costQuote));
+        }
+
+        ForfeitAgendaId = forfeitAgendaId;
         if (creditCost < 0)
         {
             throw new ArgumentOutOfRangeException(nameof(creditCost), "Rez credit cost must not be negative.");
@@ -277,6 +285,11 @@ public sealed record RezCardParameters : ActionParameters
     [JsonInclude]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public CostQuote? CostQuote { get; private set; }
+
+    /// <summary>EL-REZ-COST-PAYMENT: the scored agenda forfeited to pay part of the rez cost (Biawak).</summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public CardInstanceId? ForfeitAgendaId { get; private set; }
 }
 
 /// <summary>
@@ -652,10 +665,10 @@ public sealed record RunBioroidAbilityParameters : ActionParameters
         ArgumentOutOfRangeException.ThrowIfNegative(subroutineOrdinal);
 
         ArgumentNullException.ThrowIfNull(cost);
-        if (cost.Kind != BehaviorCostKind.LoseClick || cost.Amount != 1)
+        if (!EncounteredBioroidAbilitySpec.IsSupportedCost(cost))
         {
             throw new ArgumentException(
-                "A bioroid ability action must carry exactly one typed lost click.",
+                "A bioroid ability action must carry one typed lost click or a positive credit cost.",
                 nameof(cost));
         }
 
@@ -1555,7 +1568,7 @@ public sealed class PendingDecision
         PurgeVirusCountersParameters purgeVirusCounters => new PurgeVirusCountersParameters(purgeVirusCounters.ClickCost),
         PlayCardParameters playCard => new PlayCardParameters(playCard.CardId, playCard.CreditCost, playCard.TargetServerId),
         RunServerParameters runServer => new RunServerParameters(runServer.ServerId),
-        RezCardParameters rezCard => new RezCardParameters(rezCard.CardId, rezCard.CreditCost, rezCard.CostQuote),
+        RezCardParameters rezCard => new RezCardParameters(rezCard.CardId, rezCard.CreditCost, rezCard.CostQuote, rezCard.ForfeitAgendaId),
         AdvanceCardParameters advanceCard => new AdvanceCardParameters(advanceCard.CardId, advanceCard.CreditCost),
         ScoreAgendaParameters scoreAgenda => new ScoreAgendaParameters(
             scoreAgenda.CardId,
@@ -1621,6 +1634,9 @@ public sealed class PendingDecision
             ability.SourceZoneId,
             ability.SourceZoneKind,
             ability.AdditionalCostSelections),
+        BehaviorInstallChoiceParameters behaviorInstall => new BehaviorInstallChoiceParameters(
+            behaviorInstall.FrameIdentity,
+            behaviorInstall.Choice),
         _ => throw new InvalidOperationException(
             $"No immutable clone is registered for action parameter type '{parameters.GetType().Name}'."),
     };

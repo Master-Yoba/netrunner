@@ -46,7 +46,9 @@ internal static class RunnerInference
         ImmutableArray<TrackedCard> cards = Tracker(context)?.Cards ?? [];
         double tracked = cards.Where(card => card.Place == TrackedPlace.Hand).Sum(card => card.Weight);
         double agendas = cards.Where(card => card.Place == TrackedPlace.Hand && IsAgenda(context, card.DefinitionId)).Sum(card => card.Weight);
-        return Math.Clamp((agendas + Math.Max(0, hand - tracked) * AgendaShare(context)) / hand, 0, 1);
+        double untracked = TrackerPrior.UntrackedHqAgendas(hand, tracked, Prior(context), definition => IsAgenda(context, definition),
+            context.Catalog.BehaviorVersion);
+        return Math.Clamp((agendas + untracked) / hand, 0, 1);
     }
 
     /// <summary>The chance R&amp;D's top card is an agenda: known when the Runner has seen it, otherwise at the unseen rate.</summary>
@@ -89,6 +91,29 @@ internal static class RunnerInference
         }
         return (traps, Math.Max(0, 1 - belief.Values.Sum()));
     }
+
+    /// <summary>
+    /// Runner v24 (bot loop 1): the chance an unadvanced face-down root card is an ambush the Corp can pay for whose damage
+    /// exceeds the grip (Byte!'s 3 net damage against 2 cards): its share of the root cards the Corp may hold, and at least one
+    /// in five once the Runner has seen this Corp's copy.
+    /// </summary>
+    public static double LethalAmbushShare(HeuristicContext context, int grip) => context.Memo($"lethal-ambush-share/{grip}", () =>
+    {
+        bool Lethal(string definition) => context.Catalog.TryGet(new CardDefinitionId(definition), out CardEvaluationDescriptor card)
+            && card.Agenda is null && AccessDamage(card, 0) > grip && AmbushCost(card) <= context.Opponent.Credits;
+        Dictionary<string, double> roots = TrackerPrior.Conditional(Prior(context), definition => TrackerPrior.Fits(context.Catalog, definition, "root"));
+        double share = roots.Where(pair => Lethal(pair.Key)).Sum(pair => pair.Value);
+        return context.Knowledge?.Reveals.Any(reveal => Lethal(reveal.DefinitionId)) == true ? Math.Max(share, 0.2) : share;
+    });
+
+    /// <summary>The credits the Corp pays for an ambush's damage on access (Byte!'s 4), or 0 when it costs nothing.</summary>
+    private static int AmbushCost(CardEvaluationDescriptor card) => card.Behavior?.Triggers
+        .Where(trigger => trigger.Occurrence == OccurrenceKind.CardAccessed)
+        .SelectMany(trigger => HeuristicContext.Flatten(trigger.Instructions)).Where(instruction => instruction.Choice is not null)
+        .SelectMany(instruction => instruction.Choice!.Options)
+        .Where(option => HeuristicContext.Flatten(option.Instructions).Any(instruction => instruction.Kind == BehaviorInstructionKind.DealDamage))
+        .Select(option => (option.Costs ?? []).Where(cost => cost.Kind == BehaviorCostKind.Credits).Sum(cost => cost.Amount))
+        .DefaultIfEmpty(0).Min() ?? 0;
 
     /// <summary>For Hard, which knows the list: the chance an advanced unknown root card is a trap rather than an agenda or asset.</summary>
     public static double ListTrapShare(HeuristicContext context) => context.Memo("list-trap-share", () =>
@@ -180,6 +205,7 @@ internal static class RunnerInference
         {
             BehaviorCardType.Any => true,
             BehaviorCardType.ProgramOrHardware => cardClass is RuntimeCardClass.Program or RuntimeCardClass.Hardware,
+            BehaviorCardType.ResourceOrHardware => cardClass is RuntimeCardClass.Resource or RuntimeCardClass.Hardware,
             BehaviorCardType.Program => cardClass == RuntimeCardClass.Program,
             BehaviorCardType.Icebreaker => definition.Icebreaker is not null,
             BehaviorCardType.Hardware => cardClass == RuntimeCardClass.Hardware,

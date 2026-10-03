@@ -47,7 +47,7 @@ public sealed class RunEventVariantContractTests
             DefinitionId,
             cost: 0,
             hostedCredits: 0,
-            allowedTargetServers: [ServerKind.Archives]));
+            allowedTargetServers: [ServerKind.Remote]));
         Assert.Throws<ArgumentException>(() => new RunEventBehaviorSpec(
             DefinitionId,
             cost: 0,

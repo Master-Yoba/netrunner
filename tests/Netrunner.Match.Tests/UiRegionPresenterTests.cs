@@ -484,6 +484,42 @@ public sealed class UiRegionPresenterTests
     }
 
     [Fact]
+    public void ActionsGroupACardEffectInstallChoiceWithReadableLabels()
+    {
+        // EL.8 smoke regression: Synapse Global's free install from HQ issued
+        // a behavior install choice the client showed no controls for.
+        MatchViewModel view = RepresentativeView();
+        DecisionViewModel decision = new(
+            "decision:behavior-install",
+            1,
+            new PlayerId("player:corp"),
+            PlayerSide.Corp,
+            DecisionKind.BehaviorInstallChoice,
+            "Choose a card to install");
+        LegalActionViewModel install = new(
+            new ActionId("action:behavior-install"),
+            ActionKind.InstallCard,
+            "Install card:hq (0 credits)",
+            new BehaviorInstallChoiceParameters("behavior-frame:1", new BehaviorInstallChoice(
+                new CardInstanceId("card:hq"), InstallDestinationKind.ServerRoot, serverId: null, createNewRemote: true, creditCost: 0)));
+        LegalActionViewModel nothing = new(
+            new ActionId("action:behavior-install-none"),
+            ActionKind.InstallCard,
+            "Install nothing",
+            new BehaviorInstallChoiceParameters("behavior-frame:1", null));
+
+        ActionsRegionState region = ActionsRegionPresenter.Present(
+            Snapshot(view with { Decision = decision, LegalActions = [install, nothing] }));
+
+        Assert.Equal("INSTALL CHOICE ISSUED BY CORE", Assert.Single(region.ActionGroups).Label);
+        Assert.Equal([install.Id, nothing.Id], region.DisplayActions.Select(action => action.Id));
+        Assert.Equal("card:hq", ActionsRegionPresenter.GetTargetCardId(install.Parameters));
+        Assert.Equal("Install Hedge Fund → New remote · root · 0 credits",
+            ActionLabelPresenter.Label(install, decision.Kind, _ => "Hedge Fund", server => server));
+        Assert.Equal("Install nothing", ActionLabelPresenter.Label(nothing, decision.Kind, _ => "Hedge Fund", server => server));
+    }
+
+    [Fact]
     public void ActionsGroupMandatoryVerbalUseReplacementAsActionableInterruptChoice()
     {
         MatchViewModel view = RepresentativeView();

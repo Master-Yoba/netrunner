@@ -117,4 +117,28 @@ internal static class BehaviorRunRules
             modifier.Delta == delta
             && string.Equals(modifier.ReasonKey, reasonKey, StringComparison.Ordinal)) == true;
     }
+
+    /// <summary>
+    /// Whether a definition declares an <see cref="BehaviorInstructionKind.AddBreachAccess"/>
+    /// instruction with this reason and amount anywhere in its abilities or triggers.
+    /// </summary>
+    internal static bool HasBehaviorBreachAccessDeclaration(
+        CardBehaviorDefinition definition,
+        string reasonKey,
+        int delta)
+    {
+        return definition.Instructions
+            .Concat(definition.Triggers.SelectMany(static trigger => trigger.Instructions))
+            .Concat(definition.PaidAbilities.SelectMany(static ability => ability.Instructions))
+            .Any(instruction => DeclaresBreachAccess(instruction, reasonKey, delta));
+    }
+
+    private static bool DeclaresBreachAccess(BehaviorInstruction instruction, string reasonKey, int delta) =>
+        instruction.Kind == BehaviorInstructionKind.AddBreachAccess
+            && instruction.Amount == delta
+            && string.Equals(instruction.Argument, reasonKey, StringComparison.Ordinal)
+        || instruction.Branch is { } branch
+            && branch.WhenTrue.Concat(branch.WhenFalse).Any(nested => DeclaresBreachAccess(nested, reasonKey, delta))
+        || instruction.Choice is { } choice
+            && choice.Options.SelectMany(static option => option.Instructions).Any(nested => DeclaresBreachAccess(nested, reasonKey, delta));
 }

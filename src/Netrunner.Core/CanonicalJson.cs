@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -23,11 +24,10 @@ public static class CanonicalJson
         CommentHandling = JsonCommentHandling.Disallow,
     };
 
-    public static byte[] SerializeUtf8<T>(T value)
-    {
-        byte[] json = EngineJson.SerializeUtf8(value);
-        return Canonicalize(json);
-    }
+    public static byte[] SerializeUtf8<T>(T value) => Canonicalize(EngineJson.SerializeUtf8(value));
+
+    /// <summary>The SHA-256 of a value's canonical bytes, without copying them out of the writer's buffer.</summary>
+    internal static byte[] HashUtf8<T>(T value) => SHA256.HashData(Write(EngineJson.SerializeUtf8(value)).WrittenSpan);
 
     public static string Serialize<T>(T value) =>
         Encoding.UTF8.GetString(SerializeUtf8(value));
@@ -38,10 +38,19 @@ public static class CanonicalJson
         return Canonicalize(Encoding.UTF8.GetBytes(json));
     }
 
-    public static byte[] Canonicalize(ReadOnlySpan<byte> utf8Json)
+    public static byte[] Canonicalize(ReadOnlySpan<byte> utf8Json) => Canonicalize(utf8Json.ToArray());
+
+    public static byte[] Canonicalize(byte[] utf8Json)
     {
-        using JsonDocument document = JsonDocument.Parse(utf8Json.ToArray(), ParseOptions);
-        using var buffer = new MemoryStream();
+        ArgumentNullException.ThrowIfNull(utf8Json);
+        return Write(utf8Json).WrittenSpan.ToArray();
+    }
+
+    // Parses in place (no copy) and writes into a growable buffer the caller can hash or copy.
+    private static ArrayBufferWriter<byte> Write(ReadOnlyMemory<byte> utf8Json)
+    {
+        using JsonDocument document = JsonDocument.Parse(utf8Json, ParseOptions);
+        var buffer = new ArrayBufferWriter<byte>(Math.Max(256, utf8Json.Length));
         using (var writer = new Utf8JsonWriter(buffer, new JsonWriterOptions
         {
             Indented = false,
@@ -50,7 +59,7 @@ public static class CanonicalJson
             WriteElement(writer, document.RootElement);
         }
 
-        return buffer.ToArray();
+        return buffer;
     }
 
     private static void WriteElement(Utf8JsonWriter writer, JsonElement element)
@@ -59,17 +68,32 @@ public static class CanonicalJson
         {
             case JsonValueKind.Object:
                 writer.WriteStartObject();
-                var propertyNames = new HashSet<string>(StringComparer.Ordinal);
-                foreach (JsonProperty property in element.EnumerateObject()
-                    .OrderBy(static property => property.Name, StringComparer.Ordinal))
+                int count = 0;
+                foreach (JsonProperty _ in element.EnumerateObject())
                 {
-                    if (!propertyNames.Add(property.Name))
+                    count++;
+                }
+
+                // Ordinal order; a duplicate name sorts next to its twin.
+                var names = new string[count];
+                var values = new JsonElement[count];
+                int index = 0;
+                foreach (JsonProperty property in element.EnumerateObject())
+                {
+                    names[index] = property.Name;
+                    values[index++] = property.Value;
+                }
+
+                Array.Sort(names, values, StringComparer.Ordinal);
+                for (index = 0; index < count; index++)
+                {
+                    if (index > 0 && string.Equals(names[index], names[index - 1], StringComparison.Ordinal))
                     {
-                        throw new JsonException($"Duplicate JSON object property '{property.Name}'.");
+                        throw new JsonException($"Duplicate JSON object property '{names[index]}'.");
                     }
 
-                    writer.WritePropertyName(property.Name);
-                    WriteElement(writer, property.Value);
+                    writer.WritePropertyName(names[index]);
+                    WriteElement(writer, values[index]);
                 }
 
                 writer.WriteEndObject();
@@ -87,7 +111,16 @@ public static class CanonicalJson
                 writer.WriteStringValue(element.GetString());
                 break;
             case JsonValueKind.Number:
-                writer.WriteRawValue(NormalizeNumber(element.GetRawText()), skipInputValidation: true);
+                // An integer is already canonical as its decimal digits (-0 becomes 0, as NormalizeNumber makes it).
+                if (element.TryGetInt64(out long integer))
+                {
+                    writer.WriteNumberValue(integer);
+                }
+                else
+                {
+                    writer.WriteRawValue(NormalizeNumber(element.GetRawText()), skipInputValidation: true);
+                }
+
                 break;
             case JsonValueKind.True:
                 writer.WriteBooleanValue(true);
@@ -277,7 +310,7 @@ public static class DeterministicHash
     }
 
     public static string ComputeHex<T>(T value) =>
-        ComputeHex(CanonicalJson.SerializeUtf8(value).AsSpan());
+        Convert.ToHexString(CanonicalJson.HashUtf8(value)).ToLowerInvariant();
 
     public static string Compute<T>(T value) => ComputeHex(value);
 

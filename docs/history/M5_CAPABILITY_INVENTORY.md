@@ -67,6 +67,7 @@ did not reach it; it is not evidence that a handler or rule is absent.
 | `ChooseNumber` | Lowest typed number | Generic resolver contract; actual strategic use must be identified by fixture | Not sampled independently of Setup |
 | `ChooseCard` | Semantic card-ID ordering | Generic resolver contract; prefer typed contextual value where reachable | Not sampled independently of TurnDiscard |
 | `ToyTurn` | Unsupported by full-game agent | Deliberately outside Gateway; retain toy-agent tests separately | Not applicable |
+| `BehaviorInstallChoice` | First offered install, else decline (Elevation, EL.2) | Card-effect installs from a zone (Synapse Global, Off the Books, Key Performance Indicators); not issued by any Gateway design | Not applicable |
 
 There are 15 Core decision kinds; nine occurred in this baseline. Setup actions
 have `ActionKind.ChooseNumber`, and discards use `ActionKind.ChooseCard`, but these

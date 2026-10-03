@@ -17,8 +17,63 @@ public static class CardDataResource
         LoadEmbeddedCore,
         LazyThreadSafetyMode.ExecutionAndPublication);
 
+    private static readonly Lazy<CardDataSet?> EmbeddedElevation = new(
+        LoadEmbeddedElevationCore,
+        LazyThreadSafetyMode.ExecutionAndPublication);
+
     /// <summary>The authenticated source mode selected during the build.</summary>
     public static string EmbeddedMode => GeneratedCardData.Mode;
+
+    /// <summary>
+    /// The pack codes embedded in this build, in pool order. A synthetic
+    /// build embeds only its fixture pack; an official build embeds System
+    /// Gateway and Elevation, each authenticated by its own manifest.
+    /// </summary>
+    public static IReadOnlyList<string> EmbeddedPackCodes =>
+        EmbeddedElevation.Value is null
+            ? [LoadEmbedded().Manifest.PackCode]
+            : [LoadEmbedded().Manifest.PackCode, OfficialCardPacks.ElevationCode];
+
+    /// <summary>Whether this build embeds the named pack.</summary>
+    public static bool HasEmbeddedPack(string packCode) =>
+        EmbeddedPackCodes.Contains(packCode, StringComparer.Ordinal);
+
+    /// <summary>
+    /// Loads one embedded pack by code. The primary pack is the payload
+    /// <see cref="LoadEmbedded"/> returns; Elevation is a second pack that is
+    /// present only in official builds.
+    /// </summary>
+    public static CardDataSet LoadEmbeddedPack(string packCode)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(packCode);
+        CardDataSet primary = LoadEmbedded();
+        if (string.Equals(primary.Manifest.PackCode, packCode, StringComparison.Ordinal))
+        {
+            return primary;
+        }
+
+        if (string.Equals(packCode, OfficialCardPacks.ElevationCode, StringComparison.Ordinal)
+            && EmbeddedElevation.Value is { } elevation)
+        {
+            return elevation;
+        }
+
+        throw new CardDataValidationException(
+            $"DATA-400: pack '{packCode}' is not embedded in this {EmbeddedMode} build.");
+    }
+
+    /// <summary>
+    /// Loads a pool of embedded packs as one set. Each pack keeps its own
+    /// manifest under <see cref="CardDataSet.Packs"/>.
+    /// </summary>
+    public static CardDataSet LoadEmbeddedPool(IReadOnlyList<string> packCodes)
+    {
+        ArgumentNullException.ThrowIfNull(packCodes);
+        return CardDataSet.Combine(packCodes.Select(LoadEmbeddedPack).ToArray());
+    }
+
+    /// <summary>Loads every embedded pack as one pool.</summary>
+    public static CardDataSet LoadEmbeddedPool() => LoadEmbeddedPool(EmbeddedPackCodes);
 
     /// <summary>
     /// Gets the generated card snapshot after validating its checksum,
@@ -99,6 +154,29 @@ public static class CardDataResource
         return LoadBytes(cards, manifest, copyright, requireOfficial);
     }
 
+    private static CardDataSet? LoadEmbeddedElevationCore()
+    {
+        if (GeneratedCardData.ElevationCardsBase64.Length == 0
+            && GeneratedCardData.ElevationManifestBase64.Length == 0
+            && GeneratedCardData.ElevationCopyrightBase64.Length == 0)
+        {
+            return null;
+        }
+
+        CardDataSet elevation = LoadBytes(
+            Decode(GeneratedCardData.ElevationCardsBase64, "Elevation cards"),
+            Decode(GeneratedCardData.ElevationManifestBase64, "Elevation manifest"),
+            Decode(GeneratedCardData.ElevationCopyrightBase64, "Elevation copyright"),
+            requireOfficialGateway: true);
+        if (!string.Equals(elevation.Manifest.PackCode, OfficialCardPacks.ElevationCode, StringComparison.Ordinal))
+        {
+            throw new CardDataValidationException(
+                $"DATA-400: the embedded Elevation payload is pack '{elevation.Manifest.PackCode}'.");
+        }
+
+        return elevation;
+    }
+
     private static byte[] Decode(string value, string description)
     {
         try
@@ -157,9 +235,23 @@ public sealed class CardMetadataCatalog : IReadOnlyDictionary<string, Normalized
             throw new CardDataValidationException("Card metadata catalog must contain at least one card.");
         }
 
-        CardDataValidator.ValidateRecords(values, values[0].SetCode);
-        _cards = new ReadOnlyDictionary<string, NormalizedCardDefinition>(
-            values.ToDictionary(static card => card.Code, StringComparer.Ordinal));
+        // A pool spans packs; each pack's records are validated (and kept in
+        // their normalized order) on their own.
+        foreach (IGrouping<string, NormalizedCardDefinition> pack in values.GroupBy(static card => card.SetCode))
+        {
+            CardDataValidator.ValidateRecords(pack.ToArray(), pack.Key);
+        }
+
+        var byCode = new Dictionary<string, NormalizedCardDefinition>(StringComparer.Ordinal);
+        foreach (NormalizedCardDefinition card in values)
+        {
+            if (!byCode.TryAdd(card.Code, card))
+            {
+                throw new CardDataValidationException($"Duplicate normalized card code '{card.Code}'.");
+            }
+        }
+
+        _cards = new ReadOnlyDictionary<string, NormalizedCardDefinition>(byCode);
     }
 
     public static CardMetadataCatalog Embedded() => new(CardDataResource.LoadEmbedded().Cards);

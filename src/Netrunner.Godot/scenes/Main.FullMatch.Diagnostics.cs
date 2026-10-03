@@ -3,7 +3,6 @@ using System.Reflection;
 using System.Text;
 using Godot;
 using Netrunner.AI;
-using Netrunner.Cards;
 using Netrunner.Core;
 using Netrunner.Match;
 
@@ -129,35 +128,26 @@ public partial class Main
 	private MatchCoordinator CreateOfficialFullMatchCoordinator(
 		string corpPresetId,
 		string runnerPresetId,
-		CardDataSet data,
 		PlayerSide humanSide,
-		ulong seed,
-		OfficialPresetCatalog officialPresets)
+		ulong seed)
 	{
-		IBehaviorCatalog behavior = GatewayBehaviorCatalog.Create();
-		MatchRequest request = MatchRequestComposer.ComposeOfficial(
-			corpPresetId,
-			runnerPresetId,
-			data,
-			seed,
-			officialPresets,
-			behaviorCatalog: behavior);
-		return CreateCoordinatorForRequest(request, data, humanSide, behavior, resumeSource: null);
+		// D-EL-8: the pairing's format supplies the card data, catalogs and presets.
+		PlayFormatContent content = PlayFormats.Get(PlayFormats.FormatOfPresets(corpPresetId, runnerPresetId));
+		MatchRequest request = content.ComposeOfficial(corpPresetId, runnerPresetId, seed);
+		return CreateCoordinatorForRequest(request, content, humanSide, resumeSource: null);
 	}
 
 	private MatchCoordinator CreateCoordinatorForRequest(
 		MatchRequest request,
-		CardDataSet data,
+		PlayFormatContent content,
 		PlayerSide humanSide,
-		IBehaviorCatalog behavior,
 		string? resumeSource)
 	{
 		ArgumentNullException.ThrowIfNull(request);
-		ArgumentNullException.ThrowIfNull(data);
-		ArgumentNullException.ThrowIfNull(behavior);
+		ArgumentNullException.ThrowIfNull(content);
 
 		BeginFullMatchSessionTrace(request, humanSide, resumeSource);
-		FullMatchDefinition definition = FullMatchDefinition.FromRequest(request, data, behavior);
+		FullMatchDefinition definition = content.Compose(request);
 		PlayerSide opponentSide = humanSide == PlayerSide.Corp ? PlayerSide.Runner : PlayerSide.Corp;
 		IGameAgent opponent = resumeSource is not null
 			? OfflineMatchFactory.CreateTraceOpponent(definition, humanSide, resumeSource, _resumeThroughActionSequence)
@@ -403,8 +393,8 @@ public partial class Main
 				_matchHistory.ReportHeader = $"Netrunner · recovered seed {request.Seed} · {humanSide} · {corpPresetId} / {runnerPresetId}";
 			}
 
-			IBehaviorCatalog behavior = GatewayBehaviorCatalog.Create();
-			_coordinator = CreateCoordinatorForRequest(request, _embeddedCardData!, humanSide, behavior, source);
+			_coordinator = CreateCoordinatorForRequest(request,
+				PlayFormats.Get(PlayFormats.FormatOfPresets(corpPresetId, runnerPresetId)), humanSide, source);
 			_fullMatchResumePaused = true;
 			_startButton.Disabled = true;
 			_status.Text = "Recovered decision loaded · press Continue to resume this match.";

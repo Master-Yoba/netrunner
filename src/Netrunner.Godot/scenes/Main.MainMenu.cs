@@ -17,6 +17,9 @@ public partial class Main
 {
 	private const string TutorialMode = "tutorial";
 	private const string GatewayMode = "gateway";
+	// D-EL-8: the mode's value is the format's ID.
+	private const string ElevationMode = CardFormatIds.GatewayElevation;
+	private const string NsgCoreMode = CardFormatIds.NsgCoreSets;
 	private const string RandomOpponent = "random";
 
 	private readonly List<Control> _legacySetupControls = [];
@@ -149,7 +152,14 @@ public partial class Main
 		var view = new VBoxContainer { Name = "NewGameView", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
 		view.AddThemeConstantOverride("separation", 12);
 		view.AddChild(MakeLabel("NEW GAME", 32, Accent));
-		HBoxContainer modes = MenuToggleRow(view, [("Gateway decks", GatewayMode), ("Tutorial", TutorialMode)], _menuMode, mode =>
+		(string, string)[] modeOptions =
+		[
+			("Gateway decks", GatewayMode),
+			.. ElevationMenuOffered ? [("Core Battle Box", ElevationMode)] : Array.Empty<(string, string)>(),
+			.. NsgCoreMenuOffered ? [("NSG Core Sets", NsgCoreMode)] : Array.Empty<(string, string)>(),
+			("Tutorial", TutorialMode),
+		];
+		HBoxContainer modes = MenuToggleRow(view, modeOptions, _menuMode, mode =>
 		{
 			_menuMode = mode;
 			_menuYourDeck = null;
@@ -204,25 +214,52 @@ public partial class Main
 		return view;
 	}
 
-	/// <summary>The decks for the current mode and seat, as cards; the opponent side adds "Random" for Gateway decks.</summary>
+	/// <summary>D-EL-10: the Core Battle Box decks are published lists, offered wherever the pool is installed.</summary>
+	private bool ElevationMenuOffered =>
+		HasAuthenticatedOfficialContent() && PlayFormats.IsAvailable(CardFormatIds.GatewayElevation);
+
+	/// <summary>NSG's published Core Sets decks need no review: the format is offered wherever its pool is installed.</summary>
+	private bool NsgCoreMenuOffered =>
+		HasAuthenticatedOfficialContent() && PlayFormats.IsAvailable(CardFormatIds.NsgCoreSets);
+
+	/// <summary>A mode's decks: a format's own decks, or the teaching decks for the tutorial.</summary>
+	private IEnumerable<OfficialPreset> MenuModeDecks(string mode) => mode switch
+	{
+		TutorialMode => _officialPresetCatalog!.Teaching,
+		ElevationMode => PlayFormats.Get(CardFormatIds.GatewayElevation).Decks,
+		NsgCoreMode => PlayFormats.Get(CardFormatIds.NsgCoreSets).Decks,
+		_ => _officialPresetCatalog!.Gateway.Where(preset => PlayFormats.FormatOfPreset(preset.PresetId) == CardFormatIds.Gateway),
+	};
+
+	/// <summary>Card metadata for the menu's identity tiles: the whole pool when Elevation is installed.</summary>
+	private ICardMetadataResolver MenuMetadata =>
+		PlayFormats.IsAvailable(CardFormatIds.GatewayElevation) ? PlayFormats.Get(CardFormatIds.GatewayElevation).Metadata : _metadataResolver;
+
+	/// <summary>The decks for the current mode and seat, as cards; the opponent side adds "Random" outside the tutorial.</summary>
 	private void RefreshMenuDecks()
 	{
 		if (_menuYourDecks is null || _menuOpponentDecks is null || _officialPresetCatalog is null) return;
 		PlayerSide opponent = _menuSeat == PlayerSide.Corp ? PlayerSide.Runner : PlayerSide.Corp;
-		OfficialPreset[] Decks(PlayerSide side) => (_menuMode == GatewayMode ? _officialPresetCatalog.Gateway : _officialPresetCatalog.Teaching)
+		OfficialPreset[] Decks(PlayerSide side) => MenuModeDecks(_menuMode)
 			.Where(preset => preset.Side == side && preset.Playable).ToArray();
 		OfficialPreset[] yours = Decks(_menuSeat);
 		OfficialPreset[] theirs = Decks(opponent);
 		// Expanded is the tutorial default (playtest, 27 September); Gateway starts on the first deck.
 		string Default(OfficialPreset[] decks) => decks.FirstOrDefault(preset => preset.Kind == "expanded")?.PresetId ?? decks[0].PresetId;
 		_menuYourDeck ??= yours.Length > 0 ? Default(yours) : null;
-		_menuOpponentDeck ??= _menuMode == GatewayMode ? RandomOpponent : theirs.Length > 0 ? Default(theirs) : null;
+		_menuOpponentDeck ??= _menuMode != TutorialMode ? RandomOpponent : theirs.Length > 0 ? Default(theirs) : null;
 		if (_menuModeDescription is not null)
-			_menuModeDescription.Text = _menuMode == GatewayMode
-				? "The seven System Gateway sample decks from Null Signal Games: one per faction, built to show how each plays."
-				: "The Catalyst and the Syndicate, the learn-to-play decks. The basic decks start small; the expanded decks add the booster cards.";
+			_menuModeDescription.Text = _menuMode switch
+			{
+				GatewayMode => "The seven System Gateway sample decks from Null Signal Games: one per faction, built to show how each plays.",
+				ElevationMode => "The Core Battle Box: seven System Gateway + Elevation decks by lunari, one per faction, "
+					+ "built to be played against each other. Random opponents come from these decks.",
+				NsgCoreMode => "NSG Core Sets: Null Signal Games' twenty-one System Gateway + Elevation sample decks, one per identity, "
+					+ "with no ban list. Random opponents come from these decks.",
+				_ => "The Catalyst and the Syndicate, the learn-to-play decks. The basic decks start small; the expanded decks add the booster cards.",
+			};
 		FillMenuDecks(_menuYourDecks, yours, _menuYourDeck, allowRandom: false, id => { _menuYourDeck = id; RefreshMenuDecks(); });
-		FillMenuDecks(_menuOpponentDecks, theirs, _menuOpponentDeck, allowRandom: _menuMode == GatewayMode,
+		FillMenuDecks(_menuOpponentDecks, theirs, _menuOpponentDeck, allowRandom: _menuMode != TutorialMode,
 			id => { _menuOpponentDeck = id; RefreshMenuDecks(); });
 	}
 
@@ -262,7 +299,7 @@ public partial class Main
 		row.OffsetRight = -10;
 		row.OffsetBottom = -10;
 		button.AddChild(row);
-		if (identityCode is not null && _metadataResolver.TryResolve(identityCode, out CardPresentationMetadata metadata))
+		if (identityCode is not null && MenuMetadata.TryResolve(identityCode, out CardPresentationMetadata metadata))
 		{
 			var card = new TableCardControl
 			{
@@ -300,7 +337,7 @@ public partial class Main
 			: $"The learn-to-play deck with the booster cards: {preset.CardCount} cards.");
 
 	private string IdentityTitle(string code) =>
-		_metadataResolver.TryResolve(code, out CardPresentationMetadata metadata) ? metadata.Title : code;
+		MenuMetadata.TryResolve(code, out CardPresentationMetadata metadata) ? metadata.Title : code;
 
 	/// <summary>Starts the chosen game through the setup form: its decks, side, difficulty and a fresh seed.</summary>
 	private void StartMenuGame()
@@ -309,7 +346,8 @@ public partial class Main
 		string opponent = _menuOpponentDeck;
 		if (opponent == RandomOpponent)
 		{
-			OfficialPreset[] pool = _officialPresetCatalog.Gateway
+			// D-EL-8: a random opponent comes from the chosen format's decks.
+			OfficialPreset[] pool = MenuModeDecks(_menuMode)
 				.Where(preset => preset.Side != _menuSeat && preset.Playable).ToArray();
 			opponent = pool[(int)(GD.Randi() % (uint)pool.Length)].PresetId;
 		}
@@ -383,7 +421,7 @@ public partial class Main
 	private void RefreshMenuOpponentOptions()
 	{
 		if (_menuDifficulties is null || _menuPersonalities is null) return;
-		bool gateway = _menuMode == GatewayMode;
+		bool gateway = _menuMode != TutorialMode;
 		Button[] buttons = FindDescendants<Button>(_menuDifficulties);
 		Button hard = buttons.Single(button => button.Text == "Hard opponent");
 		hard.Visible = gateway;

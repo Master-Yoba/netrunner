@@ -17,6 +17,11 @@ public sealed partial class CorpHeuristicPolicy
                 "install/complete-required-replacement", Objective: new("install", null, null, install.CardId.Value));
         }
         AgentServer? server = context.Server(install.ServerId);
+        // v28 (bot loop 1): a card replaced by its own copy is paid for again, so it is only worth it when the installed copy
+        // has run down (a rezzed campaign out of credits); Mahkota Langit Grid replaced its unrezzed copy in R&D for a click.
+        if (context.Generation >= 23 && install.RequiredReplacementCardIds.Select(id => context.Card(id))
+                .Any(installed => installed?.DefinitionId == card!.DefinitionId && !RunDown(context, installed)))
+            return new(-100, -500, "development/replaces-its-own-copy", true, new("install", null, null, install.CardId.Value));
         int lost = install.RequiredReplacementCardIds.Sum(id => context.CardValue(context.Card(id), installed: true));
         // v6: a remote's root holds one agenda or asset, so installing another
         // there trashes it; an agenda thrown away costs far more than its card value.
@@ -340,6 +345,18 @@ public sealed partial class CorpHeuristicPolicy
     }
 
     /// <summary>
+    /// v28: whether an installed card has lost value a fresh copy would restore: rezzed, and holding fewer of the credits it
+    /// loads when rezzed (a campaign). A card without such credits (an upgrade, recurring credits) loses nothing over time.
+    /// </summary>
+    private static bool RunDown(HeuristicContext context, AgentCard installed)
+    {
+        int load = context.Definition(installed)?.Behavior?.Triggers.Where(trigger => trigger.Occurrence == OccurrenceKind.CardRezzed)
+            .SelectMany(trigger => HeuristicContext.Flatten(trigger.Instructions))
+            .Where(instruction => instruction.Kind == BehaviorInstructionKind.LoadHostedCredits).Sum(instruction => instruction.Amount) ?? 0;
+        return installed.Rezzed == true && load > 0 && HeuristicContext.Hosted(installed) < load;
+    }
+
+    /// <summary>
     /// v11: an upgrade goes where it works. One that pays off when an agenda is
     /// scored from its own root (Malapert Data Vault) belongs in a remote that
     /// holds or will hold an agenda, and a unique upgrade never replaces its own copy.
@@ -456,6 +473,26 @@ public sealed partial class CorpHeuristicPolicy
         // isn't held back for ICE the Runner has already passed or chosen not to face.
         // It waits until the Runner is past the server's ICE, which may still stop the run.
         bool attacked = context.Features.Board.Run?.AttackedServer is { } attackedServer && attackedServer == server?.Id;
+        // v27 (bot loop 1, 3 October): upgrades that work outside scoring were held back as scoring upgrades.
+        // Mercia B4LL4RD installs ICE from HQ when the action phase ends; Mahkota Langit Grid's credits pay rezzes in
+        // its server. Each is rezzed once it has something to do.
+        if (context.Generation >= 22 && definition?.Printed.CardClass == RuntimeCardClass.Upgrade && definition.Behavior is { } upgrade)
+        {
+            bool installsIce = upgrade.Triggers.Any(trigger => trigger.Occurrence == OccurrenceKind.ActionPhaseEnded
+                && HeuristicContext.Flatten(trigger.Instructions).Any(instruction => instruction.Kind == BehaviorInstructionKind.InstallCard));
+            bool paysRezzes = upgrade.Triggers.Any(trigger => HeuristicContext.Flatten(trigger.Instructions)
+                .Any(instruction => instruction.Kind == BehaviorInstructionKind.RefillRecurringCredits));
+            if (installsIce || paysRezzes)
+            {
+                bool work = installsIce
+                    ? context.Features.Board.Turn.ActiveSide == PlayerSide.Corp && context.Features.Hand.Any(held => context.Definition(held)?.Ice is not null)
+                    : server is not null && server.Ice.Concat(server.Root).Any(other => other is { Rezzed: false } && other.Id != card?.Id
+                        && context.Definition(other)?.Printed.CardClass is RuntimeCardClass.Ice or RuntimeCardClass.Asset);
+                return work && cost <= context.Self.Credits
+                    ? Value(150 - cost * 30, "rez/utility-upgrade-has-work", approximate: true)
+                    : Value(-20, "rez/utility-upgrade-waits-for-work");
+            }
+        }
         // v13 (playtest, 29 September): an upgrade that only pays off when the Corp scores from its
         // server (Malapert Data Vault) does nothing during a run; it is rezzed in the Corp's own turn,
         // once an agenda in its root can be scored.
@@ -494,6 +531,17 @@ public sealed partial class CorpHeuristicPolicy
                 && definition.Behavior?.Triggers.Any(trigger => trigger.Occurrence == OccurrenceKind.TurnBegin && !trigger.ActiveWhileUnrezzed) == true
                 && (card?.AdvancementCounters ?? 0) > 0)
                 return Value((card!.AdvancementCounters ?? 0) * 150 - cost * context.CreditValue, "rez/trap-before-turn", approximate: true);
+            // v27 (bot loop 1, 3 October): an asset that works by a click ability (Humanoid Resources) or by counters it
+            // gathers each turn (Phật Gioan Baotixita) has no income, and was never rezzed.
+            if (context.Generation >= 22 && futureIncome == 0 && immediateDraw == 0 && definition.Behavior is { } asset)
+            {
+                int clicks = asset.PaidAbilities.Select(ability => ability.Costs.Where(paid => paid.Kind is BehaviorCostKind.Clicks)
+                    .Sum(paid => paid.Amount)).Where(total => total > 0).DefaultIfEmpty(0).Min();
+                bool usable = clicks > 0 && context.Features.Board.Turn.ActiveSide == PlayerSide.Corp && context.Self.Clicks >= clicks;
+                bool gathers = asset.Triggers.Any(trigger => trigger.Occurrence is OccurrenceKind.DiscardPhaseEnded or OccurrenceKind.TurnBegin
+                    && HeuristicContext.Flatten(trigger.Instructions).Any(instruction => instruction.Kind == BehaviorInstructionKind.AddCounter));
+                if (usable || gathers) return Value(100 - cost * 30, "rez/ability-or-counter-asset", approximate: true);
+            }
             if (futureIncome == 0 && immediateDraw == 0) return Value(-10, "rez/no-current-payoff", approximate: true);
             // v12 (self-play review, 28 September): an economy asset rezzed mid-way through the Runner's
             // turn shows it to a Runner who can still run and trash it; it waits for the last windows

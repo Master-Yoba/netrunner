@@ -265,7 +265,7 @@ public static class OddityLints
         var titles = new Dictionary<string, string>(StringComparer.Ordinal);
         try
         {
-            foreach (Netrunner.Cards.NormalizedCardDefinition card in Netrunner.Cards.CardDataResource.LoadEmbedded().Cards)
+            foreach (Netrunner.Cards.NormalizedCardDefinition card in Netrunner.Cards.CardDataResource.LoadEmbeddedPool().Cards)
                 titles[card.Code] = card.Title;
         }
         catch (InvalidOperationException)

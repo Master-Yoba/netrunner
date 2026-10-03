@@ -367,13 +367,15 @@ public sealed record GameplayOccurrenceEffect : EffectInstruction
         CardInstanceId? subjectCardId = null,
         ServerId? serverId = null,
         bool? successful = null,
-        RunPersistentContext? runContext = null)
+        RunPersistentContext? runContext = null,
+        bool? subjectWasRezzed = null)
     {
         if (!Enum.IsDefined(kind)
             || kind is not (OccurrenceKind.CardInstalled
                 or OccurrenceKind.CardRezzed
                 or OccurrenceKind.ServerApproached
                 or OccurrenceKind.IceEncountered
+                or OccurrenceKind.IceApproached
                 or OccurrenceKind.RunSuccessful
                 or OccurrenceKind.RunEnded
                 or OccurrenceKind.AgendaScoredOrStolen
@@ -381,7 +383,16 @@ public sealed record GameplayOccurrenceEffect : EffectInstruction
                 or OccurrenceKind.HostedCreditPoolEmptied
                 or OccurrenceKind.CardAdvancedFromZero
                 or OccurrenceKind.AccessedCardTrashed
-                or OccurrenceKind.DiscardPhaseEnded))
+                or OccurrenceKind.DiscardPhaseEnded
+                or OccurrenceKind.ActionPhaseEnded
+                or OccurrenceKind.RunBegan
+                or OccurrenceKind.AgendaForfeited
+                or OccurrenceKind.FirstTagRemovalThisTurn
+                or OccurrenceKind.FirstCardCreditGainThisTurn
+                or OccurrenceKind.FirstOperationPlayedThisTurn
+                or OccurrenceKind.DamageDone
+                or OccurrenceKind.CardsTrashedFromHq
+                or OccurrenceKind.HandSizeDiscarded))
         {
             throw new ArgumentOutOfRangeException(nameof(kind));
         }
@@ -408,7 +419,7 @@ public sealed record GameplayOccurrenceEffect : EffectInstruction
                 nameof(serverId));
         }
 
-        if (kind == OccurrenceKind.IceEncountered
+        if (kind is OccurrenceKind.IceEncountered or OccurrenceKind.IceApproached
             && (serverId is null || subjectCardId is null))
         {
             throw new ArgumentException(
@@ -424,6 +435,9 @@ public sealed record GameplayOccurrenceEffect : EffectInstruction
         if (runContext is not null && kind != OccurrenceKind.RunEnded)
             throw new ArgumentException("Run context belongs only to a run-end occurrence.", nameof(runContext));
         RunContext = runContext?.Copy();
+        if (subjectWasRezzed is not null && kind != OccurrenceKind.AccessedCardTrashed)
+            throw new ArgumentException("Only a trashed-card occurrence records whether its subject was rezzed.", nameof(subjectWasRezzed));
+        SubjectWasRezzed = subjectWasRezzed;
     }
 
     [JsonInclude]
@@ -445,6 +459,15 @@ public sealed record GameplayOccurrenceEffect : EffectInstruction
     [JsonInclude]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? Successful { get; private set; }
+
+    /// <summary>
+    /// Last-known information for a trashed card: whether it was rezzed when
+    /// trashed, so its own "when trashed" ability can still trigger. Recorded
+    /// only by catalogs that track turn events, so Gateway bytes are unchanged.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? SubjectWasRezzed { get; private set; }
 }
 
 /// <summary>
@@ -530,7 +553,7 @@ public sealed record EffectBundle
             RemoveLingeringEffect value => new RemoveLingeringEffect(value.EffectId),
             MoveCardEffect value => new MoveCardEffect(value.CardId, value.DestinationZoneId),
             TurnBoundaryEffect value => new TurnBoundaryEffect(value.Kind, value.Target, value.TurnNumber),
-            GameplayOccurrenceEffect value => new GameplayOccurrenceEffect(value.Kind, value.Controller, value.SubjectCardId, value.ServerId, value.Successful, value.RunContext),
+            GameplayOccurrenceEffect value => new GameplayOccurrenceEffect(value.Kind, value.Controller, value.SubjectCardId, value.ServerId, value.Successful, value.RunContext, value.SubjectWasRezzed),
             BasicDrawEffect value => new BasicDrawEffect(value.Side, value.DrawCount, value.IsReplacement, value.OccurrenceId, value.IsFirstBasicDraw),
             _ => throw new ArgumentException($"Unknown effect instruction type '{instruction.GetType().Name}'.", nameof(instruction)),
         };
@@ -680,6 +703,7 @@ public static class EffectInstructionValidator
                                 or OccurrenceKind.CardRezzed
                                 or OccurrenceKind.ServerApproached
                                 or OccurrenceKind.IceEncountered
+                                or OccurrenceKind.IceApproached
                                 or OccurrenceKind.RunSuccessful
                                 or OccurrenceKind.RunEnded
                                 or OccurrenceKind.AgendaScoredOrStolen
@@ -687,7 +711,16 @@ public static class EffectInstructionValidator
                                 or OccurrenceKind.HostedCreditPoolEmptied
                 or OccurrenceKind.CardAdvancedFromZero
                 or OccurrenceKind.AccessedCardTrashed
-                or OccurrenceKind.DiscardPhaseEnded))
+                or OccurrenceKind.DiscardPhaseEnded
+                or OccurrenceKind.ActionPhaseEnded
+                or OccurrenceKind.RunBegan
+                or OccurrenceKind.AgendaForfeited
+                or OccurrenceKind.FirstTagRemovalThisTurn
+                or OccurrenceKind.FirstCardCreditGainThisTurn
+                or OccurrenceKind.FirstOperationPlayedThisTurn
+                or OccurrenceKind.DamageDone
+                or OccurrenceKind.CardsTrashedFromHq
+                or OccurrenceKind.HandSizeDiscarded))
                         {
                             Add(violations, "effects.invalid-gameplay-occurrence-kind", $"{instructionPath}.kind", $"'{occurrence.Kind}' is not a supported gameplay occurrence.");
                         }
@@ -713,7 +746,7 @@ public static class EffectInstructionValidator
                                 "A ServerApproached occurrence must identify its server and must not identify a subject card.");
                         }
 
-                        if (occurrence.Kind == OccurrenceKind.IceEncountered
+                        if (occurrence.Kind is OccurrenceKind.IceEncountered or OccurrenceKind.IceApproached
                             && (occurrence.ServerId is null || occurrence.SubjectCardId is null))
                         {
                             Add(

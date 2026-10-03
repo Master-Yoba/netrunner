@@ -151,9 +151,7 @@ public static partial class GameEngine
                      .Where(cardId => !frame.SelectedReplacementCardIds.Contains(cardId)))
         {
             IReadOnlyList<CardInstanceId> selected = frame.SelectedReplacementCardIds.Append(candidate).ToArray();
-            int baseCost = CalculateInstallBaseCost(working, frame, plan, selected);
-            CostQuote? quote = InstallCostQuote(working, plan.Card, baseCost, frame.InitiationKind);
-            int effectiveCost = quote?.EffectiveCost ?? baseCost;
+            (int effectiveCost, CostQuote? quote) = InstallFrameCost(working, frame, plan, selected);
             materialized.Add(new InstallCardParameters(
                 frame.CardId,
                 frame.DestinationKind,
@@ -168,16 +166,12 @@ public static partial class GameEngine
         }
 
         PlayerState player = GetPlayer(working, frame.Owner);
-        int selectedBaseCost = CalculateInstallBaseCost(
-            working,
-            frame,
-            plan,
-            frame.SelectedReplacementCardIds);
-        CostQuote? selectedQuote = InstallCostQuote(working, plan.Card, selectedBaseCost, frame.InitiationKind);
-        int selectedCost = selectedQuote?.EffectiveCost ?? selectedBaseCost;
+        (int selectedCost, CostQuote? selectedQuote) = InstallFrameCost(working, frame, plan, frame.SelectedReplacementCardIds);
         if (InstallSelectionSatisfiesRequirements(working, frame, plan, frame.SelectedReplacementCardIds)
             && (IsClickFreeInstall(frame.InitiationKind) || player.Clicks >= 1)
-            && player.Credits >= selectedCost)
+            // The same affordability as planning and commit: the wallet and declared hosted credits (Open Market).
+            && player.Credits + DeclaredHostedCredits(working, player.Side, BehaviorHostedCreditUseKind.InstallResource,
+                GetCard(working, frame.CardId)) >= selectedCost)
         {
             materialized.Add(new InstallCardParameters(
                 frame.CardId,
@@ -209,10 +203,12 @@ public static partial class GameEngine
 
         PlayerSide side = turnFrame.ActiveSide;
         PlayerState player = GetPlayer(working, side);
-        ZoneKind sourceKind = side == PlayerSide.Corp ? ZoneKind.CorpHand : ZoneKind.RunnerGrip;
-        ZoneState source = GetZone(working, sourceKind);
         CardInstanceState card = working.Cards.SingleOrDefault(candidate => candidate.Id == parameters.CardId)
             ?? throw new ResolutionFailureException($"Card '{parameters.CardId}' does not exist.");
+        ZoneKind sourceKind = side == PlayerSide.Corp
+            ? ZoneKind.CorpHand
+            : IsGripLikeHosted(working, card) ? ZoneKind.RunnerHostedFaceUp : ZoneKind.RunnerGrip;
+        ZoneState source = GetZone(working, sourceKind);
         if (card.OwnerSide != side || card.ZoneId != source.Id || !source.CardIds.Contains(card.Id))
         {
             throw new ResolutionFailureException($"Card '{parameters.CardId}' is not in the active player's install source.");
@@ -345,17 +341,8 @@ public static partial class GameEngine
 
         if (parameters.FinalizeSelection)
         {
-            int expectedFinalBaseCost = CalculateInstallBaseCost(
-                working,
-                frame,
-                plan,
-                frame.SelectedReplacementCardIds);
-            CostQuote? expectedFinalQuote = InstallCostQuote(
-                working,
-                plan.Card,
-                expectedFinalBaseCost,
-                frame.InitiationKind);
-            int expectedFinalCost = expectedFinalQuote?.EffectiveCost ?? expectedFinalBaseCost;
+            (int expectedFinalCost, CostQuote? expectedFinalQuote) =
+                InstallFrameCost(working, frame, plan, frame.SelectedReplacementCardIds);
             if (!parameters.SelectedReplacementCardIds.SequenceEqual(frame.SelectedReplacementCardIds)
                 || parameters.CreditCost != expectedFinalCost
                 || !CostQuotesEqual(parameters.CostQuote, expectedFinalQuote)
@@ -384,13 +371,8 @@ public static partial class GameEngine
             throw new ResolutionFailureException("The incremental install selection is not a remaining frozen candidate.");
         }
 
-        int expectedBaseCost = CalculateInstallBaseCost(
-            working,
-            frame,
-            plan,
-            parameters.SelectedReplacementCardIds);
-        CostQuote? expectedQuote = InstallCostQuote(working, plan.Card, expectedBaseCost, frame.InitiationKind);
-        int expectedCost = expectedQuote?.EffectiveCost ?? expectedBaseCost;
+        (int expectedCost, CostQuote? expectedQuote) =
+            InstallFrameCost(working, frame, plan, parameters.SelectedReplacementCardIds);
         if (parameters.CreditCost != expectedCost
             || !CostQuotesEqual(parameters.CostQuote, expectedQuote))
         {
@@ -426,8 +408,10 @@ public static partial class GameEngine
         // quote is the current quote for this card and selection.  Use its
         // effective amount for the actual payment so the transaction cannot
         // silently fall back to the printed/base cost.
-        int cost = frame.CostQuote?.EffectiveCost ?? baseCost;
-        if (player.Credits < cost)
+        int cost = frame.InitiationKind == InstallInitiationKind.BehaviorZoneInstall
+            ? InstallFrameCost(working, frame, plan, frame.SelectedReplacementCardIds).Cost
+            : frame.CostQuote?.EffectiveCost ?? baseCost;
+        if (player.Credits + DeclaredHostedCredits(working, player.Side, BehaviorHostedCreditUseKind.InstallResource, GetCard(working, frame.CardId)) < cost)
         {
             throw new ResolutionFailureException($"Installing '{frame.CardId}' requires {cost} credits.");
         }
@@ -472,7 +456,12 @@ public static partial class GameEngine
             RecalculateUsedMemory(working);
         }
 
-        ApplyCreditDeltaIfNonZero(working, player.Id, -cost);
+        PayCreditsWithDeclaredHosted(working, player.Id, BehaviorHostedCreditUseKind.InstallResource, GetCard(working, frame.CardId), cost);
+        if (plan.Source.Kind is ZoneKind.CorpScore or ZoneKind.RunnerScore && plan.Spec.AgendaPoints > 0)
+        {
+            // EL-INSTALL-FROM-SCORE-AREA: the agenda's points leave that score area with it.
+            AddAgendaPoints(working, plan.Source.Kind == ZoneKind.CorpScore ? PlayerSide.Corp : PlayerSide.Runner, -plan.Spec.AgendaPoints);
+        }
         if (frame.InitiationKind == InstallInitiationKind.BasicAction)
         {
             SpendClick(working, player.Id);
@@ -518,6 +507,7 @@ public static partial class GameEngine
             source.Id,
             destination.Id,
             cost));
+        RecordFreeInstall(working, frame.CardId, cost);
 
         if (working.ResolutionStack.Count > 0 && working.ResolutionStack[^1] is InstallFrame)
         {
@@ -552,6 +542,12 @@ public static partial class GameEngine
                 player.Id,
                 frame.CardId,
                 destination.ServerId);
+            return;
+        }
+
+        if (frame.InitiationKind == InstallInitiationKind.BehaviorZoneInstall)
+        {
+            CompleteBehaviorZoneInstall(working, frame, player.Id, destination.ServerId);
             return;
         }
 
@@ -889,6 +885,7 @@ public static partial class GameEngine
             source.Id,
             destination.Id,
             plan.InstallCost));
+        RecordFreeInstall(working, plan.Card.Id, plan.InstallCost);
 
         ResumeTurnAfterInstall(working, parent);
         QueueCardInstalledOccurrence(
@@ -954,7 +951,8 @@ public static partial class GameEngine
     private static bool IsClickFreeInstall(InstallInitiationKind initiationKind) =>
         initiationKind is InstallInitiationKind.BehaviorEffect
             or InstallInitiationKind.IceSubroutineNormal
-            or InstallInitiationKind.IceSubroutineInwardIgnoreCosts;
+            or InstallInitiationKind.IceSubroutineInwardIgnoreCosts
+            or InstallInitiationKind.BehaviorZoneInstall;
 
     private static CostQuote? InstallCostQuote(
         WorkingState working,
@@ -982,6 +980,33 @@ public static partial class GameEngine
                 frame.CreateNewRemote,
                 selected);
 
+    /// <summary>
+    /// The install frame's effective credit cost and quote for a replacement
+    /// selection: the base cost, any self-install modifiers, then (for a
+    /// behavior zone install) the declaring frame's cost rule and discount.
+    /// </summary>
+    private static (int Cost, CostQuote? Quote) InstallFrameCost(
+        WorkingState working,
+        InstallFrame frame,
+        InstallPlan plan,
+        IReadOnlyList<CardInstanceId> selected)
+    {
+        int baseCost = CalculateInstallBaseCost(working, frame, plan, selected);
+        BehaviorZoneInstallRule? rule = frame.InitiationKind == InstallInitiationKind.BehaviorZoneInstall
+            ? ZoneInstallRuleFor(working, frame)
+            : null;
+        if (rule is not null)
+        {
+            // As in BuildInstallPlan: the zone discount comes before the quoted modifiers.
+            baseCost = rule.Apply(baseCost);
+        }
+
+        CostQuote? quote = rule?.CostRule == BehaviorInstallCostRule.IgnoreAllCosts
+            ? null
+            : InstallCostQuote(working, plan.Card, baseCost, frame.InitiationKind);
+        return (quote?.EffectiveCost ?? baseCost, quote);
+    }
+
     private static InstallPlan? BuildInstallPlan(
         WorkingState working,
         PlayerSide side,
@@ -991,8 +1016,17 @@ public static partial class GameEngine
         bool createNewRemote,
         InstallInitiationKind initiationKind = InstallInitiationKind.BasicAction,
         CardInstanceId? inwardAnchorIceId = null,
-        CardInstanceId? hostCardId = null)
+        CardInstanceId? hostCardId = null,
+        BehaviorZoneInstallRule? zoneRule = null)
     {
+        if (initiationKind == InstallInitiationKind.BehaviorZoneInstall)
+        {
+            return zoneRule is null
+                ? null
+                : BuildInstallPlanCore(working, side, cardId, destinationKind, serverId, createNewRemote,
+                    initiationKind, inwardAnchorIceId, zoneRule);
+        }
+
         bool deferredHost = initiationKind == InstallInitiationKind.BehaviorEffect && hostCardId is null
             && HostingSpec(working, GetCard(working, cardId)) is not null
             && InstallHosts(working, GetCard(working, cardId)).Any();
@@ -1034,7 +1068,8 @@ public static partial class GameEngine
         ServerId? serverId,
         bool createNewRemote,
         InstallInitiationKind initiationKind,
-        CardInstanceId? inwardAnchorIceId)
+        CardInstanceId? inwardAnchorIceId,
+        BehaviorZoneInstallRule? zoneRule = null)
     {
         if (side is not (PlayerSide.Runner or PlayerSide.Corp))
         {
@@ -1072,11 +1107,17 @@ public static partial class GameEngine
         bool isCorpSubroutineInstall = initiationKind is InstallInitiationKind.IceSubroutineNormal
             or InstallInitiationKind.IceSubroutineInwardIgnoreCosts;
         bool inwardInstall = initiationKind == InstallInitiationKind.IceSubroutineInwardIgnoreCosts;
-        ZoneKind[] sourceKinds = side == PlayerSide.Corp
-            ? isCorpSubroutineInstall
-                ? [ZoneKind.CorpHand, ZoneKind.CorpDiscard]
-                : [ZoneKind.CorpHand]
-            : [ZoneKind.RunnerGrip];
+        ZoneKind[] sourceKinds = initiationKind == InstallInitiationKind.BehaviorZoneInstall
+            ? side == PlayerSide.Corp
+                ? [ZoneKind.CorpHand, ZoneKind.CorpDiscard, ZoneKind.CorpDeck, ZoneKind.RunnerScore]
+                : [ZoneKind.RunnerGrip, ZoneKind.RunnerHeap, ZoneKind.RunnerStack, ZoneKind.RunnerHostedFaceUp]
+            : side == PlayerSide.Corp
+                ? isCorpSubroutineInstall
+                    ? [ZoneKind.CorpHand, ZoneKind.CorpDiscard]
+                    : [ZoneKind.CorpHand]
+                : IsGripLikeHosted(working, card)
+                    ? [ZoneKind.RunnerHostedFaceUp]
+                    : [ZoneKind.RunnerGrip];
         ZoneState? source = working.Zones.FirstOrDefault(
             zone => sourceKinds.Contains(zone.Kind) && zone.ServerId is null && zone.Id == card.ZoneId);
         if (source is null || card.OwnerSide != side || card.ZoneId != source.Id || spec.Side != side)
@@ -1162,6 +1203,15 @@ public static partial class GameEngine
         CardInstanceId[] candidates = inwardInstall
             ? []
             : InstallCandidates(working, spec, destinationKind, serverId, createNewRemote);
+        // A card-effect install during a run (Mycoweb) trashes no ICE on the
+        // attacked server, so the run's ICE cursor stays where it is.
+        if (initiationKind == InstallInitiationKind.BehaviorZoneInstall
+            && destinationKind == InstallDestinationKind.ServerIce
+            && working.RunState is { } liveRun
+            && serverId == liveRun.AttackedServer)
+        {
+            candidates = [];
+        }
         if (side == PlayerSide.Corp
             && destinationKind == InstallDestinationKind.ServerIce
             && candidates.Any(candidateId => RuntimeClass(working, candidateId) != RuntimeCardClass.Ice))
@@ -1193,13 +1243,25 @@ public static partial class GameEngine
         int baseInstallCost = inwardInstall
             ? 0
             : CalculateInstallCost(working, spec, destinationKind, serverId, createNewRemote, []);
-        CostQuote? installCostQuote = InstallCostQuote(
-            working,
-            card,
-            baseInstallCost,
-            initiationKind);
+        // A zone install's own discount ("install it, paying 1 less") lowers
+        // the cost the other modifiers then quote, so the frozen quote stays
+        // the cost actually paid.
+        if (zoneRule is not null)
+        {
+            baseInstallCost = zoneRule.Apply(baseInstallCost);
+        }
+
+        CostQuote? installCostQuote = zoneRule?.CostRule == BehaviorInstallCostRule.IgnoreAllCosts
+            ? null
+            : InstallCostQuote(
+                working,
+                card,
+                baseInstallCost,
+                initiationKind);
         int installCost = installCostQuote?.EffectiveCost ?? baseInstallCost;
+
         if (!isCorpSubroutineInstall
+            && zoneRule is null
             && side == PlayerSide.Corp
             && spec.CardClass is not RuntimeCardClass.Ice
             && installCost != 0)
@@ -1224,7 +1286,7 @@ public static partial class GameEngine
             : installCost;
         PlayerState player = GetPlayer(working, side);
         if ((!IsClickFreeInstall(initiationKind) && player.Clicks < 1)
-            || player.Credits < minimumCost)
+            || player.Credits + DeclaredHostedCredits(working, side, BehaviorHostedCreditUseKind.InstallResource, card) < minimumCost)
         {
             return null;
         }
@@ -1350,7 +1412,7 @@ public static partial class GameEngine
         CostQuote? installCostQuote = CostModifierProjection.RunnerInstall(working, card, baseInstallCost);
         int installCost = installCostQuote?.EffectiveCost ?? baseInstallCost;
         PlayerState player = GetPlayer(working, PlayerSide.Runner);
-        if (player.Credits < installCost)
+        if (player.Credits + DeclaredHostedCredits(working, PlayerSide.Runner, BehaviorHostedCreditUseKind.InstallResource, card) < installCost)
         {
             return null;
         }
@@ -1835,7 +1897,10 @@ public static partial class GameEngine
                 frame.ServerId,
                 frame.CreateNewRemote,
                 frame.InitiationKind,
-                frame.InwardAnchorIceId, frame.HostCardId)
+                frame.InwardAnchorIceId, frame.HostCardId,
+                frame.InitiationKind == InstallInitiationKind.BehaviorZoneInstall
+                    ? ZoneInstallRuleFor(working, frame)
+                    : null)
             ?? throw new ResolutionFailureException("The frozen install destination or card is stale.");
 
         if (frame.DefinitionId != plan.Card.DefinitionId
@@ -1880,17 +1945,8 @@ public static partial class GameEngine
             throw new ResolutionFailureException("The frozen install frame no longer matches the current state.");
         }
 
-        int expectedCost = frame.InitiationKind == InstallInitiationKind.IceSubroutineInwardIgnoreCosts
-            ? 0
-            : CalculateInstallCost(
-                working,
-                plan.Spec,
-                frame.DestinationKind,
-                frame.ServerId,
-                frame.CreateNewRemote,
-                frame.SelectedReplacementCardIds);
-        CostQuote? expectedQuote = InstallCostQuote(working, plan.Card, expectedCost, frame.InitiationKind);
-        int expectedEffectiveCost = expectedQuote?.EffectiveCost ?? expectedCost;
+        (int expectedEffectiveCost, CostQuote? expectedQuote) =
+            InstallFrameCost(working, frame, plan, frame.SelectedReplacementCardIds);
         if (frame.InstallCost != expectedEffectiveCost)
         {
             throw new ResolutionFailureException("The frozen install cost is stale.");
@@ -1941,6 +1997,22 @@ public static partial class GameEngine
             {
                 throw new ResolutionFailureException(
                     "The behavior install frame no longer matches its parent instruction binding.");
+            }
+        }
+        else if (frame.InitiationKind == InstallInitiationKind.BehaviorZoneInstall)
+        {
+            if (working.ResolutionStack.Count < 2
+                || working.ResolutionStack[^2] is not BehaviorInstallChoiceFrame choiceParent
+                || !string.Equals(frame.ParentFrameIdentity, choiceParent.FrameIdentity, StringComparison.Ordinal)
+                || choiceParent.Stage != BehaviorInstallChoiceStage.AwaitingInstall
+                || choiceParent.Owner != frame.Owner
+                || !choiceParent.Choices.Any(choice => choice.CardId == frame.CardId
+                    && choice.DestinationKind == frame.DestinationKind
+                    && choice.ServerId == frame.ServerId
+                    && choice.CreateNewRemote == frame.CreateNewRemote))
+            {
+                throw new ResolutionFailureException(
+                    "The behavior zone install parent choice is stale or forged.");
             }
         }
         else if (frame.InitiationKind is InstallInitiationKind.IceSubroutineNormal
@@ -2009,7 +2081,7 @@ public static partial class GameEngine
 
             PlayerState player = GetPlayer(working, frame.Owner);
             if ((frame.InitiationKind == InstallInitiationKind.BasicAction && player.Clicks < 1)
-                || player.Credits < expectedEffectiveCost)
+                || player.Credits + DeclaredHostedCredits(working, player.Side, BehaviorHostedCreditUseKind.InstallResource, GetCard(working, frame.CardId)) < expectedEffectiveCost)
             {
                 throw new ResolutionFailureException("The install is no longer affordable.");
             }
@@ -2109,7 +2181,13 @@ public static partial class GameEngine
         ZoneState hand = GetZone(
             working,
             side == PlayerSide.Corp ? ZoneKind.CorpHand : ZoneKind.RunnerGrip);
-        foreach (CardInstanceId cardId in hand.CardIds.OrderBy(id => id.Value, StringComparer.Ordinal))
+        IEnumerable<CardInstanceId> sources = hand.CardIds.OrderBy(id => id.Value, StringComparer.Ordinal);
+        if (side == PlayerSide.Runner)
+        {
+            sources = sources.Concat(GripLikeHostedCardIds(working));
+        }
+
+        foreach (CardInstanceId cardId in sources)
         {
             CardInstanceState card = GetCard(working, cardId);
             if (!working.RuntimeCardCatalog.TryGet(card.DefinitionId, out CardRuntimeSpec? spec)

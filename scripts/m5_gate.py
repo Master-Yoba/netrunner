@@ -152,13 +152,15 @@ def validate_matrix(manifest, count, profile):
     require(all(game[side]["kind"] == "offline" and game[side]["profileId"] == profile for game in games for side in ("corp", "runner")), "Wrong seat policy/profile")
 
 
-def cases(full):
+def cases(full, standard_workers=4):
     result = [("smoke", "standard-smoke-v1.json", 4), ("smoke-repeat", "standard-smoke-v1.json", 1)]
     for side, version in (("corp", "v2"), ("runner", "v1")):
         result += [(f"{side}-tactics", f"{side}-standard-tactical-{version}.json", 4),
                    (f"{side}-tactics-repeat", f"{side}-standard-tactical-{version}.json", 1)]
     if full:
-        result += [("standard", "standard-v1.json", 4), ("easy", "easy-v1.json", 4),
+        # The 1,000-game case is the gate's critical path: it gets most of the host (the repeats show that the
+        # worker count doesn't change a result).
+        result += [("standard", "standard-v1.json", standard_workers), ("easy", "easy-v1.json", 4),
                    ("compare-contract", "compare-contract-v1.json", 4), ("compare-previous", "compare-previous-v1.json", 4)]
         result += [(f"{side}-easy-tactics", f"{side}-easy-tactical-{version}.json", 4) for side, version in (("corp", "v2"), ("runner", "v1"))]
     return result
@@ -170,14 +172,16 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--dotnet", default="dotnet")
     parser.add_argument("--parallel", type=int, default=max(1, (os.cpu_count() or 4) // 4),
-                        help="Cases run at once (each uses 4 workers or fewer); 1 runs them one after another.")
+                        help="Cases run at once (each uses 4 workers or fewer, but standard); 1 runs them one after another.")
+    parser.add_argument("--standard-workers", type=int, default=max(4, (os.cpu_count() or 4) - 2),
+                        help="Workers for the 1,000-game standard case, the gate's longest.")
     args = parser.parse_args()
     output = args.output.resolve()
     require(not output.exists(), "Choose a new evidence directory; previous attempts are retained")
     output.mkdir(parents=True)
     (output / "PRIVATE-ARTIFACTS.txt").write_text("Local private replays/snapshots. Only summary files may be shared. No automatic upload.\n")
     # Freeze loaded binaries and inputs so later builds cannot alter another process in this run.
-    shutil.copytree(ROOT / "src/Netrunner.Cli/bin/Debug/net8.0", output / "runner")
+    shutil.copytree(ROOT / "src/Netrunner.Cli/bin/Release/net8.0", output / "runner")
     shutil.copytree(MANIFESTS, output / "manifests")
     reports, errors, evidence = {}, [], {}
 
@@ -205,7 +209,7 @@ def main():
 
     # The cases are independent and deterministic, so they run side by side, longest first: each uses its own
     # worker count (the repeats check that the worker count doesn't change a result), and together they fill the host.
-    planned = sorted(cases(not args.quick), key=lambda case: case[0] != "standard")
+    planned = sorted(cases(not args.quick, args.standard_workers), key=lambda case: case[0] != "standard")
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.parallel) as pool:
         futures = {pool.submit(run_case, *case): case[0] for case in planned}
         for future in concurrent.futures.as_completed(futures):

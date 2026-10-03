@@ -1863,7 +1863,8 @@ public sealed record BioroidAbilityUsedEventPayload : EngineEventPayload
         CardInstanceId iceId,
         SubroutineId subroutineId,
         string abilityKey,
-        int clickCost)
+        int clickCost,
+        int creditCost = 0)
         : base(version)
     {
         ArgumentNullException.ThrowIfNull(abilityKey);
@@ -1873,6 +1874,7 @@ public sealed record BioroidAbilityUsedEventPayload : EngineEventPayload
         SubroutineId = subroutineId;
         AbilityKey = abilityKey;
         ClickCost = clickCost;
+        CreditCost = creditCost;
     }
 
     public BioroidAbilityUsedEventPayload(
@@ -1881,10 +1883,16 @@ public sealed record BioroidAbilityUsedEventPayload : EngineEventPayload
         CardInstanceId iceId,
         SubroutineId subroutineId,
         string abilityKey,
-        int clickCost)
-        : this(1, runId, encounterId, iceId, subroutineId, abilityKey, clickCost)
+        int clickCost,
+        int creditCost = 0)
+        : this(1, runId, encounterId, iceId, subroutineId, abilityKey, clickCost, creditCost)
     {
     }
+
+    /// <summary>EL-RUNNER-ICE-ABILITY: the credits a credit-cost break ability paid (N-Pot); 0 for a lost click.</summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int CreditCost { get; private set; }
 
     [JsonInclude]
     [JsonRequired]
@@ -2331,7 +2339,7 @@ public sealed record EngineEvent
         IceRezzedEventPayload value => new EngineEvent(Version, Sequence, Kind, new IceRezzedEventPayload(value.Version, value.RunId, value.IceId)),
         SubroutinesBrokenEventPayload value => new EngineEvent(Version, Sequence, Kind, new SubroutinesBrokenEventPayload(value.Version, value.RunId, value.EncounterId, value.BreakerId, value.BrokenCount)),
         IceSubroutineJackOutEventPayload value => new EngineEvent(Version, Sequence, Kind, new IceSubroutineJackOutEventPayload(value.Version, value.RunId, value.EncounterId, value.IceId, value.SubroutineId)),
-        BioroidAbilityUsedEventPayload value => new EngineEvent(Version, Sequence, Kind, new BioroidAbilityUsedEventPayload(value.Version, value.RunId, value.EncounterId, value.IceId, value.SubroutineId, value.AbilityKey, value.ClickCost)),
+        BioroidAbilityUsedEventPayload value => new EngineEvent(Version, Sequence, Kind, new BioroidAbilityUsedEventPayload(value.Version, value.RunId, value.EncounterId, value.IceId, value.SubroutineId, value.AbilityKey, value.ClickCost, value.CreditCost)),
         BreakerPumpedEventPayload value => new EngineEvent(Version, Sequence, Kind, new BreakerPumpedEventPayload(value.Version, value.RunId, value.BreakerId)),
         EncounterInitializedEventPayload value => new EngineEvent(Version, Sequence, Kind, new EncounterInitializedEventPayload(value.Version, value.RunId, value.EncounterId, value.IceId, value.SubroutineCount)),
         EncounterCompletedEventPayload value => new EngineEvent(Version, Sequence, Kind, new EncounterCompletedEventPayload(value.Version, value.RunId, value.EncounterId)),
@@ -2875,8 +2883,7 @@ public static class EngineEventValidator
                 RequireId(value.IceId.Value, $"{path}.payload.iceId", "card", violations);
                 RequireId(value.SubroutineId.Value, $"{path}.payload.subroutineId", "subroutine", violations);
                 RequireId(value.AbilityKey, $"{path}.payload.abilityKey", "ability", violations);
-                RequireNumber(value.ClickCost, $"{path}.payload.clickCost", "Bioroid ability click cost", violations, strictlyPositive: true);
-                if (value.ClickCost != 1)
+                if (value.CreditCost > 0 ? value.ClickCost != 0 : value.ClickCost != 1)
                 {
                     Add(violations, "event.invalid-bioroid-click-cost", $"{path}.payload.clickCost", "A bioroid ability event must carry exactly one lost click.");
                 }
@@ -2902,7 +2909,12 @@ public static class EngineEventValidator
             case RunMovedEventPayload value:
                 RequireKind(@event, EngineEventKinds.RunMoved, path, violations);
                 RequireId(value.RunId.Value, $"{path}.payload.runId", "run", violations);
-                RequireNumber(value.FromIceIndex, $"{path}.payload.fromIceIndex", "Previous ICE index", violations);
+                // EL-MOVE-RUNNER: a Runner moved to another server may leave from the server itself (-1).
+                if (value.FromIceIndex < -1)
+                {
+                    Add(violations, "event.invalid-index", $"{path}.payload.fromIceIndex", "Previous ICE index must be -1 or nonnegative.");
+                }
+
                 if (value.ToIceIndex < -1)
                 {
                     Add(violations, "event.invalid-index", $"{path}.payload.toIceIndex", "Next ICE index must be -1 or nonnegative.");

@@ -582,7 +582,9 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
         string? abilityKey = null,
         string? triggerKey = null,
         bool catalogTriggerSourceMovedBeforeStart = false,
-        BehaviorOccurrenceContinuation? occurrenceContinuation = null)
+        BehaviorOccurrenceContinuation? occurrenceContinuation = null,
+        IReadOnlyList<BehaviorRecordedAmount>? recordedAmounts = null,
+        bool catalogTriggerSourceMovedAfterStart = false)
         : base(version, behaviorId)
     {
         if (abilityKey is not null && triggerKey is not null)
@@ -636,8 +638,28 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
         AbilityKey = abilityKey;
         TriggerKey = triggerKey;
         CatalogTriggerSourceMovedBeforeStart = catalogTriggerSourceMovedBeforeStart;
+        CatalogTriggerSourceMovedAfterStart = catalogTriggerSourceMovedAfterStart;
         OccurrenceContinuation = occurrenceContinuation;
+        BehaviorRecordedAmount[] recorded = (recordedAmounts ?? []).ToArray();
+        if (recorded.Any(static value => value is null)
+            || recorded.Select(static value => value.Key).Distinct(StringComparer.Ordinal).Count() != recorded.Length)
+        {
+            throw new ArgumentException("Recorded behavior amounts must be distinct by key.", nameof(recordedAmounts));
+        }
+
+        RecordedAmounts = recorded.Length == 0 ? null : new ReadOnlyCollection<BehaviorRecordedAmount>(recorded);
     }
+
+    /// <summary>
+    /// EL-AMOUNT: amounts earlier instructions recorded (credits lost, tags
+    /// removed), read by later recorded amounts. Omitted while empty.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<BehaviorRecordedAmount>? RecordedAmounts { get; private set; }
+
+    /// <summary>The recorded amount for a key, or 0.</summary>
+    public int Recorded(string key) =>
+        RecordedAmounts?.FirstOrDefault(value => string.Equals(value.Key, key, StringComparison.Ordinal))?.Value ?? 0;
 
     public BehaviorResolutionFrame(
         CardBehaviorDefinition definition,
@@ -830,6 +852,17 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
     public bool CatalogTriggerSourceMovedBeforeStart { get; private set; }
 
     /// <summary>
+    /// Engine-issued authorization for a catalog trigger that began resolving
+    /// and whose source another effect then moved, outside its owner's trash
+    /// or removed-from-game zone (EL.9: Byte!, accessed on top of R&amp;D, is
+    /// drawn by NBN: Reality Plus before its net damage). The trigger
+    /// finishes, as one whose source moved before it started does.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool CatalogTriggerSourceMovedAfterStart { get; private set; }
+
+    /// <summary>
     /// Typed parent continuation for a hosted-credit exhaustion occurrence.
     /// While the frame is AwaitingOccurrence this identifies the exact nested
     /// occurrence effect; after completion it is retained only when that
@@ -854,7 +887,9 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
         string? triggerKey = null,
         bool? catalogTriggerSourceMovedBeforeStart = null,
         BehaviorOccurrenceContinuation? occurrenceContinuation = null,
-        bool clearOccurrenceContinuation = false) =>
+        bool clearOccurrenceContinuation = false,
+        IReadOnlyList<BehaviorRecordedAmount>? recordedAmounts = null,
+        bool? catalogTriggerSourceMovedAfterStart = null) =>
         new(
             Version,
             BehaviorId,
@@ -881,7 +916,9 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
             catalogTriggerSourceMovedBeforeStart: catalogTriggerSourceMovedBeforeStart ?? CatalogTriggerSourceMovedBeforeStart,
             occurrenceContinuation: clearOccurrenceContinuation
                 ? null
-                : occurrenceContinuation ?? OccurrenceContinuation)
+                : occurrenceContinuation ?? OccurrenceContinuation,
+            recordedAmounts: recordedAmounts ?? RecordedAmounts,
+            catalogTriggerSourceMovedAfterStart: catalogTriggerSourceMovedAfterStart ?? CatalogTriggerSourceMovedAfterStart)
         {
             RootInstructions = Freeze(RootInstructions),
             Instructions = Freeze(instructions ?? Instructions),
@@ -894,4 +931,29 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
             ArgumentNullException.ThrowIfNull(value);
             return value;
         }).ToArray());
+}
+
+/// <summary>An amount one behavior instruction recorded for later instructions.</summary>
+public sealed record BehaviorRecordedAmount
+{
+    [JsonConstructor]
+    public BehaviorRecordedAmount(string key, int value)
+    {
+        if (!StableIdentifier.TryValidate(key))
+        {
+            throw new ArgumentException("A recorded amount key must be stable.", nameof(key));
+        }
+
+        ArgumentOutOfRangeException.ThrowIfNegative(value);
+        Key = key;
+        Value = value;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string Key { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int Value { get; private set; }
 }

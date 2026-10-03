@@ -2,7 +2,8 @@
 """E6 Core-growth report: how much a card batch grew the engine, and which of its cards needed it.
 
 Usage:
-  scripts/core-growth.py --vocabulary VOCAB.json --registry REGISTRY.json [--batch ID]... [--range ID=BASE..HEAD]...
+  scripts/core-growth.py --vocabulary VOCAB.json --registry REGISTRY.json [--registry REGISTRY.json]...
+      [--batch ID]... [--range ID=BASE..HEAD]...
       [--json] [--markdown OUT.md]
 
 For each batch (a `batches[].id` in the registry, with its card codes) and its git range BASE..HEAD:
@@ -122,7 +123,8 @@ def markdown(reports: list[dict]) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--vocabulary", required=True, help="card-vocabulary --json output")
-    parser.add_argument("--registry", required=True, help="a batch registry (data/m4/batch-registry.json shape)")
+    parser.add_argument("--registry", action="append", required=True,
+                        help="a batch registry (data/m4/batch-registry.json shape); repeat for several card sets")
     parser.add_argument("--batch", action="append", default=[], help="a batch id; all batches with a range if omitted")
     parser.add_argument("--range", action="append", default=[], help="ID=BASE..HEAD, overriding the registry's coreRange")
     parser.add_argument("--json", action="store_true")
@@ -130,10 +132,10 @@ def main() -> int:
     args = parser.parse_args()
 
     cards = {card["code"]: card for card in json.load(open(args.vocabulary, encoding="utf-8"))["cards"]}
-    registry = json.load(open(args.registry, encoding="utf-8"))
+    batches = [batch for path in args.registry for batch in json.load(open(path, encoding="utf-8"))["batches"]]
     ranges = dict(item.split("=", 1) for item in args.range)
     reports = []
-    for batch in registry["batches"]:
+    for batch in batches:
         if args.batch and batch["id"] not in args.batch:
             continue
         span = ranges.get(batch["id"]) or batch.get("coreRange")

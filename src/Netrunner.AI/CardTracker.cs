@@ -138,7 +138,11 @@ public sealed record CardTracker(ImmutableArray<TrackedCard> Cards, TrackerSnaps
             int outflow = 0;
             int Available() => last.Hand + maxDraws - now.Hand - outflow;
 
-            // Face-down slots: a removal forgets its zone (it moves the later cards); a new slot takes a card from the hand.
+            // Cards that left face-up Archives: installed (Mycoweb), or shuffled into the deck below.
+            List<string> leftFaceUp = Multiset(last.FaceUpDiscard).Subtract(Multiset(now.FaceUpDiscard));
+
+            // Face-down slots: a removal forgets its zone (it moves the later cards); a new slot takes a card from the
+            // hand, or, when the hand can't account for it, a card that left face-up Archives (an install from Archives).
             foreach (TrackerZoneSnapshot zone in now.Zones)
             {
                 ImmutableArray<string?> old = last.Zones.FirstOrDefault(value => value.ServerId == zone.ServerId && value.Zone == zone.Zone)?.Cards ?? [];
@@ -162,13 +166,18 @@ public sealed record CardTracker(ImmutableArray<TrackedCard> Cards, TrackerSnaps
                         InstallFromHand(zone.ServerId, zone.Zone, index, last.Hand - outflow);
                         outflow++;
                     }
+                    else if (added && leftFaceUp.FirstOrDefault(definition => Fits(definition, zone.Zone)) is { } fromArchives)
+                    {
+                        leftFaceUp.Remove(fromArchives);
+                        Cards.Add(new(fromArchives, TrackedPlace.Slot, 1, Turn, ServerId: zone.ServerId, Zone: zone.Zone, Index: index));
+                    }
                 }
             }
 
             // Cards played or installed face up: newly visible cards of this side in a play area, the discard, the rig, or
             // appended to a server zone. Each that the hand can account for came from it.
             ImmutableArray<string> fresh = [.. now.VisibleIds.Except(last.VisibleIds, StringComparer.Ordinal)];
-            foreach (string definition in features.VisibleCards().Where(pair => fresh.Contains(pair.Card.Id) && FromHand(last, pair))
+            foreach (string definition in features.VisibleCards().Where(pair => fresh.Contains(pair.Card.Id) && FromHand(last, now, pair))
                 .GroupBy(pair => pair.Card.Id, StringComparer.Ordinal).Select(group => group.First().Card.DefinitionId).ToArray())
             {
                 if (Available() <= 0) break;
@@ -190,7 +199,6 @@ public sealed record CardTracker(ImmutableArray<TrackedCard> Cards, TrackerSnaps
             {
                 LoseDeckOrder();
                 int rest = Math.Max(0, deckChange);
-                List<string> leftFaceUp = Multiset(last.FaceUpDiscard).Subtract(Multiset(now.FaceUpDiscard));
                 foreach (string definition in leftFaceUp.Take(rest)) Cards.Add(new(definition, TrackedPlace.Deck, 1, Turn));
                 rest -= Math.Min(rest, leftFaceUp.Count);
                 int handIntoDeck = Math.Min(rest, Math.Max(0, last.Hand - outflow - now.Hand));
@@ -220,10 +228,13 @@ public sealed record CardTracker(ImmutableArray<TrackedCard> Cards, TrackerSnaps
                     TakeShare(definition, TrackedPlace.FaceDownDiscard);
         }
 
-        /// <summary>Whether a newly visible card can have come from the hand: played, discarded or installed face up.</summary>
-        private bool FromHand(TrackerSnapshot last, (AgentCard Card, string Location) pair) => pair.Location switch
+        /// <summary>Whether a newly visible card can have come from the hand: played, discarded, installed or hosted face up.</summary>
+        private bool FromHand(TrackerSnapshot last, TrackerSnapshot now, (AgentCard Card, string Location) pair) => pair.Location switch
         {
             "corp-play" or "runner-play" or "corp-discard" or "runner-heap" or "runner-rig" => true,
+            // EL.4/EL.7: hosted face up from the hand (Madani from the grip, Detente from HQ) when the hand shrank; Bling
+            // hosts the stack's top card instead.
+            "runner-hosted" or "corp-hosted" => now.Hand < last.Hand,
             _ when pair.Location.StartsWith("server/", StringComparison.Ordinal) => IsNewFaceUpInstall(last, pair),
             _ => false,
         };

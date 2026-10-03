@@ -555,7 +555,10 @@ public sealed class OfficialPresetCatalog
             if (preset.Kind != GatewayKind) problems.Add($"{path}.kind: expected '{GatewayKind}'.");
             if (string.IsNullOrWhiteSpace(preset.Name) || string.IsNullOrWhiteSpace(preset.Summary) || string.IsNullOrWhiteSpace(preset.SourceUrl))
                 problems.Add($"{path}: a sample deck needs a name, a summary and a source URL.");
-            if (preset.CardCount != (preset.Side == PlayerSide.Corp ? 44 : 40))
+            // Our Elevation decks and NSG's Core Sets decks follow their identity's
+            // minimum (checked against the metadata below), not the Gateway sample sizes.
+            if (!preset.PresetId.StartsWith(ElevationDeckPrefix, StringComparison.Ordinal) && !IsNsgCoreSetsDeck(preset.PresetId)
+                && preset.CardCount != (preset.Side == PlayerSide.Corp ? 44 : 40))
                 problems.Add($"{path}.cards: contains {preset.CardCount} cards; a Gateway sample deck has {(preset.Side == PlayerSide.Corp ? 44 : 40)}.");
             var codes = new HashSet<string>(StringComparer.Ordinal);
             foreach (DeckCardEntry card in preset.Cards)
@@ -603,6 +606,119 @@ public sealed class OfficialPresetCatalog
     }
 
     private const string GatewayResourceName = "Netrunner.Cards.Data.decks.gateway-sample-decks.json";
+
+    private const string ElevationSimulationResourceName = "Netrunner.Cards.Data.decks.elevation-simulation-decks.json";
+
+    /// <summary>The preset-ID prefix of the Elevation simulation decks.</summary>
+    public const string ElevationSimulationPrefix = "elevation-sim-";
+
+    // EL.8's own decks, retired from the menu and the deck pool (D-EL-10); kept so older saves load and the
+    // EL.8 seed-replay regressions still play.
+    private const string ElevationDecksResourceName = "Netrunner.Cards.Data.decks.gateway-elevation-decks.json";
+
+    private const string CoreBattleBoxResourceName = "Netrunner.Cards.Data.decks.elevation-core-battle-box-decks.json";
+
+    /// <summary>The preset-ID prefix of the Core Battle Box decks, the Gateway + Elevation format's decks (D-EL-10).</summary>
+    public const string CoreBattleBoxPrefix = "elevation-box-";
+
+    /// <summary>The preset-ID prefix of our Elevation decks: the format's decks and the simulation decks.</summary>
+    public const string ElevationDeckPrefix = "elevation-";
+
+    private const string NsgCoreSetsDecksResourceName = "Netrunner.Cards.Data.decks.nsg-core-sets-decks.json";
+
+    /// <summary>The preset-ID prefix of Null Signal Games' Core Sets sample decks.</summary>
+    public const string NsgCoreSetsDeckPrefix = "nsg-core-";
+
+    private static readonly Lazy<OfficialPresetCatalog> ElevationSimulationCatalog = new(
+        () => WithEmbeddedDecks(ElevationSimulationResourceName),
+        LazyThreadSafetyMode.ExecutionAndPublication);
+
+    private static readonly Lazy<OfficialPresetCatalog> GatewayElevationCatalog = new(
+        () => WithEmbeddedDecks(CoreBattleBoxResourceName, ElevationDecksResourceName),
+        LazyThreadSafetyMode.ExecutionAndPublication);
+
+    private static readonly Lazy<OfficialPresetCatalog> NsgCoreSetsCatalog = new(
+        () => WithEmbeddedDecks(NsgCoreSetsDecksResourceName),
+        LazyThreadSafetyMode.ExecutionAndPublication);
+
+    private static readonly Lazy<OfficialPresetCatalog> FormatDecksCatalog = new(
+        () => WithEmbeddedDecks(CoreBattleBoxResourceName, ElevationDecksResourceName, NsgCoreSetsDecksResourceName),
+        LazyThreadSafetyMode.ExecutionAndPublication);
+
+    /// <summary>
+    /// The embedded catalog plus Null Signal Games' Core Sets (System Gateway +
+    /// Elevation) sample decks: the decks of the NSG Core Sets format.
+    /// </summary>
+    public static OfficialPresetCatalog NsgCoreSets() => NsgCoreSetsCatalog.Value;
+
+    /// <summary>
+    /// Every playable format's decks in one catalog: the embedded catalog, our Gateway +
+    /// Elevation decks and NSG's Core Sets decks, for a form that lists them all.
+    /// </summary>
+    public static OfficialPresetCatalog FormatDecks() => FormatDecksCatalog.Value;
+
+    /// <summary>
+    /// The embedded catalog plus the Elevation simulation decks: our decks for
+    /// the batch proofs and fuzzing, not menu decks. Kept apart from
+    /// <see cref="Embedded"/> so the frozen Gateway preset pins are unchanged.
+    /// </summary>
+    public static OfficialPresetCatalog ElevationSimulation() => ElevationSimulationCatalog.Value;
+
+    /// <summary>
+    /// The embedded catalog plus the Core Battle Box, the decks of the Gateway + Elevation
+    /// format (D-EL-10), and EL.8's retired decks (for older saves and regressions).
+    /// </summary>
+    public static OfficialPresetCatalog GatewayElevation() => GatewayElevationCatalog.Value;
+
+    /// <summary>The Elevation simulation decks alone.</summary>
+    public IReadOnlyList<OfficialPreset> ElevationSimulationDecks =>
+        Gateway.Where(static preset => preset.PresetId.StartsWith(ElevationSimulationPrefix, StringComparison.Ordinal)).ToArray();
+
+    /// <summary>The System Gateway + Elevation format's decks alone: the Core Battle Box (D-EL-10).</summary>
+    public IReadOnlyList<OfficialPreset> ElevationDecks =>
+        Gateway.Where(static preset => preset.PresetId.StartsWith(CoreBattleBoxPrefix, StringComparison.Ordinal)).ToArray();
+
+    /// <summary>EL.8's retired decks: still in the catalog for older saves and regressions, offered nowhere.</summary>
+    public IReadOnlyList<OfficialPreset> RetiredElevationDecks =>
+        Gateway.Where(static preset => IsElevationDeck(preset.PresetId)
+            && !preset.PresetId.StartsWith(CoreBattleBoxPrefix, StringComparison.Ordinal)).ToArray();
+
+    /// <summary>Whether a preset belongs to the System Gateway + Elevation format: a Core Battle Box deck or a retired EL.8 deck (not a simulation deck).</summary>
+    public static bool IsElevationDeck(string presetId)
+    {
+        ArgumentNullException.ThrowIfNull(presetId);
+        return presetId.StartsWith(ElevationDeckPrefix, StringComparison.Ordinal)
+            && !presetId.StartsWith(ElevationSimulationPrefix, StringComparison.Ordinal);
+    }
+
+    /// <summary>The NSG Core Sets format's decks alone.</summary>
+    public IReadOnlyList<OfficialPreset> NsgCoreSetsDecks =>
+        Gateway.Where(static preset => IsNsgCoreSetsDeck(preset.PresetId)).ToArray();
+
+    /// <summary>Whether a preset is one of NSG's Core Sets sample decks.</summary>
+    public static bool IsNsgCoreSetsDeck(string presetId)
+    {
+        ArgumentNullException.ThrowIfNull(presetId);
+        return presetId.StartsWith(NsgCoreSetsDeckPrefix, StringComparison.Ordinal);
+    }
+
+    private static OfficialPresetCatalog WithEmbeddedDecks(params string[] resourceNames)
+    {
+        OfficialPresetCatalog embedded = Embedded();
+        Assembly assembly = typeof(OfficialPresetCatalog).Assembly;
+        var decks = new List<OfficialPreset>(embedded.Gateway);
+        foreach (string resourceName in resourceNames)
+        {
+            using Stream? stream = assembly.GetManifestResourceStream(resourceName)
+                ?? throw new PresetDataValidationException(
+                    [$"preset resource: embedded resource '{resourceName}' was not found."]);
+            using var reader = new StreamReader(stream, Encoding.UTF8);
+            decks.AddRange(ParseGatewayDecks(reader.ReadToEnd()));
+        }
+        var catalog = new OfficialPresetCatalog(embedded.Provenance, embedded.Teaching, decks);
+        catalog.Validate();
+        return catalog;
+    }
 
     private static readonly IReadOnlySet<string> GatewayRootProperties = new HashSet<string>(
         ["schemaVersion", "retrievedDate", "publishedSourceUrl", "metadataCommitSha", "provenanceNote", "decks"], StringComparer.Ordinal);

@@ -297,15 +297,30 @@ public static partial class GameEngine
                 AdvanceBehaviorCursor(working, frame);
                 return;
             case BehaviorInstructionKind.GainCredits:
-                int creditGain = instruction.AmountOperand is null
-                    ? instruction.Amount
-                    : ResolveBehaviorDynamicAmount(working, frame, instruction);
-                ApplyCreditDeltaIfNonZero(working, frame.Controller, creditGain);
+                int creditGain = StaticOrDynamicAmount(working, frame, instruction);
+                PlayerId gainer = ResolveBehaviorRecipient(working, frame, instruction);
+                ApplyCreditDeltaIfNonZero(working, gainer, creditGain);
+                RecordCardCreditGain(working, frame, gainer, creditGain);
                 AdvanceBehaviorCursor(working, frame);
                 return;
             case BehaviorInstructionKind.LoseCredits:
-                ApplyCreditDelta(working, frame.Controller, -instruction.Amount);
-                AdvanceBehaviorCursor(working, frame);
+                // A player loses only the credits they have (CR 1.10); the
+                // realized loss is what a recorded amount reads.
+                PlayerId loser = ResolveBehaviorRecipient(working, frame, instruction);
+                int lost = Math.Min(GetPlayer(working, loser).Credits, StaticOrDynamicAmount(working, frame, instruction));
+                ApplyCreditDeltaIfNonZero(working, loser, -lost);
+                AdvanceBehaviorCursor(working, RecordBehaviorAmount(frame, instruction.RecordAs, lost));
+                return;
+            case BehaviorInstructionKind.RemoveTags:
+                PlayerId tagged = GetPlayer(working, PlayerSide.Runner).Id;
+                int removed = Math.Min(RunnerTags(working), StaticOrDynamicAmount(working, frame, instruction));
+                AdvanceBehaviorCursor(working, RecordBehaviorAmount(frame, instruction.RecordAs, removed));
+                if (removed > 0)
+                {
+                    working.ResolutionStack.Add(new EffectResolutionFrame(frame.Controller, new CostBundle(),
+                        new EffectBundle(new TagAdjustmentEffect(tagged, -removed))));
+                }
+
                 return;
             case BehaviorInstructionKind.GainClicks:
                 ApplyClickDelta(working, frame.Controller, instruction.Amount);
@@ -314,13 +329,14 @@ public static partial class GameEngine
             case BehaviorInstructionKind.LoseClicks:
                 if (instruction.Condition is null || BehaviorConditionMatches(working, frame, instruction.Condition))
                 {
-                    ApplyClickDelta(working, frame.Controller, -instruction.Amount);
+                    PlayerId clickLoser = ResolveBehaviorRecipient(working, frame, instruction);
+                    ApplyClickDelta(working, clickLoser, -Math.Min(instruction.Amount, GetPlayer(working, clickLoser).Clicks));
                 }
 
                 AdvanceBehaviorCursor(working, frame);
                 return;
             case BehaviorInstructionKind.Draw:
-                ResolveBehaviorDraw(working, frame, instruction.Amount);
+                ResolveBehaviorDraw(working, frame, StaticOrDynamicAmount(working, frame, instruction));
                 if (working.Outcome.Kind == GameOutcomeKind.Won)
                 {
                     return;
@@ -444,6 +460,7 @@ public static partial class GameEngine
 
                 return;
             case BehaviorInstructionKind.ModifyEncounteredIceStrength:
+            case BehaviorInstructionKind.ModifySourceStrength:
                 ResolveBehaviorModifyEncounteredIceStrength(working, frame, instruction);
                 return;
             case BehaviorInstructionKind.AddCounter:
@@ -457,7 +474,12 @@ public static partial class GameEngine
                         "A counter instruction must resolve exactly one card target.");
                 }
 
-                AdjustCounter(working, counterTargets[0], instruction.Argument ?? "counter", instruction.Amount);
+                int counterAmount = StaticOrDynamicAmount(working, frame, instruction);
+                if (counterAmount != 0)
+                {
+                    AdjustCounter(working, counterTargets[0], instruction.Argument ?? "counter", counterAmount);
+                }
+
                 AdvanceBehaviorCursor(working, frame);
                 return;
             case BehaviorInstructionKind.AddTags:
@@ -486,8 +508,239 @@ public static partial class GameEngine
                 MarkScoreProhibition(working, frame.SourceCardId);
                 AdvanceBehaviorCursor(working, frame);
                 break;
+            case BehaviorInstructionKind.RemoveCounter:
+                IReadOnlyList<CardInstanceId> removeTargets = instruction.Target is null
+                    || instruction.Target.Kind == BehaviorTargetKind.Self
+                    ? [frame.SourceCardId]
+                    : ResolveBehaviorCards(working, frame, instruction.Target);
+                foreach (CardInstanceId removeTarget in removeTargets)
+                {
+                    string counterName = instruction.Argument ?? "counter";
+                    int present = CurrentCounter(working, removeTarget, counterName);
+                    if (present > 0)
+                    {
+                        AdjustCounter(working, removeTarget, counterName, -Math.Min(present, instruction.Amount));
+                    }
+                }
+
+                AdvanceBehaviorCursor(working, frame);
+                return;
+            case BehaviorInstructionKind.FlipSelf:
+                FlipSource(working, frame.SourceCardId);
+                AdvanceBehaviorCursor(working, frame);
+                return;
+            case BehaviorInstructionKind.ForfeitAgenda:
+                ResolveBehaviorForfeit(working, frame, instruction);
+                return;
+            case BehaviorInstructionKind.GainAllottedClicksNextTurn:
+                GrantNextTurnClicks(working, GetPlayer(working, ResolveBehaviorRecipient(working, frame, instruction)).Side, instruction.Amount);
+                AdvanceBehaviorCursor(working, frame);
+                return;
+            case BehaviorInstructionKind.ProhibitScoringTargetThisTurn:
+                foreach (CardInstanceId prohibited in instruction.Target is { Kind: BehaviorTargetKind.ChosenCard } prohibitedTarget
+                    && IsProvenEmptyChosenCard(frame, prohibitedTarget)
+                        ? []
+                        : ResolveBehaviorCards(working, frame, instruction.Target))
+                {
+                    MarkCardScoreProhibition(working, prohibited);
+                }
+
+                AdvanceBehaviorCursor(working, frame);
+                return;
+            case BehaviorInstructionKind.Sabotage:
+                ResolveBehaviorSabotage(working, frame, instruction);
+                return;
+            case BehaviorInstructionKind.RefillRecurringCredits:
+                RefillRecurringCredits(working, frame.SourceCardId);
+                AdvanceBehaviorCursor(working, frame);
+                return;
+            case BehaviorInstructionKind.PlayCard:
+                ResolveBehaviorPlay(working, frame, instruction);
+                return;
+            case BehaviorInstructionKind.TurnFaceUp:
+                foreach (CardInstanceId faceUpId in ResolveBehaviorCards(working, frame, instruction.Target))
+                {
+                    CardInstanceState faceDown = GetCard(working, faceUpId);
+                    if (!IsInstalledCard(working, faceUpId) || faceDown.Rezzed)
+                    {
+                        throw new ResolutionFailureException("Only an unrezzed installed card can be turned faceup this way.");
+                    }
+
+                    ReplaceCard(working, new CardInstanceState(faceDown.Id, faceDown.DefinitionId, faceDown.ZoneId,
+                        faceDown.OwnerSide, faceUp: true, rezzed: false, faceDown.AdvancementCounters, faceDown.HostCardId));
+                    Emit(working, EngineEventKinds.BehaviorCardRevealed, new BehaviorCardRevealedEventPayload(
+                        faceDown.Id, faceDown.DefinitionId, faceDown.ZoneId, faceDown.OwnerSide));
+                }
+
+                AdvanceBehaviorCursor(working, frame);
+                return;
+            case BehaviorInstructionKind.PurgeVirusCounters:
+                PurgeVirusCounters(working);
+                AdvanceBehaviorCursor(working, frame);
+                return;
+            case BehaviorInstructionKind.BypassEncounteredIce:
+                {
+                    RunState bypassing = working.RunState is { Encounter: not null } live
+                        ? live
+                        : throw new ResolutionFailureException("Only an encountered ICE can be bypassed.");
+                    working.RunState = bypassing.WithPendingBypass(true);
+                    AdvanceBehaviorCursor(working, frame);
+                    return;
+                }
+            case BehaviorInstructionKind.MoveRunnerToServer:
+                {
+                    RunState movingRun = working.RunState
+                        ?? throw new ResolutionFailureException("The Runner can move only during a run.");
+                    if (!Enum.TryParse(instruction.Argument, ignoreCase: false, out ServerKind kind)
+                        || working.Servers.FirstOrDefault(server => server.Kind == kind && server.Exists) is not { } destination)
+                    {
+                        throw new ResolutionFailureException("A Runner move names an existing server kind.");
+                    }
+
+                    working.RunState = movingRun.WithPendingMove(destination.Id);
+                    AdvanceBehaviorCursor(working, frame);
+                    return;
+                }
+            case BehaviorInstructionKind.ChooseAtRandom:
+                {
+                    CardInstanceId[] candidates = MaterializeBehaviorCandidates(working, instruction.Target!, hostSourceId: frame.SourceCardId);
+                    var shuffled = candidates.ToList();
+                    if (shuffled.Count > 1)
+                    {
+                        var random = DeterministicRandom.Restore(working.RandomState);
+                        random.Shuffle(shuffled);
+                        working.RandomState = random.State;
+                    }
+
+                    CardInstanceId[] picked = shuffled.Take(Math.Max(1, instruction.Amount)).ToArray();
+                    IReadOnlyList<BehaviorBinding> bindings = frame.Bindings
+                        .Where(binding => !string.Equals(binding.Key, instruction.Argument, StringComparison.Ordinal))
+                        .Concat(picked.Length > 0 ? [new BehaviorBinding(instruction.Argument!, picked)] : [])
+                        .ToArray();
+                    AdvanceBehaviorCursor(working, frame.With(bindings: bindings));
+                    return;
+                }
+            case BehaviorInstructionKind.StealAgenda:
+                {
+                    var stolenAgendas = new List<CardInstanceId>();
+                    foreach (CardInstanceId stolenId in instruction.Target is { Kind: BehaviorTargetKind.ChosenCard } stealTarget
+                        && IsProvenEmptyChosenCard(frame, stealTarget)
+                            ? []
+                            : ResolveBehaviorCards(working, frame, instruction.Target).ToArray())
+                    {
+                        if (StealAgendaOutsideRun(working, stolenId))
+                        {
+                            return;
+                        }
+
+                        stolenAgendas.Add(stolenId);
+                    }
+
+                    AdvanceBehaviorCursor(working, frame);
+                    // EL.6 review: "scored or stolen" triggers resolve before the behavior continues, as for a
+                    // breach steal.
+                    foreach (CardInstanceId stolenId in stolenAgendas)
+                    {
+                        QueueAgendaStolenOutsideRunOccurrence(working, stolenId);
+                    }
+
+                    return;
+                }
+            case BehaviorInstructionKind.HostSourceOnTarget:
+                {
+                    IReadOnlyList<CardInstanceId> hosts = instruction.Target is { Kind: BehaviorTargetKind.ChosenCard } hostTarget
+                        && IsProvenEmptyChosenCard(frame, hostTarget)
+                            ? []
+                            : ResolveBehaviorCards(working, frame, instruction.Target);
+                    CardInstanceState mod = GetCard(working, frame.SourceCardId);
+                    if (hosts.Count == 1 && hosts[0] != mod.Id && mod.HostCardId != hosts[0])
+                    {
+                        if (!IsModHost(working, hosts[0]))
+                        {
+                            throw new ResolutionFailureException("A mod hosts only on an installed non-AI icebreaker.");
+                        }
+
+                        ReplaceCard(working, new CardInstanceState(mod.Id, mod.DefinitionId, mod.ZoneId, mod.OwnerSide,
+                            mod.FaceUp, mod.Rezzed, mod.AdvancementCounters, hosts[0]));
+                    }
+
+                    AdvanceBehaviorCursor(working, frame);
+                    return;
+                }
+            case BehaviorInstructionKind.SwapApproachedIce:
+                ResolveSwapApproachedIce(working, frame, instruction);
+                return;
+            case BehaviorInstructionKind.MoveSourceToServerOf:
+                {
+                    IReadOnlyList<CardInstanceId> anchors = ResolveBehaviorCards(working, frame, instruction.Target);
+                    CardInstanceState upgrade = GetCard(working, frame.SourceCardId);
+                    ZoneState from = ZoneForCard(working, upgrade.Id);
+                    if (anchors.Count == 1
+                        && from.Kind == ZoneKind.ServerRoot
+                        && ZoneForCard(working, anchors[0]).ServerId is { } serverId
+                        && working.Servers.Single(server => server.Id == serverId) is { } server
+                        && server.RootZoneId != from.Id)
+                    {
+                        MoveCard(working, upgrade, from, working.Zones.Single(zone => zone.Id == server.RootZoneId));
+
+                        // The move is the behavior's last act: its source has left
+                        // the location the behavior was invoked from, so it completes.
+                        RestoreBehaviorSetAside(working, frame);
+                        working.ResolutionStack.RemoveAt(working.ResolutionStack.Count - 1);
+                        return;
+                    }
+
+                    AdvanceBehaviorCursor(working, frame);
+                    return;
+                }
+            case BehaviorInstructionKind.Derez:
+                foreach (CardInstanceId derezzedId in ResolveBehaviorCards(working, frame, instruction.Target).ToArray())
+                {
+                    Derez(working, derezzedId);
+                }
+
+                AdvanceBehaviorCursor(working, frame);
+                return;
+            case BehaviorInstructionKind.HostFaceUp:
+                {
+                    var remainingSetAside = frame.SetAside.ToList();
+                    foreach (CardInstanceId hostedId in ResolveBehaviorCards(working, frame, instruction.Target).ToArray())
+                    {
+                        HostFaceUp(working, hostedId, frame.SourceCardId);
+                        remainingSetAside.RemoveAll(selected => selected.CardId == hostedId);
+                    }
+
+                    if (remainingSetAside.Count == 0
+                        && frame.SetAsideZoneId is { } emptiedId
+                        && working.Zones.SingleOrDefault(zone => zone.Id == emptiedId) is { CardIds.Count: 0 } emptied)
+                    {
+                        working.Zones.Remove(emptied);
+                    }
+
+                    AdvanceBehaviorCursor(working, frame.With(
+                        setAside: remainingSetAside,
+                        clearSetAsideZone: remainingSetAside.Count == 0));
+                    return;
+                }
+            case BehaviorInstructionKind.ReturnSetAside:
+                RestoreBehaviorSetAside(working, frame);
+                AdvanceBehaviorCursor(working, frame.With(setAside: [], clearSetAsideZone: true));
+                return;
+            case BehaviorInstructionKind.ShuffleDeck:
+                ShuffleProvenEmptyZone(working, frame, instruction.SourceZone!.Value, GetPlayer(working, frame.Controller).Side);
+                return;
+            case BehaviorInstructionKind.PlaceOnTopOfDeck:
+                ResolveBehaviorPlaceOnTopOfDeck(working, frame, instruction);
+                return;
+            case BehaviorInstructionKind.AddBreachAccess:
+                AddBehaviorBreachAccess(working, frame, instruction);
+                AdvanceBehaviorCursor(working, frame);
+                return;
             case BehaviorInstructionKind.RezIgnoringCosts:
                 ResolveBehaviorRezIgnoringCosts(working, frame, instruction);
+                break;
+            case BehaviorInstructionKind.RezPayingLess:
+                ResolveBehaviorRezPayingLess(working, frame, instruction);
                 break;
             case BehaviorInstructionKind.NoOp:
                 AdvanceBehaviorCursor(working, frame);
@@ -546,8 +799,10 @@ public static partial class GameEngine
         {
             return;
         }
+        // Damage the Runner suffers is the Runner's own (rules 10.4.1): the effect is the Runner's, so "whenever you do
+        // damage" (AU Co.) doesn't count it.
         working.ResolutionStack.Add(new EffectResolutionFrame(
-            frame.Controller,
+            instruction.Recipient == BehaviorPlayerSelector.Runner ? GetPlayer(working, PlayerSide.Runner).Id : frame.Controller,
             new CostBundle(),
             new EffectBundle(new DamageEffect(
                 GetPlayer(working, PlayerSide.Runner).Id,
@@ -621,10 +876,17 @@ public static partial class GameEngine
         WorkingState working,
         BehaviorResolutionFrame frame)
     {
-        if (frame.TriggerKey is null || frame.AbilityKey is not null)
+        // EL-ABILITY-END-RUN: a paid ability used during the run (LEO
+        // Construction) ends it as a reaction does.
+        bool abilityChild = frame.AbilityKey is not null
+            && frame.TriggerKey is null
+            && working.ResolutionStack.Count >= 3
+            && working.ResolutionStack[^2] is AbilityFrame
+            && working.ResolutionStack[^3] is RunTimingFrame;
+        if (!abilityChild && (frame.TriggerKey is null || frame.AbilityKey is not null))
         {
             throw new ResolutionFailureException(
-                "EndRun is executable only from an engine-owned catalog reaction.");
+                "EndRun is executable only from an engine-owned catalog reaction or a paid ability used during the run.");
         }
 
         RunState run = working.RunState
@@ -653,8 +915,13 @@ public static partial class GameEngine
         // The immediate parent must be an effect checkpoint for a gameplay
         // occurrence tied to this run. This excludes a forgeable standalone
         // behavior frame and prevents an old/non-run trigger from ending a
-        // later run.
-        if (working.ResolutionStack[^2] is not EffectCheckpointFrame checkpoint
+        // later run. A generic subroutine of the encountered ICE sits on the
+        // run timing frame itself.
+        bool encounterSubroutine = working.ResolutionStack[^2] is RunTimingFrame
+            && IsEncounteredIceSubroutineFrame(working, frame);
+        if (!encounterSubroutine
+            && !abilityChild
+            && (working.ResolutionStack[^2] is not EffectCheckpointFrame checkpoint
             || checkpoint.ChildKind != EffectCheckpointChildKind.Trigger
             || checkpoint.Occurrence.Effect is not GameplayOccurrenceEffect occurrence
             || occurrence.ServerId != run.AttackedServer
@@ -666,10 +933,17 @@ public static partial class GameEngine
                 && string.Equals(invocation.TriggerKey, frame.TriggerKey, StringComparison.Ordinal)
                 && invocation.SourceCardId == frame.SourceCardId
                 && invocation.SourceDefinitionId == frame.DefinitionId
-                && invocation.Controller == frame.Controller))
+                && invocation.Controller == frame.Controller)))
         {
             throw new ResolutionFailureException(
                 "EndRun requires a current run-owned catalog reaction occurrence.");
+        }
+
+        if (PreventsRunEnd(working, run))
+        {
+            // EL-PREVENT-END-RUN (Shred): the run goes on.
+            AdvanceBehaviorCursor(working, frame);
+            return;
         }
 
         RunState ending = run.WithTiming(
@@ -718,6 +992,12 @@ public static partial class GameEngine
         BehaviorResolutionFrame frame,
         BehaviorInstruction instruction)
     {
+        if (instruction.IsZoneInstall)
+        {
+            PushBehaviorZoneInstall(working, frame, instruction);
+            return;
+        }
+
         if (instruction.Optional
             && instruction.Target is { Kind: BehaviorTargetKind.ChosenCard } optionalTarget
             && IsProvenEmptyChosenCard(frame, optionalTarget))
@@ -999,6 +1279,12 @@ public static partial class GameEngine
         return instructions;
     }
 
+    /// <summary>Whether a catalog trigger has begun resolving: past its first instruction, or with a recorded choice.</summary>
+    private static bool CatalogTriggerBegan(BehaviorResolutionFrame frame) =>
+        frame.TriggerKey is not null
+        && frame.Stage == BehaviorResolutionStage.Execute
+        && (frame.InstructionCursor > 0 || frame.Continuation.Count > 0);
+
     private static void ValidateBehaviorRuntimeFrame(WorkingState working, BehaviorResolutionFrame frame)
     {
         CardBehaviorDefinition definition = GetBehaviorDefinition(working, frame);
@@ -1037,7 +1323,7 @@ public static partial class GameEngine
         }
 
         if (rootInstructions.Any(static instruction =>
-                instruction.Kind == BehaviorInstructionKind.ModifyEncounteredIceStrength)
+                BehaviorEncounterStrengthContracts.IsStrengthInstruction(instruction.Kind))
             && (frame.AbilityKey is null
                 || !BehaviorEncounterStrengthContracts.TryGetExecutableInstruction(
                     definition,
@@ -1046,10 +1332,10 @@ public static partial class GameEngine
                     out BehaviorInstruction? declaredInstruction)
                 || declaredInstruction is null
                 || rootInstructions.Count(static instruction =>
-                    instruction.Kind == BehaviorInstructionKind.ModifyEncounteredIceStrength) != 1
+                    BehaviorEncounterStrengthContracts.IsStrengthInstruction(instruction.Kind)) != 1
                 || !BehaviorContractStructure.AreEqual(
                     rootInstructions.Single(static instruction =>
-                        instruction.Kind == BehaviorInstructionKind.ModifyEncounteredIceStrength),
+                        BehaviorEncounterStrengthContracts.IsStrengthInstruction(instruction.Kind)),
                     declaredInstruction)))
         {
             throw new ResolutionFailureException(
@@ -1071,6 +1357,18 @@ public static partial class GameEngine
             {
                 throw new ResolutionFailureException(
                     "The trigger-subject binding is reserved for catalog trigger children.");
+            }
+        }
+        else if (working.ResolutionStack.Count >= 2
+            && working.ResolutionStack[^2] is RunTimingFrame
+            && IsEncounteredIceSubroutineFrame(working, frame))
+        {
+            // A generic ICE subroutine is keyed by its trigger declaration but
+            // runs directly above the encounter, not under a checkpoint.
+            if (triggerSubjectBindings.Length > 0)
+            {
+                throw new ResolutionFailureException(
+                    "A generic ICE subroutine must not retain a trigger-subject binding.");
             }
         }
         else
@@ -1262,23 +1560,34 @@ public static partial class GameEngine
                         && instruction.DamageAmountOperand?.TrashSourceAsCost == true);
             // The trigger's own install may replace its source (a second Pantograph
             // trashes the first, Wave 4 C1); an ability that began resolving finishes.
+            // So may a card the trigger plays (EL.9: Plutus plays Peer Review from
+            // Archives, which installs into Plutus's server and trashes Plutus).
             bool installReplacedSource = frame.TriggerKey is not null
-                && BehaviorInstructionPath.HasReached(
-                    rootInstructions,
-                    frame.Continuation,
-                    frame.InstructionCursor,
-                    BehaviorInstructionKind.InstallCard);
+                && (BehaviorInstructionPath.HasReached(
+                        rootInstructions,
+                        frame.Continuation,
+                        frame.InstructionCursor,
+                        BehaviorInstructionKind.InstallCard)
+                    || BehaviorInstructionPath.HasReached(
+                        rootInstructions,
+                        frame.Continuation,
+                        frame.InstructionCursor,
+                        BehaviorInstructionKind.PlayCard));
             bool catalogTriggerLifecycleZone = (catalogTriggerSelfTrashReached || damageSelfTrashReached || installReplacedSource)
                 && IsAbilityTrashZone(currentSourceZone, source);
             bool catalogTriggerDetachedSource = frame.TriggerKey is not null
                 && frame.CatalogTriggerSourceMovedBeforeStart;
+            // A triggered ability that began resolving finishes after another effect moved its source,
+            // as one whose source moved before it started does (EL.9: Byte!, accessed on top of R&D,
+            // gives a tag; NBN: Reality Plus draws 2 and draws Byte! before its net damage).
+            bool catalogTriggerBegan = frame.TriggerKey is not null && frame.CatalogTriggerSourceMovedAfterStart;
             bool hostedCreditOccurrenceAuthorized = IsAuthorizedHostedCreditMovement(
                 working,
                 frame,
                 source,
                 currentSourceZone);
             bool validLifecycleZone = frame.TriggerKey is not null
-                ? catalogTriggerDetachedSource || catalogTriggerLifecycleZone || hostedCreditOccurrenceAuthorized
+                ? catalogTriggerDetachedSource || catalogTriggerBegan || catalogTriggerLifecycleZone || hostedCreditOccurrenceAuthorized
                 : (selfTrash && IsAbilityTrashZone(currentSourceZone, source))
                     || (selfRemove && IsAbilityRemoveZone(currentSourceZone, source))
                     || hostedCreditOccurrenceAuthorized;
@@ -1518,6 +1827,7 @@ public static partial class GameEngine
         }
 
         CardInstanceState source = GetCard(working, frame.SourceCardId);
+        bool selfStrength = instruction.Kind == BehaviorInstructionKind.ModifySourceStrength;
         if (source.OwnerSide != PlayerSide.Runner
             || !working.BehaviorCatalog.TryGet(frame.DefinitionId, out CardBehaviorDefinition? definition)
             || !BehaviorEncounterStrengthContracts.MatchesEffect(
@@ -1536,6 +1846,42 @@ public static partial class GameEngine
         {
             throw new ResolutionFailureException(
                 "Encountered-ICE strength modifier provenance does not match its catalog paid ability.");
+        }
+
+        if (selfStrength)
+        {
+            // The source breaker's own strength: a realized variable term on
+            // the breaker, the same shape as a dynamic pump's snapshot.
+            if (!IsInstalledCard(working, source.Id)
+                || !working.BehaviorCatalog.TryGetIcebreaker(source.DefinitionId, out _))
+            {
+                throw new ResolutionFailureException(
+                    "A self-strength ability requires its installed icebreaker source.");
+            }
+
+            RunEffectId selfEffectId = new(
+                $"effect:source-strength:{run.Id.Value}:{encounter.Id.Value}:"
+                + $"{source.Id.Value}:{run.LingeringEffects.Count}");
+            working.RunState = run.WithLingeringEffects(
+                run.LingeringEffects.Append(
+                    new RunLingeringEffect(
+                        selfEffectId,
+                        BehaviorEncounterStrengthContracts.EffectBehaviorId(frame.DefinitionId, abilityKey),
+                        source.Id,
+                        RunLingeringEffectExpiry.Encounter,
+                        new RunValueAdjustment(
+                            BehaviorValueKind.Strength,
+                            BehaviorValueSourceKind.Variable,
+                            BehaviorValueOperation.Add,
+                            source.Id,
+                            source.Id,
+                            instruction.Amount,
+                            instruction.Argument!,
+                            instruction.Argument!,
+                            quantity: 1,
+                            unitDelta: instruction.Amount))).ToArray());
+            AdvanceBehaviorCursor(working, frame);
+            return;
         }
 
         CardInstanceState ice = GetCard(working, encounter.IceId);
@@ -1596,6 +1942,17 @@ public static partial class GameEngine
         {
             throw new ResolutionFailureException(
                 "The active behavior frame changed before ordinary Corp play deck-out completion.");
+        }
+
+        // EL-NESTED-PLAY: an operation played from inside another ability
+        // (Humanoid Resources) draws from an empty R&D. The game ends; the
+        // terminal cleanup clears the play area and the suspended parents.
+        if (cardPlay.IsNested)
+        {
+            RestoreBehaviorSetAside(working, frame);
+            CompleteTurnGame(working, PlayerSide.Runner, GameWinReason.DeckOut);
+            working.RunState = null;
+            return true;
         }
 
         if (working.ResolutionStack.Count < 3
@@ -1671,7 +2028,9 @@ public static partial class GameEngine
         {
             BehaviorConditionKind.Tagged => TagsForCondition(working, frame, condition) > 0,
             BehaviorConditionKind.NotTagged => TagsForCondition(working, frame, condition) <= 0,
-            BehaviorConditionKind.ClicksRemainingAtLeast => controller.Clicks >= condition.Value.GetValueOrDefault(),
+            BehaviorConditionKind.ClicksRemainingAtLeast => (condition.SubjectSide is { } clickSide
+                ? GetPlayer(working, clickSide)
+                : controller).Clicks >= condition.Value.GetValueOrDefault(),
             BehaviorConditionKind.Installed => IsInstalledCard(working, frame.SourceCardId),
             BehaviorConditionKind.InstalledThisTurn => CurrentFacts(working, frame.Controller)?.InstalledCardIds.Contains(frame.SourceCardId) == true,
             BehaviorConditionKind.SuccessfulRun => working.RunState?.Successful == true,
@@ -1682,7 +2041,19 @@ public static partial class GameEngine
             BehaviorConditionKind.CounterAtLeast => CurrentCounter(working, frame.SourceCardId, condition.Fact!) >= condition.Value.GetValueOrDefault(),
             BehaviorConditionKind.FactEquals => BehaviorFactEquals(working, frame, condition),
             BehaviorConditionKind.FoundCard => FoundCardConditionMatches(working, frame),
-            _ => false,
+            BehaviorConditionKind.SourceInZone => SourceZoneMatches(working, frame.SourceCardId, condition.Fact!),
+            BehaviorConditionKind.SourceNotInZone => !SourceZoneMatches(working, frame.SourceCardId, condition.Fact!),
+            BehaviorConditionKind.ChoseCards => frame.Bindings.Any(binding =>
+                string.Equals(binding.Key, condition.Fact, StringComparison.Ordinal) && binding.CardIds.Count > 0),
+            BehaviorConditionKind.PlayedFromZone => PlayedFromZone(working, frame, condition.Fact!),
+            BehaviorConditionKind.SourceAdvancementAtLeast =>
+                GetCard(working, frame.SourceCardId).AdvancementCounters >= condition.Value.GetValueOrDefault(),
+            BehaviorConditionKind.ChosenTrashCostIs => frame.Bindings.SingleOrDefault(binding =>
+                    string.Equals(binding.Key, condition.Fact, StringComparison.Ordinal)) is { CardIds.Count: 1 } chosen
+                && AccessTrashCost(working.BehaviorCatalog, working.RuntimeCardCatalog, GetCard(working, chosen.CardIds[0]).DefinitionId)
+                    == condition.Value,
+            BehaviorConditionKind.SourceHostsAtLeast => OptionConditionMatches(working, frame.Controller, frame.SourceCardId, condition),
+            _ => SharedConditionMatches(working, frame.Controller, condition) ?? false,
         };
     }
 
@@ -1773,6 +2144,49 @@ public static partial class GameEngine
         return actual.HasValue && actual.Value == condition.Value;
     }
 
+    internal static bool DeclaresKeyedInstall(IEnumerable<BehaviorInstruction> instructions, string key) =>
+        instructions.Any(instruction =>
+            instruction.Kind is BehaviorInstructionKind.InstallCard or BehaviorInstructionKind.ChooseAtRandom
+                && string.Equals(instruction.Argument, key, StringComparison.Ordinal)
+            || instruction.Branch is { } branch && DeclaresKeyedInstall(branch.WhenTrue.Concat(branch.WhenFalse), key)
+            || instruction.Choice is { } choice && DeclaresKeyedInstall(choice.Options.SelectMany(static option => option.Instructions), key));
+
+    /// <summary>A card's zone before this behavior set it aside, or its current zone.</summary>
+    private static ZoneKind OriginalZoneKind(WorkingState working, BehaviorResolutionFrame frame, CardInstanceId cardId) =>
+        frame.SetAside.SingleOrDefault(selected => selected.CardId == cardId) is { } frozen
+            ? working.Zones.Single(zone => zone.Id == frozen.OriginalZoneId).Kind
+            : ZoneForCard(working, cardId).Kind;
+
+    private static bool SourceZoneMatches(WorkingState working, CardInstanceId cardId, string zoneName)
+    {
+        CardInstanceState card = GetCard(working, cardId);
+        ZoneState? zone = working.Zones.FirstOrDefault(candidate => candidate.Id == card.ZoneId);
+        return zone is not null
+            && Enum.TryParse(zoneName, ignoreCase: false, out BehaviorZone behaviorZone)
+            && BehaviorZoneMatches(behaviorZone, zone.Kind, card.OwnerSide);
+    }
+
+    /// <summary>Whether the card whose play this behavior resolves came from the named zone.</summary>
+    private static bool PlayedFromZone(WorkingState working, BehaviorResolutionFrame frame, string zoneName)
+    {
+        int index = working.ResolutionStack.FindLastIndex(candidate =>
+            candidate is BehaviorResolutionFrame behavior && behavior.FrameIdentity == frame.FrameIdentity);
+        return index > 0
+            && working.ResolutionStack[index - 1] is CardPlayFrame play
+            && play.CardId == frame.SourceCardId
+            && Enum.TryParse(zoneName, ignoreCase: false, out BehaviorZone zone)
+            && BehaviorZoneMatches(zone, play.SourceZoneKind, play.Side);
+    }
+
+    private static int SourceExcessAdvancement(WorkingState working, CardInstanceId cardId)
+    {
+        CardInstanceState card = GetCard(working, cardId);
+        int requirement = working.RuntimeCardCatalog?.TryGet(card.DefinitionId, out CardRuntimeSpec? spec) == true
+            ? spec!.AdvancementRequirement
+            : 0;
+        return Math.Max(0, card.AdvancementCounters - requirement);
+    }
+
     private static int CurrentCounter(WorkingState working, CardInstanceId cardId, string counterName) =>
         working.RulesState?.Counters.SingleOrDefault(counter =>
             counter.CardId == cardId
@@ -1791,9 +2205,23 @@ public static partial class GameEngine
     {
         BehaviorAmountOperand operand = instruction.AmountOperand
             ?? throw new ResolutionFailureException("A dynamic credit amount is missing its typed operand.");
+        if (operand.Kind is { } kind && kind != BehaviorAmountKind.SourceCounter)
+        {
+            int counted = kind switch
+            {
+                BehaviorAmountKind.Recorded => frame.Recorded(operand.RecordedKey!),
+                BehaviorAmountKind.ControllerClicks => GetPlayer(working, frame.Controller).Clicks,
+                BehaviorAmountKind.SourceAdvancementCounters => GetCard(working, frame.SourceCardId).AdvancementCounters,
+                BehaviorAmountKind.ChosenCardInstallCost => ChosenCardInstallCost(working, frame),
+                BehaviorAmountKind.SourceExcessAdvancement => SourceExcessAdvancement(working, frame.SourceCardId),
+                _ => throw new ResolutionFailureException($"Amount kind '{kind}' is not executable."),
+            };
+            return checked(counted * operand.Multiplier + operand.Offset);
+        }
+
         if (instruction.Kind != BehaviorInstructionKind.GainCredits)
         {
-            throw new ResolutionFailureException("A dynamic amount is executable only on GainCredits.");
+            throw new ResolutionFailureException("A source-counter amount is executable only on GainCredits.");
         }
 
         CardInstanceState source = GetCard(working, frame.SourceCardId);
@@ -1817,8 +2245,48 @@ public static partial class GameEngine
         }
 
         int count = counter?.Count ?? 0;
-        return checked(count * operand.Multiplier);
+        return checked(count * operand.Multiplier + operand.Offset);
     }
+
+    private static int ChosenCardInstallCost(WorkingState working, BehaviorResolutionFrame frame)
+    {
+        CardInstanceId[] chosen = frame.Bindings
+            .Where(static binding => string.Equals(binding.Key, "chosen", StringComparison.Ordinal))
+            .SelectMany(static binding => binding.CardIds)
+            .ToArray();
+        if (chosen.Length != 1
+            || working.RuntimeCardCatalog is null
+            || !working.RuntimeCardCatalog.TryGet(GetCard(working, chosen[0]).DefinitionId, out CardRuntimeSpec? spec))
+        {
+            return 0;
+        }
+
+        return spec.InstallCost ?? spec.RezCost ?? 0;
+    }
+
+    private static PlayerId ResolveBehaviorRecipient(WorkingState working, BehaviorResolutionFrame frame, BehaviorInstruction instruction) =>
+        instruction.Recipient switch
+        {
+            null or BehaviorPlayerSelector.Controller => frame.Controller,
+            BehaviorPlayerSelector.ActingPlayer => frame.ActingPlayer
+                ?? throw new ResolutionFailureException("An instruction targeting ActingPlayer requires an acting player."),
+            BehaviorPlayerSelector.Corp => GetPlayer(working, PlayerSide.Corp).Id,
+            BehaviorPlayerSelector.Runner => GetPlayer(working, PlayerSide.Runner).Id,
+            _ => throw new ResolutionFailureException("The instruction recipient is invalid."),
+        };
+
+    private static int StaticOrDynamicAmount(WorkingState working, BehaviorResolutionFrame frame, BehaviorInstruction instruction) =>
+        instruction.AmountOperand is null
+            ? instruction.Amount
+            : ResolveBehaviorDynamicAmount(working, frame, instruction);
+
+    private static BehaviorResolutionFrame RecordBehaviorAmount(BehaviorResolutionFrame frame, string? key, int value) =>
+        key is null
+            ? frame
+            : frame.With(recordedAmounts: (frame.RecordedAmounts ?? [])
+                .Where(entry => !string.Equals(entry.Key, key, StringComparison.Ordinal))
+                .Append(new BehaviorRecordedAmount(key, value))
+                .ToArray());
 
     private static bool IsAbilitySourceCounterRetention(
         WorkingState working,
@@ -1866,7 +2334,7 @@ public static partial class GameEngine
         foreach (BehaviorInstruction instruction in instructions)
         {
             if (instruction.Kind == BehaviorInstructionKind.GainCredits
-                && instruction.AmountOperand is { } amount
+                && instruction.AmountOperand is { Kind: null or BehaviorAmountKind.SourceCounter } amount
                 && (expected is null || amount.Equals(expected)))
             {
                 return true;
@@ -2020,7 +2488,7 @@ public static partial class GameEngine
         string[] optionKeys = spec.Options
             .Where(option => !IsBehaviorInstallOption(option)
                 || IsBehaviorInstallOptionAvailable(working, frame, option))
-            .Where(option => IsBehaviorChoiceOptionAffordable(working, owner, option))
+            .Where(option => IsBehaviorChoiceOptionAffordable(working, owner, option, frame.SourceCardId))
             .Select(option => option.Key)
             .ToArray();
         if (spec.Mode == BehaviorChoiceMode.Mode && optionKeys.Length == 0)
@@ -2365,10 +2833,17 @@ public static partial class GameEngine
     private static bool IsBehaviorChoiceOptionAffordable(
         WorkingState working,
         PlayerId owner,
-        BehaviorChoiceOption option)
+        BehaviorChoiceOption option,
+        CardInstanceId? sourceCardId = null)
     {
         try
         {
+            if (option.Condition is { } condition
+                && !OptionConditionMatches(working, owner, sourceCardId, condition))
+            {
+                return false;
+            }
+
             PlayerState payer = GetPlayer(working, owner);
             long credits = 0;
             long clicks = 0;
@@ -2415,12 +2890,13 @@ public static partial class GameEngine
         IBehaviorCatalog behaviorCatalog,
         IRuntimeCardCatalog? runtimeCardCatalog,
         PlayerId owner,
-        BehaviorChoiceOption option)
+        BehaviorChoiceOption option,
+        CardInstanceId? sourceCardId = null)
     {
         try
         {
             WorkingState working = WorkingState.From(state, behaviorCatalog, runtimeCardCatalog);
-            return IsBehaviorChoiceOptionAffordable(working, owner, option);
+            return IsBehaviorChoiceOptionAffordable(working, owner, option, sourceCardId);
         }
         catch (Exception exception) when (exception is ResolutionFailureException
             or InvalidOperationException
@@ -2461,7 +2937,7 @@ public static partial class GameEngine
 
                 BehaviorChoiceOption? option = specification.Options.SingleOrDefault(candidate =>
                     string.Equals(candidate.Key, parameters.OptionKeys[0], StringComparison.Ordinal));
-                if (option is null || !IsBehaviorChoiceOptionAffordable(working, choice.Owner, option))
+                if (option is null || !IsBehaviorChoiceOptionAffordable(working, choice.Owner, option, frame.SourceCardId))
                 {
                     return false;
                 }
@@ -2882,12 +3358,15 @@ public static partial class GameEngine
     private static CardInstanceId[] MaterializeBehaviorCandidates(
         WorkingState working,
         BehaviorTarget target,
-        CardInstanceId? excludedCardId = null)
+        CardInstanceId? excludedCardId = null,
+        CardInstanceId? hostSourceId = null)
     {
         if (target.Kind is BehaviorTargetKind.ZoneCard or BehaviorTargetKind.ZoneCards)
         {
             ZoneState zone = GetBehaviorZone(working, target.Zone!.Value, target.Filter?.OwnerSide);
             return zone.CardIds
+                .Take(target.TopCount ?? int.MaxValue)
+                .Where(cardId => !target.IsHostedOnSource || GetCard(working, cardId).HostCardId == (hostSourceId ?? excludedCardId))
                 .Where(cardId => !excludedCardId.HasValue || cardId != excludedCardId.Value)
                 .Where(cardId => BehaviorCardMatches(working, cardId, target.Filter))
                 .ToArray();
@@ -2899,6 +3378,11 @@ public static partial class GameEngine
             return working.Cards
                 .Where(card => IsInstalledCard(working, card.Id)
                     && (owner is null || card.OwnerSide == owner.Value)
+                    && (!target.IsOther || card.Id != excludedCardId)
+                    && (!target.IsCopyOfArchives || IsCopyOfFaceUpArchivesCard(working.Cards, working.Zones, card))
+                    && (!target.IsNotAi || !GameEngine.CardSubtypes(working.RuntimeCardCatalog, card.DefinitionId).Contains("ai", StringComparer.Ordinal))
+                    && (!target.IsInAttackedServer || working.RunState is { } attacked
+                        && working.Zones.FirstOrDefault(zone => zone.Id == card.ZoneId)?.ServerId == attacked.AttackedServer)
                     && (target.Kind != BehaviorTargetKind.InstalledCardNotThisTurn
                         || !IsInstalledThisTurn(working, card.Id, owner))
                     && BehaviorCardMatches(working, card.Id, target.Filter))
@@ -3075,6 +3559,11 @@ public static partial class GameEngine
                 return false;
             }
 
+            if (filter.AgendaPoints is { } points && runtimeSpec.AgendaPoints != points)
+            {
+                return false;
+            }
+
             return filter.CardType switch
             {
                 BehaviorCardType.Any => true,
@@ -3088,10 +3577,14 @@ public static partial class GameEngine
                     && runtimeSpec.Subtypes.Contains("icebreaker", StringComparer.Ordinal),
                 BehaviorCardType.Program => runtimeSpec.CardClass == RuntimeCardClass.Program,
                 BehaviorCardType.ProgramOrHardware => runtimeSpec.CardClass is RuntimeCardClass.Program or RuntimeCardClass.Hardware,
+                BehaviorCardType.ResourceOrHardware => runtimeSpec.CardClass is RuntimeCardClass.Resource or RuntimeCardClass.Hardware,
                 BehaviorCardType.Identity => runtimeSpec.CardClass == RuntimeCardClass.Identity,
                 BehaviorCardType.Operation => runtimeSpec.CardClass == RuntimeCardClass.Operation,
                 BehaviorCardType.Resource => runtimeSpec.CardClass == RuntimeCardClass.Resource,
                 BehaviorCardType.Upgrade => runtimeSpec.CardClass == RuntimeCardClass.Upgrade,
+                BehaviorCardType.Advanceable => runtimeSpec.CardClass == RuntimeCardClass.Agenda
+                    || working.BehaviorCatalog.TryGet(card.DefinitionId, out CardBehaviorDefinition? advanceable)
+                        && advanceable.CanBeAdvanced,
                 _ => false,
             };
         }
@@ -3105,6 +3598,8 @@ public static partial class GameEngine
         {
             BehaviorCardType.ProgramOrHardware => working.BehaviorCatalog.TryGetCardType(card.DefinitionId, out BehaviorCardType installedClass)
                 && installedClass is BehaviorCardType.Program or BehaviorCardType.Icebreaker or BehaviorCardType.Hardware,
+            BehaviorCardType.ResourceOrHardware => working.BehaviorCatalog.TryGetCardType(card.DefinitionId, out BehaviorCardType resourceOrHardware)
+                && resourceOrHardware is BehaviorCardType.Resource or BehaviorCardType.Hardware,
             BehaviorCardType.Ice => working.BehaviorCatalog.TryGetIce(card.DefinitionId, out _),
             BehaviorCardType.Icebreaker => working.BehaviorCatalog.TryGetIcebreaker(card.DefinitionId, out _),
             BehaviorCardType.Asset => working.BehaviorCatalog.TryGetAsset(card.DefinitionId, out _),
@@ -3561,6 +4056,7 @@ public static partial class GameEngine
             CardInstanceState accessed = ResolveAccessedCardTarget(working, frame);
             ZoneState source = ZoneForCard(working, accessed.Id);
             ZoneState discard = GetBehaviorZone(working, BehaviorZone.Archives, PlayerSide.Corp);
+            ServerId? installedServer = source.Kind is ZoneKind.ServerRoot or ZoneKind.ServerIce ? source.ServerId : null;
             TrashCard(working, accessed, source, discard);
 
             // Access trash is a public reveal even when the card was an
@@ -3583,21 +4079,38 @@ public static partial class GameEngine
                 EngineEventKinds.AccessedCardTrashed,
                 new AccessedCardTrashedEventPayload(run.Id, accessed.Id, trashCost: 0));
             AdvanceBehaviorCursor(working, frame);
-            QueueIdentityOccurrence(working, OccurrenceKind.AccessedCardTrashed, PlayerSide.Runner, accessed.Id);
+            QueueAccessedCardTrashedOccurrence(working, accessed.Id, accessed.Rezzed, installedServer);
             return;
         }
 
         IReadOnlyList<CardInstanceId> cardIds = ResolveBehaviorCards(working, frame, instruction.Target);
         if (cardIds.Count == 0)
         {
+            // "All hosted cards" may be none (EL-HOSTED-FACEUP), and the top
+            // cards of a deck may have run out (EL-LOOK-TOP: AU Co.).
             if (instruction.Target is { Kind: BehaviorTargetKind.ChosenCard }
-                && IsProvenEmptyChosenCard(frame, instruction.Target))
+                    && IsProvenEmptyChosenCard(frame, instruction.Target)
+                || instruction.Target is { IsHostedOnSource: true }
+                || instruction.Target is { TopCount: not null })
             {
                 AdvanceBehaviorCursor(working, frame);
                 return;
             }
 
             throw new ResolutionFailureException($"Behavior instruction '{instruction.Kind}' resolved no cards.");
+        }
+
+        if (kind == BehaviorTransferKind.Trash
+            && GetPlayer(working, frame.Controller).Side == PlayerSide.Runner)
+        {
+            cardIds = cardIds.Where(cardId => !RunnerCannotTrash(working, GetCard(working, cardId))).ToArray();
+        }
+
+        if (kind == BehaviorTransferKind.Trash
+            && GetPlayer(working, frame.Controller).Side == PlayerSide.Corp
+            && cardIds.Any(cardId => OriginalZoneKind(working, frame, cardId) == ZoneKind.CorpHand))
+        {
+            DeferOccurrence(working, OccurrenceKind.CardsTrashedFromHq, PlayerSide.Corp);
         }
 
         var remainingSetAside = frame.SetAside.ToList();
@@ -3950,6 +4463,14 @@ public static partial class GameEngine
         // (for example Seamless Launch), not taking an advance action. CR 1.18.2
         // explicitly distinguishes the two: do not emit an advance occurrence
         // or trigger advance-from-zero abilities for this counter placement.
+        if (instruction.Target is { Kind: BehaviorTargetKind.ChosenCard } emptyTarget
+            && IsProvenEmptyChosenCard(frame, emptyTarget))
+        {
+            // An optional or target-less choice chose nothing: nothing to advance.
+            AdvanceBehaviorCursor(working, frame);
+            return;
+        }
+
         IReadOnlyList<CardInstanceId> cardIds = ResolveBehaviorCards(working, frame, instruction.Target);
         if (instruction.Target is { Kind: BehaviorTargetKind.ChosenCard })
         {
@@ -4011,6 +4532,13 @@ public static partial class GameEngine
             : frame.TriggerKey is not null
                 ? GetTriggerDeclaration(definition, frame.TriggerKey).Instructions
                 : definition.Instructions;
+        if (DeclaresKeyedInstall(rootInstructions, bindingKey)
+            && cardIds.All(cardId => IsInstalledCard(working, cardId)))
+        {
+            // The card a keyed zone install placed ("that agenda").
+            return;
+        }
+
         List<BehaviorInstruction> replay = rootInstructions.ToList();
         BehaviorTarget? originatingTarget = null;
         IReadOnlyList<CardInstanceId>? originatingSelection = null;
@@ -4063,6 +4591,13 @@ public static partial class GameEngine
                 "The chosen installed-card target is stale or no longer matches its selector.");
         }
     }
+
+    /// <summary>A rezzed Corp card that forbids the Runner trashing it (Kessleroid).</summary>
+    private static bool RunnerCannotTrash(WorkingState working, CardInstanceState card) =>
+        card.OwnerSide == PlayerSide.Corp
+        && card.Rezzed
+        && working.BehaviorCatalog.TryGet(card.DefinitionId, out CardBehaviorDefinition? definition)
+        && definition.RunnerCannotTrash;
 
     private static bool IsProvenEmptyChosenCard(
         BehaviorResolutionFrame frame,
@@ -4120,7 +4655,7 @@ public static partial class GameEngine
                 return installed;
             case BehaviorTargetKind.ZoneCard:
             case BehaviorTargetKind.ZoneCards:
-                return MaterializeBehaviorCandidates(working, target);
+                return MaterializeBehaviorCandidates(working, target, hostSourceId: frame.SourceCardId);
             default:
                 throw new ResolutionFailureException($"Card target kind '{target.Kind}' is not executable.");
         }
@@ -4313,6 +4848,12 @@ public static partial class GameEngine
                 PlayerSide.Runner => actual == ZoneKind.RunnerRemovedFromGame,
                 _ => false,
             },
+            BehaviorZone.HostedFaceUp => ownerSide switch
+            {
+                PlayerSide.Corp => actual == ZoneKind.CorpHostedFaceUp,
+                PlayerSide.Runner => actual == ZoneKind.RunnerHostedFaceUp,
+                _ => actual is ZoneKind.CorpHostedFaceUp or ZoneKind.RunnerHostedFaceUp,
+            },
             _ => false,
         };
 
@@ -4335,6 +4876,9 @@ public static partial class GameEngine
             BehaviorZone.RemovedFromGame => side == PlayerSide.Corp
                 ? ZoneKind.CorpRemovedFromGame
                 : ZoneKind.RunnerRemovedFromGame,
+            BehaviorZone.HostedFaceUp => side == PlayerSide.Corp
+                ? ZoneKind.CorpHostedFaceUp
+                : ZoneKind.RunnerHostedFaceUp,
             _ => throw new ResolutionFailureException($"Behavior zone '{zone}' is not executable."),
         };
 
@@ -4351,7 +4895,8 @@ public static partial class GameEngine
             return created;
         }
 
-        if (kind is ZoneKind.CorpRemovedFromGame or ZoneKind.RunnerRemovedFromGame)
+        if (kind is ZoneKind.CorpRemovedFromGame or ZoneKind.RunnerRemovedFromGame
+            or ZoneKind.CorpHostedFaceUp or ZoneKind.RunnerHostedFaceUp)
         {
             ZoneState? existing = working.Zones.FirstOrDefault(candidate => candidate.Kind == kind && candidate.ServerId is null);
             if (existing is not null)
@@ -4403,4 +4948,34 @@ public static partial class GameEngine
             history!.MarkInstalled(activeSide, cardId));
     }
 
+    /// <summary>
+    /// Evaluates a choice option's condition: the shared game-state kinds, or
+    /// a counter on the behavior's source card.
+    /// </summary>
+    private static bool OptionConditionMatches(
+        WorkingState working,
+        PlayerId owner,
+        CardInstanceId? sourceCardId,
+        BehaviorCondition condition) => condition.Kind switch
+        {
+            BehaviorConditionKind.CounterAtLeast => sourceCardId is { } source
+                && CurrentCounter(working, source, condition.Fact!) >= condition.Value.GetValueOrDefault(),
+            BehaviorConditionKind.Tagged => RunnerTags(working) > 0,
+            BehaviorConditionKind.NotTagged => RunnerTags(working) <= 0,
+            BehaviorConditionKind.SourceAdvancementAtLeast => sourceCardId is { } advanced
+                && GetCard(working, advanced).AdvancementCounters >= condition.Value.GetValueOrDefault(),
+            BehaviorConditionKind.ClicksRemainingAtLeast =>
+                GetPlayer(working, condition.SubjectSide ?? GetPlayer(working, owner).Side).Clicks >= condition.Value.GetValueOrDefault(),
+            BehaviorConditionKind.SourceInZone => sourceCardId is { } inZone && SourceZoneMatches(working, inZone, condition.Fact!),
+            BehaviorConditionKind.SourceNotInZone => sourceCardId is { } notInZone && !SourceZoneMatches(working, notInZone, condition.Fact!),
+            BehaviorConditionKind.SourceHostsAtLeast => sourceCardId is { } host
+                && working.Cards.Count(card => card.HostCardId == host
+                    && working.Zones.FirstOrDefault(zone => zone.Id == card.ZoneId)?.Kind is ZoneKind.RunnerHostedFaceUp or ZoneKind.CorpHostedFaceUp)
+                    >= condition.Value.GetValueOrDefault(),
+            BehaviorConditionKind.RezzedInstalledCopy => working.Cards.Any(card => card.Id != sourceCardId
+                && card.Rezzed
+                && card.DefinitionId.Value == condition.Fact
+                && IsInstalledCard(working, card.Id)),
+            _ => SharedConditionMatches(working, owner, condition) ?? false,
+        };
 }

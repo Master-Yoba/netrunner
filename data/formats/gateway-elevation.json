@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "gateway-elevation",
+  "name": "System Gateway + Elevation",
+  "effectiveDate": "2026-05-01",
+  "complete": true,
+  "cardPool": "gateway-elevation",
+  "legalPacks": [
+    "sg",
+    "elev"
+  ],
+  "missingPacks": [],
+  "restriction": null,
+  "deckRules": {
+    "maxCopiesByName": 3,
+    "highValueAgendaLimit": null
+  },
+  "source": {
+    "note": "System Gateway and Elevation with no ban list (D-EL-10): the pool the Core Battle Box decks are built for. Startup legality waits for the full Startup format, when Vantage Point is in."
+  }
+}

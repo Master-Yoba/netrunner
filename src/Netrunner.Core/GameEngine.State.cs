@@ -32,6 +32,8 @@ public static partial class GameEngine
             throw new ResolutionFailureException("Cards cannot enter a destroyed server.");
         }
 
+        MarkTriggerSourcesMovedAfterStart(working, card, destination);
+
         ReplaceZone(working, new ZoneState(
             source.Id,
             source.Kind,
@@ -61,7 +63,7 @@ public static partial class GameEngine
             card.OwnerSide,
             !entersHiddenZone && (entersPublicFaceUpZone || card.FaceUp),
             !leavesInstalledZone && card.Rezzed,
-            card.AdvancementCounters, leavesInstalledZone ? null : card.HostCardId));
+            card.AdvancementCounters, KeepsHost(source.Kind, destination.Kind, leavesInstalledZone) ? card.HostCardId : null));
         if (leavesInstalledZone)
         {
             TrashHostedDescendants(working, card.Id);
@@ -140,10 +142,47 @@ public static partial class GameEngine
     /// </summary>
     private static void ClearRunValueAdjustments(WorkingState working, CardInstanceId cardId)
     {
+        // EL.8: so do a breaker's run-long pumps (GAMEDRAGON™ Pro), sourced by the breaker itself.
+        static bool Ends(RunLingeringEffect effect, CardInstanceId cardId) =>
+            effect.ValueAdjustment?.TargetCardId == cardId
+            || effect.ValueAdjustment is null
+            && effect.SourceCardId == cardId
+            && effect.Expiry == RunLingeringEffectExpiry.Run
+            && effect.BehaviorId == EncounterStrength.IcebreakerPumpBehavior;
         if (working.RunState is not { } run
-            || !run.LingeringEffects.Any(effect => effect.ValueAdjustment?.TargetCardId == cardId)) return;
+            || !run.LingeringEffects.Any(effect => Ends(effect, cardId))) return;
         working.RunState = run.WithLingeringEffects(run.LingeringEffects
-            .Where(effect => effect.ValueAdjustment?.TargetCardId != cardId).ToArray());
+            .Where(effect => !Ends(effect, cardId)).ToArray());
+    }
+
+    /// <summary>
+    /// Whether a moved card keeps its host. A card leaving play or its console's faceup zone loses it, except into
+    /// a behavior's temporary set-aside custody and back (EL.4 review): a returned selection is hosted as before.
+    /// </summary>
+    private static bool KeepsHost(ZoneKind source, ZoneKind destination, bool leavesInstalledZone) =>
+        !leavesInstalledZone
+        && (!(IsHostedFaceUpZone(source) || source == ZoneKind.BehaviorSetAside)
+            || destination == ZoneKind.BehaviorSetAside
+            || IsHostedFaceUpZone(destination));
+
+    /// <summary>
+    /// Records that a begun catalog trigger's source left its zone for one other than its owner's trash or
+    /// removed-from-game zone (those keep their own lifecycle rules), so the trigger may finish (EL.9).
+    /// </summary>
+    private static void MarkTriggerSourcesMovedAfterStart(WorkingState working, CardInstanceState card, ZoneState destination)
+    {
+        if (IsAbilityTrashZone(destination, card) || IsAbilityRemoveZone(destination, card)) return;
+        for (int index = 0; index < working.ResolutionStack.Count; index++)
+        {
+            if (working.ResolutionStack[index] is BehaviorResolutionFrame frame
+                && frame.SourceCardId == card.Id
+                && frame.SourceZoneId == card.ZoneId
+                && !frame.CatalogTriggerSourceMovedAfterStart
+                && CatalogTriggerBegan(frame))
+            {
+                working.ResolutionStack[index] = frame.With(catalogTriggerSourceMovedAfterStart: true);
+            }
+        }
     }
 
     private static bool IsInstalledZone(ZoneKind kind) =>
@@ -376,6 +415,12 @@ public static partial class GameEngine
         public RunState? RunState { get; set; }
 
         public RulesState? RulesState { get; set; }
+
+        /// <summary>
+        /// Transient: the action this Apply consumes has started but its
+        /// frames aren't on the stack yet ("finished an action yet" checks).
+        /// </summary>
+        public bool ActionJustStarted { get; set; }
 
         public List<EngineEvent> Events { get; }
 

@@ -422,7 +422,8 @@ public static class ActionsRegionPresenter
             DecisionKind.BehaviorChoice => [ActionKind.ChooseBehavior],
             DecisionKind.TriggerChoice => [ActionKind.UseTrigger, ActionKind.DeclineTrigger],
             DecisionKind.IceSubroutineChoice => [ActionKind.ResolveIceSubroutine],
-            DecisionKind.InstallChoice => [ActionKind.InstallCard],
+            // EL.2: an install by a card effect (Synapse Global, Peer Review) is an install choice too.
+            DecisionKind.InstallChoice or DecisionKind.BehaviorInstallChoice => [ActionKind.InstallCard],
             DecisionKind.MemoryCleanup => [ActionKind.TrashProgram],
             DecisionKind.TriggerOrdering => [ActionKind.OrderTriggers],
             DecisionKind.InterruptChoice =>
@@ -474,7 +475,7 @@ public static class ActionsRegionPresenter
             DecisionKind.BehaviorChoice => "BEHAVIOR CHOICE ISSUED BY CORE",
             DecisionKind.TriggerChoice => "TRIGGER CHOICE ISSUED BY CORE",
             DecisionKind.IceSubroutineChoice => "ICE SUBROUTINE CHOICE ISSUED BY CORE",
-            DecisionKind.InstallChoice => "INSTALL CHOICE ISSUED BY CORE",
+            DecisionKind.InstallChoice or DecisionKind.BehaviorInstallChoice => "INSTALL CHOICE ISSUED BY CORE",
             DecisionKind.InterruptChoice => "INTERRUPT CHOICE ISSUED BY CORE",
             DecisionKind.RunTiming => "RUN WINDOW ACTIONS ISSUED BY CORE",
             _ => "ISSUED ACTIONS",
@@ -511,9 +512,12 @@ public static class ActionsRegionPresenter
     public static string? GetTargetCardId(ActionParameters parameters)
     {
         ArgumentNullException.ThrowIfNull(parameters);
-        return parameters is TrashTaggedResourceParameters tagged
-            ? tagged.CardId.Value
-            : EncounterChoicePresenter.GetTargetCardId(parameters);
+        return parameters switch
+        {
+            TrashTaggedResourceParameters tagged => tagged.CardId.Value,
+            BehaviorInstallChoiceParameters { Choice: { } install } => install.CardId.Value,
+            _ => EncounterChoicePresenter.GetTargetCardId(parameters),
+        };
     }
 
     /// <summary>

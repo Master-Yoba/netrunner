@@ -9,19 +9,23 @@ namespace Netrunner.Cli;
 public static partial class CliCommands
 {
     /// <summary>
-    /// fuzz [--games N] [--seed S] [--content developer|official] [--action-cap N]
-    /// [--workers 1..64] [--differential] [--output new-dir] [--json]. --differential
-    /// also checks Simulation-mode Apply against every authoritative action. Exit 0 means no defects,
+    /// fuzz [--games N | --games-per-pairing N] [--seed S] [--content developer|official|...] [--action-cap N]
+    /// [--workers 1..64] [--verify-replays-every N] [--differential] [--output new-dir] [--json]. --verify-replays-every
+    /// verifies only every Nth finished game's replay (default 1, every game; a capped game always). --differential
+    /// also checks Simulation-mode Apply against every authoritative action. --games-per-pairing plays N games of
+    /// each deck pairing with each seat mix (the plan cycles both, so any count is spread evenly). Exit 0 means no defects,
     /// 1 means at least one defect, 2 means invalid arguments.
     /// </summary>
     private static int RunFuzz(string[] args, TextWriter output, TextWriter error)
     {
         bool json = args.Contains("--json", StringComparer.Ordinal);
         int games = 50;
+        int? gamesPerPairing = null;
         ulong seed = 1;
         string content = "developer";
         int actionCap = RulesFuzzRunner.DefaultActionCap;
         int workers = 1;
+        int verifyReplaysEvery = 1;
         bool differential = false;
         string? destination = null;
         try
@@ -39,14 +43,18 @@ public static partial class CliCommands
                         if (!int.TryParse(args[++index], NumberStyles.None, CultureInfo.InvariantCulture, out games) || games is < 1 or > 100_000)
                             throw new ArgumentException("--games requires an integer from 1 to 100000.");
                         break;
+                    case "--games-per-pairing" when index + 1 < args.Length:
+                        gamesPerPairing = int.TryParse(args[++index], NumberStyles.None, CultureInfo.InvariantCulture, out int perPairing)
+                            && perPairing is >= 1 and <= 1_000 ? perPairing : throw new ArgumentException("--games-per-pairing requires an integer from 1 to 1000.");
+                        break;
                     case "--seed" when index + 1 < args.Length:
                         if (!ulong.TryParse(args[++index], NumberStyles.None, CultureInfo.InvariantCulture, out seed))
                             throw new ArgumentException("--seed requires an unsigned integer.");
                         break;
                     case "--content" when index + 1 < args.Length:
                         content = args[++index];
-                        if (content is not ("developer" or "official" or "gateway"))
-                            throw new ArgumentException("--content requires 'developer', 'official' or 'gateway'.");
+                        if (!RulesFuzzRunner.ContentNames.Contains(content, StringComparer.Ordinal))
+                            throw new ArgumentException($"--content requires one of {string.Join(", ", RulesFuzzRunner.ContentNames)}.");
                         break;
                     case "--action-cap" when index + 1 < args.Length:
                         if (!int.TryParse(args[++index], NumberStyles.None, CultureInfo.InvariantCulture, out actionCap)
@@ -60,12 +68,24 @@ public static partial class CliCommands
                     case "--output" when index + 1 < args.Length:
                         destination = args[++index];
                         break;
+                    case "--verify-replays-every" when index + 1 < args.Length:
+                        if (!int.TryParse(args[++index], NumberStyles.None, CultureInfo.InvariantCulture, out verifyReplaysEvery)
+                            || verifyReplaysEvery is < 1 or > 1_000)
+                            throw new ArgumentException("--verify-replays-every requires an integer from 1 to 1000.");
+                        break;
                     default: throw new ArgumentException($"Unsupported fuzz argument '{args[index]}'.");
                 }
             }
 
+            if (gamesPerPairing is not null && seen.Contains("--games"))
+                throw new ArgumentException("--games and --games-per-pairing are alternatives.");
             if (content != "developer" && CardDataResource.EmbeddedMode != CardDataResource.OfficialMode)
                 throw new ArgumentException("Official fuzzing needs previously provisioned official content embedded at build time.");
+            if (gamesPerPairing is { } perPairingGames)
+            {
+                games = perPairingGames * RulesFuzzRunner.ContentIds(content).Count * RulesFuzzRunner.Pairings.Count;
+                if (games > 100_000) throw new ArgumentException("--games-per-pairing plans more than 100000 games for this content.");
+            }
             if (destination is not null)
             {
                 if (Directory.Exists(destination) || File.Exists(destination))
@@ -80,7 +100,7 @@ public static partial class CliCommands
         }
 
         IReadOnlyList<FuzzGameCase> cases = RulesFuzzRunner.Plan(games, seed,
-            RulesFuzzRunner.ContentIds(content));
+            RulesFuzzRunner.ContentIds(content), verifyReplaysEvery);
         var results = new ConcurrentDictionary<string, FuzzGameResult>(StringComparer.Ordinal);
         Parallel.ForEachAsync(cases, new ParallelOptions { MaxDegreeOfParallelism = workers },
             async (fuzzCase, cancellation) =>
@@ -111,7 +131,7 @@ public static partial class CliCommands
         else
         {
             output.WriteLine(defects.Length == 0 ? "fuzz=ok" : "fuzz=defects");
-            output.WriteLine($"content={content} seed={seed} games={ordered.Length} action-cap={actionCap}");
+            output.WriteLine($"content={content} seed={seed} games={ordered.Length} action-cap={actionCap} replays-verified={ordered.Count(ReplayVerified)}");
             foreach (IGrouping<FuzzGameStatus, FuzzGameResult> group in ordered.GroupBy(result => result.Status).OrderBy(group => group.Key))
                 output.WriteLine($"status {group.Key}={group.Count()}");
             output.WriteLine($"mean-actions={ordered.Average(result => result.ActionCount).ToString("F1", CultureInfo.InvariantCulture)}");
@@ -148,6 +168,10 @@ public static partial class CliCommands
         return directory;
     }
 
+    // A finished game's replay is verified when its case asks (every Nth game at a per-slice size); a capped one always.
+    private static bool ReplayVerified(FuzzGameResult result) =>
+        result.Status == FuzzGameStatus.Capped || (result.Status == FuzzGameStatus.Terminal && result.Case.VerifyReplay);
+
     private static string FuzzSummaryJson(FuzzGameResult[] results, ulong seed, string content, int actionCap,
         string? destination = null, string? writeError = null) => EngineJson.Serialize(new
         {
@@ -158,6 +182,7 @@ public static partial class CliCommands
             seed,
             actionCap,
             games = results.Length,
+            replaysVerified = results.Count(ReplayVerified),
             statuses = results.GroupBy(result => result.Status).OrderBy(group => group.Key)
                 .ToDictionary(group => group.Key.ToString(), group => group.Count()),
             meanActions = results.Average(result => result.ActionCount),

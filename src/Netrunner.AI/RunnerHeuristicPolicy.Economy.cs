@@ -15,12 +15,21 @@ public sealed partial class RunnerHeuristicPolicy
             int kept = rezDelta <= 0 ? 0 : context.Server(play.TargetServerId)?.Ice
                 .Count(ice => ice is { Rezzed: not true }) is int unrezzed and > 0
                     ? unrezzed * (context.Opponent.Credits < rezDelta + 4 ? 450 : context.Opponent.Credits < rezDelta + 7 ? 250 : 120) : 0;
+            // v24 (bot loop 1): what the event's own successful-run trigger pays (Clean Getaway's 6 credits), counted when the
+            // Runner can see the run succeed; a basic run was always preferred to it.
+            int success = context.Generation >= 20 ? definition.Behavior?.Triggers
+                .Where(trigger => trigger.Occurrence == OccurrenceKind.RunSuccessful && trigger.Scope == BehaviorTriggerScope.Self)
+                .Sum(trigger => Effects(context, trigger.Instructions, card, PlayerSide.Runner)) ?? 0 : 0;
             AgentUtility utility = Run(context, context.Server(play.TargetServerId), runEvent.HostedCredits,
                 (runEvent.BreachAccessModifier?.Delta ?? 0) * 140 + (runEvent.SuccessDraw?.DrawCount ?? 0) * context.DrawValue + kept,
-                upfrontCost: play.CreditCost);
+                upfrontCost: play.CreditCost, knownSuccessValue: success);
             return utility with { Reason = "run/event-benefit-and-issued-cost" };
         }
         if (definition?.Behavior is not { } behavior) return Value(-50, "play/unmodelled", true, true);
+        // v24 (bot loop 1): a tutor for a breaker finds nothing the Runner needs once its rig and grip break every ICE type
+        // (Mutual Favor, played twice to find nothing).
+        if (context.Generation >= 20 && TutorsOnlyBreakers(behavior) && BreakersCovered(context))
+            return Value(-100, "play/tutor-finds-nothing-needed", true);
         return Value(Effects(context, behavior.Instructions, card, behavior.Controller) - play.CreditCost * context.CreditValue, "economy/event-net-payoff", true);
     }
 
@@ -64,18 +73,50 @@ public sealed partial class RunnerHeuristicPolicy
         return Value(benefit - cost, "ability/benefit-minus-issued-additional-costs", true);
     }
 
-    private static int Effects(HeuristicContext context, IEnumerable<BehaviorInstruction> instructions, AgentCard? source, PlayerSide controller)
+    // v23: past any other cost, so a choice that flatlines the Runner is never taken while another isn't.
+    private const int Flatline = 100_000;
+
+    /// <param name="gripSpent">Cards an enclosing effect has already installed from the grip (v23's damage check).</param>
+    private static int Effects(HeuristicContext context, IEnumerable<BehaviorInstruction> instructions, AgentCard? source, PlayerSide controller,
+        int gripSpent = 0)
     {
         int total = 0;
+        // v23: what each choice from the grip may take, so the install or hosting it feeds is worth nothing when nothing matches.
+        var gripChoices = new Dictionary<string, BehaviorCardFilter?>(StringComparer.Ordinal);
         foreach (BehaviorInstruction instruction in instructions)
         {
+            if (instruction.Choice is { Target: { Zone: BehaviorZone.Grip } choiceTarget } gripChoice)
+                gripChoices[gripChoice.Key] = choiceTarget.Filter;
             bool self = controller == PlayerSide.Runner;
+            if (instruction.Recipient is BehaviorPlayerSelector.Corp or BehaviorPlayerSelector.Runner)
+                self = instruction.Recipient == BehaviorPlayerSelector.Runner;
             int sign = self ? 1 : -1;
-            int amount = instruction.Amount;
-            if (instruction.AmountOperand is { } operand)
-                amount = (source?.Counters.Where(counter => counter.CounterName == operand.SourceCounterName).Sum(counter => counter.Count) ?? 0) * operand.Multiplier;
+            int amount = HeuristicContext.EffectAmount(context, instruction, source);
             switch (instruction.Kind)
             {
+                // Elevation (EL.3): counters, faces, tags, sabotage and additional access.
+                case BehaviorInstructionKind.RemoveCounter: total -= amount * 50; break;
+                case BehaviorInstructionKind.RemoveTags: total += amount * 200; break;
+                case BehaviorInstructionKind.FlipSelf: total += 50; break;
+                case BehaviorInstructionKind.GainAllottedClicksNextTurn: total += sign * amount * 90; break;
+                case BehaviorInstructionKind.Sabotage: total += amount * 80; break;
+                case BehaviorInstructionKind.AddBreachAccess: total += amount * 150; break;
+                case BehaviorInstructionKind.RefillRecurringCredits: total += 2 * context.CreditValue; break;
+                case BehaviorInstructionKind.ForfeitAgenda: total -= 600; break;
+                // Elevation (EL.5): a card hosted faceup on a console is one more card to play or install;
+                // a nested play is the played card's own value, roughly a good event.
+                // v23 (bot loop 1): Madani hosted nothing 65 times in a game with no program in the grip.
+                case BehaviorInstructionKind.HostFaceUp when context.Generation >= 19 && instruction.Target?.Selector is { } hosted
+                    && gripChoices.TryGetValue(hosted, out BehaviorCardFilter? hostFilter) && !GripHolds(context, hostFilter, install: false):
+                    break;
+                case BehaviorInstructionKind.HostFaceUp: total += 100; break;
+                case BehaviorInstructionKind.PlayCard: total += 250; break;
+                // Elevation (EL.7): runs and ICE. A bypass passes the ICE untouched; a derez costs the
+                // Corp its rez; a steal outside a run is worth the agenda; a mod is lasting strength.
+                case BehaviorInstructionKind.BypassEncounteredIce: total += 300; break;
+                case BehaviorInstructionKind.Derez: total += 200; break;
+                case BehaviorInstructionKind.StealAgenda: total += 400; break;
+                case BehaviorInstructionKind.HostSourceOnTarget: total += 80; break;
                 case BehaviorInstructionKind.GainCredits: total += sign * amount * context.CreditValue; break;
                 // v14 (Codex review, 1 October): Zahya pays a credit a card the ended run accessed; it scored 0 and was declined.
                 case BehaviorInstructionKind.GainCreditsPerAccess when context.Generation >= 10:
@@ -104,7 +145,20 @@ public sealed partial class RunnerHeuristicPolicy
                 case BehaviorInstructionKind.AddCounter: total += sign * amount * 70; break;
                 case BehaviorInstructionKind.Search: total += 220; break;
                 case BehaviorInstructionKind.AddToHand: total += 180; break;
-                case BehaviorInstructionKind.InstallCard: total += 350; break;
+                // v23 (bot loop 1): Topan spent a click installing from a grip of events.
+                case BehaviorInstructionKind.InstallCard when context.Generation >= 19 && instruction.SourceZone == BehaviorZone.Grip
+                    && !GripHolds(context, instruction.Target?.Filter, install: true):
+                    break;
+                case BehaviorInstructionKind.InstallCard:
+                    total += 350;
+                    if (instruction.SourceZone == BehaviorZone.Grip) gripSpent++;
+                    break;
+                // v23 (bot loop 1, 3 October): damage is always the Runner's. It costs a card a point; more than the grip
+                // holds once this effect's installs from it are made is a flatline (Topan installing its last card,
+                // Semak-samun's 3 net or Measured Response's 4 meat with too few cards).
+                case BehaviorInstructionKind.DealDamage when context.Generation >= 19:
+                    total -= amount > context.Features.Hand.Length - gripSpent ? Flatline : amount * context.DrawValue;
+                    break;
                 case BehaviorInstructionKind.TrashSelf: total -= RunnerValues.Card(context, source); break;
                 case BehaviorInstructionKind.TrashCard:
                     total += context.Features.Board.Run?.Breach.Chosen.Where(card => card is not null).Select(card => RunnerValues.Trash(context, card)).DefaultIfEmpty(0).Max() ?? 0;
@@ -112,9 +166,14 @@ public sealed partial class RunnerHeuristicPolicy
                 case BehaviorInstructionKind.SwapInstalledIce: total += BestSwap(context, []); break;
                 case BehaviorInstructionKind.EndRun: total -= Math.Max(300, RunnerValues.Server(context, RunnerValues.Attacked(context))); break;
                 case BehaviorInstructionKind.AddTags: total -= RunnerValues.TagRisk(context, amount); break;
+                // v23: a card choice from a grip that holds nothing it takes chooses nothing (Madani's empty hosting).
+                case BehaviorInstructionKind.Choose when context.Generation >= 19
+                    && instruction.Choice is { Options.Count: 0, Target: { Zone: BehaviorZone.Grip } emptyTarget }
+                    && !GripHolds(context, emptyTarget.Filter, install: false):
+                    break;
                 case BehaviorInstructionKind.Choose:
                     total += instruction.Choice is { Options.Count: > 0 } choice
-                        ? choice.Options.Max(option => Effects(context, option.Instructions, source, controller) - (option.Costs ?? []).Sum(cost => Cost(context, cost)))
+                        ? choice.Options.Max(option => Effects(context, option.Instructions, source, controller, gripSpent) - (option.Costs ?? []).Sum(cost => Cost(context, cost)))
                         : 180;
                     break;
                 case BehaviorInstructionKind.Branch:
@@ -127,13 +186,42 @@ public sealed partial class RunnerHeuristicPolicy
                             BehaviorConditionKind.NotTagged => context.Self.Tags == 0,
                             _ => true,
                         };
-                        total += Effects(context, condition ? branch.WhenTrue : branch.WhenFalse, source, controller);
+                        total += Effects(context, condition ? branch.WhenTrue : branch.WhenFalse, source, controller, gripSpent);
                     }
                     break;
             }
         }
         return total;
     }
+
+    /// <summary>v24: whether every search the effect makes looks for an icebreaker.</summary>
+    private static bool TutorsOnlyBreakers(CardBehaviorDefinition behavior)
+    {
+        BehaviorInstruction[] searches = [.. HeuristicContext.Flatten(behavior.Instructions).Where(instruction => instruction.Kind == BehaviorInstructionKind.Search)];
+        return searches.Length > 0 && searches.All(search => search.Target?.Filter?.CardType == BehaviorCardType.Icebreaker);
+    }
+
+    /// <summary>v24: whether the installed breakers and those in the grip break barriers, code gates and sentries.</summary>
+    private static bool BreakersCovered(HeuristicContext context)
+    {
+        IceType[] types = [.. context.Features.Board.RunnerRig.Concat(context.Features.Hand)
+            .Select(card => context.Definition(card)?.Icebreaker?.InterfaceType).OfType<IceType>().Distinct()];
+        return types.Contains(IceType.Any) || new[] { IceType.Barrier, IceType.CodeGate, IceType.Sentry }.All(types.Contains);
+    }
+
+    /// <summary>v23: whether the grip holds a card a filter takes; an install never takes an event.</summary>
+    private static bool GripHolds(HeuristicContext context, BehaviorCardFilter? filter, bool install) =>
+        context.Features.Hand.Any(card => context.Definition(card) is { } definition
+            && !(install && definition.Printed.CardClass == RuntimeCardClass.Event)
+            && (filter?.CardType ?? BehaviorCardType.Any) switch
+            {
+                BehaviorCardType.Any => true,
+                BehaviorCardType.Event => definition.Printed.CardClass == RuntimeCardClass.Event,
+                BehaviorCardType.Hardware => definition.Printed.CardClass == RuntimeCardClass.Hardware,
+                BehaviorCardType.Resource => definition.Printed.CardClass == RuntimeCardClass.Resource,
+                BehaviorCardType.Program or BehaviorCardType.Icebreaker => definition.Printed.CardClass == RuntimeCardClass.Program,
+                _ => true,
+            });
 
     private static int Cost(HeuristicContext context, BehaviorCost cost) => cost.Kind switch
     {

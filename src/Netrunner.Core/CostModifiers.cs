@@ -13,6 +13,9 @@ public enum BehaviorCostModifierKind
     RunnerInstallCreditCost,
     IcebreakerBreakCreditCost,
     IceRezCreditCost,
+
+    /// <summary>The credit cost of an icebreaker's printed strength pump.</summary>
+    IcebreakerPumpCreditCost,
 }
 
 /// <summary>
@@ -178,18 +181,23 @@ public sealed record BehaviorCostModifier
     public BehaviorCostModifier(
         BehaviorCostModifierKind kind,
         int delta,
-        BehaviorCondition condition,
-        string reasonKey)
+        BehaviorCondition? condition,
+        string reasonKey,
+        BehaviorCardFilter? perInstalledFilter = null)
     {
         if (!Enum.IsDefined(kind))
         {
             throw new ArgumentOutOfRangeException(nameof(kind));
         }
 
-        if (kind == BehaviorCostModifierKind.IceRezCreditCost)
+        // ICE rez-cost modifiers are run-scoped declarations on
+        // RunEventBehaviorSpec, or an unconditional modifier of every ICE
+        // while the source is installed (EL-REZ-COST-MODIFIER: Fransofia Ward).
+        if (kind == BehaviorCostModifierKind.IceRezCreditCost
+            && (condition is not null || perInstalledFilter is not null))
         {
             throw new ArgumentException(
-                "ICE rez-cost modifiers are run-scoped declarations on RunEventBehaviorSpec.",
+                "An installed card's ICE rez-cost modifier is unconditional.",
                 nameof(kind));
         }
 
@@ -198,15 +206,25 @@ public sealed record BehaviorCostModifier
             throw new ArgumentOutOfRangeException(nameof(delta), "A cost modifier delta must be nonzero.");
         }
 
-        ArgumentNullException.ThrowIfNull(condition);
-        if (condition.Kind != BehaviorConditionKind.SuccessfulRunThisTurn
-            || condition.Fact is not null
-            || condition.Value is not null
-            || condition.SubjectSide is not null)
+        // A cost modifier is unconditional, or conditional on a successful run
+        // this turn (Carmen) or on an active run event (Sang Kancil).
+        if (condition is not null
+            && (condition.Kind is not (BehaviorConditionKind.SuccessfulRunThisTurn or BehaviorConditionKind.RunEventActive)
+                || condition.Fact is not null
+                || condition.Value is not null
+                || condition.SubjectSide is not null))
         {
             throw new ArgumentException(
-                "This checkpoint supports only the explicit SuccessfulRunThisTurn condition for cost modifiers.",
+                "Cost modifiers support only the SuccessfulRunThisTurn and RunEventActive conditions.",
                 nameof(condition));
+        }
+
+        if (perInstalledFilter is not null
+            && (perInstalledFilter.DefinitionId is not null || perInstalledFilter.Rezzed is not null))
+        {
+            throw new ArgumentException(
+                "A per-installed cost multiplier may filter by owner, card class and subtype only.",
+                nameof(perInstalledFilter));
         }
 
         if (!StableIdentifier.TryValidate(reasonKey))
@@ -218,6 +236,7 @@ public sealed record BehaviorCostModifier
         Delta = delta;
         Condition = condition;
         ReasonKey = reasonKey;
+        PerInstalledFilter = perInstalledFilter;
     }
 
     public BehaviorCostModifier(
@@ -232,9 +251,27 @@ public sealed record BehaviorCostModifier
 
     public int Delta { get; }
 
-    public BehaviorCondition Condition { get; }
+    /// <summary>The condition, or null when the modifier always applies.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public BehaviorCondition? Condition { get; }
 
     public string ReasonKey { get; }
+
+    /// <summary>
+    /// When set, the delta applies once for each other active installed card
+    /// of the source's owner matching the filter ("1 less for each other
+    /// installed icebreaker").
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public BehaviorCardFilter? PerInstalledFilter { get; }
+
+    /// <summary>An unconditional modifier, optionally per other matching installed card.</summary>
+    public static BehaviorCostModifier Always(
+        BehaviorCostModifierKind kind,
+        int delta,
+        string reasonKey,
+        BehaviorCardFilter? perInstalledFilter = null) =>
+        new(kind, delta, null, reasonKey, perInstalledFilter);
 }
 
 /// <summary>
@@ -601,7 +638,9 @@ public static partial class GameEngine
             ArgumentNullException.ThrowIfNull(target);
             ArgumentOutOfRangeException.ThrowIfNegative(baseCost);
 
-            if (working.RunState is not { RezCostModifiers: { Count: > 0 } modifiers }
+            IReadOnlyList<RunRezCostModifier> modifiers = working.RunState?.RezCostModifiers ?? [];
+            CostAdjustment[] installedAdjustments = InstalledIceRezAdjustments(working);
+            if (modifiers.Count == 0 && installedAdjustments.Length == 0
                 || target.OwnerSide != PlayerSide.Corp
                 || target.Rezzed)
             {
@@ -620,6 +659,7 @@ public static partial class GameEngine
 
             CostAdjustment[] adjustments = modifiers
                 .Select(static modifier => modifier.ToCostAdjustment())
+                .Concat(installedAdjustments)
                 .OrderBy(static adjustment => adjustment.SourceDefinitionId?.Value, StringComparer.Ordinal)
                 .ThenBy(static adjustment => adjustment.SourceCardId?.Value, StringComparer.Ordinal)
                 .ThenBy(static adjustment => adjustment.ReasonKey, StringComparer.Ordinal)
@@ -627,6 +667,17 @@ public static partial class GameEngine
                 .ToArray();
             return new CostQuote(baseCost, adjustments);
         }
+
+        /// <summary>EL-REZ-COST-MODIFIER: rez-cost changes of every ICE from installed Runner cards.</summary>
+        private static CostAdjustment[] InstalledIceRezAdjustments(WorkingState working) =>
+            ActiveInstalledCards(working, PlayerSide.Runner)
+                .OrderBy(static card => card.Id.Value, StringComparer.Ordinal)
+                .SelectMany(card => working.BehaviorCatalog.TryGet(card.DefinitionId, out CardBehaviorDefinition? definition)
+                    ? (definition.CostModifiers ?? [])
+                        .Where(static modifier => modifier.Kind == BehaviorCostModifierKind.IceRezCreditCost)
+                        .Select(modifier => new CostAdjustment(modifier.Kind, modifier.Delta, modifier.ReasonKey, card.DefinitionId, card.Id))
+                    : [])
+                .ToArray();
 
         private static bool IsInZone(
             WorkingState working,
@@ -660,28 +711,62 @@ public static partial class GameEngine
                 return null;
             }
 
-            if (!IsSuccessfulRunThisTurn(working))
+            var adjustments = new List<CostAdjustment>();
+            foreach (BehaviorCostModifier modifier in definition.CostModifiers ?? [])
             {
-                return null;
-            }
+                if (modifier.Kind != kind || !ConditionMatches(working, modifier.Condition))
+                {
+                    continue;
+                }
 
-            CostAdjustment[] adjustments = (definition.CostModifiers ?? [])
-                .Where(modifier => modifier.Kind == kind && ConditionMatches(working, modifier.Condition))
-                .Select(modifier => new CostAdjustment(
+                int delta = modifier.Delta;
+                if (modifier.PerInstalledFilter is { } filter)
+                {
+                    int count = ActiveInstalledCards(working, source.OwnerSide)
+                        .Count(card => card.Id != source.Id && BehaviorCardMatches(working, card.Id, filter));
+                    if (count == 0)
+                    {
+                        continue;
+                    }
+
+                    delta = checked(delta * count);
+                }
+
+                adjustments.Add(new CostAdjustment(
                     modifier.Kind,
-                    modifier.Delta,
+                    delta,
                     modifier.ReasonKey,
                     source.DefinitionId,
-                    source.Id))
-                .ToArray();
-            return adjustments.Length == 0
+                    source.Id));
+            }
+
+            return adjustments.Count == 0
                 ? null
                 : new CostQuote(baseCost, adjustments);
         }
 
-        private static bool ConditionMatches(WorkingState working, BehaviorCondition condition) =>
-            condition.Kind == BehaviorConditionKind.SuccessfulRunThisTurn
-            && IsSuccessfulRunThisTurn(working);
+        private static bool ConditionMatches(WorkingState working, BehaviorCondition? condition) =>
+            condition is null
+            || condition.Kind switch
+            {
+                BehaviorConditionKind.SuccessfulRunThisTurn => IsSuccessfulRunThisTurn(working),
+                BehaviorConditionKind.RunEventActive => working.RunState?.ActiveRunEventId is not null,
+                _ => false,
+            };
+
+        private static IEnumerable<CardInstanceState> ActiveInstalledCards(WorkingState working, PlayerSide side) =>
+            working.Cards.Where(card => card.OwnerSide == side
+                && (side == PlayerSide.Corp ? card.Rezzed : card.FaceUp)
+                && IsInstalledCard(working, card.Id));
+
+        internal static CostQuote? IcebreakerPump(
+            WorkingState working,
+            CardInstanceState source,
+            int baseCost) =>
+            IsInZone(working, source, ZoneKind.RunnerRig)
+                && source.FaceUp
+                ? ForSource(working, source, BehaviorCostModifierKind.IcebreakerPumpCreditCost, baseCost)
+                : null;
 
         private static bool IsSuccessfulRunThisTurn(WorkingState working)
         {

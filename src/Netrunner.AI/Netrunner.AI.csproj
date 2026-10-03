@@ -10,5 +10,9 @@
   <ItemGroup Condition="Exists('../../data/ai/evaluation-v2.json')">
     <EmbeddedResource Include="../../data/ai/evaluation-v2.json" LogicalName="Netrunner.AI.Data.ai.evaluation-v2.json" />
   </ItemGroup>
+  <!-- A7 (EL.8): the System Gateway + Elevation pool's own fit of feature set 2. -->
+  <ItemGroup Condition="Exists('../../data/ai/evaluation-gateway-elevation-v2.json')">
+    <EmbeddedResource Include="../../data/ai/evaluation-gateway-elevation-v2.json" LogicalName="Netrunner.AI.Data.ai.evaluation-gateway-elevation-v2.json" />
+  </ItemGroup>
 </Project>
 

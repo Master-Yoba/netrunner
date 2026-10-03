@@ -7,6 +7,7 @@ python3 "$gate_root/scripts/test-m5-gate.py"
 export NetrunnerContentEnabled=true
 export NetrunnerCardDataMode=official
 export NetrunnerCardDataInputRoot="$gate_root/data/vendor/system-gateway"
-dotnet build "$gate_root/src/Netrunner.Cli" --no-restore -m:1 --disable-build-servers >&2
+# Release: the benchmarks run optimized code; their results don't depend on the build configuration.
+dotnet build "$gate_root/src/Netrunner.Cli" -c Release --no-restore -m:1 --disable-build-servers >&2
 gate_output="${NETRUNNER_M5_GATE_OUTPUT:-$gate_root/artifacts/m5/gate-$(date -u +%Y%m%dT%H%M%SZ)-$$}"
 python3 "$gate_root/scripts/m5_gate.py" --output "$gate_output" "$@"

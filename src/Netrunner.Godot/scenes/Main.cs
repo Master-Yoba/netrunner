@@ -127,7 +127,11 @@ public partial class Main : Control
 	{
 		try
 		{
-			return OfficialPresetCatalog.Embedded();
+			// D-EL-8: with Elevation installed the setup form also lists the
+			// Gateway + Elevation and NSG Core Sets decks.
+			return PlayFormats.IsAvailable(CardFormatIds.GatewayElevation)
+				? OfficialPresetCatalog.FormatDecks()
+				: OfficialPresetCatalog.Embedded();
 		}
 		catch (Exception exception) when (exception is PresetDataValidationException or InvalidOperationException)
 		{
@@ -401,6 +405,13 @@ public partial class Main : Control
 		_startPanel.AddChild(_runnerPreset);
 	}
 
+	private static string FormatLabel(string presetId) => PlayFormats.FormatOfPreset(presetId) switch
+	{
+		CardFormatIds.NsgCoreSets => "NSG CORE",
+		CardFormatIds.GatewayElevation => "ELEVATION",
+		_ => "GATEWAY",
+	};
+
 	private void PopulatePresetButton(
 		OptionButton button,
 		PlayerSide side,
@@ -424,7 +435,7 @@ public partial class Main : Control
 			string kindLabel = preset.Kind == "starter" ? "BASIC (STARTER)" : preset.Kind.ToUpperInvariant();
 			// Gateway sample decks show their name; the menu rework (U7) gives them their own area.
 			button.AddItem(preset.Name is { } name
-				? $"GATEWAY · {name} · {preset.CardCount} cards · {state}"
+				? $"{FormatLabel(preset.PresetId)} · {name} · {preset.CardCount} cards · {state}"
 				: $"{kindLabel} · {preset.PresetId} · {preset.CardCount} cards · {state}",
 				index);
 			if (preset.Summary is { } summary) button.SetItemTooltip(index, summary);

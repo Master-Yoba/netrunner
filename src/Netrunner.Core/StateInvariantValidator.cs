@@ -540,6 +540,19 @@ public static partial class StateInvariantValidator
                         path,
                         $"Removed-from-game card '{card.Id}' must be faceup.");
                 }
+
+                if (zone.Kind is ZoneKind.CorpHostedFaceUp or ZoneKind.RunnerHostedFaceUp
+                    && (!card.FaceUp
+                        || card.HostCardId is not { } faceUpHost
+                        || !cardsById.TryGetValue(faceUpHost.Value, out CardInstanceState? host)
+                        || state.Zones.FirstOrDefault(candidate => candidate?.Id == host.ZoneId)?.Kind != ZoneKind.RunnerRig))
+                {
+                    Add(
+                        violations,
+                        "cards.hosted-faceup",
+                        path,
+                        $"Hosted faceup card '{card.Id}' must be faceup and name an installed Runner host.");
+                }
             }
         }
 
@@ -569,8 +582,8 @@ public static partial class StateInvariantValidator
 
         PlayerSide? expectedOwner = zone.Kind switch
         {
-            ZoneKind.CorpIdentity or ZoneKind.CorpDeck or ZoneKind.CorpHand or ZoneKind.CorpDiscard or ZoneKind.CorpScore or ZoneKind.CorpPlayArea or ZoneKind.CorpRemovedFromGame => PlayerSide.Corp,
-            ZoneKind.RunnerIdentity or ZoneKind.RunnerStack or ZoneKind.RunnerGrip or ZoneKind.RunnerPlayArea or ZoneKind.RunnerHeap or ZoneKind.RunnerRig or ZoneKind.RunnerScore or ZoneKind.RunnerRemovedFromGame => PlayerSide.Runner,
+            ZoneKind.CorpIdentity or ZoneKind.CorpDeck or ZoneKind.CorpHand or ZoneKind.CorpDiscard or ZoneKind.CorpScore or ZoneKind.CorpPlayArea or ZoneKind.CorpRemovedFromGame or ZoneKind.CorpHostedFaceUp => PlayerSide.Corp,
+            ZoneKind.RunnerIdentity or ZoneKind.RunnerStack or ZoneKind.RunnerGrip or ZoneKind.RunnerPlayArea or ZoneKind.RunnerHeap or ZoneKind.RunnerRig or ZoneKind.RunnerScore or ZoneKind.RunnerRemovedFromGame or ZoneKind.RunnerHostedFaceUp => PlayerSide.Runner,
             ZoneKind.ServerIce or ZoneKind.ServerRoot => PlayerSide.Corp,
             ZoneKind.BehaviorSetAside => null,
             _ => null,
@@ -651,7 +664,7 @@ public static partial class StateInvariantValidator
             }
         }
 
-        foreach (ZoneKind removedKind in new[] { ZoneKind.CorpRemovedFromGame, ZoneKind.RunnerRemovedFromGame })
+        foreach (ZoneKind removedKind in new[] { ZoneKind.CorpRemovedFromGame, ZoneKind.RunnerRemovedFromGame, ZoneKind.CorpHostedFaceUp, ZoneKind.RunnerHostedFaceUp })
         {
             int removedCount = state.Zones.Count(zone => zone is not null && zone.Kind == removedKind);
             if (removedCount > 1)
@@ -946,7 +959,8 @@ public static partial class StateInvariantValidator
                     state.Servers,
                     knownPlayers,
                     runtimeCardCatalog,
-                    violations);
+                    violations,
+                    turn.History.CorpLastTurn?.NextTurnExtraClicks ?? 0);
                 ValidateTurnFacts(
                     turn.History.CorpLastTurn,
                     PlayerSide.Corp,
@@ -956,7 +970,8 @@ public static partial class StateInvariantValidator
                     state.Servers,
                     knownPlayers,
                     runtimeCardCatalog,
-                    violations);
+                    violations,
+                    extraAllottedClicks: null);
                 ValidateTurnFacts(
                     turn.History.RunnerThisTurn,
                     PlayerSide.Runner,
@@ -966,7 +981,8 @@ public static partial class StateInvariantValidator
                     state.Servers,
                     knownPlayers,
                     runtimeCardCatalog,
-                    violations);
+                    violations,
+                    turn.History.RunnerLastTurn?.NextTurnExtraClicks ?? 0);
                 ValidateTurnFacts(
                     turn.History.RunnerLastTurn,
                     PlayerSide.Runner,
@@ -976,7 +992,8 @@ public static partial class StateInvariantValidator
                     state.Servers,
                     knownPlayers,
                     runtimeCardCatalog,
-                    violations);
+                    violations,
+                    extraAllottedClicks: null);
             }
             else if (turn.Step != TurnStep.None)
             {
@@ -1320,6 +1337,22 @@ public static partial class StateInvariantValidator
                         }
                         break;
 
+                    case RunBreachAccessModifierSourceKind.BehaviorEffect:
+                        if (source is not null
+                            && (!behaviorCatalog.TryGet(source.DefinitionId, out CardBehaviorDefinition? effectDefinition)
+                                || !BehaviorRunRules.HasBehaviorBreachAccessDeclaration(
+                                    effectDefinition,
+                                    modifier.ReasonKey,
+                                    modifier.Delta)))
+                        {
+                            Add(
+                                violations,
+                                "run.breach-modifier-undeclared",
+                                modifierPath,
+                                "Behavior breach access modifiers must match a declared additional-access instruction of the source.");
+                        }
+                        break;
+
                     case RunBreachAccessModifierSourceKind.RunEvent:
                         if (run.ActiveRunEventId is not { } activeRunEventId)
                         {
@@ -1488,8 +1521,14 @@ public static partial class StateInvariantValidator
                     ServerKind? attackedKind = state.Servers
                         .FirstOrDefault(candidate => candidate?.Id == run.AttackedServer)
                         ?.Kind;
+                    // The attacked server may also have changed during the run: to the
+                    // event's own redirect (Maintenance Access: HQ), or to Archives by a
+                    // Runner move (Proprionegation).
                     if (activeRunEventSpec.AllowedTargetServers is { } allowed
-                        && (attackedKind is null || !allowed.Contains(attackedKind.Value)))
+                        && (attackedKind is null
+                            || !allowed.Contains(attackedKind.Value)
+                                && attackedKind != activeRunEventSpec.RedirectApproachTo
+                                && attackedKind != ServerKind.Archives))
                     {
                         Add(
                             violations,
@@ -1696,7 +1735,19 @@ public static partial class StateInvariantValidator
             // authoritative and cross-check the behavior ID against the
             // injected catalog; a caller cannot forge a cleanup by merely
             // placing a source card and arbitrary string in RunState.
+            // EL-STRENGTH-PERSISTENCE: a pump that lasts the run (GAMEDRAGON™ Pro)
+            // is not a cleanup; its breaker hosts the mod that makes it last.
+            // The pump's duration is fixed when it is made, so it stays if the mod leaves (EL.8); it ends when its
+            // breaker leaves play.
+            bool persistentPump = effect.Expiry == RunLingeringEffectExpiry.Run
+                && effect.BehaviorId == EncounterStrength.IcebreakerPumpBehavior
+                && effect.ValueAdjustment is null
+                && effect.SourceCardId is { } pumpedBreaker
+                && state.Cards.FirstOrDefault(card => card?.Id == pumpedBreaker) is { } breaker
+                && state.Zones.Any(zone => zone?.Id == breaker.ZoneId && zone.Kind == ZoneKind.RunnerRig)
+                && behaviorCatalog.TryGetIcebreaker(breaker.DefinitionId, out _);
             if (effect.Expiry == RunLingeringEffectExpiry.Run
+                && !persistentPump
                 && effect.SourceCardId is { } cleanupSourceId)
             {
                 if (effect.Kind != RunLingeringEffectKind.IcebreakerRunEndCleanup)
@@ -1985,7 +2036,7 @@ public static partial class StateInvariantValidator
     {
         BehaviorInstruction[] modifiers = instructions
             .Where(static instruction =>
-                instruction.Kind == BehaviorInstructionKind.ModifyEncounteredIceStrength)
+                BehaviorEncounterStrengthContracts.IsStrengthInstruction(instruction.Kind))
             .ToArray();
         if (modifiers.Length == 0)
         {
@@ -2150,7 +2201,10 @@ public static partial class StateInvariantValidator
             hiddenChosen,
             movedOutOfPools,
             additionalRandomAccess);
-        long expectedMinimum = Math.Min(expectedAtMinimum, expectedAtMaximum);
+        // EL.8: a card effect resolved during the breach may take unaccessed hidden cards away (Poétrï installing
+        // from HQ); the engine clamps the cursor to the unaccessed cards left.
+        long availableHidden = hiddenZone is null ? 0 : RunState.AvailableHiddenBreachCards(hiddenZone, run.AccessedCards).Count;
+        long expectedMinimum = Math.Min(Math.Min(expectedAtMinimum, expectedAtMaximum), availableHidden);
         long expectedMaximum = Math.Max(expectedAtMinimum, expectedAtMaximum);
         if (run.RandomAccessLimit < expectedMinimum || run.RandomAccessLimit > expectedMaximum)
         {
@@ -2568,11 +2622,18 @@ public static partial class StateInvariantValidator
                 && damageIce.Subroutines[damageParent.Ordinal] is DamageSubroutineSpec printedDamage
                 && damage.Kind == printedDamage.Kind && damage.Amount == printedDamage.Amount
                 && state.Players.Any(player => player.Side == PlayerSide.Runner && player.Id == damage.Target);
+            // EL-GENERIC-SUBROUTINE: the behavior child of a generic
+            // subroutine of the encountered ICE; the behavior validators own
+            // its nested continuation.
+            bool expectedIceBehavior = suffixRoot is BehaviorResolutionFrame subroutineBehavior
+                && IsIceSubroutineTrigger(behaviorCatalog, subroutineBehavior)
+                && run.Encounter?.IceId == subroutineBehavior.SourceCardId;
             if (suffixRoot is not AbilityFrame
                 && !expectedGameplayOccurrence
                 && !expectedIceInstall
                 && !expectedIceDamage
-                && !expectedIceTag)
+                && !expectedIceTag
+                && !expectedIceBehavior)
             {
                 Add(
                     violations,
@@ -2582,7 +2643,8 @@ public static partial class StateInvariantValidator
                 return;
             }
 
-            if (!expectedGameplayOccurrence && !expectedIceInstall && !expectedIceDamage && !expectedIceTag)
+            if (!expectedGameplayOccurrence && !expectedIceInstall && !expectedIceDamage && !expectedIceTag
+                && !expectedIceBehavior)
             {
                 for (int index = runFrameIndex + 2; index < state.ResolutionStack.Count; index++)
                 {
@@ -2600,6 +2662,29 @@ public static partial class StateInvariantValidator
                     if (suffix is InstallFrame install
                         && index == runFrameIndex + 3
                         && state.ResolutionStack[index - 1] is BehaviorResolutionFrame)
+                    {
+                        continue;
+                    }
+
+                    // EL.8: an access ability's behavior that trashes the accessed
+                    // card (Gourmand) suspends the exact gameplay occurrence
+                    // pipeline above it; the effect and checkpoint validators own
+                    // that pipeline and everything above it.
+                    if (suffix is EffectResolutionFrame abilityOccurrence
+                        && state.ResolutionStack[index - 1] is BehaviorResolutionFrame
+                        && IsExpectedRunGameplayOccurrenceFrame(state, abilityOccurrence, run, withinAccessAbility: true))
+                    {
+                        break;
+                    }
+
+                    // EL-BEHAVIOR-INSTALL: a zone install chosen by a paid
+                    // ability mid-run (Madani), and its install child.
+                    if (suffix is BehaviorInstallChoiceFrame
+                        && index == runFrameIndex + 3
+                        && state.ResolutionStack[index - 1] is BehaviorResolutionFrame
+                        || suffix is InstallFrame
+                        && index == runFrameIndex + 4
+                        && state.ResolutionStack[index - 1] is BehaviorInstallChoiceFrame)
                     {
                         continue;
                     }
@@ -2690,7 +2775,8 @@ public static partial class StateInvariantValidator
     private static bool IsExpectedRunGameplayOccurrenceFrame(
         GameState state,
         EffectResolutionFrame frame,
-        RunState run)
+        RunState run,
+        bool withinAccessAbility = false)
     {
         if (frame.Effects.Instructions.Count != 1
             || frame.Effects.Instructions[0] is not GameplayOccurrenceEffect occurrence
@@ -2722,6 +2808,12 @@ public static partial class StateInvariantValidator
                 && run.Encounter is { Status: RunEncounterStatus.Initialized, IceId: var encounterIce }
                 && encounterIce == encounteredIce
                 && occurrence.ServerId == run.AttackedServer,
+            OccurrenceKind.IceApproached => run.Step == RunTimingStep.ApproachPaidWindow
+                && frame.Controller == run.InitiatingPlayer
+                && occurrence.Controller == run.InitiatingPlayer
+                && occurrence.SubjectCardId is { } approachedIce
+                && run.CurrentIceId == approachedIce
+                && occurrence.ServerId == run.AttackedServer,
             OccurrenceKind.CardAccessed => run.Step == RunTimingStep.BreachAccessAbility
                 && frame.Controller == run.InitiatingPlayer
                 && occurrence.Controller == run.InitiatingPlayer
@@ -2731,12 +2823,13 @@ public static partial class StateInvariantValidator
                 && run.AccessedCards.Contains(accessed)
                 && occurrence.ServerId == run.AttackedServer,
             OccurrenceKind.AccessedCardTrashed => run.InitiatingSide == PlayerSide.Runner
-                && run.Step is RunTimingStep.BreachCandidateSelection or RunTimingStep.RunEnd
+                && (run.Step is RunTimingStep.BreachCandidateSelection or RunTimingStep.RunEnd
+                    || withinAccessAbility && run.Step == RunTimingStep.BreachAccessAbility)
                 && frame.Controller == run.InitiatingPlayer
                 && occurrence.SubjectCardId is { } trashed
                 && run.ChosenAccessCards.Contains(trashed)
                 && run.AccessedCards.Contains(trashed)
-                && occurrence.ServerId is null
+                && (occurrence.ServerId is null || occurrence.ServerId == run.AttackedServer)
                 && state.Zones.Any(zone => zone.Kind == ZoneKind.CorpDiscard && zone.CardIds.Contains(trashed)),
             OccurrenceKind.AgendaScoredOrStolen => run.InitiatingSide == PlayerSide.Runner
                 && run.Successful
@@ -2752,6 +2845,17 @@ public static partial class StateInvariantValidator
                     && zone.CardIds.Contains(agenda))
                 && occurrence.ServerId == run.AttackedServer,
             OccurrenceKind.CardRezzed => IsExpectedRunCardRezzedOccurrence(state, run, occurrence),
+            OccurrenceKind.RunBegan => run.Step == RunTimingStep.InitiationPaidWindow
+                && frame.Controller == run.InitiatingPlayer
+                && occurrence.SubjectCardId is null
+                && occurrence.ServerId == run.AttackedServer,
+            // EL.2: an occurrence deferred to the end of the action that raised it (a forfeit to rez, an
+            // emptied hosted pool, a first tag removal or operation), opened when the run's cursor resumes.
+            // EL.9: also the first credit gain through an agenda or operation (Greenmail forfeited to rez
+            // Biawak mid-run, for The Zwicky Group).
+            OccurrenceKind.AgendaForfeited or OccurrenceKind.HostedCreditPoolEmptied
+                or OccurrenceKind.FirstTagRemovalThisTurn or OccurrenceKind.FirstOperationPlayedThisTurn
+                or OccurrenceKind.FirstCardCreditGainThisTurn => occurrence.ServerId is null,
             _ => false,
         };
     }
@@ -3642,6 +3746,20 @@ public static partial class StateInvariantValidator
                         break;
                     }
 
+                    if (install.InitiationKind == InstallInitiationKind.BehaviorZoneInstall)
+                    {
+                        if (index == 0
+                            || state.ResolutionStack[index - 1] is not BehaviorInstallChoiceFrame zoneParent
+                            || !string.Equals(zoneParent.FrameIdentity, install.ParentFrameIdentity, StringComparison.Ordinal)
+                            || zoneParent.Stage != BehaviorInstallChoiceStage.AwaitingInstall
+                            || zoneParent.Owner != install.Owner)
+                        {
+                            Add(violations, "resolution.behavior-zone-install-parent", path, "A behavior zone install must sit on its awaiting choice frame.");
+                        }
+
+                        break;
+                    }
+
                     if (install.InitiationKind is InstallInitiationKind.IceSubroutineNormal
                         or InstallInitiationKind.IceSubroutineInwardIgnoreCosts)
                     {
@@ -3700,12 +3818,16 @@ public static partial class StateInvariantValidator
                     }
 
                     ZoneState? installSource = state.Zones.FirstOrDefault(zone => zone?.Id == install.SourceZoneId);
+                    // EL-HOSTED-FACEUP: Bling's hosted cards install as if from the grip.
+                    ZoneKind installSourceKind = install.SourceZoneKind == ZoneKind.RunnerHostedFaceUp
+                        ? ZoneKind.RunnerHostedFaceUp
+                        : ZoneKind.RunnerGrip;
                     ZoneState? runnerGrip = state.Zones.FirstOrDefault(
-                        zone => zone?.Kind == ZoneKind.RunnerGrip
+                        zone => zone?.Kind == installSourceKind
                             && zone.ServerId is null);
-                    if (install.SourceZoneKind != ZoneKind.RunnerGrip
+                    if (install.SourceZoneKind != installSourceKind
                         || installSource is null
-                        || installSource.Kind != ZoneKind.RunnerGrip
+                        || installSource.Kind != installSourceKind
                         || installSource.OwnerSide != PlayerSide.Runner
                         || installSource.ServerId is not null
                         || runnerGrip is null
@@ -3943,6 +4065,25 @@ public static partial class StateInvariantValidator
                         {
                             Add(violations, "run.frame-step-mismatch", $"{path}.step", "Run timing frame step must match live run state.");
                         }
+                    }
+
+                    break;
+                case BehaviorInstallChoiceFrame installChoiceFrame:
+                    RequirePlayer(playerIds, installChoiceFrame.Owner, $"{path}.owner", violations);
+                    if (index == 0
+                        || state.ResolutionStack[index - 1] is not BehaviorResolutionFrame installChoiceParent
+                        || !string.Equals(
+                            installChoiceFrame.ParentFrameIdentity,
+                            GameEngine.BehaviorFrameIdentityOf(installChoiceParent),
+                            StringComparison.Ordinal))
+                    {
+                        Add(violations, "resolution.behavior-install-parent", path, "A behavior install choice must sit directly on the behavior frame that declared it.");
+                    }
+
+                    if (installChoiceFrame.Stage == BehaviorInstallChoiceStage.AwaitingChoice
+                        && index != state.ResolutionStack.Count - 1)
+                    {
+                        Add(violations, "resolution.behavior-install-not-top", path, "A behavior install choice must be top while its decision is pending.");
                     }
 
                     break;
@@ -4275,6 +4416,7 @@ public static partial class StateInvariantValidator
                             if (sourceCard is not null
                                 && sourceCard.ZoneId != sourceZone.Id
                                 && !catalogTriggerDetachedSource
+                                && !(behaviorFrame.TriggerKey is not null && behaviorFrame.CatalogTriggerSourceMovedAfterStart)
                                 && !movedAfterPayment)
                             {
                                 Add(violations, "resolution.behavior-source-location-mismatch", $"{path}.sourceZoneId", "Behavior source card no longer occupies its captured invocation location.");
@@ -4292,6 +4434,19 @@ public static partial class StateInvariantValidator
                             "Detached-source authorization is reserved for catalog trigger behavior children.");
                     }
 
+                    if (behaviorFrame.CatalogTriggerSourceMovedAfterStart
+                        && (behaviorFrame.TriggerKey is null
+                            || behaviorFrame.Stage != BehaviorResolutionStage.Execute
+                            || (behaviorFrame.InstructionCursor == 0 && behaviorFrame.Continuation.Count == 0)
+                            || state.Cards.SingleOrDefault(card => card.Id == behaviorFrame.SourceCardId)?.ZoneId == behaviorFrame.SourceZoneId))
+                    {
+                        Add(
+                            violations,
+                            "resolution.behavior-moved-source-unexpected",
+                            path,
+                            "Moved-after-start authorization is reserved for a begun catalog trigger whose source left its zone.");
+                    }
+
                     BehaviorBinding[] triggerSubjectBindings = behaviorFrame.Bindings
                         .Where(binding => string.Equals(binding.Key, "trigger-subject", StringComparison.Ordinal))
                         .ToArray();
@@ -4304,6 +4459,22 @@ public static partial class StateInvariantValidator
                                 "resolution.behavior-trigger-subject-unexpected",
                                 $"{path}.bindings",
                                 "The trigger-subject binding is reserved for catalog trigger children.");
+                        }
+                    }
+                    else if (IsIceSubroutineTrigger(behaviorCatalog, behaviorFrame))
+                    {
+                        // A generic ICE subroutine runs directly above the run
+                        // timing frame of its own ICE's encounter.
+                        if (index == 0
+                            || state.ResolutionStack[index - 1] is not RunTimingFrame
+                            || state.RunState?.Encounter?.IceId != behaviorFrame.SourceCardId
+                            || triggerSubjectBindings.Length > 0)
+                        {
+                            Add(
+                                violations,
+                                "resolution.trigger-child-parent-mismatch",
+                                path,
+                                "A generic ICE subroutine must remain immediately above the run timing frame encountering its ICE.");
                         }
                     }
                     else
@@ -5370,7 +5541,8 @@ public static partial class StateInvariantValidator
                             : currentZone.Kind == ZoneKind.CorpRemovedFromGame)));
             behaviorCatalog.TryGet(frame.DefinitionId, out CardBehaviorDefinition? lifecycleDefinition);
             validLifecycleZone |= AbilityLifecycleRules.IsEmptyPoolSelfTrash(lifecycleDefinition, declaration, frame,
-                source, currentZone, state.RulesState, state.Turn);
+                source, currentZone, state.RulesState, state.Turn)
+                || AbilityLifecycleRules.IsSelfPlay(declaration, frame, source, currentZone);
             if (!validLifecycleZone || (selfTrash && selfRemove))
             {
                 Add(
@@ -5508,6 +5680,11 @@ public static partial class StateInvariantValidator
         CardInstanceState source,
         ZoneState zone)
     {
+        if (GameEngine.IsIdentityOrScoreAbilityZone(zone))
+        {
+            return GameEngine.IsIdentityOrScoreAbilitySource(source, zone);
+        }
+
         if (source.OwnerSide == PlayerSide.Runner)
         {
             return zone.Kind == ZoneKind.RunnerRig
@@ -5730,6 +5907,9 @@ public static partial class StateInvariantValidator
         BehaviorZone.RemovedFromGame => ownerSide == PlayerSide.Corp
             ? ZoneKind.CorpRemovedFromGame
             : ZoneKind.RunnerRemovedFromGame,
+        BehaviorZone.HostedFaceUp => ownerSide == PlayerSide.Corp
+            ? ZoneKind.CorpHostedFaceUp
+            : ZoneKind.RunnerHostedFaceUp,
         _ => throw new ArgumentOutOfRangeException(nameof(zone)),
     };
 
@@ -5975,6 +6155,24 @@ public static partial class StateInvariantValidator
                     }
 
                     break;
+                case BehaviorInstallChoiceFrame installChoice:
+                    if (pending.Kind != DecisionKind.BehaviorInstallChoice)
+                    {
+                        Add(violations, "resolution.pending-kind-mismatch", $"{path}.kind", "A behavior install choice requires a BehaviorInstallChoice decision.");
+                    }
+
+                    if (pending.Owner != installChoice.Owner)
+                    {
+                        Add(violations, "resolution.pending-owner-mismatch", $"{path}.owner", "A behavior install decision belongs to its frame owner.");
+                    }
+
+                    int expectedInstallActions = installChoice.Choices.Count + (installChoice.Optional ? 1 : 0);
+                    if (pending.LegalActions.Count != expectedInstallActions)
+                    {
+                        Add(violations, "decision.behavior-install-actions", $"{path}.legalActions", "A behavior install decision offers exactly its frozen choices and, when optional, a decline.");
+                    }
+
+                    break;
                 case BehaviorResolutionFrame behaviorFrame when behaviorFrame.Choice is null:
                     Add(violations, "resolution.pending-kind-mismatch", $"{path}.kind", "A behavior frame requires a materialized choice while a decision is pending.");
                     break;
@@ -6134,6 +6332,23 @@ public static partial class StateInvariantValidator
                                 $"{actionPath}.parameters",
                                 "Behavior choice parameters do not satisfy the current catalog declaration and authenticated candidate/cost rules.");
                         }
+                    }
+
+                    break;
+                case (ActionKind.InstallCard, BehaviorInstallChoiceParameters behaviorInstall):
+                    if (pending.Kind != DecisionKind.BehaviorInstallChoice
+                        || topFrame is not BehaviorInstallChoiceFrame offeringFrame
+                        || offeringFrame.Stage != BehaviorInstallChoiceStage.AwaitingChoice
+                        || !string.Equals(offeringFrame.FrameIdentity, behaviorInstall.FrameIdentity, StringComparison.Ordinal)
+                        || (behaviorInstall.Choice is null
+                            ? !offeringFrame.Optional
+                            : !offeringFrame.Choices.Contains(behaviorInstall.Choice)))
+                    {
+                        Add(
+                            violations,
+                            "decision.behavior-install-action-not-offered",
+                            $"{actionPath}.parameters",
+                            "A behavior install action must be one of its frame's frozen choices, or a decline of an optional install.");
                     }
 
                     break;
@@ -6568,10 +6783,9 @@ public static partial class StateInvariantValidator
                         Add(violations, "decision.invalid-ability-action", $"{actionPath}.parameters.abilityKey", "A bioroid ability must identify a stable ability key.");
                     }
 
-                    if (bioroidAbility.Cost.Kind != BehaviorCostKind.LoseClick
-                        || bioroidAbility.Cost.Amount != 1)
+                    if (!EncounteredBioroidAbilitySpec.IsSupportedCost(bioroidAbility.Cost))
                     {
-                        Add(violations, "decision.invalid-bioroid-cost", $"{actionPath}.parameters.cost", "A bioroid ability action must carry exactly one typed lost click.");
+                        Add(violations, "decision.invalid-bioroid-cost", $"{actionPath}.parameters.cost", "A bioroid ability action must carry one typed lost click or a positive credit cost.");
                     }
 
                     break;
@@ -6753,7 +6967,7 @@ public static partial class StateInvariantValidator
                         or ActionKind.TrashTaggedResource
                         or ActionKind.PurgeVirusCounters
                         or ActionKind.UseAbility))
-                || (pending.Kind == DecisionKind.InstallChoice
+                || (pending.Kind is DecisionKind.InstallChoice or DecisionKind.BehaviorInstallChoice
                     && action.Kind != ActionKind.InstallCard)
                 || (pending.Kind == DecisionKind.TurnDiscard
                     && action.Kind != ActionKind.ChooseCard)
@@ -7277,14 +7491,14 @@ public static partial class StateInvariantValidator
         if (ability.Activation == BehaviorAbilityActivation.ClickAction
             && (ability.Timing != BehaviorAbilityTiming.ActionPhase
                 || clickCostCount != 1
-                || clickAmount != 1
+                || clickAmount < 1
                 || hasLoseClickCost))
         {
             Add(
                 violations,
                 "decision.invalid-ability-combination",
                 path,
-                "A ClickAction ability requires exactly one Click cost of one and action-phase timing.");
+                "A ClickAction ability requires exactly one Click cost and action-phase timing.");
         }
         else if (ability.Activation == BehaviorAbilityActivation.PaidAbility && hasClickCost)
         {
@@ -7655,7 +7869,21 @@ public static partial class StateInvariantValidator
         }
 
         TurnFrame? parent = index > 0 ? state.ResolutionStack[index - 1] as TurnFrame : null;
-        if (parent is null)
+        if (frame.IsNested)
+        {
+            // EL-NESTED-PLAY: the card is played from inside the behavior below.
+            if (index == 0
+                || state.ResolutionStack[index - 1] is not BehaviorResolutionFrame nestedParent
+                || !string.Equals(GameEngine.BehaviorFrameIdentityOf(nestedParent), frame.ParentFrameIdentity, StringComparison.Ordinal))
+            {
+                Add(
+                    violations,
+                    "resolution.card-play-parent-missing",
+                    path,
+                    "A nested CardPlayFrame requires the behavior frame that played it immediately beneath it.");
+            }
+        }
+        else if (parent is null)
         {
             Add(
                 violations,
@@ -7712,6 +7940,10 @@ public static partial class StateInvariantValidator
                     ParentFrameIdentity: not null,
                 } behaviorInstall
                 && ParentIdentityMatches(child, behaviorInstall.ParentFrameIdentity))
+            // EL-BEHAVIOR-INSTALL: a behavior suspends beneath the zone-install
+            // choice its own instruction opened (and that choice's install).
+            && !(state.ResolutionStack[index + 2] is BehaviorInstallChoiceFrame zoneChoice
+                && ParentIdentityMatches(child, zoneChoice.ParentFrameIdentity))
             // An executing behavior may suspend beneath the effect pipeline its own
             // instruction opened, while that effect's checkpoint resolves a trigger
             // (Public Trail's tag firing NBN: Reality Plus, Wave 4 C1). The effect
@@ -7734,7 +7966,9 @@ public static partial class StateInvariantValidator
             return;
         }
 
-        ZoneKind sourceKind = frame.Side == PlayerSide.Corp ? ZoneKind.CorpHand : ZoneKind.RunnerGrip;
+        ZoneKind sourceKind = frame.Side == PlayerSide.Corp
+            ? ZoneKind.CorpHand
+            : frame.SourceZoneKind == ZoneKind.RunnerHostedFaceUp ? ZoneKind.RunnerHostedFaceUp : ZoneKind.RunnerGrip;
         ZoneKind discardKind = frame.Side == PlayerSide.Corp ? ZoneKind.CorpDiscard : ZoneKind.RunnerHeap;
         ZoneKind playAreaKind = frame.Side == PlayerSide.Corp ? ZoneKind.CorpPlayArea : ZoneKind.RunnerPlayArea;
 
@@ -7743,11 +7977,13 @@ public static partial class StateInvariantValidator
             .Select(zone => zone!)
             .ToArray();
         ZoneState? source = sourceMatches.Length == 1 ? sourceMatches[0] : null;
-        if (sourceMatches.Length != 1
-            || source!.OwnerSide != frame.Side
-            || source.ServerId is not null
-            || frame.SourceZoneId != source.Id
-            || frame.SourceZoneKind != sourceKind)
+        if (frame.IsNested
+                ? !GameEngine.IsNestedPlaySourceKind(frame.Side, frame.SourceZoneKind)
+                : sourceMatches.Length != 1
+                    || source!.OwnerSide != frame.Side
+                    || source.ServerId is not null
+                    || frame.SourceZoneId != source.Id
+                    || frame.SourceZoneKind != sourceKind)
         {
             Add(
                 violations,
@@ -8011,13 +8247,20 @@ public static partial class StateInvariantValidator
             bool costOverflowed = false;
             foreach (BehaviorCost behaviorCost in definition.Costs)
             {
+                // A "Double" card's additional click is paid with the action
+                // and is not part of the frozen credit cost.
+                if (behaviorCost.Kind == BehaviorCostKind.Clicks)
+                {
+                    continue;
+                }
+
                 if (behaviorCost.Kind != BehaviorCostKind.Credits)
                 {
                     Add(
                         violations,
                         "resolution.card-play-cost-kind",
                         $"{path}.creditCost",
-                        "Every up-front CardPlayFrame behavior cost must be a Credits cost.");
+                        "Every up-front CardPlayFrame behavior cost must be a Credits or additional Clicks cost.");
                 }
 
                 if (behaviorCost.Amount < 0)
@@ -8649,12 +8892,13 @@ public static partial class StateInvariantValidator
                         PlayerState? runnerPlayer = state.Players.FirstOrDefault(player => player?.Side == PlayerSide.Runner);
 
                         if (runnerPlayer is not null
-                            && expectedIceSpec.EncounteredBioroidAbilities is { Count: > 0 } bioroidAbilities
-                            && runnerPlayer.Clicks > 0)
+                            && expectedIceSpec.EncounteredBioroidAbilities is { Count: > 0 } bioroidAbilities)
                         {
                             foreach (EncounteredBioroidAbilitySpec ability in bioroidAbilities)
                             {
-                                if (runnerPlayer.Clicks < ability.Cost.Amount)
+                                if (ability.Cost.Kind == BehaviorCostKind.Credits
+                                        ? (long)runnerPlayer.Credits + run.RunCredits < ability.Cost.Amount
+                                        : runnerPlayer.Clicks < ability.Cost.Amount)
                                 {
                                     continue;
                                 }
@@ -8711,7 +8955,11 @@ public static partial class StateInvariantValidator
                                     cardId);
                                 if (runnerPlayer is not null
                                     && expectedBreakerQuote is not null
-                                    && IceInterfaceMatcher.Matches(expectedIceSpec, expectedBreakerSpec)
+                                    && IceInterfaceMatcher.CanInterface(
+                                        expectedIceSpec,
+                                        GameEngine.IceGainsEveryType(state.Cards, behaviorCatalog, run.Encounter.IceId),
+                                        expectedBreakerSpec,
+                                        GameEngine.CardSubtypes(runtimeCardCatalog, card.DefinitionId))
                                     && expectedBreakerQuote.EffectiveValue >= iceStrength
                                     && (long)runnerPlayer.Credits + run.RunCredits >= (GameEngine.ProjectCostQuote(
                                         state,
@@ -8756,14 +9004,21 @@ public static partial class StateInvariantValidator
                                         behaviorCatalog,
                                         out _,
                                         out _);
+                                int expectedPumpCost = GameEngine.ProjectCostQuote(
+                                    state,
+                                    behaviorCatalog,
+                                    cardId,
+                                    BehaviorCostModifierKind.IcebreakerPumpCreditCost,
+                                    expectedBreakerSpec.PumpCost)?.EffectiveCost ?? expectedBreakerSpec.PumpCost;
                                 if (runnerPlayer is not null
+                                    && expectedBreakerSpec.HasPump
                                     && dynamicPumpAvailable
-                                    && (long)runnerPlayer.Credits + run.RunCredits >= expectedBreakerSpec.PumpCost)
+                                    && (long)runnerPlayer.Credits + run.RunCredits >= expectedPumpCost)
                                 {
                                     foreach (int hostedCredits in LegalHostedCreditSplits(
                                         runnerPlayer,
                                         run,
-                                        expectedBreakerSpec.PumpCost))
+                                        expectedPumpCost))
                                     {
                                         expected.Add((
                                             ActionKind.PumpBreaker,
@@ -8834,8 +9089,9 @@ public static partial class StateInvariantValidator
                         {
                             unknownTrashCost = accessedCardId;
                         }
-                        else if (GameEngine.AccessTrashCost(behaviorCatalog, runtimeCardCatalog, accessedCard!.DefinitionId) is { } trashCost)
+                        else if (GameEngine.AccessTrashPayment(state, behaviorCatalog, runtimeCardCatalog, accessedCardId) is { } trashPayment)
                         {
+                            int trashCost = trashPayment.Remaining;
                             PlayerState? trashRunner = state.Players.FirstOrDefault(player => player?.Side == PlayerSide.Runner);
                             if (trashRunner is not null && (long)trashRunner.Credits + run.RunCredits >= trashCost)
                             {
@@ -9049,7 +9305,7 @@ public static partial class StateInvariantValidator
         IReadOnlyList<AbilityActionParameters> expectedAbilities = [];
         try
         {
-            expectedAbilities = GameEngine.MaterializeAbilityActionParameters(state, behaviorCatalog);
+            expectedAbilities = GameEngine.MaterializeAbilityActionParameters(state, behaviorCatalog, runtimeCardCatalog);
             if (run.RunRestrictions?.Any(restriction =>
                     restriction.Kind == RunRestrictionKind.CannotStealOrTrashCorpCards) == true)
             {
@@ -9135,7 +9391,8 @@ public static partial class StateInvariantValidator
                     $"Runtime rez action for '{candidate.CardId}' at cost {candidate.CreditCost} is duplicated.");
             }
 
-            RezCardParameters? expectedTarget = expected.FirstOrDefault(item => item.CardId == candidate.CardId);
+            RezCardParameters? expectedTarget = expected.FirstOrDefault(item => item.CardId == candidate.CardId
+                && item.ForfeitAgendaId == candidate.ForfeitAgendaId);
             if (expectedTarget is not null
                 && (expectedTarget.CreditCost != candidate.CreditCost
                     || (expectedTarget.CostQuote is null
@@ -9367,7 +9624,7 @@ public static partial class StateInvariantValidator
         foreach (BehaviorInstruction instruction in instructions)
         {
             if (instruction.Kind == BehaviorInstructionKind.GainCredits
-                && instruction.AmountOperand is not null)
+                && instruction.AmountOperand is { Kind: null or BehaviorAmountKind.SourceCounter })
             {
                 return true;
             }
@@ -10549,6 +10806,15 @@ public static partial class StateInvariantValidator
                             : action.SelectedReplacementCardIds)
                             .Count(id => iceZone.CardIds.Contains(id)))
                 : frame.InstallCost;
+            if (frame.InitiationKind == InstallInitiationKind.BehaviorZoneInstall
+                && frame.CardClass == RuntimeCardClass.Ice
+                && GameEngine.TryGetZoneInstallRule(state, frame, out int zoneDiscount, out BehaviorInstallCostRule zoneRule))
+            {
+                expectedActionCost = zoneRule == BehaviorInstallCostRule.IgnoreAllCosts
+                    ? 0
+                    : Math.Max(0, expectedActionCost - zoneDiscount);
+            }
+
             if (action.CreditCost != expectedActionCost)
             {
                 Add(
@@ -10805,7 +11071,7 @@ public static partial class StateInvariantValidator
         IReadOnlyList<AbilityActionParameters> expectedAbilities = [];
         try
         {
-            expectedAbilities = GameEngine.MaterializeAbilityActionParameters(state, behaviorCatalog);
+            expectedAbilities = GameEngine.MaterializeAbilityActionParameters(state, behaviorCatalog, runtimeCardCatalog);
         }
         catch (Exception exception) when (exception is ResolutionFailureException
             or InvalidOperationException
@@ -11447,7 +11713,7 @@ public static partial class StateInvariantValidator
         IReadOnlyList<AbilityActionParameters> expectedAbilities = [];
         try
         {
-            expectedAbilities = GameEngine.MaterializeAbilityActionParameters(state, behaviorCatalog);
+            expectedAbilities = GameEngine.MaterializeAbilityActionParameters(state, behaviorCatalog, runtimeCardCatalog);
         }
         catch (Exception exception) when (exception is ResolutionFailureException
             or InvalidOperationException
@@ -11615,6 +11881,7 @@ public static partial class StateInvariantValidator
         RezCardParameters expected) =>
         actual.CardId == expected.CardId
         && actual.CreditCost == expected.CreditCost
+        && actual.ForfeitAgendaId == expected.ForfeitAgendaId
         && (actual.CostQuote is null
             ? expected.CostQuote is null
             : actual.CostQuote.Equals(expected.CostQuote));
@@ -11807,6 +12074,7 @@ public static partial class StateInvariantValidator
                     or EffectCheckpointStage.TriggerOrdering,
         }
         || frame is IceSubroutineFrame { Stage: IceSubroutineFrameStage.AwaitingChoice }
+        || frame is BehaviorInstallChoiceFrame { Stage: BehaviorInstallChoiceStage.AwaitingChoice }
         || frame is RunTimingFrame runTiming && IsRunPromptStep(runTiming.Step);
 
     private static bool TryGetNumberRange(ResolutionFrame? frame, out int minimum, out int maximum)
@@ -12038,6 +12306,14 @@ public static partial class StateInvariantValidator
                 continue;
             }
 
+            // EL-BEHAVIOR-INSTALL: a keyed zone install binds the card it installed.
+            if (!selectionsByKey.ContainsKey(binding.Key)
+                && binding.CardIds.Count == 1
+                && GameEngine.DeclaresKeyedInstall(rootInstructions, binding.Key))
+            {
+                continue;
+            }
+
             if (!selectionsByKey.TryGetValue(binding.Key, out IReadOnlyList<CardInstanceId>? selectedCards))
             {
                 Add(
@@ -12202,6 +12478,7 @@ public static partial class StateInvariantValidator
                 runtimeCardCatalog,
                 target,
                 instruction.Kind == BehaviorInstructionKind.Search || target.Kind is BehaviorTargetKind.ZoneCard or BehaviorTargetKind.ZoneCards
+                    || target.IsOther
                     ? frame.SourceCardId
                     : null);
             if (instruction.Kind == BehaviorInstructionKind.Choose
@@ -12256,7 +12533,8 @@ public static partial class StateInvariantValidator
                     behaviorCatalog,
                     runtimeCardCatalog,
                     choice.Owner,
-                    option))
+                    option,
+                    frame.SourceCardId))
                 .Select(option => option.Key)
                 .ToArray();
             if (!choice.OptionKeys.SequenceEqual(expectedOptions, StringComparer.Ordinal))
@@ -12404,6 +12682,9 @@ public static partial class StateInvariantValidator
             return zone is null
                 ? []
                 : zone.CardIds
+                    .Take(target.TopCount ?? int.MaxValue)
+                    .Where(cardId => !target.IsHostedOnSource
+                        || state.Cards.FirstOrDefault(card => card.Id == cardId)?.HostCardId == excludedCardId)
                     .Where(cardId => !excludedCardId.HasValue || cardId != excludedCardId.Value)
                     .Where(cardId => BehaviorCardMatches(state, behaviorCatalog, runtimeCardCatalog, cardId, target.Filter))
                     .ToArray();
@@ -12415,6 +12696,11 @@ public static partial class StateInvariantValidator
             return state.Cards
                 .Where(card => card is not null && IsInstalledCard(state, card.Id)
                     && (owner is null || card.OwnerSide == owner.Value)
+                    && (!target.IsOther || card.Id != excludedCardId)
+                    && (!target.IsCopyOfArchives || GameEngine.IsCopyOfFaceUpArchivesCard(state.Cards, state.Zones, card))
+                    && (!target.IsNotAi || !GameEngine.CardSubtypes(runtimeCardCatalog, card.DefinitionId).Contains("ai", StringComparer.Ordinal))
+                    && (!target.IsInAttackedServer || state.RunState is { } attacked
+                        && state.Zones.FirstOrDefault(zone => zone.Id == card.ZoneId)?.ServerId == attacked.AttackedServer)
                     && (target.Kind != BehaviorTargetKind.InstalledCardNotThisTurn
                         || !IsInstalledThisTurn(state, card.Id, owner))
                     && BehaviorCardMatches(state, behaviorCatalog, runtimeCardCatalog, card.Id, target.Filter))
@@ -12444,6 +12730,12 @@ public static partial class StateInvariantValidator
             {
                 PlayerSide.Corp => state.Zones.FirstOrDefault(value => value.Kind == ZoneKind.CorpRemovedFromGame && value.ServerId is null),
                 PlayerSide.Runner => state.Zones.FirstOrDefault(value => value.Kind == ZoneKind.RunnerRemovedFromGame && value.ServerId is null),
+                _ => null,
+            },
+            BehaviorZone.HostedFaceUp => ownerSide switch
+            {
+                PlayerSide.Corp => state.Zones.FirstOrDefault(value => value.Kind == ZoneKind.CorpHostedFaceUp && value.ServerId is null),
+                PlayerSide.Runner => state.Zones.FirstOrDefault(value => value.Kind == ZoneKind.RunnerHostedFaceUp && value.ServerId is null),
                 _ => null,
             },
             BehaviorZone.ServerRoot => state.Servers
@@ -12510,6 +12802,11 @@ public static partial class StateInvariantValidator
                 return false;
             }
 
+            if (filter.AgendaPoints is { } points && runtimeSpec.AgendaPoints != points)
+            {
+                return false;
+            }
+
             return filter.CardType switch
             {
                 BehaviorCardType.Any => true,
@@ -12523,10 +12820,14 @@ public static partial class StateInvariantValidator
                     && runtimeSpec.Subtypes.Contains("icebreaker", StringComparer.Ordinal),
                 BehaviorCardType.Program => runtimeSpec.CardClass == RuntimeCardClass.Program,
                 BehaviorCardType.ProgramOrHardware => runtimeSpec.CardClass is RuntimeCardClass.Program or RuntimeCardClass.Hardware,
+                BehaviorCardType.ResourceOrHardware => runtimeSpec.CardClass is RuntimeCardClass.Resource or RuntimeCardClass.Hardware,
                 BehaviorCardType.Identity => runtimeSpec.CardClass == RuntimeCardClass.Identity,
                 BehaviorCardType.Operation => runtimeSpec.CardClass == RuntimeCardClass.Operation,
                 BehaviorCardType.Resource => runtimeSpec.CardClass == RuntimeCardClass.Resource,
                 BehaviorCardType.Upgrade => runtimeSpec.CardClass == RuntimeCardClass.Upgrade,
+                BehaviorCardType.Advanceable => runtimeSpec.CardClass == RuntimeCardClass.Agenda
+                    || behaviorCatalog.TryGet(card.DefinitionId, out CardBehaviorDefinition? advanceable)
+                        && advanceable.CanBeAdvanced,
                 _ => false,
             };
         }
@@ -12540,6 +12841,8 @@ public static partial class StateInvariantValidator
         {
             BehaviorCardType.ProgramOrHardware => behaviorCatalog.TryGetCardType(card.DefinitionId, out BehaviorCardType installedClass)
                 && installedClass is BehaviorCardType.Program or BehaviorCardType.Icebreaker or BehaviorCardType.Hardware,
+            BehaviorCardType.ResourceOrHardware => behaviorCatalog.TryGetCardType(card.DefinitionId, out BehaviorCardType resourceOrHardware)
+                && resourceOrHardware is BehaviorCardType.Resource or BehaviorCardType.Hardware,
             BehaviorCardType.Ice => behaviorCatalog.TryGetIce(card.DefinitionId, out _),
             BehaviorCardType.Icebreaker => behaviorCatalog.TryGetIcebreaker(card.DefinitionId, out _),
             BehaviorCardType.Asset => behaviorCatalog.TryGetAsset(card.DefinitionId, out _),
@@ -13085,7 +13388,8 @@ public static partial class StateInvariantValidator
         IReadOnlyList<ServerState> knownServers,
         Dictionary<PlayerId, PlayerSide> knownPlayers,
         IRuntimeCardCatalog? runtimeCardCatalog,
-        List<StateInvariantViolation> violations)
+        List<StateInvariantViolation> violations,
+        int? extraAllottedClicks)
     {
         if (facts is null)
         {
@@ -13112,8 +13416,12 @@ public static partial class StateInvariantValidator
             Add(violations, "turn.facts-negative-clicks", path, "Turn facts click counts must be nonnegative.");
         }
 
-        int expectedClicks = expectedSide == PlayerSide.Corp ? 3 : 4;
-        if (facts.ClicksAllotted != expectedClicks)
+        // EL-EXTRA-CLICKS: "+1 allotted click next turn" (Aggressive
+        // Trendsetting) raises a turn's allotment by the previous own turn's
+        // extra clicks; a last turn's own predecessor is gone, so it may only
+        // exceed the base allotment.
+        int expectedClicks = (expectedSide == PlayerSide.Corp ? 3 : 4) + (extraAllottedClicks ?? 0);
+        if (extraAllottedClicks is null ? facts.ClicksAllotted < expectedClicks : facts.ClicksAllotted != expectedClicks)
         {
             Add(violations, "turn.facts-allotment-mismatch", $"{path}.clicksAllotted", $"'{expectedSide}' turn facts must record {expectedClicks} allotted clicks.");
         }
@@ -13547,4 +13855,10 @@ public static partial class StateInvariantValidator
         string path,
         string message) =>
         violations.Add(new StateInvariantViolation(code, path, message));
+
+    private static bool IsIceSubroutineTrigger(IBehaviorCatalog behaviorCatalog, BehaviorResolutionFrame frame) =>
+        frame.TriggerKey is { } key
+        && behaviorCatalog.TryGet(frame.DefinitionId, out CardBehaviorDefinition? definition)
+        && definition.Triggers.Any(trigger => trigger.Occurrence == OccurrenceKind.IceSubroutine
+            && string.Equals(trigger.Key, key, StringComparison.Ordinal));
 }

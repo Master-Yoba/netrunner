@@ -76,6 +76,9 @@ public static partial class GameEngine
                 case IceSubroutineFrame iceSubroutine:
                     StepIceSubroutineFrame(working, iceSubroutine);
                     break;
+                case BehaviorInstallChoiceFrame behaviorInstall:
+                    StepBehaviorInstallChoice(working, behaviorInstall);
+                    break;
                 case EffectResolutionFrame effectResolution:
                     StepEffectResolution(working, effectResolution);
                     break;

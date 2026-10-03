@@ -63,10 +63,15 @@ public sealed record IdentityPanelViewModel(PlayerSide Side, CardViewModel? Card
 
     public int? AgendaPoints => Card?.AgendaPoints;
 
+    /// <summary>A double-faced identity (Elevation) showing its back face.</summary>
+    public bool IsFlipped => Card?.TypedCounters.Any(static counter =>
+        string.Equals(counter.CounterName, "flipped", StringComparison.Ordinal) && counter.Count > 0) == true;
+
     public string Summary => Card is null
         ? $"{Side.ToString().ToUpperInvariant()} IDENTITY · unavailable"
         : $"{Side.ToString().ToUpperInvariant()} IDENTITY · {Title}"
-            + (Faction.Length == 0 ? string.Empty : $" · {Faction}");
+            + (Faction.Length == 0 ? string.Empty : $" · {Faction}")
+            + (IsFlipped ? " · back face" : string.Empty);
 }
 
 /// <summary>Both identity panels projected from one filtered Match view.</summary>

@@ -10,6 +10,9 @@ namespace Netrunner.Match;
 internal sealed class MatchHistoryProjector
 {
     private readonly Dictionary<string, string> _serverNames = new(StringComparer.Ordinal);
+
+    /// <summary>Card titles for public reveals (EL.5 review): the definition a reveal names is public by the rules.</summary>
+    internal ICardMetadataResolver? Metadata { get; set; }
     private int _remoteNumber;
 
     public IReadOnlyList<MatchHistoryEntry> Project(MatchViewModel before, MatchViewModel after,
@@ -86,6 +89,12 @@ internal sealed class MatchHistoryProjector
                     Summary($"{install.Side} installs {Name(install.CardId.Value)} in {where}.", install.Side);
                     if (moves.Count > 0)
                         Summary($"{install.Side} replaces a card in {where}: {string.Join("; ", moves)}; installs {Name(install.CardId.Value)}.", install.Side);
+                    break;
+                case BehaviorCardRevealedEventPayload revealed:
+                    // A reveal is public: both players learn the card, which may stay hidden (Peer Review's HQ,
+                    // Touch-ups' grip). Only its title is named, never its instance ID.
+                    Detail($"{revealed.OwnerSide} reveals {RevealedTitle(revealed.DefinitionId)}{RevealedFrom(revealed.SourceZoneId)}.",
+                        revealed.OwnerSide);
                     break;
                 case CardDerezzedEventPayload derez:
                     Detail($"{Name(derez.CardId.Value)} is derezzed.", PlayerSide.Corp);
@@ -173,7 +182,10 @@ internal sealed class MatchHistoryProjector
                     Detail($"Runner reaches {ServerName(approached.ServerId.Value)}.", PlayerSide.Runner);
                     break;
                 case RunMovedEventPayload moved:
-                    Detail("Runner advances through the run.", PlayerSide.Runner);
+                    // EL.6: a move other than one position inward takes the Runner to another server.
+                    Detail(moved.ToIceIndex == moved.FromIceIndex - 1 ? "Runner advances through the run."
+                        : after.Run is { } movedRun ? $"Runner moves to the outermost position of {ServerName(movedRun.AttackedServerId)}."
+                        : "Runner moves to another server.", PlayerSide.Runner);
                     break;
                 case RunSuccessfulEventPayload successful:
                     Summary($"Runner completes a successful run on {ServerName(successful.ServerId.Value)}.", PlayerSide.Runner);
@@ -298,6 +310,19 @@ internal sealed class MatchHistoryProjector
                 : $"Runner continues after accessing {Name(accessed.Id)}.";
         }
         string ServerName(string id) => _serverNames.GetValueOrDefault(id, "server");
+        string RevealedTitle(CardDefinitionId definition) =>
+            (Metadata ?? CardMetadataResolvers.Default).TryResolve(definition.Value, out CardPresentationMetadata metadata)
+                ? metadata.Title : "a card";
+
+        string RevealedFrom(ZoneId id) => ZoneKindFor(id) switch
+        {
+            ZoneKind.CorpHand => " from HQ",
+            ZoneKind.CorpDeck => " from R&D",
+            ZoneKind.RunnerGrip => " from the grip",
+            ZoneKind.RunnerStack => " from the stack",
+            _ => "",
+        };
+
         string ZoneName(ZoneId id)
         {
             ZoneState? zone = state.Zones.FirstOrDefault(candidate => candidate.Id == id);

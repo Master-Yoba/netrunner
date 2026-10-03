@@ -261,6 +261,21 @@ public static partial class ObservationBuilder
                 .ToArray();
         }
 
+        // EL-HOSTED-FACEUP: cards hosted faceup on a console are public; each names its host.
+        if (state.Zones.Any(zone => zone.Kind == ZoneKind.RunnerHostedFaceUp && zone.ServerId is null))
+        {
+            publicState["runnerHostedFaceUp"] = ZoneCards(state, ZoneKind.RunnerHostedFaceUp)
+                .Select(card => CardView(state, card))
+                .ToArray();
+        }
+
+        if (state.Zones.Any(zone => zone.Kind == ZoneKind.CorpHostedFaceUp && zone.ServerId is null))
+        {
+            publicState["corpHostedFaceUp"] = ZoneCards(state, ZoneKind.CorpHostedFaceUp)
+                .Select(card => CardView(state, card))
+                .ToArray();
+        }
+
         RunState? run = state.RunState;
         if (run is not null)
         {
@@ -928,6 +943,13 @@ public static partial class ObservationBuilder
         if (card.HostCardId is { } hostId)
         {
             view["hostCardId"] = hostId.Value;
+        }
+        // EL-FACEUP-AGENDA: a card installed faceup without being rezzed (BANGUN's agendas)
+        // is public and inactive. Written only when true, so other observations keep their shape.
+        if (card.FaceUp && !card.Rezzed
+            && state.Zones.FirstOrDefault(zone => zone.Id == card.ZoneId)?.Kind == ZoneKind.ServerRoot)
+        {
+            view["faceUpInactive"] = true;
         }
         AddCounters(view, state, card.Id);
         return view;

@@ -994,6 +994,7 @@ public static partial class GameEngine
             or OccurrenceKind.CardRezzed
             or OccurrenceKind.ServerApproached
             or OccurrenceKind.IceEncountered
+            or OccurrenceKind.IceApproached
             or OccurrenceKind.RunSuccessful
             or OccurrenceKind.RunEnded
             or OccurrenceKind.AgendaScoredOrStolen
@@ -1003,7 +1004,16 @@ public static partial class GameEngine
             or OccurrenceKind.Tags
             or OccurrenceKind.CardAdvancedFromZero
             or OccurrenceKind.AccessedCardTrashed
-            or OccurrenceKind.DiscardPhaseEnded))
+            or OccurrenceKind.DiscardPhaseEnded
+                or OccurrenceKind.ActionPhaseEnded
+                or OccurrenceKind.RunBegan
+                or OccurrenceKind.AgendaForfeited
+                or OccurrenceKind.FirstTagRemovalThisTurn
+                or OccurrenceKind.FirstCardCreditGainThisTurn
+                or OccurrenceKind.FirstOperationPlayedThisTurn
+                or OccurrenceKind.DamageDone
+                or OccurrenceKind.CardsTrashedFromHq
+                or OccurrenceKind.HandSizeDiscarded))
         {
             return [];
         }
@@ -1022,7 +1032,10 @@ public static partial class GameEngine
 
             foreach (BehaviorTrigger trigger in definition.Triggers)
             {
-                if (!CatalogTriggerSourceIsActive(working, source, trigger, activeRunEventSource)
+                if (!(CatalogTriggerSourceIsActive(working, source, trigger, activeRunEventSource)
+                        || IsTrashedSelfTriggerSource(working, source, trigger, occurrence.SourceCardId)
+                            && SubjectWasRezzed(occurrence)
+                        || IsEndedRunEventSource(working, source, trigger, occurrence.SourceCardId))
                     || trigger.Occurrence != occurrence.Kind
                     || occurrence.Kind == OccurrenceKind.TurnBegin
                         && trigger.Scope == BehaviorTriggerScope.Self
@@ -1033,6 +1046,7 @@ public static partial class GameEngine
                     || !CatalogRunAgendaConditionMatches(trigger, occurrence)
                     || !CatalogTriggerServerMatches(working, trigger, occurrence)
                     || !CatalogTriggerSourceLocationMatches(working, trigger, source, occurrence)
+                    || !CatalogTriggerRequirementMatches(working, source, trigger)
                     || !CatalogTriggerCanStart(working, source, trigger))
                 {
                     continue;
@@ -1116,6 +1130,7 @@ public static partial class GameEngine
 
         if (occurrence.Kind is not (OccurrenceKind.ServerApproached
             or OccurrenceKind.IceEncountered
+            or OccurrenceKind.IceApproached
             or OccurrenceKind.RunSuccessful
             or OccurrenceKind.RunEnded)
             || occurrence.Effect is not GameplayOccurrenceEffect gameplay
@@ -1139,7 +1154,7 @@ public static partial class GameEngine
             return true;
         }
 
-        if (occurrence.Kind is not (OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered or OccurrenceKind.CardRezzed or OccurrenceKind.RunEnded or OccurrenceKind.AgendaScoredOrStolen)
+        if (occurrence.Kind is not (OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered or OccurrenceKind.IceApproached or OccurrenceKind.CardRezzed or OccurrenceKind.RunEnded or OccurrenceKind.AgendaScoredOrStolen)
             || occurrence.Effect is not GameplayOccurrenceEffect gameplay
             || gameplay.ServerId is not { } attackedServer)
         {
@@ -1176,17 +1191,19 @@ public static partial class GameEngine
 
             if (definition.Triggers.Any(trigger =>
                 trigger.Occurrence == occurrenceKind
-                && CatalogTriggerSourceIsActive(working, source, trigger, activeRunEventSource)
+                && (CatalogTriggerSourceIsActive(working, source, trigger, activeRunEventSource)
+                    || IsTrashedSelfTriggerSource(working, source, trigger, subjectCardId)
+                    || IsEndedRunEventSource(working, source, trigger, subjectCardId))
                 && (trigger.ServerKindRequirement is null
                     || serverId is { } suppliedServerId
                         && working.Servers.FirstOrDefault(candidate => candidate.Id == suppliedServerId)?.Kind
                             == trigger.ServerKindRequirement)
                 && (!trigger.RequireSourceOnAttackedServer
-                    || occurrenceKind is OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered or OccurrenceKind.CardRezzed or OccurrenceKind.RunEnded or OccurrenceKind.AgendaScoredOrStolen
+                    || occurrenceKind is OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered or OccurrenceKind.IceApproached or OccurrenceKind.CardRezzed or OccurrenceKind.RunEnded or OccurrenceKind.AgendaScoredOrStolen
                         && (occurrenceKind != OccurrenceKind.CardRezzed || working.RunState?.AttackedServer == serverId)
                         && serverId is { } suppliedServer
                         && working.Zones.FirstOrDefault(zone => zone.Id == source.ZoneId)?.ServerId == suppliedServer)
-                && (occurrenceKind is not (OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered)
+                && (occurrenceKind is not (OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered or OccurrenceKind.IceApproached)
                     || trigger.Scope != BehaviorTriggerScope.Controller
                     || source.OwnerSide == PlayerSide.Runner)
                 && (occurrenceKind != OccurrenceKind.RunSuccessful
@@ -1201,6 +1218,7 @@ public static partial class GameEngine
                     || trigger.SubjectCardFilter is null
                     || subjectCardId is { } subject
                         && CatalogSubjectMatches(working, subject, trigger.SubjectCardFilter))
+                && CatalogTriggerRequirementMatches(working, source, trigger)
                 && CatalogTriggerCanStart(working, source, trigger)))
             {
                 return true;
@@ -1217,14 +1235,36 @@ public static partial class GameEngine
         bool activeRunEventSource)
     {
         bool installed = IsInstalledCard(working, source.Id);
+        if (trigger.Face is { } face && face != SourceFace(working, source.Id))
+        {
+            return false;
+        }
+
         return (!trigger.RequireSourceInstalled || installed)
             && (activeRunEventSource
                 || RuntimeCardActivity.IsActive(source, working.Zones)
                 || trigger.Occurrence == OccurrenceKind.AgendaScoredOrStolen
                     && trigger.Scope == BehaviorTriggerScope.Self
                     && working.Zones.Any(zone => zone.Id == source.ZoneId && zone.Kind == ZoneKind.RunnerScore)
-                || trigger.ActiveWhileUnrezzed && installed && source.OwnerSide == PlayerSide.Corp);
+                || trigger.Occurrence == OccurrenceKind.AgendaForfeited
+                    && trigger.Scope == BehaviorTriggerScope.Self
+                    && working.Zones.Any(zone => zone.Id == source.ZoneId && zone.Kind == ZoneKind.CorpRemovedFromGame)
+                || trigger.ActiveWhileUnrezzed && installed && source.OwnerSide == PlayerSide.Corp
+                || trigger.ActiveWhileAccessed && IsBeingAccessedOutsideArchives(working, source));
     }
+
+    private static bool IsBeingAccessedOutsideArchives(WorkingState working, CardInstanceState source) =>
+        source.OwnerSide == PlayerSide.Corp
+        && working.RunState is { ChosenAccessCards.Count: > 0 } run
+        && run.ChosenAccessCards[^1] == source.Id
+        && working.Zones.FirstOrDefault(zone => zone.Id == source.ZoneId)?.Kind is not ZoneKind.CorpDiscard;
+
+    private static bool CatalogTriggerRequirementMatches(
+        WorkingState working,
+        CardInstanceState source,
+        BehaviorTrigger trigger) =>
+        trigger.Requirement is not { } requirement
+        || OptionConditionMatches(working, GetPlayer(working, source.OwnerSide).Id, source.Id, requirement);
 
     private static bool CatalogTriggerDamageCostIsPayable(
         WorkingState working,
@@ -1268,7 +1308,7 @@ public static partial class GameEngine
             (trigger.Mode != TriggerMode.Optional
                 || option.Semantic != BehaviorChoiceOptionSemantic.Fallback)
             &&
-            IsBehaviorChoiceOptionAffordable(working, controller, option));
+            IsBehaviorChoiceOptionAffordable(working, controller, option, source.Id));
     }
 
     private static bool CatalogTriggerScopeMatches(
@@ -1331,6 +1371,11 @@ public static partial class GameEngine
                 BehaviorCardType.Operation => runtime.CardClass == RuntimeCardClass.Operation,
                 BehaviorCardType.Resource => runtime.CardClass == RuntimeCardClass.Resource,
                 BehaviorCardType.Upgrade => runtime.CardClass == RuntimeCardClass.Upgrade,
+                BehaviorCardType.ProgramOrHardware => runtime.CardClass is RuntimeCardClass.Program or RuntimeCardClass.Hardware,
+                BehaviorCardType.ResourceOrHardware => runtime.CardClass is RuntimeCardClass.Resource or RuntimeCardClass.Hardware,
+                BehaviorCardType.Advanceable => runtime.CardClass == RuntimeCardClass.Agenda
+                    || working.BehaviorCatalog.TryGet(subject.DefinitionId, out CardBehaviorDefinition? advanceable)
+                        && advanceable.CanBeAdvanced,
                 _ => false,
             };
         }

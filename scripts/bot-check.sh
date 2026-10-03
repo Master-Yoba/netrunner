@@ -13,7 +13,10 @@ dotnet format "$check_root/Netrunner.sln" --verify-no-changes
 echo "bot-check format=PASS"
 
 # The quick M5 gate builds and freezes its own copy of the CLI first, so the official build below can't change it.
-if bash "$check_root/scripts/m5-gate.sh" --quick >"$logs/m5-quick.log" 2>&1; then
+# make gates sets BOT_CHECK_SKIP_M5_QUICK=1: its full m5-gate already ran these cases.
+if [[ "${BOT_CHECK_SKIP_M5_QUICK:-0}" == 1 ]]; then
+  echo "bot-check m5-quick=SKIP (the full m5-gate covers it)"
+elif bash "$check_root/scripts/m5-gate.sh" --quick >"$logs/m5-quick.log" 2>&1; then
   echo "bot-check m5-quick=PASS"
 else
   echo "bot-check m5-quick=FAIL ($logs/m5-quick.log)"

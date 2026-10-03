@@ -285,6 +285,13 @@ public static partial class GameEngine
             throw new ResolutionFailureException("Turn frame does not match the active turn.");
         }
 
+        if (frame.Stage is TurnFrameStage.BeforeTurnPriority or TurnFrameStage.ActionPriority
+                or TurnFrameStage.DiscardPriority or TurnFrameStage.AwaitingAction
+            && FlushDeferredOccurrence(working))
+        {
+            return;
+        }
+
         switch (frame.Stage)
         {
             case TurnFrameStage.GainAllottedClicks:
@@ -343,7 +350,8 @@ public static partial class GameEngine
     private static void AllotTurnClicks(WorkingState working, TurnFrame frame)
     {
         PlayerState player = GetPlayer(working, frame.ActiveSide);
-        int allotted = frame.ActiveSide == PlayerSide.Corp ? 3 : 4;
+        int allotted = (frame.ActiveSide == PlayerSide.Corp ? 3 : 4)
+            + (working.Turn.History?.ThisTurn(frame.ActiveSide)?.NextTurnExtraClicks ?? 0);
         ReplacePlayer(working, new PlayerState(
             player.Id,
             player.Side,
@@ -351,6 +359,7 @@ public static partial class GameEngine
             allotted,
             player.AgendaPoints));
 
+        RefillActiveRecurringCredits(working, frame.ActiveSide);
         TurnHistoryState history = (working.Turn.History ?? new TurnHistoryState())
             .Start(frame.ActiveSide, frame.TurnNumber, allotted);
         TurnStep step = frame.ActiveSide == PlayerSide.Corp ? TurnStep.CorpDraw : TurnStep.RunnerAction;
@@ -676,6 +685,10 @@ public static partial class GameEngine
             frame.ActiveSide,
             frame.TurnNumber,
             TurnFrameStage.DiscardSelection);
+        if (working.BehaviorCatalog.TracksTurnEvents)
+        {
+            QueueIdentityOccurrence(working, OccurrenceKind.ActionPhaseEnded, frame.ActiveSide);
+        }
     }
 
     private static void BeginTurnDiscard(WorkingState working, TurnFrame frame)
@@ -799,6 +812,18 @@ public static partial class GameEngine
             TurnFrameStage.DiscardPriority,
             TurnWindow(parent.ActiveSide),
             parent.ActiveSide);
+
+        // EL-HAND-SIZE-DISCARD: remember what was discarded, for "from among those cards".
+        CardInstanceId[] discarded = frame.Candidates.Where(candidate => frame.Selected.Contains(candidate)).ToArray();
+        TurnState turn = working.Turn;
+        if (discarded.Length > 0
+            && working.BehaviorCatalog.TracksTurnEvents
+            && turn.History?.ThisTurn(side) is not null)
+        {
+            ReplaceTurn(working, turn.ActiveSide, turn.Phase, turn.TurnNumber, turn.Step,
+                turn.History.WithHandSizeDiscards(side, discarded));
+            QueueIdentityOccurrence(working, OccurrenceKind.HandSizeDiscarded, side);
+        }
     }
 
     private static void LoseTurnClicks(WorkingState working, TurnFrame frame)

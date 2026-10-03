@@ -216,7 +216,9 @@ public static partial class GameEngine
                 runtimeMismatch!);
         }
 
-        if (!simulation && !StateInvariantValidator.TryValidate(
+        if (!simulation
+            && !state.WasValidatedWith(enforceCatalogCompatibility ? behaviorCatalog : null, runtimeCardCatalog)
+            && !StateInvariantValidator.TryValidate(
                 state,
                 enforceCatalogCompatibility ? behaviorCatalog : null,
                 runtimeCardCatalog,
@@ -305,6 +307,7 @@ public static partial class GameEngine
                 next,
                 enforceCatalogCompatibility ? behaviorCatalog : null,
                 runtimeCardCatalog);
+            next.MarkValidated(enforceCatalogCompatibility ? behaviorCatalog : null, runtimeCardCatalog);
             var acceptedAction = new AcceptedActionRecord(
                 working.ActionSequence,
                 submission,
@@ -730,6 +733,7 @@ public static partial class GameEngine
         LegalAction action,
         PlayerId? decisionOwner = null)
     {
+        RecordActionStarted(working, action);
         switch (action.Kind, action.Parameters)
         {
             case (ActionKind.ChooseCard, CardChoiceParameters discardChoice)
@@ -750,6 +754,9 @@ public static partial class GameEngine
                 return;
             case (ActionKind.UseAbility, AbilityActionParameters ability):
                 ConsumeAbilityAction(working, ability, decisionOwner);
+                return;
+            case (ActionKind.InstallCard, BehaviorInstallChoiceParameters behaviorInstall):
+                ConsumeBehaviorInstallChoice(working, behaviorInstall);
                 return;
             case (ActionKind.InstallCard, InstallCardParameters install)
                 when IsInstallFrameTop(working):

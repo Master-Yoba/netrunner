@@ -40,6 +40,15 @@ public enum ZoneKind
     RunnerRemovedFromGame,
     CorpIdentity,
     RunnerIdentity,
+
+    /// <summary>
+    /// EL-HOSTED-FACEUP: Runner cards hosted faceup on a card without being
+    /// installed (Bling, Madani). Lazy and public; each card names its host.
+    /// </summary>
+    RunnerHostedFaceUp,
+
+    /// <summary>EL-HOSTED-FACEUP: Corp cards hosted faceup on a Runner card (Detente). Lazy and public.</summary>
+    CorpHostedFaceUp,
 }
 
 /// <summary>The stable topology kind of a Corp server.</summary>
@@ -607,6 +616,19 @@ public sealed class GameState
         IsSimulated = true;
         return this;
     }
+
+    // The catalogs the engine validated this exact (immutable) state against when it produced it, so the
+    // next action needn't validate it again as its input. A restored or hand-built state never carries it.
+    private (IBehaviorCatalog? Behavior, IRuntimeCardCatalog? Runtime)? _validatedWith;
+
+    internal void MarkValidated(IBehaviorCatalog? behaviorCatalog, IRuntimeCardCatalog? runtimeCardCatalog) =>
+        _validatedWith = (behaviorCatalog, runtimeCardCatalog);
+
+    internal bool WasValidatedWith(IBehaviorCatalog? behaviorCatalog, IRuntimeCardCatalog? runtimeCardCatalog) =>
+        !IsSimulated
+        && _validatedWith is { } validated
+        && ReferenceEquals(validated.Behavior, behaviorCatalog)
+        && ReferenceEquals(validated.Runtime, runtimeCardCatalog);
 
     public GameSnapshot CreateSnapshot() => GameSnapshot.From(this);
 

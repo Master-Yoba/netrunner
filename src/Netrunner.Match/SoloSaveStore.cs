@@ -10,14 +10,22 @@ public sealed record SoloSaveBrowserEntry(string FileName, SoloSavePreview? Prev
 public sealed class SoloSaveStore : IDisposable
 {
     public const long MaximumFileBytes = 64 * 1024 * 1024;
-    private readonly IBehaviorCatalog _behavior;
-    private readonly IRuntimeCardCatalog _runtime;
+    private readonly Func<string?, (IBehaviorCatalog Behavior, IRuntimeCardCatalog Runtime)> _catalogs;
     private readonly SemaphoreSlim _writes = new(1, 1);
 
     public SoloSaveStore(IBehaviorCatalog behavior, IRuntimeCardCatalog runtime, string? directory = null)
+        : this(_ => (behavior, runtime), directory)
     {
-        _behavior = behavior;
-        _runtime = runtime;
+    }
+
+    /// <summary>
+    /// A store whose saves validate against the catalogs of their own format
+    /// (D-EL-8); <paramref name="catalogs"/> throws for a format this build
+    /// can't play, which marks the save incompatible.
+    /// </summary>
+    public SoloSaveStore(Func<string?, (IBehaviorCatalog Behavior, IRuntimeCardCatalog Runtime)> catalogs, string? directory = null)
+    {
+        _catalogs = catalogs;
         DirectoryPath = Path.GetFullPath(directory ?? DefaultDirectory);
     }
 
@@ -33,7 +41,7 @@ public sealed class SoloSaveStore : IDisposable
         {
             await Task.Run(() =>
             {
-                document.Validate(_behavior, _runtime);
+                Validate(document);
                 byte[] bytes = EngineJson.SerializeUtf8(document);
                 if (bytes.LongLength > MaximumFileBytes) throw new IOException("The save exceeds the supported file size.");
                 cancellationToken.ThrowIfCancellationRequested();
@@ -43,7 +51,7 @@ public sealed class SoloSaveStore : IDisposable
                 if (File.Exists(path))
                 {
                     // Never replace a verified backup with a corrupt primary.
-                    try { Read(path).Validate(_behavior, _runtime); backup = path + ".bak"; }
+                    try { Validate(Read(path)); backup = path + ".bak"; }
                     catch (Exception exception) when (IsReadFailure(exception)) { }
                 }
                 AtomicFile.Write(path, bytes, temporary => Read(temporary).ValidateIntegrity(), backup);
@@ -56,7 +64,7 @@ public sealed class SoloSaveStore : IDisposable
         Task.Run(() =>
         {
             SoloSaveDocument document = Read(PathFor(saveId) + (backup ? ".bak" : ""));
-            document.Validate(_behavior, _runtime);
+            Validate(document);
             return document;
         }, cancellationToken);
 
@@ -76,7 +84,7 @@ public sealed class SoloSaveStore : IDisposable
                     SoloSaveDocument document = Read(path);
                     document.ValidateIntegrity();
                     preview = document.Preview;
-                    document.Validate(_behavior, _runtime);
+                    Validate(document);
                 }
                 catch (Exception exception) when (IsReadFailure(exception))
                 {
@@ -89,7 +97,7 @@ public sealed class SoloSaveStore : IDisposable
                     try
                     {
                         SoloSaveDocument previous = Read(path + ".bak");
-                        previous.Validate(_behavior, _runtime);
+                        Validate(previous);
                         backup = previous.Preview;
                     }
                     catch (Exception exception) when (IsReadFailure(exception)) { }
@@ -110,6 +118,12 @@ public sealed class SoloSaveStore : IDisposable
     }
 
     public void Dispose() => _writes.Dispose();
+
+    private void Validate(SoloSaveDocument document)
+    {
+        (IBehaviorCatalog behavior, IRuntimeCardCatalog runtime) = _catalogs(document.Metadata?.FormatId);
+        document.Validate(behavior, runtime);
+    }
 
     private string PathFor(string saveId)
     {

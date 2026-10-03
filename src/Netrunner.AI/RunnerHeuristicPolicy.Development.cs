@@ -14,9 +14,9 @@ public sealed partial class RunnerHeuristicPolicy
         foreach (BehaviorPaidAbility ability in behavior.PaidAbilities)
         {
             foreach (BehaviorInstruction gain in ability.Instructions.Where(instruction => instruction.Kind == BehaviorInstructionKind.GainCredits
-                && instruction.AmountOperand is not null))
+                && instruction.AmountOperand is { SourceCounterName: not null }))
             {
-                string counter = gain.AmountOperand!.SourceCounterName;
+                string counter = gain.AmountOperand!.SourceCounterName!;
                 int counters = behavior.Triggers.Sum(trigger => HeuristicContext.Flatten(trigger.Instructions)
                     .Where(instruction => instruction.Kind == BehaviorInstructionKind.AddCounter && instruction.Argument == counter)
                     .Sum(instruction => instruction.Amount * (trigger.Occurrence == OccurrenceKind.TurnBegin ? 2 : 1)));
@@ -58,6 +58,11 @@ public sealed partial class RunnerHeuristicPolicy
         if (context.Generation >= 13 && install.RequiredReplacementCardIds.Concat(install.SelectedReplacementCardIds)
                 .Any(id => context.Card(id)?.DefinitionId == card!.DefinitionId))
             return Value(-500, "rig/replaces-its-own-copy", true);
+        // v24 (bot loop 1): a second copy of an installed breaker breaks nothing the first doesn't, for its memory and credits
+        // (a second Marjanah, installed with the last click and credit).
+        if (context.Generation >= 20 && definition.Icebreaker is not null
+            && context.Features.Board.RunnerRig.Any(installed => installed.DefinitionId == card!.DefinitionId))
+            return Value(-500, "rig/breaker-already-installed", true);
         if (context.Generation >= 13 && definition.Printed.Console
             && context.Features.Board.RunnerRig.Any(installed => context.Definition(installed)?.Printed.Console == true))
             return Value(-500, "rig/console-already-installed", true);
@@ -108,8 +113,38 @@ public sealed partial class RunnerHeuristicPolicy
         int personal = Math.Max(0, cost - payment.RunCredits);
         int impact = RunnerValues.Trash(context, card);
         if (context.Generation >= 8) impact = (int)(impact * context.RunnerProfile.TrashWeight);
+        // v24 (bot loop 1): a known operation the Corp could play next turn to flatline the Runner is worth its trash cost
+        // (Measured Response's 4 meat damage, left in HQ while the Runner had 2 cards and 4 credits).
+        if (context.Generation >= 20 && KillCard(context, card)) impact = Math.Max(impact, 1500);
         int value = impact - personal * context.CreditValue - payment.RunCredits * 15;
         return Value(value, "access/trash-value-and-reserve", true);
+    }
+
+    /// <summary>
+    /// v24: whether the Corp can play this operation next turn for more damage than the Runner's grip can take, after the
+    /// clicks it has left to draw, when the Runner can't pay its way out with its credits and clicks.
+    /// </summary>
+    private static bool KillCard(HeuristicContext context, AgentCard? card)
+    {
+        CardEvaluationDescriptor? definition = context.Definition(card);
+        if (definition?.Printed.CardClass != RuntimeCardClass.Operation || definition.Behavior is not { } behavior) return false;
+        if ((definition.Printed.PlayCost ?? 0) > context.Opponent.Credits) return false;
+        int threat = Math.Max(context.Self.AgendaPoints, context.Opponent.AgendaPoints);
+        if (behavior.Conditions.Any(condition => condition.Kind == BehaviorConditionKind.ThreatLevelAtLeast && threat < (condition.Value ?? 0)))
+            return false;
+        int payable = context.Self.Credits + context.Self.Clicks;
+        return Damage(behavior.Instructions) > context.Features.Hand.Length + context.Self.Clicks;
+
+        int Damage(IEnumerable<BehaviorInstruction> instructions) => instructions.Sum(instruction => instruction switch
+        {
+            { Kind: BehaviorInstructionKind.DealDamage } => instruction.Amount,
+            { Kind: BehaviorInstructionKind.Choose, Choice: { Options.Count: > 0 } choice } when choice.Chooser == BehaviorChooser.Runner =>
+                choice.Options.Where(option => (option.Costs ?? []).Where(cost => cost.Kind == BehaviorCostKind.Credits).Sum(cost => cost.Amount) <= payable)
+                    .Select(option => Damage(option.Instructions)).DefaultIfEmpty(0).Min(),
+            { Kind: BehaviorInstructionKind.Choose, Choice: { Options.Count: > 0 } choice } => choice.Options.Max(option => Damage(option.Instructions)),
+            { Kind: BehaviorInstructionKind.Branch, Branch: { } branch } => Math.Max(Damage(branch.WhenTrue), Damage(branch.WhenFalse)),
+            _ => 0,
+        });
     }
 
     private static AgentUtility Access(HeuristicContext context, BreachCandidateParameters candidate)

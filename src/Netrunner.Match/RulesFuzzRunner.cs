@@ -31,7 +31,9 @@ public enum FuzzGameStatus
 }
 
 /// <summary>One deterministic fuzz game: content, seed and the agent kind in each seat.</summary>
-public sealed record FuzzGameCase(string Id, string ContentId, ulong GameSeed, FuzzAgentKind Corp, FuzzAgentKind Runner);
+/// <param name="VerifyReplay">Whether a game that ends normally has its replay verified; a capped game always does.</param>
+public sealed record FuzzGameCase(string Id, string ContentId, ulong GameSeed, FuzzAgentKind Corp, FuzzAgentKind Runner,
+    bool VerifyReplay = true);
 
 /// <summary>
 /// The exact position before a failing action. <see cref="ReplayPrefix"/>
@@ -87,13 +89,57 @@ public static class RulesFuzzRunner
     /// <summary>Separates the Corp and Runner preset IDs in a named-preset content ID.</summary>
     public const char PairSeparator = '~';
 
-    /// <summary>The content IDs a <c>--content</c> option names: developer, official (expanded) or gateway.</summary>
+    /// <summary>
+    /// Every pairing of the Elevation simulation decks (the batch proofs), on
+    /// the System Gateway + Elevation pool.
+    /// </summary>
+    public static IReadOnlyList<string> ElevationContentIds =>
+        OfficialPresetCatalog.ElevationSimulation().ElevationSimulationDecks.Where(preset => preset.Side == PlayerSide.Corp)
+            .SelectMany(corp => OfficialPresetCatalog.ElevationSimulation().ElevationSimulationDecks.Where(preset => preset.Side == PlayerSide.Runner)
+                .Select(runner => $"{corp.PresetId}{PairSeparator}{runner.PresetId}"))
+            .ToArray();
+
+    /// <summary>
+    /// EL.8: every pairing of the System Gateway + Elevation format's decks (D-EL-4),
+    /// the deck pool of that format.
+    /// </summary>
+    public static IReadOnlyList<string> GatewayElevationContentIds =>
+        OfficialPresetCatalog.GatewayElevation().ElevationDecks.Where(preset => preset.Side == PlayerSide.Corp)
+            .SelectMany(corp => OfficialPresetCatalog.GatewayElevation().ElevationDecks.Where(preset => preset.Side == PlayerSide.Runner)
+                .Select(runner => $"{corp.PresetId}{PairSeparator}{runner.PresetId}"))
+            .ToArray();
+
+    /// <summary>Every pairing of NSG's Core Sets decks, the deck pool of the NSG Core Sets format.</summary>
+    public static IReadOnlyList<string> NsgCoreSetsContentIds =>
+        OfficialPresetCatalog.NsgCoreSets().NsgCoreSetsDecks.Where(preset => preset.Side == PlayerSide.Corp)
+            .SelectMany(corp => OfficialPresetCatalog.NsgCoreSets().NsgCoreSetsDecks.Where(preset => preset.Side == PlayerSide.Runner)
+                .Select(runner => $"{corp.PresetId}{PairSeparator}{runner.PresetId}"))
+            .ToArray();
+
+    /// <summary>
+    /// The <c>--content</c> options: developer, official (expanded), gateway, elevation (simulation),
+    /// gateway-elevation or nsg-core-sets.
+    /// </summary>
+    public static IReadOnlyList<string> ContentNames { get; } =
+        ["developer", "official", "gateway", "elevation", "gateway-elevation", "nsg-core-sets"];
+
+    /// <summary>Whether a content ID is a pairing of one of the official pools (Gateway, the Elevation pools, the expanded decks).</summary>
+    public static bool IsKnownContentId(string contentId)
+    {
+        ArgumentNullException.ThrowIfNull(contentId);
+        return ContentNames.Where(name => name != "developer").Any(name => ContentIds(name).Contains(contentId, StringComparer.Ordinal));
+    }
+
+    /// <summary>The content IDs a <c>--content</c> option names.</summary>
     public static IReadOnlyList<string> ContentIds(string content) => content switch
     {
         "developer" => [DeveloperContentId],
         "official" => OfficialContentIds,
         "gateway" => GatewayContentIds,
-        _ => throw new ArgumentException($"Unknown content '{content}'; expected developer, official or gateway.", nameof(content)),
+        "elevation" => ElevationContentIds,
+        "gateway-elevation" => GatewayElevationContentIds,
+        "nsg-core-sets" => NsgCoreSetsContentIds,
+        _ => throw new ArgumentException($"Unknown content '{content}'; expected {string.Join(", ", ContentNames)}.", nameof(content)),
     };
 
     /// <summary>
@@ -105,7 +151,11 @@ public static class RulesFuzzRunner
         "developer" => "developer",
         "official" => "expanded-v1",
         "gateway" => "gateway-v1",
-        _ => throw new ArgumentException($"Unknown content '{content}'; expected developer, official or gateway.", nameof(content)),
+        "elevation" => "elevation-simulation-v3",
+        // v2: the Core Battle Box replaced our decks (D-EL-10).
+        "gateway-elevation" => "gateway-elevation-v2",
+        "nsg-core-sets" => "nsg-core-sets-v1",
+        _ => throw new ArgumentException($"Unknown content '{content}'; expected {string.Join(", ", ContentNames)}.", nameof(content)),
     };
 
     /// <summary>Every official preset pairing, in the benchmark's corp/runner order (the frozen M5 suites).</summary>
@@ -120,10 +170,16 @@ public static class RulesFuzzRunner
         (FuzzAgentKind.Heuristic, FuzzAgentKind.RandomLegal),
     ];
 
-    /// <summary>Builds a deterministic case list that cycles content and seat pairings.</summary>
-    public static IReadOnlyList<FuzzGameCase> Plan(int games, ulong baseSeed, IReadOnlyList<string> contentIds)
+    /// <summary>
+    /// Builds a deterministic case list that cycles content and seat pairings. With <paramref name="verifyReplaysEvery"/>
+    /// above 1, only every Nth game that ends normally has its replay verified (a per-slice run; the milestone run
+    /// verifies every game).
+    /// </summary>
+    public static IReadOnlyList<FuzzGameCase> Plan(int games, ulong baseSeed, IReadOnlyList<string> contentIds,
+        int verifyReplaysEvery = 1)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(games);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(verifyReplaysEvery);
         ArgumentNullException.ThrowIfNull(contentIds);
         if (contentIds.Count == 0) throw new ArgumentException("At least one content ID is required.", nameof(contentIds));
         var cases = new List<FuzzGameCase>(games);
@@ -132,7 +188,8 @@ public static class RulesFuzzRunner
             string content = contentIds[index % contentIds.Count];
             (FuzzAgentKind corp, FuzzAgentKind runner) = Pairings[index / contentIds.Count % Pairings.Count];
             cases.Add(new FuzzGameCase(
-                $"{content}-{index + 1:D5}", content, DeriveGameSeed(baseSeed, index), corp, runner));
+                $"{content}-{index + 1:D5}", content, DeriveGameSeed(baseSeed, index), corp, runner,
+                VerifyReplay: index % verifyReplaysEvery == 0));
         }
         return cases;
     }
@@ -153,11 +210,13 @@ public static class RulesFuzzRunner
         (string corpPreset, string runnerPreset) = PresetIds(contentId);
         if (!string.Equals(CardDataResource.EmbeddedMode, CardDataResource.OfficialMode, StringComparison.Ordinal))
             throw new InvalidOperationException("Official fuzz content requires the embedded official card snapshot.");
-        CardDataSet data = CardDataResource.LoadEmbedded();
-        BehaviorCatalog behavior = GatewayBehaviorCatalog.Create();
+        OfficialPresetCatalog presets = CatalogOf(corpPreset);
+        bool elevation = !ReferenceEquals(presets, OfficialPresetCatalog.Embedded());
+        CardDataSet data = elevation ? CardDataResource.LoadEmbeddedPool() : CardDataResource.LoadEmbedded();
+        BehaviorCatalog behavior = elevation ? ElevationBehaviorCatalog.Create() : GatewayBehaviorCatalog.Create();
         MatchRequest request = MatchRequestComposer.ComposeOfficial(
-            corpPreset, runnerPreset, data, seed, OfficialPresetCatalog.Embedded(), behaviorCatalog: behavior);
-        return FullMatchDefinition.FromRequest(request, data, behavior);
+            corpPreset, runnerPreset, data, seed, presets, behaviorCatalog: behavior);
+        return FullMatchDefinition.FromRequest(request, data, behavior, presets);
     }
 
     /// <summary>The Corp and Runner preset IDs a content ID names: <c>basic-expanded</c> style, or <c>corpId~runnerId</c>.</summary>
@@ -166,7 +225,7 @@ public static class RulesFuzzRunner
         ArgumentNullException.ThrowIfNull(contentId);
         if (contentId.Split(PairSeparator) is [string corp, string runner])
         {
-            OfficialPresetCatalog catalog = OfficialPresetCatalog.Embedded();
+            OfficialPresetCatalog catalog = CatalogOf(corp);
             if (!catalog.TryGet(corp, out OfficialPreset corpPreset) || corpPreset.Side != PlayerSide.Corp
                 || !catalog.TryGet(runner, out OfficialPreset runnerPreset) || runnerPreset.Side != PlayerSide.Runner)
                 throw new ArgumentException($"Unknown fuzz content '{contentId}'.", nameof(contentId));
@@ -177,6 +236,16 @@ public static class RulesFuzzRunner
             throw new ArgumentException($"Unknown fuzz content '{contentId}'.", nameof(contentId));
         return ($"system-gateway-{parts[0]}-corp", $"system-gateway-{parts[1]}-runner");
     }
+
+    /// <summary>
+    /// The preset catalog a Corp preset ID belongs to: the simulation decks, the Elevation format's decks,
+    /// NSG's Core Sets decks or the embedded catalog.
+    /// </summary>
+    private static OfficialPresetCatalog CatalogOf(string corpPresetId) =>
+        corpPresetId.StartsWith(OfficialPresetCatalog.ElevationSimulationPrefix, StringComparison.Ordinal) ? OfficialPresetCatalog.ElevationSimulation()
+        : OfficialPresetCatalog.IsElevationDeck(corpPresetId) ? OfficialPresetCatalog.GatewayElevation()
+        : OfficialPresetCatalog.IsNsgCoreSetsDeck(corpPresetId) ? OfficialPresetCatalog.NsgCoreSets()
+        : OfficialPresetCatalog.Embedded();
 
     public static Task<FuzzGameResult> RunAsync(FuzzGameCase fuzzCase, int actionCap = DefaultActionCap,
         CancellationToken cancellationToken = default) =>
@@ -293,6 +362,8 @@ public static class RulesFuzzRunner
 
         Task<FuzzGameResult> FinishAsync(FuzzGameStatus status, string? message)
         {
+            if (status == FuzzGameStatus.Terminal && !fuzzCase.VerifyReplay)
+                return Task.FromResult(new FuzzGameResult(fuzzCase, status, actions.Count, state.Outcome, message, null));
             ReplayArtifact replay = Replay();
             ReplayVerificationResult verified;
             try

@@ -31,6 +31,14 @@ public sealed record MatchViewModel(
 {
     public IReadOnlyList<CardViewModel> CorpDiscard { get; init; } = Array.Empty<CardViewModel>();
     public IReadOnlyList<CardViewModel> RunnerHeap { get; init; } = Array.Empty<CardViewModel>();
+    /// <summary>
+    /// Cards hosted faceup on a Runner console (Bling, Madani): not installed,
+    /// public to both sides, each naming its host in <see cref="CardViewModel.HostCardId"/>.
+    /// </summary>
+    public IReadOnlyList<CardViewModel> HostedFaceUp { get; init; } = Array.Empty<CardViewModel>();
+    /// <summary>Each side's removed-from-game pile; public.</summary>
+    public IReadOnlyList<CardViewModel> CorpRemovedFromGame { get; init; } = Array.Empty<CardViewModel>();
+    public IReadOnlyList<CardViewModel> RunnerRemovedFromGame { get; init; } = Array.Empty<CardViewModel>();
     /// <summary>Public cards currently resolving: a played Operation or Event.</summary>
     public IReadOnlyList<CardViewModel> PlayArea { get; init; } = Array.Empty<CardViewModel>();
     /// <summary>Advancement counters on installed cards, by presentation key; counters are public even on face-down cards.</summary>
@@ -48,6 +56,9 @@ public sealed record MatchViewModel(
         get => Math.Max(_corpDiscardCount, CorpDiscard.Count);
         init => _corpDiscardCount = value;
     }
+
+    /// <summary>CR 1.17.1a: the threat level is the higher of the two scores (Elevation's "Threat X").</summary>
+    public int ThreatLevel => Math.Max(Corp.AgendaPoints, Runner.AgendaPoints);
 
     public CardViewModel? CorpIdentity { get; init; }
     public CardViewModel? RunnerIdentity { get; init; }
@@ -352,8 +363,13 @@ public sealed record CardViewModel(
     /// </summary>
     public string? HostCardId { get; init; }
 
+    /// <summary>EL.4: installed faceup without being rezzed (BANGUN's agendas): public, and its abilities inactive.</summary>
+    public bool IsFaceUpInactive { get; init; }
+
     public string StatusLabel => Rezzed
             ? "REZZED"
+            : IsFaceUpInactive
+                ? "FACEUP · INACTIVE"
             : IsKnown
                 ? "KNOWN"
                 : "FACE-DOWN";
@@ -429,15 +445,22 @@ public sealed record CardCounterViewModel(
         CardCounterPurpose.Virus => "VIRUS",
         CardCounterPurpose.Generic when string.Equals(CounterName, "power", StringComparison.OrdinalIgnoreCase)
             => "POWER",
+        CardCounterPurpose.Generic when string.Equals(CounterName, "agenda", StringComparison.OrdinalIgnoreCase)
+            => "AGENDA",
+        CardCounterPurpose.Generic when string.Equals(CounterName, "flipped", StringComparison.OrdinalIgnoreCase)
+            => "FLIPPED",
         CardCounterPurpose.Generic => "GENERIC",
         _ => "UNKNOWN",
     };
 
     public string ChipText => $"{Label} ×{Count}";
 
-    public string Summary => SpendRestriction is { } restriction
-        ? $"{ChipText} · {restriction.ToString().ToUpperInvariant()}"
-        : ChipText;
+    public string Summary => SpendRestriction switch
+    {
+        HostedCreditSpendRestriction.DeclaredUseOnly => $"{ChipText} · CARD'S OWN USES ONLY",
+        { } restriction => $"{ChipText} · {restriction.ToString().ToUpperInvariant()}",
+        null => ChipText,
+    };
 }
 
 /// <summary>One visible current-turn use of a physical card ability.</summary>
@@ -915,6 +938,10 @@ public static class ObservationViewMapper
             CorpDiscardCount = OptionalMap(publicState, "zoneCounts") is { } zoneCounts
                 ? ReadInt(zoneCounts, "corpDiscard", fallback: 0) : 0,
             RunnerHeap = ReadCards(publicState, "runnerHeap", metadataResolver, abilityCue),
+            HostedFaceUp = ReadCards(publicState, "runnerHostedFaceUp", metadataResolver, abilityCue)
+                .Concat(ReadCards(publicState, "corpHostedFaceUp", metadataResolver, abilityCue)).ToArray(),
+            CorpRemovedFromGame = ReadCards(publicState, "corpRemovedFromGame", metadataResolver, abilityCue),
+            RunnerRemovedFromGame = ReadCards(publicState, "runnerRemovedFromGame", metadataResolver, abilityCue),
             PlayArea = ReadCards(publicState, "corpPlayArea", metadataResolver, abilityCue)
                 .Concat(ReadCards(publicState, "runnerPlayArea", metadataResolver, abilityCue)).ToArray(),
             CorpIdentity = ReadCards(publicState, "corpIdentity", metadataResolver, abilityCue).SingleOrDefault(),
@@ -980,9 +1007,13 @@ public static class ObservationViewMapper
 
         IReadOnlyDictionary<string, object?> turnFacts = RequiredMap(rawFacts, "turnFacts");
         var uses = new List<AbilityUseViewModel>();
-        var keys = new HashSet<(string SourceCardId, string AbilityKey)>();
+        // A Runner card's once-per-turn ability can be used on both players' turns (Madani
+        // installs on the Runner's turn and again on the Corp's), so the same use can appear
+        // in both sides' facts. Each side's list must be unique; across sides it is shown once.
+        var shown = new HashSet<(string SourceCardId, string AbilityKey)>();
         foreach (string side in new[] { "corp", "runner" })
         {
+            var keys = new HashSet<(string SourceCardId, string AbilityKey)>();
             if (!turnFacts.TryGetValue(side, out object? rawSideFacts)
                 || rawSideFacts is null
                 || rawSideFacts is JsonElement { ValueKind: JsonValueKind.Null })
@@ -1031,7 +1062,7 @@ public static class ObservationViewMapper
                         $"Observation field 'turnFacts.{side}.thisTurn.usedAbilityKeys' contains duplicate use '{sourceCardId}/{abilityKey}'.");
                 }
 
-                uses.Add(new AbilityUseViewModel(sourceCardId, abilityKey));
+                if (shown.Add((sourceCardId, abilityKey))) uses.Add(new AbilityUseViewModel(sourceCardId, abilityKey));
             }
         }
 
@@ -1624,7 +1655,13 @@ public static class ObservationViewMapper
             && CardDefinitionId.TryParse(iceDefinition, out CardDefinitionId iceId)
             && behaviorCatalog.TryGetIce(iceId, out IceBehaviorSpec? registeredIce) ? registeredIce : null;
         var breakers = new List<EncounterBreakerViewModel>();
-        foreach (CardViewModel card in ReadCards(publicState, "runnerRig", metadataResolver, abilityCue))
+        CardViewModel[] rigCards = ReadCards(publicState, "runnerRig", metadataResolver, abilityCue);
+        // EL-ICE-GAINS-SUBTYPE: a card installed on the encountered ICE may give it every subtype.
+        bool iceGainsEveryType = encounterIce is not null && rigCards.Any(hosted => hosted.HostCardId == encounterIce.Id
+            && hosted.DefinitionId is { } hostedDefinition
+            && behaviorCatalog.TryGet(new CardDefinitionId(hostedDefinition), out CardBehaviorDefinition? hostedBehavior)
+            && hostedBehavior.Hosting?.HostGainsEveryIceType == true);
+        foreach (CardViewModel card in rigCards)
         {
             if (card.DefinitionId is not { } definitionId
                 || !CardDefinitionId.TryParse(definitionId, out CardDefinitionId parsedDefinition))
@@ -1652,7 +1689,11 @@ public static class ObservationViewMapper
                 spec.BaseStrength,
                 quote.EffectiveValue)
             {
-                CanInterfaceEncounter = iceSpec is not null && IceInterfaceMatcher.Matches(iceSpec, spec),
+                CanInterfaceEncounter = iceSpec is not null && IceInterfaceMatcher.CanInterface(
+                    iceSpec,
+                    iceGainsEveryType,
+                    spec,
+                    card.Subtypes.Select(static subtype => subtype.ToLowerInvariant()).ToArray()),
                 StrengthQuote = quote,
                 StrengthBreakdown = StrengthBreakdownViewModel.From(quote),
                 PumpCost = spec.PumpCost,
@@ -1806,6 +1847,7 @@ public static class ObservationViewMapper
         return mapped with
         {
             HostCardId = ReadNullableString(map, "hostCardId"),
+            IsFaceUpInactive = ReadBool(map, "faceUpInactive", fallback: false),
             TypedCounters = MapCounters(map, id),
             AbilityCue = abilityCue.For(id),
             FirstXUses = abilityCue.FirstXFor(id),

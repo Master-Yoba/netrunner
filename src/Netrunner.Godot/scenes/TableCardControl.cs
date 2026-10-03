@@ -1565,9 +1565,10 @@ public partial class TableCardControl : Control
 		return string.Join(" · ", values);
 	}
 
-	/// <summary>Agendas are never rezzed; they stay face-down until scored.</summary>
+	/// <summary>Agendas are never rezzed; they stay face-down until scored, unless installed faceup and inactive (EL.4).</summary>
 	private static string UnrezzedLabel(CardViewModel card) =>
-		string.Equals(card.Type, "Agenda", StringComparison.OrdinalIgnoreCase) ? "FACE-DOWN" : "UNREZZED";
+		card.IsFaceUpInactive ? "FACEUP · INACTIVE"
+		: string.Equals(card.Type, "Agenda", StringComparison.OrdinalIgnoreCase) ? "FACE-DOWN" : "UNREZZED";
 
 	private static string FormatCounters(CardViewModel card, bool compact = false)
 	{

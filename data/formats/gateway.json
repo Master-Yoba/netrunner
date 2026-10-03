@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "gateway",
+  "name": "System Gateway",
+  "effectiveDate": "2021-03-28",
+  "complete": true,
+  "cardPool": "gateway",
+  "legalPacks": ["sg"],
+  "missingPacks": [],
+  "restriction": null,
+  "deckRules": {
+    "maxCopiesByName": 3,
+    "highValueAgendaLimit": null
+  },
+  "source": {
+    "note": "The System Gateway pool alone, with no ban list: the format every Gateway deck and the frozen M5 benchmarks are played in."
+  }
+}

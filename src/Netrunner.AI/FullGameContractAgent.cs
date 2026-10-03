@@ -270,6 +270,7 @@ public sealed class FullGameContractAgent : IGameAgent
             DecisionKind.TurnDiscard => SelectTurnDiscard(observation.LegalActions),
             DecisionKind.BehaviorChoice => SelectBehaviorChoice(observation),
             DecisionKind.InstallChoice => SelectInstallChoice(observation.LegalActions),
+            DecisionKind.BehaviorInstallChoice => SelectBehaviorInstallChoice(observation.LegalActions),
             DecisionKind.InterruptChoice => SelectInterruptChoice(observation.LegalActions),
             DecisionKind.TriggerChoice => SelectTriggerChoice(observation.LegalActions),
             DecisionKind.IceSubroutineChoice => SelectIceSubroutineChoice(observation),
@@ -361,6 +362,13 @@ public sealed class FullGameContractAgent : IGameAgent
             FullGameActionClass.BehaviorChoice,
             BehaviorOrderKey);
     }
+
+    /// <summary>A card-effect install (Synapse Global, Off the Books): the first offered install, else decline.</summary>
+    private static LegalAction SelectBehaviorInstallChoice(IReadOnlyList<LegalAction> actions) =>
+        actions.FirstOrDefault(static action => action.Kind == ActionKind.InstallCard
+            && action.Parameters is BehaviorInstallChoiceParameters { Choice: not null })
+        ?? actions.First(static action => action.Kind == ActionKind.InstallCard
+            && action.Parameters is BehaviorInstallChoiceParameters);
 
     private static LegalAction SelectInstallChoice(IReadOnlyList<LegalAction> actions)
     {
@@ -1198,19 +1206,19 @@ public sealed class FullGameContractAgent : IGameAgent
         // The dedicated bioroid interface is emitted only in the Runner's
         // encounter paid window. Its payload is intentionally narrower than
         // a generic AbilityActionParameters snapshot: one ICE, one exact
-        // subroutine, one stable ability key, and one lost click. Keep this
-        // validation detached from authoritative state; Core owns whether
-        // those IDs still denote the current encountered/unbroken target.
+        // subroutine, one stable ability key, and one lost click or (EL.6,
+        // N-Pot) a positive credit cost. Keep this validation detached from
+        // authoritative state; Core owns whether those IDs still denote the
+        // current encountered/unbroken target.
         return actionClass == FullGameActionClass.RunWindow
             && bioroid is not null
             && HasStableId(bioroid.IceId.Value)
             && HasStableId(bioroid.SubroutineId.Value)
             && bioroid.SubroutineOrdinal >= 0
             && HasStableId(bioroid.AbilityKey)
+            && EncounteredBioroidAbilitySpec.IsSupportedCost(bioroid.Cost)
             && bioroid.Cost is
             {
-                Kind: BehaviorCostKind.LoseClick,
-                Amount: 1,
                 CounterName: null,
                 AdditionalKey: null,
                 AdditionalTarget: null,
@@ -1346,9 +1354,10 @@ public sealed class FullGameContractAgent : IGameAgent
 
         return activation switch
         {
+            // One click cost of one or more clicks (Elevation's multi-click actions).
             BehaviorAbilityActivation.ClickAction =>
                 clickCostCount == 1
-                && costs.Single(static cost => cost.Kind == BehaviorCostKind.Clicks).Amount == 1
+                && costs.Single(static cost => cost.Kind == BehaviorCostKind.Clicks).Amount >= 1
                 && !hasLoseClickCost,
             BehaviorAbilityActivation.PaidAbility => clickCostCount == 0,
             _ => false,

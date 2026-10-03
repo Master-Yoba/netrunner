@@ -19,9 +19,10 @@ public sealed class FullMatchDefinition
     public IRuntimeCardCatalog Runtime { get; }
     public ICardMetadataResolver Metadata { get; }
 
-    public static FullMatchDefinition FromRequest(MatchRequest request, CardDataSet data, IBehaviorCatalog behavior)
+    public static FullMatchDefinition FromRequest(MatchRequest request, CardDataSet data, IBehaviorCatalog behavior,
+        OfficialPresetCatalog? officialPresets = null)
     {
-        MatchRequestComposer.ValidateUserFacing(request, data, behaviorCatalog: behavior);
+        MatchRequestComposer.ValidateUserFacing(request, data, officialPresets, behaviorCatalog: behavior);
         return new FullMatchDefinition(request, data, behavior);
     }
 

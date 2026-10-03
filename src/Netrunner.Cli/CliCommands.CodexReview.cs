@@ -171,6 +171,10 @@ public static partial class CliCommands
         rules rather than guess, check the board in positions.txt before you report a finding, and check any run or
         access your claim relies on in history.txt.
 
+        Report gameplay bugs too, with the category "engine-bug": anything the game did that the card texts or the
+        rules don't allow (an effect missing, wrong, or applied twice; an option offered that shouldn't be, or missing).
+        Check every Elevation card (code 35xxx) played in this game against its printed text in cards.txt.
+
         {{LlmGameReviewer.Knowledge}}
 
         Your final answer is the findings object the output schema describes. "sequence" is the decision's number

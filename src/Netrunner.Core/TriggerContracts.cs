@@ -36,6 +36,46 @@ public enum OccurrenceKind
     CardAdvancedFromZero,
     AccessedCardTrashed,
     DiscardPhaseEnded,
+
+    /// <summary>
+    /// Never dispatched: a trigger declared with this occurrence is a keyed
+    /// instruction list resolved as an ICE subroutine
+    /// (<see cref="BehaviorSubroutineSpec"/>), with the ICE as its source.
+    /// </summary>
+    IceSubroutine,
+
+    /// <summary>EL-ACTION-PHASE-END: the active player's action phase ended.</summary>
+    ActionPhaseEnded,
+
+    /// <summary>A run began (after its initiation), on the attacked server.</summary>
+    RunBegan,
+
+    /// <summary>EL-FORFEIT: an agenda was forfeited; the subject is the agenda.</summary>
+    AgendaForfeited,
+
+    /// <summary>EL-TAG-REMOVED: the first time this turn one of the Runner's tags was removed.</summary>
+    FirstTagRemovalThisTurn,
+
+    /// <summary>
+    /// The first time this turn the Corp gained credits through an ability on
+    /// an agenda or operation; the subject is that card.
+    /// </summary>
+    FirstCardCreditGainThisTurn,
+
+    /// <summary>The first time this turn the Corp played an operation; the subject is the operation.</summary>
+    FirstOperationPlayedThisTurn,
+
+    /// <summary>A side did damage (the controller is the side whose effect did it).</summary>
+    DamageDone,
+
+    /// <summary>A side trashed one or more cards from HQ (the controller is the side that trashed them).</summary>
+    CardsTrashedFromHq,
+
+    /// <summary>EL-HAND-SIZE-DISCARD: the active player discarded cards to reach maximum hand size.</summary>
+    HandSizeDiscarded,
+
+    /// <summary>EL-ICE-APPROACHED: the Runner approaches a piece of ICE (Mitra Aman); the subject is that ICE.</summary>
+    IceApproached,
 }
 
 public enum OccurrencePhase
@@ -186,7 +226,7 @@ public sealed record OccurrenceSnapshot
         RemoveLingeringEffect value => new RemoveLingeringEffect(value.EffectId),
         MoveCardEffect value => new MoveCardEffect(value.CardId, value.DestinationZoneId),
         TurnBoundaryEffect value => new TurnBoundaryEffect(value.Kind, value.Target, value.TurnNumber),
-        GameplayOccurrenceEffect value => new GameplayOccurrenceEffect(value.Kind, value.Controller, value.SubjectCardId, value.ServerId, value.Successful, value.RunContext),
+        GameplayOccurrenceEffect value => new GameplayOccurrenceEffect(value.Kind, value.Controller, value.SubjectCardId, value.ServerId, value.Successful, value.RunContext, value.SubjectWasRezzed),
         BasicDrawEffect value => new BasicDrawEffect(value.Side, value.DrawCount, value.IsReplacement, value.OccurrenceId, value.IsFirstBasicDraw),
         _ => throw new ArgumentException($"Unknown effect instruction type '{effect.GetType().Name}'.", nameof(effect)),
     };

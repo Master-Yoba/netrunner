@@ -5,6 +5,10 @@ namespace Netrunner.Match;
 public sealed record SoloSaveReceipt(SoloSavePreview Preview, long ActionCount);
 public sealed record LoadedSoloSession(MatchCoordinator Coordinator, SoloSavePreview Preview);
 
+/// <summary>What a saved game of one format loads with: its catalogs and its match composer.</summary>
+public sealed record SoloSaveContent(IBehaviorCatalog Behavior, IRuntimeCardCatalog Runtime,
+    Func<MatchRequest, FullMatchDefinition> Compose);
+
 /// <summary>
 /// Client persistence facade. Private payloads never cross the presentation API.
 /// All writes share one queue; switching sessions invalidates pending automatic captures.
@@ -13,7 +17,7 @@ public sealed class SoloSessionService : IAsyncDisposable
 {
     public const string AutoSaveId = "00000000000000000000000000000001";
     private readonly SoloSaveStore _store;
-    private readonly Func<MatchRequest, FullMatchDefinition> _compose;
+    private readonly Func<string?, SoloSaveContent> _content;
     private readonly SemaphoreSlim _writes = new(1, 1);
     private readonly object _gate = new();
     private MatchCoordinator? _active;
@@ -27,9 +31,20 @@ public sealed class SoloSessionService : IAsyncDisposable
 
     public SoloSessionService(IBehaviorCatalog behavior, IRuntimeCardCatalog runtime,
         Func<MatchRequest, FullMatchDefinition> compose, string? directory = null)
+        : this(_ => new SoloSaveContent(behavior, runtime, compose), directory)
     {
-        _store = new(behavior, runtime, directory);
-        _compose = compose;
+    }
+
+    /// <summary>A service whose saves load with the content of the format each records (D-EL-8).</summary>
+    public SoloSessionService(Func<string?, SoloSaveContent> content, string? directory = null)
+    {
+        ArgumentNullException.ThrowIfNull(content);
+        _store = new(format =>
+        {
+            SoloSaveContent loaded = content(format);
+            return (loaded.Behavior, loaded.Runtime);
+        }, directory);
+        _content = content;
     }
 
     public string DirectoryPath => _store.DirectoryPath;
@@ -53,7 +68,7 @@ public sealed class SoloSessionService : IAsyncDisposable
         string? traceDirectory = null, bool enableDeveloperTools = false, CancellationToken cancellationToken = default)
     {
         SoloSaveDocument document = await _store.LoadAsync(saveId, backup, cancellationToken).ConfigureAwait(false);
-        MatchCoordinator coordinator = await Task.Run(() => new MatchCoordinator(_compose(document.Payload.Request), document,
+        MatchCoordinator coordinator = await Task.Run(() => new MatchCoordinator(_content(document.Metadata.FormatId).Compose(document.Payload.Request), document,
             new MatchCoordinatorOptions
             {
                 HumanSide = document.Metadata.HumanSide,
@@ -194,7 +209,8 @@ public sealed class SoloSessionService : IAsyncDisposable
     }
 
     private static SoloSaveDocument AsAutoSave(SoloSaveDocument document) => SoloSaveDocument.Create(
-        SoloSaveDocument.NewMetadata("Automatic save", document.Metadata.HumanSide, AutoSaveId), document.Payload);
+        SoloSaveDocument.NewMetadata("Automatic save", document.Metadata.HumanSide, AutoSaveId,
+            formatId: document.Metadata.FormatId), document.Payload);
 
     private async Task WriteAutoSaveAsync(SoloSaveDocument document, long generation, CancellationToken cancellationToken = default)
     {

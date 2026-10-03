@@ -7,6 +7,9 @@ public interface ICardEvaluationCatalog
     string Fingerprint { get; }
     IReadOnlyCollection<CardDefinitionId> DefinitionIds { get; }
     bool TryGet(CardDefinitionId definitionId, out CardEvaluationDescriptor descriptor);
+
+    /// <summary>A7: the behavior-registry version of the pool these cards play in, where the catalog knows it.</summary>
+    string? BehaviorVersion => null;
 }
 
 /// <summary>

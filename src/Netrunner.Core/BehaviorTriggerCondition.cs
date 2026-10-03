@@ -6,4 +6,19 @@ public enum BehaviorTriggerCondition
     FacedownArchives,
     FirstRunnerTag,
     HqOrRdRun,
+
+    /// <summary>EL-FACEUP-AGENDA: the occurrence's subject is an installed card that is faceup (BANGUN).</summary>
+    FaceUpInstalledSubject,
+
+    /// <summary>EL-HOSTED-FACEUP: the occurrence's subject was installed this turn without spending credits (Bling).</summary>
+    SubjectInstalledWithoutCredits,
+
+    /// <summary>EL-SUBROUTINE-RESOLVED-FACT: a subroutine resolved during the live run (Ryō "Phoenix" Ōno).</summary>
+    SubroutineResolvedThisRun,
+
+    /// <summary>
+    /// The accessed card the Runner trashed was installed, by last-known
+    /// information: its server is recorded (Aggressive Trendsetting).
+    /// </summary>
+    TrashedSubjectWasInstalled,
 }

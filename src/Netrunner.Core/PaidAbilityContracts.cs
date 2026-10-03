@@ -116,7 +116,9 @@ public sealed class BehaviorPaidAbility : IEquatable<BehaviorPaidAbility>
         IReadOnlyList<BehaviorCondition> conditions,
         IReadOnlyList<BehaviorTarget> targets,
         IReadOnlyList<BehaviorInstruction> instructions,
-        BehaviorAbilityUsageLimit usageLimit)
+        BehaviorAbilityUsageLimit usageLimit,
+        bool usableFromRunnerScoreArea = false,
+        bool usableFromArchives = false)
     {
         if (!StableIdentifier.TryValidate(key))
         {
@@ -144,6 +146,8 @@ public sealed class BehaviorPaidAbility : IEquatable<BehaviorPaidAbility>
         Timing = timing;
         Activation = activation;
         UsageLimit = usageLimit;
+        UsableFromRunnerScoreArea = usableFromRunnerScoreArea;
+        UsableFromArchives = usableFromArchives;
         Costs = Freeze(costs, nameof(costs));
         Conditions = Freeze(conditions, nameof(conditions));
         Targets = Freeze(targets, nameof(targets));
@@ -192,12 +196,27 @@ public sealed class BehaviorPaidAbility : IEquatable<BehaviorPaidAbility>
     [JsonRequired]
     public IReadOnlyList<BehaviorInstruction> Instructions { get; private set; }
 
+    /// <summary>
+    /// EL-SCORE-AREA-ABILITY: the Corp can use this agenda ability even while
+    /// the agenda is in the Runner's score area.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool UsableFromRunnerScoreArea { get; private set; }
+
+    /// <summary>EL-PLAY-FROM-ARCHIVES: the Corp can use this ability while the card is in Archives (Petty Cash).</summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool UsableFromArchives { get; private set; }
+
     public bool Equals(BehaviorPaidAbility? other) =>
         other is not null
         && string.Equals(Key, other.Key, StringComparison.Ordinal)
         && Timing == other.Timing
         && Activation == other.Activation
         && UsageLimit == other.UsageLimit
+        && UsableFromRunnerScoreArea == other.UsableFromRunnerScoreArea
+        && UsableFromArchives == other.UsableFromArchives
         && SequenceEquals(Costs, other.Costs)
         && SequenceEquals(Conditions, other.Conditions)
         && SequenceEquals(Targets, other.Targets)
@@ -233,12 +252,14 @@ public sealed class BehaviorPaidAbility : IEquatable<BehaviorPaidAbility>
                     nameof(Timing));
             }
 
+            // CR 9.5: a click action may cost several clicks ("[click][click][click]"),
+            // declared as one Click cost carrying the count.
             if (Costs.Count(static cost => cost.Kind == BehaviorCostKind.Clicks) != 1
-                || Costs.Single(static cost => cost.Kind == BehaviorCostKind.Clicks).Amount != 1
+                || Costs.Single(static cost => cost.Kind == BehaviorCostKind.Clicks).Amount < 1
                 || hasLoseClickCost)
             {
                 throw new ArgumentException(
-                    "A click action requires exactly one Click cost of one click and may not use LoseClick.",
+                    "A click action requires exactly one Click cost and may not use LoseClick.",
                     nameof(Costs));
             }
         }

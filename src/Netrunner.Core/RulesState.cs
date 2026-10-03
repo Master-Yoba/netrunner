@@ -40,6 +40,13 @@ public enum HostedCreditSpendRestriction
     AbilityCost,
     RunCost,
     AnyCost,
+
+    /// <summary>
+    /// Spendable only for the uses its card declares
+    /// (<see cref="CardBehaviorDefinition.HostedCreditUses"/>): recurring
+    /// credits for trash costs, credits to install job resources, and so on.
+    /// </summary>
+    DeclaredUseOnly,
 }
 
 /// <summary>

@@ -61,6 +61,21 @@ public static partial class GameEngine
             history.RecordAccess(turn.ActiveSide, cardId));
     }
 
+    /// <summary>EL-HOSTED-FACEUP: remembers an install that spent no credits, for "install a card without spending credits".</summary>
+    private static void RecordFreeInstall(WorkingState working, CardInstanceId cardId, int creditsSpent)
+    {
+        TurnState turn = working.Turn;
+        if (creditsSpent != 0
+            || !working.BehaviorCatalog.TracksTurnEvents
+            || turn.History?.ThisTurn(turn.ActiveSide) is null)
+        {
+            return;
+        }
+
+        ReplaceTurn(working, turn.ActiveSide, turn.Phase, turn.TurnNumber, turn.Step,
+            turn.History.WithFreeInstall(turn.ActiveSide, cardId));
+    }
+
     private static void RecordTurnTrash(WorkingState working, CardInstanceId cardId)
     {
         TurnState turn = working.Turn;
@@ -381,5 +396,75 @@ public static partial class GameEngine
             turn.TurnNumber,
             turn.Step,
             history.RecordTagChange(turn.ActiveSide, affectedPlayerId, delta));
+    }
+
+    /// <summary>
+    /// Records a typed turn event for a side whose current turn facts exist.
+    /// States without current facts (fixtures, setup) are left unchanged.
+    /// </summary>
+    private static void RecordTurnEvent(WorkingState working, PlayerSide side, TurnEventKind kind)
+    {
+        TurnState turn = working.Turn;
+        if (!working.BehaviorCatalog.TracksTurnEvents || turn.History?.ThisTurn(side) is null)
+        {
+            return;
+        }
+
+        ReplaceTurn(working, turn.ActiveSide, turn.Phase, turn.TurnNumber, turn.Step,
+            turn.History.RecordEvent(side, kind));
+    }
+
+    /// <summary>
+    /// CR 5.4: a click action taken at the action stage starts an action. The
+    /// count, less any action still resolving, is how many actions the player
+    /// has finished this turn.
+    /// </summary>
+    private static void RecordActionStarted(WorkingState working, LegalAction action)
+    {
+        if (working.ResolutionStack.Count == 0
+            || working.ResolutionStack[^1] is not TurnFrame { Stage: TurnFrameStage.AwaitingAction } frame)
+        {
+            return;
+        }
+
+        bool isAction = action.Kind switch
+        {
+            ActionKind.GainCredit
+                or ActionKind.DrawCard
+                or ActionKind.InstallCard
+                or ActionKind.PlayCard
+                or ActionKind.StartRun
+                or ActionKind.AdvanceCard
+                or ActionKind.RemoveTag
+                or ActionKind.TrashTaggedResource
+                or ActionKind.PurgeVirusCounters => true,
+            ActionKind.UseAbility => action.Parameters is AbilityActionParameters
+            {
+                Activation: BehaviorAbilityActivation.ClickAction,
+            },
+            _ => false,
+        };
+        if (isAction)
+        {
+            RecordTurnEvent(working, frame.ActiveSide, TurnEventKind.ActionStarted);
+            working.ActionJustStarted = true;
+        }
+    }
+
+    /// <summary>
+    /// Whether the active player has finished an action this turn: actions
+    /// started, less one still resolving under the action stage.
+    /// </summary>
+    private static bool HasFinishedActionThisTurn(WorkingState working)
+    {
+        PlayerSide side = working.Turn.ActiveSide;
+        int started = working.Turn.History?.ThisTurn(side)?.EventCount(TurnEventKind.ActionStarted) ?? 0;
+        // An action is in progress while its frames sit above the turn frame;
+        // a turn frame on top awaiting an action is choosing the next one.
+        bool inProgress = working.ActionJustStarted
+            || working.ResolutionStack.Count > 1
+            && working.ResolutionStack.Take(working.ResolutionStack.Count - 1)
+                .Any(static frame => frame is TurnFrame { Stage: TurnFrameStage.AwaitingAction });
+        return started - (inProgress ? 1 : 0) > 0;
     }
 }

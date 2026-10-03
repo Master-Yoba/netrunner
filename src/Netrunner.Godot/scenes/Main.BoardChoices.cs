@@ -595,6 +595,7 @@ public partial class Main
 
 	private static bool IsBoardPlayFollowUpDecision(DecisionKind kind) => kind is
 		DecisionKind.InstallChoice
+		or DecisionKind.BehaviorInstallChoice
 		or DecisionKind.MemoryCleanup
 		or DecisionKind.ChooseCard
 		or DecisionKind.ChooseNumber
@@ -774,7 +775,7 @@ public partial class Main
 
 	private static string BoardChoiceFollowUpTitle(DecisionKind kind) => kind switch
 	{
-		DecisionKind.InstallChoice => "Install resolution",
+		DecisionKind.InstallChoice or DecisionKind.BehaviorInstallChoice => "Install resolution",
 		DecisionKind.MemoryCleanup => "Memory cleanup",
 		_ => "Card resolution",
 	};

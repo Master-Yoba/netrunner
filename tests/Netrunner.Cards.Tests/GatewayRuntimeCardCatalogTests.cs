@@ -283,11 +283,23 @@ public sealed class GatewayRuntimeCardCatalogTests
     }
 
     [Fact]
+    public void AnXPlayCostCompilesToZeroAndTheBehaviorChargesX()
+    {
+        // Elevation's IP Enforcement prints a cost of X, null upstream.
+        RuntimeCardCatalog catalog = GatewayRuntimeCardCatalog.Create(BuildData(
+            [Card("x-cost", "X Cost", "corp", "nbn", "operation", trashCost: 5)]));
+
+        CardRuntimeSpec spec = catalog.GetSpec(new CardDefinitionId("x-cost"));
+        Assert.Equal(0, spec.PlayCost);
+        Assert.Equal(5, spec.TrashCost);
+    }
+
+    [Fact]
     public void MissingOrForbiddenMappedFieldsFailWithTheCardCode()
     {
         AssertCardFailure(
             BuildData(
-            [Card("missing-cost", "Missing Cost", "runner", "shaper", "event")]),
+            [Card("missing-cost", "Missing Cost", "runner", "shaper", "resource")]),
             "missing-cost");
         AssertCardFailure(
             BuildData(
