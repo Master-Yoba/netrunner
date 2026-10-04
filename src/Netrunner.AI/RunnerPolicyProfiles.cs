@@ -145,7 +145,9 @@ public static class RunnerPolicyProfiles
             || configuration.Parameters.Any(pair => pair.Key switch
             {
                 "inference-scale" => pair.Value is < 0 or > 200,
-                "plan-samples" or "plan-width" or "run-samples" or "run-width" => pair.Value is < 0 or > 16,
+                // Bot plan S0.3: the budget-scaling entrants plan up to 16 times Hard's samples.
+                "plan-samples" => pair.Value is < 0 or > 64,
+                "plan-width" or "run-samples" or "run-width" => pair.Value is < 0 or > 16,
                 "plan-weight" => pair.Value is < 25 or > 400,
                 "plan-model" => pair.Value is < 0 or > 1,
                 "plan-tracker" => pair.Value is < 0 or > 3,

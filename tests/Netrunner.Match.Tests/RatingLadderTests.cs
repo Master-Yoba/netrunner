@@ -8,6 +8,24 @@ namespace Netrunner.Match.Tests;
 public sealed class RatingLadderTests
 {
     [Fact]
+    public void BudgetScalingEntrantsPlanAMultipleOfHardsSamples()
+    {
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
+        FullMatchDefinition definition = RulesFuzzRunner.CreateDefinition(RulesFuzzRunner.GatewayElevationContentIds[0], 5);
+        foreach (PlayerSide side in new[] { PlayerSide.Corp, PlayerSide.Runner })
+        {
+            var hard = (OfflineAgent)RatingLadder.CreateAgent("hard", side, definition);
+            foreach (int multiple in new[] { 1, 2, 4, 8, 16 })
+            {
+                var scaled = (OfflineAgent)RatingLadder.CreateAgent($"standard-x{multiple}", side, definition);
+                Assert.Equal(hard.Configuration.Parameters["plan-samples"] * multiple, scaled.Configuration.Parameters["plan-samples"]);
+                Assert.Equal(hard.Configuration.Parameters.Remove("plan-samples"), scaled.Configuration.Parameters.Remove("plan-samples"));
+                Assert.Equal(hard.Checkpoint.Knowledge.OpponentList, scaled.Checkpoint.Knowledge.OpponentList);
+            }
+        }
+    }
+
+    [Fact]
     public void PlanPairsEveryEntrantInEachSeatOnSharedSeeds()
     {
         IReadOnlyList<LadderGame> games = RatingLadder.Plan(["random", "standard"], 3, 9, RulesFuzzRunner.OfficialContentIds);

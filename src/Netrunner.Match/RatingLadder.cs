@@ -1,3 +1,4 @@
+using System.Globalization;
 using Netrunner.AI;
 using Netrunner.Cards;
 using Netrunner.Core;
@@ -51,7 +52,7 @@ public static partial class RatingLadder
     /// in its own seat, and "hard".
     /// </summary>
     public static IReadOnlyList<string> EntrantOrder { get; } =
-        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard-w3", "standard-c1", "standard-r22", "standard-c26", "standard-r23", "standard-c27", "standard-r24", "standard-c28", "standard-r25", "standard-c29", "standard", "standard-plan", "standard-plan-fit", "standard-run", "standard-rez", "standard-w4a", "standard-w4b", "standard-arch", "standard-rarch", "standard-rgen", "standard-w4c", "standard-c13", "standard-w4d", "standard-c14", "standard-c15", "standard-c16", "standard-r13", "standard-c17", "standard-c18", "standard-c19", "standard-r14", "standard-c20", "standard-r15", "standard-c21", "standard-r16", "standard-c22", "standard-b3", "standard-c23", "standard-r17", "standard-r18", "standard-c24", "standard-r19", "standard-w5", "standard-r21", "hard-r21", "hard-a9c", "hard-a9d", "hard-a9d-list", "hard-a9d-pins", "glacier", "rush", "asset-spam", "aggressive", "rig-builder", "hard", "hard-wide", "hard-weight", "hard-rez", "hard-model"];
+        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard-w3", "standard-c1", "standard-r22", "standard-c26", "standard-r23", "standard-c27", "standard-r24", "standard-c28", "standard-r25", "standard-c29", "standard", "standard-plan", "standard-plan-fit", "standard-run", "standard-rez", "standard-w4a", "standard-w4b", "standard-arch", "standard-rarch", "standard-rgen", "standard-w4c", "standard-c13", "standard-w4d", "standard-c14", "standard-c15", "standard-c16", "standard-r13", "standard-c17", "standard-c18", "standard-c19", "standard-r14", "standard-c20", "standard-r15", "standard-c21", "standard-r16", "standard-c22", "standard-b3", "standard-c23", "standard-r17", "standard-r18", "standard-c24", "standard-r19", "standard-w5", "standard-r21", "hard-r21", "hard-a9c", "hard-a9d", "hard-a9d-list", "hard-a9d-pins", "glacier", "rush", "asset-spam", "aggressive", "rig-builder", "hard", "hard-wide", "hard-weight", "hard-rez", "hard-model", "standard-x1", "standard-x2", "standard-x4", "standard-x8", "standard-x16"];
 
     private const double EloScale = 400 / 2.302585092994046;
     private const double Ridge = 0.01;
@@ -102,6 +103,11 @@ public static partial class RatingLadder
             "hard-rez" => Tuned(OfflineMatchFactory.CreateOpponent(definition, other, "hard"), definition,
                 ("run-samples", RunnerPolicyProfiles.RunSamples), ("run-width", 2)),
             "hard-model" => Tuned(OfflineMatchFactory.CreateOpponent(definition, other, "hard"), definition, ("plan-model", 1)),
+            // Bot plan S0.3, diagnostics: Hard's planner at 1, 2, 4, 8 and 16 times its samples, on its own leaf. Strength
+            // that doesn't grow with the samples means the leaf carries no signal.
+            "standard-x1" or "standard-x2" or "standard-x4" or "standard-x8" or "standard-x16" =>
+                Scaled(OfflineMatchFactory.CreateOpponent(definition, other, "hard"), definition, int.Parse(entrant["standard-x".Length..],
+                    CultureInfo.InvariantCulture)),
             // A6 personalities: Standard with the style in its own seat, plain Standard in the other.
             "glacier" or "rush" or "asset-spam" or "aggressive" or "rig-builder" => OfflineMatchFactory.CreateOpponent(definition, other, "standard", null,
                 AgentPersonalities.Keys[entrant] is var personality && AgentPersonalities.Side(personality) == side ? personality : AgentPersonality.Balanced),
@@ -269,6 +275,10 @@ public static partial class RatingLadder
             current.FeatureVersion);
         return new OfflineAgent(configuration, OfflinePolicies.Create(configuration), new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior));
     }
+
+    /// <summary>The same agent planning <paramref name="multiple"/> times its samples (bot plan S0.3).</summary>
+    private static OfflineAgent Scaled(OfflineAgent agent, FullMatchDefinition definition, int multiple) => Tuned(agent, definition,
+        ("plan-samples", agent.Configuration.Parameters["plan-samples"] * multiple));
 
     /// <summary>The same agent with planner settings added or replaced.</summary>
     private static OfflineAgent Tuned(OfflineAgent agent, FullMatchDefinition definition, params (string Key, int Value)[] settings)
