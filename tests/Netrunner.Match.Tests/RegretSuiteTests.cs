@@ -1,0 +1,107 @@
+using Netrunner.AI;
+using Netrunner.Cards;
+using Netrunner.Core;
+using Netrunner.Match.Regret;
+using Xunit;
+
+namespace Netrunner.Match.Tests;
+
+/// <summary>Bot plan S1: the regret suite's games, roots, teacher and report.</summary>
+public sealed class RegretSuiteTests
+{
+    private const string Fixture = "strategy1-petty-cash";
+    private const long CorpTurn = 101;
+
+    [Fact]
+    public void ASavedGameRoundTripsThroughItsCompactForm()
+    {
+        if (!Official) return;
+        (LadderSavedGame saved, FullMatchDefinition definition) = Saved();
+        RegretGame game = RegretGames.FromSaved(saved, definition, "train", "test");
+
+        Assert.Equal(saved.Replay.ExpectedFinalStateHash, game.FinalStateHash);
+        Assert.Equal(saved.Replay.Actions.Count, game.Choices.Length);
+        RegretPosition[] positions = [.. RegretGames.Positions(game, RegretGames.Definition(game))];
+        Assert.Equal(saved.Replay.Actions.Select(action => action.Sequence), positions.Select(position => position.Sequence));
+        Assert.Equal(saved.Replay.Actions.Select(action => action.Submission.ActionId),
+            positions.Select(position => position.State.PendingDecision!.LegalActions[position.Choice].Id));
+    }
+
+    [Fact]
+    public void GroupsPartitionTheLegalActionsAndJoinOnlyTheSameChoice()
+    {
+        if (!Official) return;
+        (LadderSavedGame saved, FullMatchDefinition definition) = Saved();
+        foreach (RegretPosition position in SavedDecision.Positions(saved.Replay, definition).Where(position => position.Sequence % 7 == 0))
+        {
+            PendingDecision pending = position.State.PendingDecision!;
+            IReadOnlyList<RegretCandidate> groups = RegretRoots.Group(position.State, pending);
+            Assert.Equal(pending.LegalActions.Select(action => action.Id.Value).Order(StringComparer.Ordinal),
+                groups.SelectMany(group => group.ActionIds).Order(StringComparer.Ordinal));
+            foreach (RegretCandidate group in groups)
+                Assert.Single(group.ActionIds.Select(id => pending.LegalActions.Single(action => action.Id.Value == id).Kind).Distinct());
+        }
+    }
+
+    [Fact]
+    public void TheTeacherGivesHiddenStateTwinsTheSameLabelsAndRepeatsItself()
+    {
+        if (!Official) return;
+        (LadderSavedGame saved, FullMatchDefinition definition) = Saved();
+        OfflineAgent teacher = (OfflineAgent)RatingLadder.CreateAgent("hard", PlayerSide.Corp, definition);
+        GameState? root = null;
+        foreach (RegretPosition position in SavedDecision.Positions(saved.Replay, definition))
+        {
+            AgentLifecycleHost.Observe(teacher, position.State, definition.Behavior);
+            if (position.Sequence == CorpTurn) { root = position.State; break; }
+        }
+        GameState state = root ?? throw new InvalidOperationException("The fixture has no root.");
+        GameState twin = TurnPlannerTests.SwapTwoHiddenCards(state, PlayerSide.Runner)
+            ?? throw new InvalidOperationException("The fixture's Runner has no two different hidden cards.");
+        ActionId[] candidates = [.. state.PendingDecision!.LegalActions.Take(3).Select(action => action.Id)];
+        var settings = new TeacherSettings(Samples: 2, Seed: 7, HorizonTurns: 1);
+
+        IReadOnlyList<TeacherValue> real = RolloutTeacher.Evaluate(teacher,
+            ObservationBuilder.Build(state, PlayerSide.Corp, definition.Behavior, definition.Runtime), candidates, settings);
+        IReadOnlyList<TeacherValue> twinned = RolloutTeacher.Evaluate(teacher,
+            ObservationBuilder.Build(twin, PlayerSide.Corp, definition.Behavior, definition.Runtime), candidates, settings);
+        IReadOnlyList<TeacherValue> again = RolloutTeacher.Evaluate(teacher,
+            ObservationBuilder.Build(state, PlayerSide.Corp, definition.Behavior, definition.Runtime), candidates, settings);
+
+        Assert.Equal(real, twinned);
+        Assert.Equal(real, again);
+        Assert.All(real, value => Assert.Equal(2, value.PlayOuts));
+        Assert.All(real, value => Assert.InRange(value.Mean, 0, 1));
+    }
+
+    [Fact]
+    public void TheReportRanksVersionsOnTheSameRootsAndMeasuresItsNoise()
+    {
+        RegretChoice Choice(string root, double regret) =>
+            new(root, PlayerSide.Runner, RegretRoots.TurnKind, "held-out", "g", "", "", regret, regret == 0, regret < 0.05);
+        RegretChoice[] better = [.. Enumerable.Range(0, 200).Select(index => Choice($"r{index}", index % 4 == 0 ? 0.1 : 0))];
+        RegretChoice[] worse = [.. Enumerable.Range(0, 200).Select(index => Choice($"r{index}", index % 4 == 0 ? 0.2 : 0.05))];
+
+        RegretSummary summary = RegretReport.Summarize("all", better);
+        RegretComparison comparison = RegretReport.Compare("worse", worse, "better", better);
+
+        Assert.Equal(0.025, summary.MeanRegret, 6);
+        Assert.Equal(0.75, summary.Agreement, 6);
+        Assert.InRange(summary.MeanRegret, summary.Lower, summary.Upper);
+        Assert.Equal(summary, RegretReport.Summarize("all", better));
+        Assert.True(comparison.Separated);
+        Assert.Equal(0.0625, comparison.MeanDifference, 6);
+
+        RegretLabel Label(string root, string best) => new(root, 8, 4, 4, 1,
+            [new RegretValue("a", best == "a" ? 0.6 : 0.4, 0.1, 8), new RegretValue("b", best == "b" ? 0.6 : 0.4, 0.1, 8)]);
+        RegretNoise noise = RegretReport.Noise([Label("x", "a"), Label("y", "a")], [Label("x", "a"), Label("y", "b")]);
+        Assert.Equal(2, noise.Roots);
+        Assert.Equal(0.5, noise.BestDisagreement, 6);
+        Assert.Equal(0.1, noise.MedianStandardError, 6);
+    }
+
+    private static bool Official => CardDataResource.EmbeddedMode == CardDataResource.OfficialMode;
+
+    private static (LadderSavedGame Saved, FullMatchDefinition Definition) Saved() => Assert.Single(LadderGameArchive.Read(
+        Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "Fixtures", "saved-games", Fixture)));
+}

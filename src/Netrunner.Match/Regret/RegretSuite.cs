@@ -141,6 +141,22 @@ public static class RegretGames
         return DeterministicHash.ForState(state);
     }
 
+    /// <summary>Every decision of a game, before it is applied.</summary>
+    public static IEnumerable<RegretPosition> Positions(RegretGame game, FullMatchDefinition definition)
+    {
+        ArgumentNullException.ThrowIfNull(game);
+        ArgumentNullException.ThrowIfNull(definition);
+        GameState state = definition.Start().State;
+        foreach (int choice in game.Choices)
+        {
+            PendingDecision pending = state.PendingDecision ?? throw new InvalidDataException($"'{game.Id}' runs past its game's end.");
+            yield return new RegretPosition(state, state.ActionSequence + 1, choice);
+            ApplyResult result = GameEngine.Apply(state, new ActionSubmission(pending.Owner, pending.Id, pending.Revision, pending.LegalActions[choice].Id),
+                definition.Behavior, definition.Runtime);
+            state = result.Accepted ? result.State : throw new InvalidDataException($"'{game.Id}' was rejected at {state.ActionSequence + 1}.");
+        }
+    }
+
     /// <summary>The deal's definition.</summary>
     public static FullMatchDefinition Definition(RegretGame game) => RulesFuzzRunner.CreateDefinition(game.ContentId, game.GameSeed);
 

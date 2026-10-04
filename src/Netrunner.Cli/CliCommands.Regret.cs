@@ -31,6 +31,7 @@ public static partial class CliCommands
                 "roots" => RegretRootsCommand(args[2], options, output, error),
                 "label" => RegretLabelCommand(args[2], options, output, error),
                 "score" => RegretScoreCommand(args[2], options, output),
+                "findings" => RegretFindingsCommand(args[2], options, output),
                 _ => throw new ArgumentException($"Unknown ai-regret command '{args[1]}'."),
             };
         }
@@ -43,7 +44,7 @@ public static partial class CliCommands
 
     private sealed record RegretOptions(string? Output, int TurnRoots, int RunRoots, int Labelled, ulong Seed, int Workers, int Samples,
         int HorizonTurns, int Evaluation, string LabelsFile, int Repeat, ulong RepeatSeed, string[] Versions, string Profile, string Split,
-        int Blunders, int Bootstrap, bool Json)
+        int Blunders, int Bootstrap, bool Json, bool Missing = false, string? Manifest = null, string? Fixtures = null, string? Content = null)
     {
         public static RegretOptions Parse(string[] args)
         {
@@ -68,11 +69,18 @@ public static partial class CliCommands
                     "--repeat-seed" => options with { RepeatSeed = ulong.Parse(Next(), NumberStyles.None, CultureInfo.InvariantCulture) },
                     "--version" => options with { Versions = Next().Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) },
                     "--profile" => options with { Profile = Next() },
-                    "--split" => options with { Split = Next() is var split && split is "all" or "held-out" or "train" ? split
-                        : throw new ArgumentException("--split requires all, held-out or train.") },
+                    "--split" => options with
+                    {
+                        Split = Next() is var split && split is "all" or "held-out" or "train" ? split
+                        : throw new ArgumentException("--split requires all, held-out or train.")
+                    },
                     "--blunders" => options with { Blunders = Int("--blunders", 0, 10_000) },
                     "--bootstrap" => options with { Bootstrap = Int("--bootstrap", 0, 100_000) },
                     "--json" => options with { Json = true },
+                    "--missing" => options with { Missing = true },
+                    "--manifest" => options with { Manifest = Next() },
+                    "--fixtures" => options with { Fixtures = Next() },
+                    "--content" => options with { Content = Next() },
                     _ => throw new ArgumentException($"Unsupported ai-regret argument '{args[index]}'."),
                 };
             }
@@ -117,8 +125,12 @@ public static partial class CliCommands
                 $"ai-regret noise roots={noise.Roots} best-disagreement={noise.BestDisagreement:F3} median-se={noise.MedianStandardError:F3} seconds={started.Elapsed.TotalSeconds:F0}"));
             return 0;
         }
-        ImmutableArray<RegretLabel> labels = Label(suite, [.. suite.Roots.Select(root => root.Id)], options, error);
-        RegretSuite.WriteLines(Path.Combine(suiteDirectory, options.LabelsFile), labels.OrderBy(label => label.RootId, StringComparer.Ordinal));
+        string labelsPath = Path.Combine(suiteDirectory, options.LabelsFile);
+        // --missing labels only the roots the file has no label for, and keeps the rest.
+        ImmutableArray<RegretLabel> kept = options.Missing && File.Exists(labelsPath) ? RegretSuite.ReadLines<RegretLabel>(labelsPath) : [];
+        HashSet<string> labelled = [.. kept.Select(label => label.RootId)];
+        ImmutableArray<RegretLabel> labels = Label(suite, [.. suite.Roots.Select(root => root.Id).Where(id => !labelled.Contains(id))], options, error);
+        RegretSuite.WriteLines(labelsPath, kept.Concat(labels).OrderBy(label => label.RootId, StringComparer.Ordinal));
         output.WriteLine(string.Create(CultureInfo.InvariantCulture,
             $"ai-regret label roots={labels.Length} samples={options.Samples} horizon={(options.HorizonTurns == 0 ? "game" : options.HorizonTurns.ToString(CultureInfo.InvariantCulture))} seconds={started.Elapsed.TotalSeconds:F0} file={options.LabelsFile}"));
         return 0;
@@ -194,6 +206,48 @@ public static partial class CliCommands
         foreach (RegretComparison comparison in comparisons)
             output.WriteLine(string.Create(CultureInfo.InvariantCulture,
                 $"compare {comparison.First} − {comparison.Second}: roots={comparison.Roots} regret difference={comparison.MeanDifference:F4} [{comparison.Lower:F4}, {comparison.Upper:F4}]{(comparison.Separated ? " separated" : "")}"));
+        return 0;
+    }
+
+    /// <summary>
+    /// Adds the findings manifest's saved decisions to a suite as held-out roots, replacing any it added before. A finding
+    /// whose game is not of the suite's pool (<c>--content</c>) is skipped and reported.
+    /// </summary>
+    private static int RegretFindingsCommand(string suiteDirectory, RegretOptions options, TextWriter output)
+    {
+        string manifestPath = options.Manifest ?? throw new ArgumentException("ai-regret findings needs --manifest FILE.");
+        string fixtures = options.Fixtures ?? throw new ArgumentException("ai-regret findings needs --fixtures DIR.");
+        HashSet<string> pool = [.. RulesFuzzRunner.ContentIds(options.Content ?? throw new ArgumentException("ai-regret findings needs --content POOL."))];
+        RegretSuite suite = RegretSuite.Load(suiteDirectory);
+        using System.Text.Json.JsonDocument manifest = System.Text.Json.JsonDocument.Parse(File.ReadAllText(manifestPath));
+        var findings = manifest.RootElement.GetProperty("findings").EnumerateArray().Select(entry => (
+            Fixture: entry.GetProperty("fixture").GetString()!, Sequence: entry.GetProperty("sequence").GetInt64(),
+            Side: entry.GetProperty("side").GetString()!, Test: entry.GetProperty("test").GetString()!)).ToList();
+        var games = new List<RegretGame>();
+        var roots = new List<RegretRoot>();
+        var sampling = new RegretSampling(Labelled: options.Labelled, Seed: options.Seed);
+        foreach (var fixture in findings.GroupBy(finding => finding.Fixture).OrderBy(group => group.Key, StringComparer.Ordinal))
+        {
+            (LadderSavedGame saved, FullMatchDefinition definition) = LadderGameArchive.Read(Path.Combine(fixtures, fixture.Key)).Single();
+            if (!pool.Contains(saved.Game.ContentId))
+            {
+                output.WriteLine($"ai-regret findings skipped {fixture.Key}: {saved.Game.ContentId} is not of the pool");
+                continue;
+            }
+            RegretGame game = RegretGames.FromSaved(saved, definition, "held-out", "finding") with { Id = "finding-" + fixture.Key };
+            games.Add(game);
+            foreach (var finding in fixture)
+            {
+                RegretRoot? root = RegretRoots.At(game, new HashSet<long> { finding.Sequence }, sampling, ["finding", finding.Test]).SingleOrDefault();
+                if (root is null || !string.Equals(root.Side.ToString(), finding.Side, StringComparison.OrdinalIgnoreCase))
+                    output.WriteLine($"ai-regret findings skipped {fixture.Key}#{finding.Sequence}: {(root is null ? "fewer than two distinct choices" : "not the " + finding.Side + "'s decision")}");
+                else roots.Add(root);
+            }
+        }
+        HashSet<string> added = [.. games.Select(game => game.Id)];
+        new RegretSuite([.. suite.Games.Where(game => !added.Contains(game.Id)).Concat(games)],
+            [.. suite.Roots.Where(root => !added.Contains(root.GameId)).Concat(roots)], []).Save(suiteDirectory);
+        output.WriteLine($"ai-regret findings games={games.Count} roots={roots.Count} of {findings.Count}");
         return 0;
     }
 

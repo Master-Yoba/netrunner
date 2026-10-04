@@ -184,22 +184,8 @@ public sealed class CorpCodexV20Tests
     /// <summary>The Corp version's choice at the recorded decision <paramref name="sequence"/>, having watched the game to it.</summary>
     private static async Task<(LegalAction Chosen, GameState State)> ChooseAtAsync(string fixture, string version, long sequence)
     {
-        (LadderSavedGame saved, FullMatchDefinition definition) = Assert.Single(LadderGameArchive.Read(Path.Combine(AppContext.BaseDirectory,
-            "..", "..", "..", "Fixtures", "saved-games", fixture)));
-        GameState state = saved.Replay.InitialSnapshot.ToState();
-        OfflineAgent agent = OfflineMatchFactory.CreateOpponent(definition, PlayerSide.Runner, "standard", version);
-        AgentLifecycleHost.Observe(agent, state, definition.Behavior);
-        foreach (ReplayAction recorded in saved.Replay.Actions)
-        {
-            if (recorded.Sequence == sequence)
-            {
-                PendingDecision pending = state.PendingDecision!;
-                ActionId id = await agent.ChooseActionAsync(ObservationBuilder.Build(state, PlayerSide.Corp, definition.Behavior, definition.Runtime));
-                return (pending.LegalActions.Single(action => action.Id == id), state);
-            }
-            state = GameEngine.Apply(state, recorded.Submission, definition.Behavior, definition.Runtime).State;
-            AgentLifecycleHost.Observe(agent, state, definition.Behavior);
-        }
-        throw new InvalidOperationException($"The game has no action {sequence}.");
+        (ReplayArtifact replay, FullMatchDefinition definition) = SavedDecision.ReadSaved(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "Fixtures", "saved-games", fixture));
+        SavedChoice choice = await SavedDecision.ChooseAsync(replay, definition, sequence, PlayerSide.Corp, version);
+        return (choice.Chosen, choice.State);
     }
 }

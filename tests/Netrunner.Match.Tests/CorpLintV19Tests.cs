@@ -48,29 +48,9 @@ public sealed class CorpLintV19Tests
     private static async Task<(LegalAction Chosen, GameState State)> ChooseAtAsync(string fixture, string version,
         Func<GameState, PendingDecision, bool> match, long limit)
     {
-        (LadderSavedGame saved, FullMatchDefinition definition) = Assert.Single(LadderGameArchive.Read(Path.Combine(AppContext.BaseDirectory,
-            "..", "..", "..", "Fixtures", "saved-games", fixture)));
-        long target = 0;
-        GameState scan = saved.Replay.InitialSnapshot.ToState();
-        foreach (ReplayAction recorded in saved.Replay.Actions.TakeWhile(action => action.Sequence <= limit))
-        {
-            if (match(scan, scan.PendingDecision!)) target = recorded.Sequence;
-            scan = GameEngine.Apply(scan, recorded.Submission, definition.Behavior, definition.Runtime).State;
-        }
-        GameState state = saved.Replay.InitialSnapshot.ToState();
-        OfflineAgent agent = OfflineMatchFactory.CreateOpponent(definition, PlayerSide.Runner, "standard", version);
-        AgentLifecycleHost.Observe(agent, state, definition.Behavior);
-        foreach (ReplayAction recorded in saved.Replay.Actions)
-        {
-            if (recorded.Sequence == target)
-            {
-                PendingDecision pending = state.PendingDecision!;
-                ActionId id = await agent.ChooseActionAsync(ObservationBuilder.Build(state, PlayerSide.Corp, definition.Behavior, definition.Runtime));
-                return (pending.LegalActions.Single(action => action.Id == id), state);
-            }
-            state = GameEngine.Apply(state, recorded.Submission, definition.Behavior, definition.Runtime).State;
-            AgentLifecycleHost.Observe(agent, state, definition.Behavior);
-        }
-        throw new InvalidOperationException($"The game has no matching decision by action {limit}.");
+        (ReplayArtifact replay, FullMatchDefinition definition) = SavedDecision.ReadSaved(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "Fixtures", "saved-games", fixture));
+        long target = SavedDecision.LastMatching(replay, definition, match, limit);
+        SavedChoice choice = await SavedDecision.ChooseAsync(replay, definition, target, PlayerSide.Corp, version);
+        return (choice.Chosen, choice.State);
     }
 }

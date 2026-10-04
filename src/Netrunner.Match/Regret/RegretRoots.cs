@@ -21,6 +21,8 @@ public static partial class RegretRoots
 {
     public const string TurnKind = "turn";
     public const string RunKind = "run";
+    /// <summary>Any other decision with options (a finding's nested choice: what to break, discard or let fire).</summary>
+    public const string ChoiceKind = "choice";
 
     public static ImmutableArray<RegretRoot> Sample(RegretGame game, RegretSampling sampling)
     {
@@ -36,7 +38,7 @@ public static partial class RegretRoots
         RegretGames.Replay(game, definition, position =>
         {
             foreach (OfflineAgent agent in agents.Values) AgentLifecycleHost.Observe(agent, position.State, definition.Behavior);
-            if (Root(game, definition, position, agents, sampling) is { } root) found.Add(root);
+            if (Root(game, definition, position, agents, sampling, finding: false) is { } root) found.Add(root);
         });
         var random = new DeterministicRandom(sampling.Seed ^ StableHash(game.Id));
         return [.. Draw(found.Where(root => root.Kind == TurnKind).ToList(), sampling.TurnRoots, random)
@@ -76,13 +78,40 @@ public static partial class RegretRoots
 
     private static string Truncate(string value, int length) => value.Length <= length ? value : value[..length] + "…";
 
+    /// <summary>
+    /// The roots at given decisions of a game, whatever their kind (the loops' and strategy work's findings): every
+    /// decision with at least two distinct choices, its groups ranked and cut as a drawn root's are.
+    /// </summary>
+    public static ImmutableArray<RegretRoot> At(RegretGame game, IReadOnlySet<long> sequences, RegretSampling sampling,
+        IReadOnlyList<string> categories)
+    {
+        ArgumentNullException.ThrowIfNull(game);
+        ArgumentNullException.ThrowIfNull(sequences);
+        ArgumentNullException.ThrowIfNull(sampling);
+        ArgumentNullException.ThrowIfNull(categories);
+        FullMatchDefinition definition = RegretGames.Definition(game);
+        var agents = new Dictionary<PlayerSide, OfflineAgent>
+        {
+            [PlayerSide.Corp] = Judge(definition, PlayerSide.Corp),
+            [PlayerSide.Runner] = Judge(definition, PlayerSide.Runner),
+        };
+        var found = ImmutableArray.CreateBuilder<RegretRoot>();
+        RegretGames.Replay(game, definition, position =>
+        {
+            foreach (OfflineAgent agent in agents.Values) AgentLifecycleHost.Observe(agent, position.State, definition.Behavior);
+            if (sequences.Contains(position.Sequence) && Root(game, definition, position, agents, sampling, finding: true) is { } root)
+                found.Add(root with { Categories = [.. root.Categories, .. categories] });
+        });
+        return found.ToImmutable();
+    }
+
     private static RegretRoot? Root(RegretGame game, FullMatchDefinition definition, RegretPosition position,
-        Dictionary<PlayerSide, OfflineAgent> agents, RegretSampling sampling)
+        Dictionary<PlayerSide, OfflineAgent> agents, RegretSampling sampling, bool finding)
     {
         GameState state = position.State;
         PendingDecision pending = state.PendingDecision!;
         PlayerSide side = state.GetPlayer(pending.Owner).Side;
-        if (KindOf(state, pending, side) is not { } kind) return null;
+        if ((KindOf(state, pending, side) ?? (finding ? ChoiceKind : null)) is not { } kind) return null;
         IReadOnlyList<RegretCandidate> groups = Group(state, pending);
         if (groups.Count < 2) return null;
         OfflineAgent agent = agents[side];
@@ -96,7 +125,7 @@ public static partial class RegretRoots
             .OrderByDescending(entry => entry.Utility.Priority).ThenByDescending(entry => entry.Utility.Score)
             .ThenBy(entry => entry.Group.Group, StringComparer.Ordinal)
             .Select(entry => entry.Group)];
-        if (kind == TurnKind)
+        if (kind == TurnKind && !finding)
         {
             AgentUtility first = Best(ranked[0], utilities), second = Best(ranked[1], utilities);
             bool close = first.Priority == second.Priority
