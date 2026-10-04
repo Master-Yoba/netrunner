@@ -8,12 +8,15 @@ namespace Netrunner.Cli;
 public static partial class CliCommands
 {
     /// <summary>
-    /// engine-bench [--content developer|official] [--games N] [--seed S] [--json].
+    /// engine-bench [--content developer|official] [--games N] [--seed S] [--json]; --profile-game and --profile-plan
+    /// profile games and planner decisions instead (<see cref="RunEngineProfile"/>).
     /// Reports mean Apply time per action in Authoritative and Simulation mode
     /// over the same recorded positions. Build in Release for real numbers.
     /// </summary>
     private static int RunEngineBench(string[] args, TextWriter output, TextWriter error)
     {
+        if (args.Contains("--profile-game", StringComparer.Ordinal) || args.Contains("--profile-plan", StringComparer.Ordinal))
+            return RunEngineProfile(args, output, error);
         bool json = args.Contains("--json", StringComparer.Ordinal);
         string content = "official";
         int games = 10;

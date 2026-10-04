@@ -128,6 +128,8 @@ public sealed class OfflineAgent : IAgentLifecycle
 
     public PlayerSide ControlledSide => Configuration.Side;
     public OfflineAgentConfiguration Configuration { get; }
+    internal IOfflinePolicy Policy => _policy;
+    internal ICardEvaluationCatalog Catalog => _catalog;
     public OfflineAgentCheckpoint Checkpoint => _checkpoint;
     // Opt-in callers may inspect this private decision report. Hosts must not
     // put its contents into player history or opponent tooltips.

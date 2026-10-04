@@ -274,6 +274,8 @@ public static partial class CliCommands
             + "[--workers 1..64] [--differential] [--output <new directory>] [--json] | "
             + "fuzz-repro <failure-directory> [--json] | "
             + "engine-bench [--content developer|official] [--games N] [--seed <unsigned-integer>] [--json] | "
+            + "engine-bench --profile-game [--content POOL] [--profile ENTRANT] [--games N] [--seed S] [--rollout-roots N] [--rollout-samples N] [--json] | "
+            + "engine-bench --profile-plan <games-dir> --sequence N [--profile ENTRANT] [--repeats N] [--rollout-samples N] [--json] | "
             + "ai-lint <games-dir> [--workers N] [--examples N] [--output file] [--json] | "
             + "ai-style <games-dir> [--workers N] [--json] | "
             + "ai-belief <games-dir> [--games N] [--json] | "

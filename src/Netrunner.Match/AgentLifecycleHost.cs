@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using Netrunner.AI;
 using Netrunner.Core;
 
 namespace Netrunner.Match;
@@ -19,8 +20,13 @@ public static class AgentLifecycleHost
 
     public static void Observe(IGameAgent agent, GameState state, IBehaviorCatalog behavior)
     {
-        if (agent is IAgentLifecycle lifecycle)
-            lifecycle.Observe(ObservationBuilder.Build(state, lifecycle.ControlledSide, behavior), state.ActionSequence);
+        if (agent is not IAgentLifecycle lifecycle) return;
+        long started = ProfileTimings.Start();
+        Observation observation = ObservationBuilder.Build(state, lifecycle.ControlledSide, behavior);
+        ProfileTimings.Stop("match.observe.observation", started);
+        started = ProfileTimings.Start();
+        lifecycle.Observe(observation, state.ActionSequence);
+        ProfileTimings.Stop("match.observe.agent", started);
     }
 
     public static void Accepted(IGameAgent agent, ActionSubmission submission, GameState state, IBehaviorCatalog behavior)

@@ -19,13 +19,21 @@ records; their confirmed findings become puzzles (section 5.3).
 
 ### 1.1 Where the bots are
 
-The defaults are Corp v30 and Runner v26, Standard profile. Standard is a one-step greedy scorer: every engine-issued
-action gets an integer `(Priority, Score)` from hand-tuned literal weights, and the highest priority then the highest
-score wins (`OfflineAgent`, `RunnerHeuristicPolicy`, `CorpHeuristicPolicy`). Hard adds the turn planner
-(`TurnPlanner`): 3–4 determinized samples of the top 3 heuristic candidates, rolled out to the end of the turn by both
-sides' heuristics and scored by a logistic "fitted evaluation" of win probability (`FittedEvaluation`, feature set 4),
-blended into the heuristic score. Runner Hard is about 80 Elo above Standard; Corp Hard is level with Standard at every
-planner setting tried.
+The defaults are Corp v30 and Runner v26, Standard profile. The heuristic is a one-step greedy scorer: every
+engine-issued action gets an integer `(Priority, Score)` from hand-tuned literal weights, and the highest priority then
+the highest score wins (`OfflineAgent`, `RunnerHeuristicPolicy`, `CorpHeuristicPolicy`). The turn planner
+(`TurnPlanner`) takes determinized samples of the top heuristic candidates, rolls each out to the end of the turn by
+both sides' heuristics, scores the result by a logistic "fitted evaluation" of win probability (`FittedEvaluation`), and
+blends that into the heuristic score. Who plans (corrected by S0.1's profile; the profiles in `CorpPolicyProfiles` and
+`RunnerPolicyProfiles`):
+
+| Seat | Standard | Hard |
+|---|---|---|
+| Corp v30 | Planner, 3 samples × width 3, set 4 | The same planner, dealing samples from the tracker and the Runner's list |
+| Runner v26 | Heuristic only | Planner, 4 samples × width 3, set 3 |
+
+Runner Hard is about 80 Elo above Standard; Corp Hard is level with Standard at every planner setting tried, and its
+default differs from Standard only in how samples are dealt.
 
 On the Core Battle Box (the pool human players meet), Standard's Runner wins 31% against Standard's Corp.
 

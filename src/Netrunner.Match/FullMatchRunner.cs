@@ -31,20 +31,28 @@ public static class FullMatchRunner
             cancellationToken.ThrowIfCancellationRequested();
             PendingDecision pending = state.PendingDecision ?? throw Stall("Full match stalled without a decision.");
             PlayerSide side = state.GetPlayer(pending.Owner).Side;
+            long started = ProfileTimings.Start();
             Observation observation = ObservationBuilder.Build(state, side, definition.Behavior, definition.Runtime);
+            ProfileTimings.Stop("match.observation", started);
             IGameAgent activeAgent = side == PlayerSide.Corp ? corpAgent : runnerAgent;
             ActionId action;
+            started = ProfileTimings.Start();
             try
             {
                 action = await activeAgent.ChooseActionAsync(observation, cancellationToken).ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();
             }
             catch { AgentLifecycleHost.Discard(activeAgent); throw; }
+            ProfileTimings.Stop("match.decide", started);
             // Every yield is a persistence boundary, including setup, nested effects,
             // paid windows, and forced discards. Restore with both frozen catalogs.
+            started = ProfileTimings.Start();
             state = EngineJson.DeserializeState(EngineJson.Serialize(state), definition.Behavior, definition.Runtime);
+            ProfileTimings.Stop("match.round-trip", started);
             var submission = new ActionSubmission(pending.Owner, pending.Id, pending.Revision, action);
+            started = ProfileTimings.Start();
             ApplyResult result = GameEngine.Apply(state, submission, definition.Behavior, definition.Runtime);
+            ProfileTimings.Stop("match.apply", started);
             if (!result.Accepted)
             {
                 AgentLifecycleHost.Discard(activeAgent);
@@ -61,8 +69,12 @@ public static class FullMatchRunner
         }
         string finalHash = DeterministicHash.ForState(state);
         ReplayArtifact replay = new(initial, state.InitialSeed, actions, expectedFinalStateHash: finalHash);
+        long finishing = ProfileTimings.Start();
         replay = EngineJson.Deserialize<ReplayArtifact>(EngineJson.Serialize(replay), definition.Behavior, definition.Runtime);
+        ProfileTimings.Stop("match.replay-round-trip", finishing);
+        finishing = ProfileTimings.Start();
         ReplayVerificationResult verified = ReplayVerifier.Verify(replay, definition.Behavior, definition.Runtime);
+        ProfileTimings.Stop("match.replay-verify", finishing);
         if (!verified.Success)
         {
             throw new InvalidOperationException($"Full match replay failed: {verified.Message}");
