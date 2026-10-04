@@ -183,6 +183,10 @@ First implementation: the current heuristic at a reduced work budget with a cach
 Second, if profiling says so: a distilled table policy (action kind × a few features) fitted to the heuristic's choices.
 Profiling in S0 decides which is needed to fit the budgets.
 
+The first implementation is built in S0 (step S0.4 in the steps document), not with the planner in S5, because the
+teacher (5.1) plays its deep rollouts with it: the labels and the shipped planner then share one rollout policy, and a
+whole-game rollout costs what this policy costs, not what the full heuristic does.
+
 ### 4.4 One live policy, frozen history
 
 - `LegacyCorpPolicy` and `LegacyRunnerPolicy` are copies of today's `CorpHeuristicPolicy` and `RunnerHeuristicPolicy`
@@ -223,7 +227,13 @@ A fixed corpus of recorded decision roots with teacher labels, scored in minutes
   numbers across candidates. Its rollouts go **deeper than the leaf's horizon**: to the game's end with the rollout
   policy where S0.1's costs allow it, otherwise a fixed number of turns (start 4) and then the leaf. A label is then
   mostly the result of play, not a reading of set 4, so fitting set 5 to it does not inherit set 4's bias. It writes each
-  candidate's value and the horizon it used.
+  candidate's value, its standard error over the samples, and the horizon it used.
+- **Label noise.** A rollout to the game's end returns a win or a loss, so 32 samples give a candidate's value to about
+  ±0.09, and common random numbers help less as the rollouts diverge over several turns, while candidates often differ
+  by a few points. Regret *differences* between versions stay unbiased under that noise; agreement and "the best
+  candidate" do not. So the suite records its **noise floor**: a subset of roots labelled twice with independent sample
+  seeds, reporting how often the two labellings pick different best candidates. Agreement is reported against that
+  floor, and roots whose top two candidates are within their standard errors count as ties (any of them is "best").
 - **Scores per policy version:**
   - **Regret:** mean over roots of (teacher's best value − teacher's value of the version's choice), in win-probability
     points. The main number.
@@ -319,8 +329,10 @@ effects), and any learned dynamics.
 
 - **The teacher repeats the leaf's mistakes.** More samples of a biased leaf do not remove the bias. Mitigation: the
   teacher's rollouts run past the leaf's horizon (to the game's end, or several turns then the leaf), so labels come
-  from play; S4.2 fits set 4 to the same labels as a control, so a gain is attributed to the target or to the features;
-  the puzzle suite and the ladder gate each round; teacher drift is reported; a round that fails either is discarded.
+  from play, played by the same rollout policy the planner ships with (4.3); deep labels are noisier, so the suite
+  measures its own noise floor (5.1) and agreement is read against it; S4.2 fits set 4 to the same labels as a control,
+  so a gain is attributed to the target or to the features; the puzzle suite and the ladder gate each round; teacher
+  drift is reported; a round that fails either is discarded.
 - **Rollout cost blows the latency budget.** Mitigation: S0 profiles before anything is built on it; the rollout policy
   is designed for cost (4.3); `rollout-budget` is a profile parameter; Standard may plan fewer samples than Hard.
 - **Freezing legacy code doubles the policy source for a while.** Mitigation: the legacy files are never edited; they
