@@ -40,6 +40,12 @@ public sealed partial class RunnerHeuristicPolicy
         if (context.Generation >= 16 && !trash)
             value += choice.CardIds.Sum(id => context.Definition(context.Card(id))?.Icebreaker is { } breaker
                 ? BreakerCoverage(context, breaker) - 730 : 0);
+        // v25 (bot loop 2): a card that only goes to the grip is a free draw at least, whatever installing it would add; MuslihaT's
+        // free Marjanah was declined as a second copy, and the Runner spent a click drawing it.
+        BehaviorInstruction[] uses = [.. plan.Consumers.Where(instruction => instruction.Target?.Selector == choice.ChoiceKey)];
+        if (context.Generation >= 21 && !trash && choice.CardIds.Count > 0 && uses.Length > 0
+            && uses.All(instruction => instruction.Kind is BehaviorInstructionKind.AddToHand or BehaviorInstructionKind.Reveal))
+            value = Math.Max(value, choice.CardIds.Count * context.DrawValue);
         return Value(value + (choice.FinalizeSelection ? 1 : 0), "choice/target-value-and-confirmation", true);
     }
 

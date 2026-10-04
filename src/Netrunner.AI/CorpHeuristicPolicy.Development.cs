@@ -507,6 +507,13 @@ public sealed partial class CorpHeuristicPolicy
                 ? Value(150 - cost * 30, "rez/scoring-upgrade-before-score", approximate: true)
                 : Value(-20, "rez/scoring-upgrade-waits-for-score");
         }
+        // v29 (bot loop 2): an upgrade that works only when an agenda is stolen does nothing in a remote without one (AMAZE
+        // Amusements rezzed against a run on its own empty remote).
+        if (context.Generation >= 24 && attacked && server?.Kind == ServerKind.Remote && definition?.Printed.CardClass == RuntimeCardClass.Upgrade
+            && definition.Behavior?.Triggers is { Count: > 0 } upgradeTriggers
+            && upgradeTriggers.All(trigger => trigger.RequireAgendaStolenDuringRun || trigger.Occurrence == OccurrenceKind.AgendaScoredOrStolen)
+            && !server.Root.Any(root => context.Definition(root)?.Agenda is not null))
+            return Value(-10, "rez/upgrade-nothing-to-steal-here");
         if (repairs && attacked && definition?.Printed.CardClass == RuntimeCardClass.Upgrade && cost <= context.Self.Credits)
             return context.Features.Board.Run!.CurrentIceIndex < 0
                 ? Value(Math.Max(120, context.ServerValue(server) / 2) - cost * 30, "rez/upgrade-in-attacked-server", approximate: true)
@@ -542,6 +549,12 @@ public sealed partial class CorpHeuristicPolicy
                     && HeuristicContext.Flatten(trigger.Instructions).Any(instruction => instruction.Kind == BehaviorInstructionKind.AddCounter));
                 if (usable || gathers) return Value(100 - cost * 30, "rez/ability-or-counter-asset", approximate: true);
             }
+            // v29 (bot loop 2): an asset that pays each turn (Public Access Plaza's credit) pays more the sooner it is rezzed.
+            int perTurn = context.Generation >= 24 ? definition.Behavior?.Triggers.Where(trigger => trigger.Occurrence == OccurrenceKind.TurnBegin)
+                .SelectMany(trigger => trigger.Instructions).Where(instruction => instruction.Kind == BehaviorInstructionKind.GainCredits)
+                .Sum(instruction => instruction.Amount) ?? 0 : 0;
+            if (futureIncome == 0 && immediateDraw == 0 && perTurn > 0 && cost <= context.Self.Credits)
+                return Value(60 + perTurn * 80 - cost * 30, "rez/turn-income-asset", approximate: true);
             if (futureIncome == 0 && immediateDraw == 0) return Value(-10, "rez/no-current-payoff", approximate: true);
             // v12 (self-play review, 28 September): an economy asset rezzed mid-way through the Runner's
             // turn shows it to a Runner who can still run and trash it; it waits for the last windows

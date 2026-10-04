@@ -342,6 +342,10 @@ public static class RunModel
             && (modifier.CounterName == "advancement" ? card.AdvancementCounters ?? 0
                 : card.Counters.Where(counter => counter.CounterName == modifier.CounterName).Sum(counter => counter.Count))
             >= (modifier.Threshold ?? int.MaxValue)).Sum(modifier => modifier.Delta);
+        // Bot loop 2: Scatter Field's +4 while it is the only ICE protecting its server; the Runner ran it with credits for 0.
+        if (context.SeesOnlyIceStrength && server.Ice.Length == 1)
+            strength += (ice.ValueModifiers ?? []).Where(modifier => modifier.Source == BehaviorValueSourceKind.OnlyIceProtectingServer)
+                .Sum(modifier => modifier.Delta);
         return strength;
     }
 

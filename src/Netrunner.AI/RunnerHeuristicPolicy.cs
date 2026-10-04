@@ -138,6 +138,13 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// grip already break every ICE type (Mutual Favor).
     /// </summary>
     public const string V24 = "runner-heuristic-v24";
+    /// <summary>
+    /// V24 with bot loop 2's fixes (docs/BOT_LOOP_2.md): Scatter Field's +4 as the only ICE is seen (the Runner ran it with
+    /// credits for strength 0); an unrezzed ICE already passed isn't unknown ICE ahead at the jack-out decision; Topan isn't
+    /// used without a card it can pay for and would install; a card MuslihaT adds to the grip is a free draw; BANGUN's damage
+    /// on accessing a faceup agenda is priced; and with one card in the grip the Runner draws before running unknown ICE.
+    /// </summary>
+    public const string V25 = "runner-heuristic-v25";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
     /// V18 is V15 with only the reinstall fix (no install over its own copy or a second console), a fix that can only remove
@@ -149,21 +156,21 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// where V20 won 6. V22 (A9c, 2 October) is: at Standard and Easy it plays as V21 (its counting needs the Corp's list),
     /// and at Hard it was level with V21 on the bot ladder. V23 (bot loop 1, 3 October) is the default while loop 1 plays
     /// against it: its fixes remove plays that flatline the Runner itself. V24 (loop 1's deferred fixes, 4 October) is the
-    /// default loop 2 plays against.
+    /// default loop 2 played against. V25 (bot loop 2, 4 October) is the default.
     /// </remarks>
-    public const string PolicyVersion = V24;
+    public const string PolicyVersion = V25;
     /// <summary>
     /// The planner's model of the Runner. It stays V7, which Corp v9 was measured
     /// with, so the shipped Corp planner plays as it did.
     /// </summary>
     public const string LatestHeuristic = V7;
-    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24];
+    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25];
 
     /// <summary>Whether the version's memory of a face-down root card survives installs in that root (v20).</summary>
-    public static bool KeepsRootMemoryThroughInstalls(string version) => version is V20 or V21 or V22 or V23 or V24;
+    public static bool KeepsRootMemoryThroughInstalls(string version) => version is V20 or V21 or V22 or V23 or V24 or V25;
 
     /// <summary>Whether the version keeps the A9a tracker of the Corp's hidden cards (v21).</summary>
-    public static bool UsesTracker(string version) => version is V21 or V22 or V23 or V24;
+    public static bool UsesTracker(string version) => version is V21 or V22 or V23 or V24 or V25;
 
     public RunnerHeuristicPolicy() : this(PolicyVersion) { }
 
@@ -171,10 +178,10 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     {
         if (!Versions.Contains(version)) throw new ArgumentException($"Unknown Runner policy version '{version}'.", nameof(version));
         Version = version;
-        Generation = version switch { V1 => 1, V4 => 3, V5 => 4, V6 => 5, V7 or V8 or V9 => 6, V10 => 7, V11 or V12 => 8, V13 => 9, V14 => 10, V15 => 11, V16 => 12, V17 => 13, V18 => 14, V19 => 15, V20 => 16, V21 => 17, V22 => 18, V23 => 19, V24 => 20, _ => 2 };
+        Generation = version switch { V1 => 1, V4 => 3, V5 => 4, V6 => 5, V7 or V8 or V9 => 6, V10 => 7, V11 or V12 => 8, V13 => 9, V14 => 10, V15 => 11, V16 => 12, V17 => 13, V18 => 14, V19 => 15, V20 => 16, V21 => 17, V22 => 18, V23 => 19, V24 => 20, V25 => 21, _ => 2 };
         // V18 on: only the Hard profile (A6) has planner parameters, so Standard and Easy play as before.
         Plans = version is V3 or V8 or V9 || Generation >= 14;
-        Repairs = version is V4 or V5 or V6 or V7 or V8 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16 or V17 or V18 or V19 or V20 or V21 or V22 or V23 or V24;
+        Repairs = version is V4 or V5 or V6 or V7 or V8 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16 or V17 or V18 or V19 or V20 or V21 or V22 or V23 or V24 or V25;
     }
 
     /// <summary>Whether this version has the playtest repairs (V4).</summary>
