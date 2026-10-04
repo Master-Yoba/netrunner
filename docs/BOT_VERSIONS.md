@@ -90,3 +90,42 @@ starts of each profiled game, 4 samples each; every one finished):
   8 × 4 is about 2.7 times the rollouts; it fits 50 ms p95 only if the rollout policy roughly triples the step rate,
   which the table above says is not possible from the observation alone (a third of the cost): the simulated `Apply`
   itself has to get cheaper, or Standard plans fewer samples than 8.
+
+### S0.2: the fast ladder mode (4 October 2026)
+
+`ai-ladder --verify-replays-every N` (default 8) checks every Nth game as it is played (the per-action save-and-reload
+and the replay's verification) and plays the rest unchecked; every result carries its final state hash.
+
+**Gate: identical game by game.** Core Battle Box, `--entrants standard-c29,standard --deals 240 --workers 12`, seed 1,
+once with `--verify-replays-every 1` and once with 8:
+
+| Mode | Games checked | Wall time (build excluded) | Games a second |
+|---|---:|---:|---:|
+| Every game checked (today's behaviour) | 960 | 577 s | 1.66 |
+| Every 8th game checked | 120 | 396 s | 2.42 |
+
+All 960 games are identical between the two (deal seed, winner, action count, capped flag and final state hash), and
+so are the ratings and differences; no errors. The fast mode is 31% faster, about what S0.1's 25% of a game predicts
+once the decisions of the slower Corp (v29 and v30 both plan) are counted.
+
+**The target is missed.** A two-entrant deal is four games (both entrants in both seats, the self-play pairings
+included), so 1,000 deals is 4,000 games, not the 2,000 the plan assumed, and at 2.42 games a second takes about 28
+minutes. Ten minutes buys about 1,450 games: **about 360 two-entrant deals**. Later steps size their ladders by that.
+
+**Why: the workers don't scale.** 24 deals (96 games), fast mode:
+
+| Workers | Wall time | Speed-up |
+|---|---:|---:|
+| 1 | 236 s | 1.0× |
+| 6 | 56.5 s | 4.2× |
+| 12 | 50.5 s | 4.7× |
+| 12, workstation GC (`DOTNET_gcServer=0`) | 103.2 s | 2.3× |
+| 12, 256 MB gen 0 (`DOTNET_GCgen0size`) | 46.9 s | 5.0× |
+
+Past six workers the box gains little (the full 240-deal run reached 5.9×, with less tail at the end of a batch). The
+VM has 14 vCPUs sharing one 16 MB L3 and 9 GB of memory, so the likely limit is memory traffic, not the GC mode (the
+workstation GC is twice as slow; a larger gen 0 gains 7%, within the noise of a 96-game run). The largest remaining
+cost that isn't a decision is the agents reading every new state (S0.1: 12% of a game), and it is also the most
+allocating: `ObservationReader.Read` decodes each observation by a JSON round trip and `Digest` hashes canonical JSON.
+That is the agent's own work, so S0.2 leaves it; S0.4's thin view for rollouts is the first place to cut it, and the
+same view would serve `OfflineAgent.Observe`.

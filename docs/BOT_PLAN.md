@@ -261,8 +261,9 @@ CLI: `ai-regret label <games-dir> --output <suite>` and `ai-regret score <suite>
   deserializes the **whole state before every action** (a save-and-reload check), then serializes, deserializes and
   re-verifies its whole replay at the end (`FullMatchRunner`). A ladder mode keeps both checks on every Nth game (as
   `fuzz --verify-replays-every` does) and skips them otherwise; the fuzz and the verified games keep them on. Profile
-  one game and remove the next cost after those. Target: 1,000 deals (2,000 games) on the box pool in under 10 minutes
-  on 12 workers.
+  one game and remove the next cost after those. Target: 1,000 deals on the box pool in under 10 minutes on 12
+  workers. (A two-entrant deal is four games, both entrants in both seats; S0.2 measured 2.4 games a second, so 10
+  minutes buys about 360 deals on this box: see [BOT_VERSIONS.md](BOT_VERSIONS.md).)
 - **Size by claim.** A claim of strength uses 1,000 deals with `--stop-when-clear`; a no-harm check on another pool
   uses 240. Report the interval, never the point alone.
 - **Budget-scaling ladder.** Entrants `standard-x1`, `standard-x4`, `standard-x16` (the same policy at 1×, 4× and 16×
