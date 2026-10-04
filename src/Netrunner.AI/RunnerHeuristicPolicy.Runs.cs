@@ -76,6 +76,11 @@ public sealed partial class RunnerHeuristicPolicy
             damage += trap;
         }
         int rewards = SuccessRewards(context, server);
+        // v26: a breaker trashed when the run ends (Mayfly) is spent by the run, as the encounter planner counts it; the Runner
+        // started runs through it and then wouldn't spend it, 17 times in one game.
+        int disposable = context.Generation >= 22 && forecast is not null ? forecast.Crossings.Select(crossing => crossing.Method).Distinct()
+            .Select(method => context.Card(new CardInstanceId(method))).OfType<AgentCard>()
+            .Where(card => context.Definition(card)?.Icebreaker?.RunEndCleanup is not null).Sum(card => RunnerValues.Card(context, card)) : 0;
         int repeated = context.Features.Board.TurnFacts?.Runner.ThisTurn?.AttemptedRunServerIds.Count(id => id == server.Id) ?? 0;
         int risk = unknown * (context.Self.Credits < 3 || context.Features.Hand.Length < 2 ? 450 : 260) * context.Parameter("risk-scale", 100) / 100;
         if (context.Generation >= 8 && unknown > 0)
@@ -95,17 +100,6 @@ public sealed partial class RunnerHeuristicPolicy
         // click to spare it draws first; it ran an unknown remote into Empiricist's 3 net damage with one card.
         if (context.Generation >= 21 && unknown > 0 && context.Features.Hand.Length <= 1 && context.Self.Clicks >= 2) risk += unknown * 250;
         if (unknown == 0) extraValue += knownSuccessValue;
-        // v26: the turn's first successful run arms the Corp's punishing operations (Measured Response); without the clicks
-        // left to draw up to the grip that survives them, the Runner doesn't make it. The run itself may steal an agenda that
-        // brings the threat level up (the Runner stole its way to 4 points on its last click, with 2 cards in its grip).
-        // The cost is the game, as likely as the Corp holding one.
-        int punished = 0;
-        if (context.Generation >= 22)
-        {
-            (int after, double chance) = RunnerInference.Punishers(context, stolen: 2, credits: funds - cost - loss);
-            bool arms = context.Features.Board.TurnFacts?.Runner.ThisTurn?.SuccessfulRun != true || after > RunnerInference.Punishers(context).Grip;
-            if (arms && after > context.Features.Hand.Length + context.Self.Clicks - 1) punished = (int)Math.Min(800, chance * PunishedGame);
-        }
         if (matchPoint)
         {
             trapRisk = Math.Min(trapRisk, 200);
@@ -114,7 +108,7 @@ public sealed partial class RunnerHeuristicPolicy
         int score = RunnerValues.Server(context, server) + rewards + extraValue
             - (upfrontCost + Math.Max(0, cost - extraRunCredits) + loss) * context.CreditValue
             - damage * 160 - risk - repeated * 180 - (funds - cost - loss - tollCredits < reserve ? 220 : 0)
-            - (tollCredits + tollClicks * ClickCredits) * context.CreditValue - trapRisk - tagCost - punished;
+            - (tollCredits + tollClicks * ClickCredits) * context.CreditValue - trapRisk - tagCost - disposable;
         // v11: an aggressive deck runs whenever it can afford to; a big rig holds back until its rig covers every ICE type.
         // v15 (reviews of the losses to Codex, 1 October): not on a run that can gain nothing, such as an Archives of
         // operations the Runner has already seen; aggression sent it there turn after turn.
@@ -161,9 +155,6 @@ public sealed partial class RunnerHeuristicPolicy
             - damage * 160 - unknown * 220 - (forecast?.Tags ?? 0) * 300,
             "run/continue-visible-affordable-line", true);
     }
-
-    /// <summary>v26: what a flatline to a punishing operation costs, before the chance the Corp holds one.</summary>
-    private const int PunishedGame = 4000;
 
     /// <summary>What a click is worth in credits when paying a toll.</summary>
     private const int ClickCredits = 2;

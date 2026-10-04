@@ -114,13 +114,9 @@ internal static class RunnerInference
     /// operations' share of the Corp's unseen cards over a hand of them, and at least one in three once the Runner has seen
     /// one of them this game. Grip 0 when there is none.
     /// </summary>
-    /// <param name="stolen">Points the Runner may still steal this turn, which raise the threat level the condition reads.</param>
-    /// <param name="credits">The credits the Runner will have to pay the operation off; its credits now by default.</param>
-    public static (int Grip, double Chance) Punishers(HeuristicContext context, int stolen = 0, int? credits = null) =>
-        context.Memo($"punishers/{stolen}/{credits}", () =>
+    public static (int Grip, double Chance) Punishers(HeuristicContext context) => context.Memo("punishers", () =>
     {
-        int wallet = credits ?? context.Self.Credits;
-        int threat = Math.Max(context.Self.AgendaPoints + stolen, context.Opponent.AgendaPoints);
+        int threat = Math.Max(context.Self.AgendaPoints, context.Opponent.AgendaPoints);
         IReadOnlyDictionary<string, double> prior = Prior(context);
         int need = 0;
         double copies = 0;
@@ -151,7 +147,7 @@ internal static class RunnerInference
             { Kind: BehaviorInstructionKind.DealDamage } => instruction.Amount,
             { Kind: BehaviorInstructionKind.Choose, Choice: { Options.Count: > 0 } choice } when choice.Chooser == BehaviorChooser.Runner =>
                 choice.Options.Where(option => (option.Costs ?? []).Where(cost => cost.Kind == BehaviorCostKind.Credits).Sum(cost => cost.Amount)
-                    <= wallet).Select(option => Damage(option.Instructions)).DefaultIfEmpty(0).Min(),
+                    <= context.Self.Credits).Select(option => Damage(option.Instructions)).DefaultIfEmpty(0).Min(),
             { Kind: BehaviorInstructionKind.Choose, Choice: { Options.Count: > 0 } choice } => choice.Options.Max(option => Damage(option.Instructions)),
             { Kind: BehaviorInstructionKind.Branch, Branch: { } branch } => Math.Max(Damage(branch.WhenTrue), Damage(branch.WhenFalse)),
             _ => 0,

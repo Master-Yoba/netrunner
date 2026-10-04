@@ -84,14 +84,20 @@ Confirm each finding against the replay before fixing anything:
 
 ## 7. Verify
 
-Per AGENTS.md's tiers, with no other load on the machine:
+Order the checks so a failure shows before the long runs start, with no other load on the machine. Each step runs only
+on a change that passed the steps before it:
 
-- `make bot-check`;
-- ladders of each new version against the previous one, on the Core Battle Box (`gateway-elevation`) and Gateway, 240
-  deals with `--stop-when-clear`;
-- `ai-runner-diagnosis` on the box ladder's saved games;
-- the per-slice fuzz on the pools `scripts/affected-pools.sh` lists (all of them for engine or bot changes);
-- `make gates REF=<commit>`.
+1. **Per change, `make bot-check`** (about 7 minutes): formatting, the quick M5 cases, and the AI, Match and CLI suites,
+   including the statistical validations that self-play feeds (the run model's forecast agreement, belief accuracy).
+   A bot change can fail these without any test of its own failing.
+2. **Per candidate, one ladder on the pool the change targets**: the new version against the previous one on the Core
+   Battle Box (`gateway-elevation`), 240 deals with `--stop-when-clear` (about 8 minutes), with `--save-games` and
+   `ai-runner-diagnosis` on them for Runner changes. Compare variants here, one ladder each, and keep the best.
+3. **Once, for the final candidate:**
+   - the Gateway ladder, to check the change does no harm there;
+   - the per-slice fuzz on the pools `scripts/affected-pools.sh` lists, when the engine or card specs changed (the fuzz
+     plays random legal actions, so a bot-only change doesn't need it);
+   - `make gates REF=<commit>` (about 27 minutes), last, before the push. By then it should hold no news.
 
 A fix confirmed in the replay is kept even when the ladder shows no change: the bots seldom create each other's rare
 positions. Neutral is fine; a separated loss is not.

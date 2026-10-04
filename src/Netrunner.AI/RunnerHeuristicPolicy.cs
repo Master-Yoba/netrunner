@@ -147,8 +147,9 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     public const string V25 = "runner-heuristic-v25";
     /// <summary>
     /// V25 against its self-flatlines (docs/BOT_STRATEGY_1.md): after a successful run, a grip too small for an operation that
-    /// punishes one (Measured Response's 4 meat damage at threat 4) is drawn up, and the run that would arm it isn't made with
-    /// too few clicks left to draw. 50 of v25's 58 self-flatlines on the Core Battle Box were Measured Response.
+    /// punishes one (Measured Response's 4 meat damage at threat 4) is drawn up, as likely as the Corp holding one; a run
+    /// event's trap risk counts the grip without the event; at match point an empty grip draws before running a possible
+    /// trap; and a breaker trashed at the run's end (Mayfly) is priced as spent by the run.
     /// </summary>
     public const string V26 = "runner-heuristic-v26";
     /// <summary>The version new games and new manifests use.</summary>
@@ -264,7 +265,7 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     private static AgentUtility Evaluate(HeuristicContext context, AgentAction action) => action.Kind switch
     {
         ActionKind.GainCredit => Value(Credit(context), "economy/credit-and-install-reserve"),
-        ActionKind.DrawCard => Value(context.Features.Board.HiddenZoneCounts.RunnerStack > 0 ? context.DrawValue + PunisherDraw(context) + SafeRemoteDraw(context)
+        ActionKind.DrawCard => Value(context.Features.Board.HiddenZoneCounts.RunnerStack > 0 ? context.DrawValue + PunisherDraw(context)
             + (context.Features.Hand.Length < 2 && context.Features.Board.Servers.SelectMany(server => server.Ice).Any(card => context.Definition(card)?.Ice?.Subroutines.Any(subroutine => subroutine is DamageSubroutineSpec) == true) ? 80 : 0) : -1000, "economy/draw-and-survival"),
         ActionKind.PlayCard => Play(context, (PlayCardParameters)action.Parameters),
         ActionKind.InstallCard when action.Parameters is BehaviorInstallChoiceParameters behaviorInstall =>
@@ -312,21 +313,8 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
         return grip > context.Features.Hand.Length ? (int)Math.Min(700, chance * PunishedGame) : 0;
     }
 
-    /// <summary>
-    /// v26 (bot loop 2's reviews): an advanced remote the Runner can't run because a trap there could flatline its grip is
-    /// run after drawing, with clicks to spare for both; it ran HQ instead and left a 3-counter agenda to be scored.
-    /// </summary>
-    private static int SafeRemoteDraw(HeuristicContext context)
-    {
-        if (context.Generation < 22) return 0;
-        int grip = context.Features.Hand.Length;
-        foreach (AgentServer server in context.Features.Board.Servers.Where(server => server.Kind == ServerKind.Remote))
-        {
-            int needed = UnknownAdvancedRoots(context, server).Select(counters => 2 + counters - grip).DefaultIfEmpty(0).Max();
-            if (needed >= 1 && needed <= context.Self.Clicks - 2) return 300;
-        }
-        return 0;
-    }
+    /// <summary>v26: what a flatline to a punishing operation costs, before the chance the Corp holds one.</summary>
+    private const int PunishedGame = 4000;
 
     private static AgentUtility Value(int score, string reason, bool approximate = false, bool fallback = false) => new(0, score, reason, approximate, UsedFallback: fallback);
     private static int Credit(HeuristicContext context)

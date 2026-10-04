@@ -13,15 +13,15 @@ namespace Netrunner.Match.Tests;
 public sealed class BotStrategy1Tests
 {
     [Theory]
-    [InlineData(RunnerHeuristicPolicy.V25, true)]
-    [InlineData(RunnerHeuristicPolicy.V26, false)]
-    public async Task ARunThatWouldArmMeasuredResponseWaitsForTheGripToSurviveIt(string version, bool runs)
+    [InlineData(RunnerHeuristicPolicy.V25, ActionKind.StartRun)]
+    [InlineData(RunnerHeuristicPolicy.V26, ActionKind.DrawCard)]
+    public async Task AfterASuccessfulRunTheGripIsDrawnUpAgainstMeasuredResponse(string version, ActionKind kind)
     {
         if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
-        // 2 points, one click left and two cards: a steal would make threat 4 with no click to draw up to Measured
-        // Response's 4 meat damage.
-        LegalAction chosen = await ChooseAtAsync("strategy1-measured-response", version, 130);
-        Assert.True(runs == (chosen.Kind == ActionKind.StartRun), $"{version} chose {chosen.Kind} {chosen.Description}.");
+        // Threat 6 against PT Untaian, a successful run made, two cards and 5 credits: Measured Response's 4 meat damage
+        // would flatline the Runner next turn.
+        LegalAction chosen = await ChooseAtAsync("strategy1-measured-response", version, 781);
+        Assert.True(kind == chosen.Kind, $"{version} chose {chosen.Kind} {chosen.Description}.");
     }
 
     [Theory]
