@@ -553,9 +553,7 @@ public sealed partial class CorpHeuristicPolicy
             int perTurn = context.Generation >= 24 ? definition.Behavior?.Triggers.Where(trigger => trigger.Occurrence == OccurrenceKind.TurnBegin)
                 .SelectMany(trigger => trigger.Instructions).Where(instruction => instruction.Kind == BehaviorInstructionKind.GainCredits)
                 .Sum(instruction => instruction.Amount) ?? 0 : 0;
-            if (futureIncome == 0 && immediateDraw == 0 && perTurn > 0 && cost <= context.Self.Credits)
-                return Value(60 + perTurn * 80 - cost * 30, "rez/turn-income-asset", approximate: true);
-            if (futureIncome == 0 && immediateDraw == 0) return Value(-10, "rez/no-current-payoff", approximate: true);
+            if (futureIncome == 0 && immediateDraw == 0 && perTurn == 0) return Value(-10, "rez/no-current-payoff", approximate: true);
             // v12 (self-play review, 28 September): an economy asset rezzed mid-way through the Runner's
             // turn shows it to a Runner who can still run and trash it; it waits for the last windows
             // before the Corp's turn, where auto-pass also stops a human.
@@ -568,6 +566,9 @@ public sealed partial class CorpHeuristicPolicy
             if (context.Generation >= 9 && context.Features.Board.Turn.ActiveSide == PlayerSide.Corp && immediateDraw == 0
                 && definition.Behavior?.Triggers.Any(trigger => trigger.Occurrence == OccurrenceKind.TurnBegin) == true)
                 return Value(-10, "rez/economy-waits-for-the-runner-turn-end", approximate: true);
+            // It waits, as the assets above do, for the last windows of the Runner's turn.
+            if (futureIncome == 0 && immediateDraw == 0)
+                return Value(60 + perTurn * 80 - cost * 30, "rez/turn-income-asset", approximate: true);
             if (immediateDraw >= context.Features.Board.HiddenZoneCounts.CorpDeck) return Value(-10000, "rez/avoid-deck-out");
             return Value(futureIncome * 45 + immediateDraw * context.DrawValue - cost * context.CreditValue, "rez/economy-payback", approximate: true);
         }

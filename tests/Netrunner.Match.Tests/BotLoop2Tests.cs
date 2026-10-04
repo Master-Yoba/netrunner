@@ -53,7 +53,8 @@ public sealed class BotLoop2Tests
     public async Task PublicAccessPlazaIsRezzedForItsTurnIncome(string version, bool rezzes)
     {
         if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
-        (LegalAction chosen, GameState state) = await ChooseWithStateAtAsync("loop2-201", version, 137, PlayerSide.Corp);
+        // The Runner's discard window: v29 waits for it, as for other assets that pay when the Corp's turn begins.
+        (LegalAction chosen, GameState state) = await ChooseWithStateAtAsync("loop2-201", version, 163, PlayerSide.Corp);
         bool plaza = chosen.Parameters is RezCardParameters rez && state.GetCard(rez.CardId).DefinitionId.Value == "35062";
         Assert.True(rezzes == plaza, $"{version} chose {chosen.Kind} {chosen.Description}.");
     }

@@ -192,11 +192,16 @@ public sealed partial class CorpHeuristicPolicy
                 // target filter's missing card type had matched the Runner's cards and made it a gain.
                 case BehaviorInstructionKind.TrashCard when context.Generation >= 24 && self
                     && instruction.Target is { Kind: BehaviorTargetKind.ChosenCard } && chosenTarget?.Filter?.OwnerSide == PlayerSide.Corp:
-                    total -= context.Features.Board.Servers.SelectMany(server => server.Ice.Concat(server.Root)).OfType<AgentCard>()
+                    // The candidates are the target selector's: LEO's bioroid must be in the attacked server. Any other
+                    // selector is priced at its dearest candidate.
+                    IEnumerable<int> own = context.Features.Board.Servers
+                        .Where(server => !chosenTarget.IsInAttackedServer || server.Id == context.Features.Board.Run?.AttackedServer)
+                        .SelectMany(server => server.Ice.Concat(server.Root)).OfType<AgentCard>()
                         .Where(card => MatchesTarget(context, card, chosenTarget) && (chosenTarget.Filter.Rezzed is not { } rezzed || (card.Rezzed == true) == rezzed)
                             && (chosenTarget.Filter.Subtype is not { } subtype || context.Definition(card)?.Printed.Subtypes
                                 .Contains(subtype, StringComparer.OrdinalIgnoreCase) == true))
-                        .Select(card => context.CardValue(card, installed: true)).DefaultIfEmpty(0).Min();
+                        .Select(card => context.CardValue(card, installed: true)).DefaultIfEmpty(0);
+                    total -= chosenTarget.Selector is null || chosenTarget.IsInAttackedServer ? own.Min() : own.Max();
                     break;
                 case BehaviorInstructionKind.TrashCard when context.Generation >= 4 && self
                     && instruction.Target is { Kind: BehaviorTargetKind.ChosenCard }:
