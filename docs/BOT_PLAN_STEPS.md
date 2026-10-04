@@ -23,7 +23,10 @@ gate.
 
 - Add `engine-bench --profile-game` (in `src/Netrunner.Cli/CliCommands.EngineBench.cs`) that plays one Standard
   self-play game on the box pool and reports time per action split into: observation build (`ObservationBuilder.Build`),
-  agent decision, authoritative `GameEngine.Apply`, replay serialization and `ReplayVerifier.Verify`.
+  agent decision, the per-action state round trip (`EngineJson.Serialize` and `DeserializeState`,
+  `FullMatchRunner.cs:45`), authoritative `GameEngine.Apply`, and at the end replay serialization and
+  `ReplayVerifier.Verify`. Also report the cost of one rollout step at the end-of-turn horizon and of a whole-game
+  rollout, so S0.3 and S1.2 can be sized.
 - Add `--profile-plan` that takes a saved game and a sequence, replays to it, and times one `TurnPlanner.Plan` call
   split into: sampling (`ObservationDeterminizer.Sample`), simulated `Apply`, `ObservationBuilder.Build` inside
   `TurnPlanner.Choose`, heuristic evaluation inside `Choose`, and leaf scoring.
@@ -32,10 +35,12 @@ gate.
 
 ### S0.2 Fast ladder mode
 
-- In `FullMatchRunner.RunAsync` (`src/Netrunner.Match/FullMatchRunner.cs`) make replay verification and the JSON round
-  trip optional per game: a `verify` flag passed from `RatingLadder.PlayAsync`.
-- `ai-ladder --verify-replays-every N` (default 8, as `fuzz` uses) verifies every Nth finished game and skips the round
-  trip otherwise. `--verify-replays-every 1` is today's behaviour.
+- In `FullMatchRunner.RunAsync` (`src/Netrunner.Match/FullMatchRunner.cs`) put the **per-action state round trip**
+  (the save-and-reload check before every `Apply`) and the end-of-game replay verification behind one `verify` flag
+  passed from `RatingLadder.PlayAsync`. The round trip is probably the largest cost after the agent itself; S0.1 says.
+- `ai-ladder --verify-replays-every N` (default 8, as `fuzz` uses) plays every Nth finished game with `verify` on and
+  the rest with it off. `--verify-replays-every 1` is today's behaviour. The fuzz and every verified game keep both
+  checks: they are what proves a state survives a save and reload.
 - Remove the next largest cost found in S0.1 if it is not the agent itself (candidates: observation building for a seat
   whose decision is forced, repeated catalog lookups).
 - **Gate:** a 240-deal box ladder in both modes gives identical results game by game (same seeds, same winners, same
@@ -46,10 +51,12 @@ gate.
 
 ### S0.3 Budget-scaling entrants
 
-- Add ladder entrants `standard-x1`, `standard-x4`, `standard-x16` in `RatingLadder.CreateAgent`
-  (`src/Netrunner.Match/RatingLadder.cs`): the current Hard planner settings at 1×, 4× and 16× `plan-samples`, on the
-  current leaf (set 4). They are diagnostics, not shipping profiles.
-- Run the three against each other on the box pool, 480 deals each pairing, both seats.
+- Add ladder entrants `standard-x1`, `standard-x2`, `standard-x4`, `standard-x8` and `standard-x16` in
+  `RatingLadder.CreateAgent` (`src/Netrunner.Match/RatingLadder.cs`): the current Hard planner settings at that multiple
+  of `plan-samples`, on the current leaf (set 4). They are diagnostics, not shipping profiles.
+- Size the run from S0.1's rollout cost. The default is ×1, ×4 and ×16 against each other on the box pool, 480 deals a
+  pairing, both seats; if that exceeds about two hours on 12 workers, use ×1, ×2, ×4 and ×8 with 240 deals a pairing and
+  record the choice. ×16 of Hard's samples is 48 to 64 samples a decision, which may be hours by itself.
 - **Gate (a reading, not a pass):** record whether strength is monotone in budget per seat. The plan expects it is not
   for the Corp and weakly so for the Runner; that confirms the leaf is the target of S4. If it *is* monotone with lower
   bounds above zero in both seats, S4 still runs, but S5 may start from a higher budget sooner.
@@ -74,13 +81,20 @@ gate.
 
 ### S1.2 Teacher labels
 
-- `ai-regret label <suite-dir> --samples 32 --budget <simulated decisions> --evaluation 4 --workers 12`: for each
-  root, rebuilds the observation and checkpoint at the sequence (the `ChooseAtAsync` path in
-  `tests/Netrunner.Match.Tests/BotLoop1Tests.cs`, moved into `Netrunner.Match` as `SavedDecision.Replay`), deals 32
-  shared samples from the tracker and pool as `TurnPlanner.Pins` does, rolls out every candidate on every sample to the
-  turn's end, and writes per-candidate mean win probability and the root value (the best candidate's). Deterministic
-  given the suite's seed.
-- Label time is budgeted from S0.1. If 8,000 roots exceed four hours on 12 workers, reduce `--per-game` and record it.
+- `ai-regret label <suite-dir> --samples 32 --horizon game|<turns> --evaluation 4 --workers 12`: for each root,
+  rebuilds the observation and checkpoint at the sequence, deals 32 shared samples from the tracker and pool as
+  `TurnPlanner.Pins` does, rolls out every candidate on every sample **past the leaf's horizon** (to the game's end
+  with the rollout policy, or `<turns>` turns and then the leaf; start with `game` and fall back to 4 turns if S0.1's
+  whole-game rollout cost makes 8,000 roots exceed about four hours on 12 workers), and writes per-candidate mean win
+  probability, the root value (the best candidate's) and the horizon used. Deterministic given the suite's seed. The
+  point of the depth is that labels come from play, not from the leaf section 1.3 of the plan calls noise.
+- Move the saved-decision replay into `Netrunner.Match` as `SavedDecision.Replay` and put **every** test copy of
+  `ChooseAtAsync` on it: `BotLoop1Tests` (the shared one), `CorpPlaytestV11Tests`, `CorpPlaytestV13Tests`,
+  `CorpPlaytestV15Tests`, `CorpPlaytestV17Tests`, `CorpCodexV20Tests`, `PlaytestWave5Tests`, `RunnerInferenceV21Tests`
+  and `SelfPlayReviewTests`, plus the callers in `CorpAgendaHidingV16Tests`, `CorpLintV19Tests`, `CorpPlaytestV14Tests`,
+  `CorpPlaytestV18Tests`, `RunnerCodexV14Tests` and `RunnerPlaytestV13Tests`. One replay path, so a root in the suite and
+  a root in a test are the same thing.
+- If reducing `--per-game` is still needed, record it.
 
 ### S1.3 Scoring and the blunder list
 
@@ -89,8 +103,10 @@ gate.
   per pool, per category, with a 200-draw bootstrap interval over roots; `--blunders N` lists the N highest-regret
   roots with every candidate's value and the version's reason string.
 - **Gate:** the suite separates what the ladder could not: Runner v24, v25 and v26 scored on the same suite in under
-  five minutes each, with intervals that order at least two of them. If no pair separates, the roots are too easy or
-  the teacher too weak: raise `--per-game` on roots where the heuristic's top two scores are close and re-label.
+  five minutes each, with intervals that order at least two of them. If no pair separates, first check the teacher:
+  compare its labels at `--horizon game` and at the turn's end on 200 roots, and if they disagree on the best candidate
+  in more than a quarter, the short horizon is the problem and labels must use the deep one. Only then treat the roots
+  as too easy: raise `--per-game` on roots where the heuristic's top two scores are close and re-label.
 - **Record:** the three versions' table, the labelling time, and the first blunder list in `docs/BOT_VERSIONS.md`.
 
 ## S2. Puzzle suite v2 (M)
@@ -144,11 +160,15 @@ gate.
 - Add `standard-prev` to the ladder: an entrant that runs the previous live version from a frozen build under
   `.tools/ladder-anchors/<version>/` (`scripts/ai-ladder.sh` builds it from a recorded commit when missing). Until S5,
   `standard-prev` is Corp v30 and Runner v26 from the legacy files; afterwards it is the frozen build.
-- **Gate:**
-  - `PolicyVersionTests` extended: every version through v30 and v26 constructs and the new live versions choose
-    identically to v30 and v26 on the regret suite (agreement 100%) and the puzzle suite;
+- **Gate** (needs nothing from S1 or S2):
+  - a 240-deal box ladder and a 240-deal Gateway ladder of v31 against v30 and v27 against v26, with `--save-games`,
+    where every game comes out identical to its pair: the same winner, action count and final state hash. That is a
+    stronger check than any suite, since it covers every decision in 960 games;
+  - `PolicyVersionTests` extended: every version through v30 and v26 constructs, and the legacy files are byte-identical
+    to the policy files at the commit the step branched from;
   - every frozen benchmark digest, saved-game fixture and twin test unchanged;
   - `make gates` passes.
+  - When S1 exists, 100% agreement on the regret suite is added as a cheap repeat of the same check.
 - **Record:** the file sizes before and after, and the agreement check, in `docs/BOT_VERSIONS.md`.
 
 ## S4. Evaluation set 5 (L)
@@ -170,9 +190,13 @@ gate.
   games, reports held-out log loss and mean absolute error against the teacher's value, and compares to set 4 scored the
   same way. The model is `LogisticSideModel` or, if the held-out error asks for it, a two-layer additive model over the
   same named features; either is stored in `data/ai/evaluation-v5.json` with provenance.
-- **Gate:** set 5 beats set 4 on held-out teacher values in both seats, and the planner (Hard settings) scoring with set
-  5 beats the same planner on set 4 on the regret suite's held-out roots.
-- **Record:** the fit report and the regret comparison.
+- Fit **three** models, so the gain is attributed: set 4 with its shipped weights (set 2's, never fitted to set 4's own
+  features), set 4 refitted to the teacher (new target, old features), and set 5 fitted to the teacher (new target, new
+  features).
+- **Gate:** set 5 beats both set 4 arms on held-out teacher values in both seats, and the planner (Hard settings)
+  scoring with set 5 beats the same planner on each set 4 arm on the regret suite's held-out roots. If the refitted set
+  4 captures most of the gain, the features are not the lever and S4.1's terms are reconsidered before S4.3.
+- **Record:** the three fit reports and the regret comparison.
 
 ### S4.3 Budget scaling on set 5
 

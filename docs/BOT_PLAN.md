@@ -56,7 +56,9 @@ The Wave 4 and 5 conclusion was "the planner is saturated". The evidence points 
 - **The leaf is fitted to the wrong target.** `ai-fit-evaluation` samples each side's view at the first action of every
   turn and labels it with who eventually won. Predicting the winner of a position is not ranking actions from it: the
   signal is one bit per game, shared by every position in the game, and dominated by which deck was ahead.
-  (argentum-engine, below, tried the same fit and rejected it for the same reason.)
+  (argentum-engine, below, tried the same fit and rejected it for the same reason.) Set 4 itself was never fitted:
+  sets 2, 3 and 4 all load set 2's weights (`FittedEvaluation.DocumentFor`) and differ only in how one feature is
+  extracted, so the weights have not seen the corrected features they are applied to.
 - **Compute does not help, which means the leaf is noise.** Corp Hard at 10 samples × width 4 scored 0 Elo against
   3 × 3. If an evaluator carried signal, more rollouts would show it. This is the test argentum calls budget scaling, and
   it failed before anyone ran it as a test.
@@ -217,8 +219,11 @@ A fixed corpus of recorded decision roots with teacher labels, scored in minutes
   self-play on each pool (`ai-ladder --save-games`), plus every confirmed finding from the loops and strategy work.
   Each root keeps the acting side's observation, the checkpoint, the legal candidates and the deal, so any policy
   version can be asked to choose there (`BotLoop1Tests.ChooseAtAsync` already does this).
-- **Teacher:** the planner at an offline budget (start: 32 samples × every meaningful candidate, rollout to the turn's
-  end, evaluation set 4 then 5), with common random numbers across candidates. It writes each candidate's value.
+- **Teacher:** the planner at an offline budget (start: 32 samples × every meaningful candidate) with common random
+  numbers across candidates. Its rollouts go **deeper than the leaf's horizon**: to the game's end with the rollout
+  policy where S0.1's costs allow it, otherwise a fixed number of turns (start 4) and then the leaf. A label is then
+  mostly the result of play, not a reading of set 4, so fitting set 5 to it does not inherit set 4's bias. It writes each
+  candidate's value and the horizon it used.
 - **Scores per policy version:**
   - **Regret:** mean over roots of (teacher's best value − teacher's value of the version's choice), in win-probability
     points. The main number.
@@ -234,10 +239,12 @@ CLI: `ai-regret label <games-dir> --output <suite>` and `ai-regret score <suite>
 
 ### 5.2 Ladders that resolve what they measure
 
-- **Speed.** Every ladder game today plays once authoritatively with a full observation per action, then serializes,
-  deserializes and re-verifies its whole replay (`FullMatchRunner`). A ladder mode verifies every Nth replay (as
-  `fuzz --verify-replays-every` does) and skips the JSON round trip otherwise. Profile one game and remove the next
-  two costs. Target: 1,000 deals (2,000 games) on the box pool in under 10 minutes on 12 workers.
+- **Speed.** Every ladder game today plays once authoritatively with a full observation per action, serializes and
+  deserializes the **whole state before every action** (a save-and-reload check), then serializes, deserializes and
+  re-verifies its whole replay at the end (`FullMatchRunner`). A ladder mode keeps both checks on every Nth game (as
+  `fuzz --verify-replays-every` does) and skips them otherwise; the fuzz and the verified games keep them on. Profile
+  one game and remove the next cost after those. Target: 1,000 deals (2,000 games) on the box pool in under 10 minutes
+  on 12 workers.
 - **Size by claim.** A claim of strength uses 1,000 deals with `--stop-when-clear`; a no-harm check on another pool
   uses 240. Report the interval, never the point alone.
 - **Budget-scaling ladder.** Entrants `standard-x1`, `standard-x4`, `standard-x16` (the same policy at 1×, 4× and 16×
@@ -310,8 +317,10 @@ effects), and any learned dynamics.
 
 ## 9. Risks
 
-- **The teacher bootstraps on a weak leaf.** Round 0 labels come from set 4 at a large budget. Mitigation: the puzzle
-  suite and the ladder gate each round; teacher drift is reported; a round that fails either is discarded.
+- **The teacher repeats the leaf's mistakes.** More samples of a biased leaf do not remove the bias. Mitigation: the
+  teacher's rollouts run past the leaf's horizon (to the game's end, or several turns then the leaf), so labels come
+  from play; S4.2 fits set 4 to the same labels as a control, so a gain is attributed to the target or to the features;
+  the puzzle suite and the ladder gate each round; teacher drift is reported; a round that fails either is discarded.
 - **Rollout cost blows the latency budget.** Mitigation: S0 profiles before anything is built on it; the rollout policy
   is designed for cost (4.3); `rollout-budget` is a profile parameter; Standard may plan fewer samples than Hard.
 - **Freezing legacy code doubles the policy source for a while.** Mitigation: the legacy files are never edited; they
