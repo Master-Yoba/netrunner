@@ -115,7 +115,11 @@ public sealed partial class CorpHeuristicPolicy
                         && RunnerGetsIn(context, server, install.CreditCost + definition.Printed.AdvancementRequirement)
                         && (context.AgendaCount < 2 || context.Generation >= 18
                             && context.Features.Board.Servers.FirstOrDefault(value => value.Kind == ServerKind.Headquarters) is { } hq
-                            && !RunnerGetsIn(context, hq, install.CreditCost))
+                            && !RunnerGetsIn(context, hq, install.CreditCost)
+                            // v30 (bot loop 2's reviews): an HQ access takes one random card, a breakable remote's agenda is
+                            // taken outright, so HQ is the safer place until agendas fill most of it (Off the Books behind a
+                            // lone Kessleroid against Principia, two agendas in a hand of five).
+                            || context.Generation >= 25 && context.AgendaCount * 10 < context.Features.Hand.Length * 6)
                         // v22 (reviews of the losses to Codex, 1 October): a full HQ of other cards only means a discard.
                         && (context.Generation >= 17 || context.Features.Hand.Length < (context.Self.MaximumHandSize ?? 5));
                 }

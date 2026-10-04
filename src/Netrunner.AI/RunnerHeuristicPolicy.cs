@@ -264,7 +264,7 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     private static AgentUtility Evaluate(HeuristicContext context, AgentAction action) => action.Kind switch
     {
         ActionKind.GainCredit => Value(Credit(context), "economy/credit-and-install-reserve"),
-        ActionKind.DrawCard => Value(context.Features.Board.HiddenZoneCounts.RunnerStack > 0 ? context.DrawValue + PunisherDraw(context)
+        ActionKind.DrawCard => Value(context.Features.Board.HiddenZoneCounts.RunnerStack > 0 ? context.DrawValue + PunisherDraw(context) + SafeRemoteDraw(context)
             + (context.Features.Hand.Length < 2 && context.Features.Board.Servers.SelectMany(server => server.Ice).Any(card => context.Definition(card)?.Ice?.Subroutines.Any(subroutine => subroutine is DamageSubroutineSpec) == true) ? 80 : 0) : -1000, "economy/draw-and-survival"),
         ActionKind.PlayCard => Play(context, (PlayCardParameters)action.Parameters),
         ActionKind.InstallCard when action.Parameters is BehaviorInstallChoiceParameters behaviorInstall =>
@@ -310,6 +310,22 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
         if (context.Generation < 22 || context.Features.Board.TurnFacts?.Runner.ThisTurn?.SuccessfulRun != true) return 0;
         (int grip, double chance) = RunnerInference.Punishers(context);
         return grip > context.Features.Hand.Length ? (int)Math.Min(700, chance * PunishedGame) : 0;
+    }
+
+    /// <summary>
+    /// v26 (bot loop 2's reviews): an advanced remote the Runner can't run because a trap there could flatline its grip is
+    /// run after drawing, with clicks to spare for both; it ran HQ instead and left a 3-counter agenda to be scored.
+    /// </summary>
+    private static int SafeRemoteDraw(HeuristicContext context)
+    {
+        if (context.Generation < 22) return 0;
+        int grip = context.Features.Hand.Length;
+        foreach (AgentServer server in context.Features.Board.Servers.Where(server => server.Kind == ServerKind.Remote))
+        {
+            int needed = UnknownAdvancedRoots(context, server).Select(counters => 2 + counters - grip).DefaultIfEmpty(0).Max();
+            if (needed >= 1 && needed <= context.Self.Clicks - 2) return 300;
+        }
+        return 0;
     }
 
     private static AgentUtility Value(int score, string reason, bool approximate = false, bool fallback = false) => new(0, score, reason, approximate, UsedFallback: fallback);
