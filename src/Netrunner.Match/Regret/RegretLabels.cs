@@ -1,0 +1,98 @@
+using System.Collections.Immutable;
+using Netrunner.AI;
+using Netrunner.Core;
+
+namespace Netrunner.Match.Regret;
+
+/// <summary>
+/// Labels a game's roots with the teacher (bot plan S1.2). The teacher is the latest Hard bot of the acting side, which
+/// has watched the game to the root: it knows the opponent's list and its tracker's beliefs, and deals from both.
+/// </summary>
+public static class RegretLabels
+{
+    public static ImmutableArray<RegretLabel> Label(RegretGame game, IReadOnlyList<RegretRoot> roots, TeacherSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(game);
+        ArgumentNullException.ThrowIfNull(roots);
+        ArgumentNullException.ThrowIfNull(settings);
+        if (roots.Count == 0) return [];
+        FullMatchDefinition definition = RegretGames.Definition(game);
+        var bySequence = roots.ToDictionary(root => root.Sequence);
+        var teachers = new Dictionary<PlayerSide, OfflineAgent>
+        {
+            [PlayerSide.Corp] = Teacher(definition, PlayerSide.Corp),
+            [PlayerSide.Runner] = Teacher(definition, PlayerSide.Runner),
+        };
+        var labels = ImmutableArray.CreateBuilder<RegretLabel>(roots.Count);
+        RegretGames.Replay(game, definition, position =>
+        {
+            foreach (OfflineAgent teacher in teachers.Values) AgentLifecycleHost.Observe(teacher, position.State, definition.Behavior);
+            if (!bySequence.TryGetValue(position.Sequence, out RegretRoot? root)) return;
+            Observation observation = ObservationBuilder.Build(position.State, root.Side, definition.Behavior, definition.Runtime);
+            TeacherSettings rooted = settings with { Seed = settings.Seed ^ RegretRoots.StableHash(root.Id) };
+            IReadOnlyList<TeacherValue> values = RolloutTeacher.Evaluate(teachers[root.Side], observation,
+                [.. root.Candidates.Select(candidate => new ActionId(candidate.ActionIds[0]))], rooted);
+            labels.Add(new RegretLabel(root.Id, settings.Samples, settings.HorizonTurns, settings.Evaluation, rooted.Seed,
+                [.. root.Candidates.Zip(values, (candidate, value) => new RegretValue(candidate.Group, value.Mean, value.StandardError, value.PlayOuts))]));
+        });
+        return labels.ToImmutable();
+    }
+
+    private static OfflineAgent Teacher(FullMatchDefinition definition, PlayerSide side) =>
+        RatingLadder.CreateAgent("hard", side, definition) as OfflineAgent
+            ?? throw new InvalidOperationException("The Hard bot is not an offline agent.");
+}
+
+/// <summary>A version's choice at one root, and its regret against the teacher's labels.</summary>
+/// <param name="Chosen">The chosen group, or null when the choice is not one of the labelled groups.</param>
+/// <param name="Regret">The best labelled value minus the chosen group's, in win probability; null when unlabelled.</param>
+/// <param name="Agrees">Whether the chosen group is the teacher's best.</param>
+/// <param name="AgreesWithinNoise">Whether the chosen group is within the two standard errors' sum of the best.</param>
+public sealed record RegretChoice(string RootId, PlayerSide Side, string Kind, string Split, string? Chosen, string ChosenDescription,
+    string Reason, double? Regret, bool? Agrees, bool? AgreesWithinNoise);
+
+/// <summary>Asks a policy version to choose at every root of a game, through the production path (bot plan S1.3).</summary>
+public static class RegretScores
+{
+    /// <param name="agent">Makes the agent being scored for a side, or null when the version does not play that side.</param>
+    public static ImmutableArray<RegretChoice> Choose(RegretGame game, IReadOnlyList<RegretRoot> roots,
+        IReadOnlyDictionary<string, RegretLabel> labels, Func<FullMatchDefinition, PlayerSide, OfflineAgent?> agent)
+    {
+        ArgumentNullException.ThrowIfNull(game);
+        ArgumentNullException.ThrowIfNull(roots);
+        ArgumentNullException.ThrowIfNull(labels);
+        ArgumentNullException.ThrowIfNull(agent);
+        FullMatchDefinition definition = RegretGames.Definition(game);
+        var agents = new Dictionary<PlayerSide, OfflineAgent>();
+        foreach (PlayerSide side in roots.Select(root => root.Side).Distinct())
+            if (agent(definition, side) is { } created) agents[side] = created;
+        var bySequence = roots.Where(root => agents.ContainsKey(root.Side) && labels.ContainsKey(root.Id)).ToDictionary(root => root.Sequence);
+        if (bySequence.Count == 0) return [];
+        var choices = ImmutableArray.CreateBuilder<RegretChoice>(bySequence.Count);
+        RegretGames.Replay(game, definition, position =>
+        {
+            foreach (OfflineAgent watcher in agents.Values) AgentLifecycleHost.Observe(watcher, position.State, definition.Behavior);
+            if (!bySequence.TryGetValue(position.Sequence, out RegretRoot? root)) return;
+            OfflineAgent chooser = agents[root.Side];
+            ActionId chosen = chooser.ChooseActionAsync(ObservationBuilder.Build(position.State, root.Side, definition.Behavior, definition.Runtime))
+                .AsTask().GetAwaiter().GetResult();
+            string reason = chooser.LastEvaluation?.Candidates.FirstOrDefault(candidate => candidate.ActionId == chosen)?.Utility.Reason ?? "";
+            chooser.DiscardDecision();
+            string description = position.State.PendingDecision!.LegalActions.First(action => action.Id == chosen).Description;
+            choices.Add(Score(root, labels[root.Id], chosen, description, reason));
+        });
+        return choices.ToImmutable();
+    }
+
+    private static RegretChoice Score(RegretRoot root, RegretLabel label, ActionId chosen, string description, string reason)
+    {
+        RegretCandidate? group = root.Candidates.FirstOrDefault(candidate => candidate.ActionIds.Contains(chosen.Value));
+        RegretValue? best = label.Best;
+        RegretValue? value = group is null ? null : label.Values.FirstOrDefault(entry => entry.Group == group.Group && !double.IsNaN(entry.Mean));
+        if (best is null || value is null)
+            return new RegretChoice(root.Id, root.Side, root.Kind, root.Split, group?.Group, description, reason, null, null, null);
+        double regret = best.Mean - value.Mean;
+        return new RegretChoice(root.Id, root.Side, root.Kind, root.Split, group!.Group, description, reason, regret,
+            value.Group == best.Group, regret <= best.StandardError + value.StandardError);
+    }
+}

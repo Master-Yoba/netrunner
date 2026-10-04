@@ -117,6 +117,11 @@ public static partial class CliCommands
             return RunAiLlmReview(args, output, error);
         }
 
+        if (args.Length > 0 && args[0] == "ai-regret")
+        {
+            return RunAiRegret(args, output, error);
+        }
+
         if (args.Length > 0 && args[0] == "ai-lint")
         {
             return RunAiLint(args, output, error);
@@ -276,6 +281,9 @@ public static partial class CliCommands
             + "engine-bench [--content developer|official] [--games N] [--seed <unsigned-integer>] [--json] | "
             + "engine-bench --profile-game [--content POOL] [--profile ENTRANT] [--games N] [--seed S] [--rollout-roots N] [--rollout-samples N] [--json] | "
             + "engine-bench --profile-plan <games-dir> --sequence N [--profile ENTRANT] [--repeats N] [--rollout-samples N] [--json] | "
+            + "ai-regret roots <games-dir> --output <suite-dir> [--turn-roots N] [--run-roots N] [--labelled N] [--seed S] [--workers N] | "
+            + "ai-regret label <suite-dir> [--samples N] [--horizon game|TURNS] [--evaluation N] [--seed S] [--workers N] [--labels FILE] [--repeat N --repeat-seed S] | "
+            + "ai-regret score <suite-dir> --version V[,V...] [--profile P] [--split all|held-out|train] [--labels FILE] [--blunders N] [--bootstrap N] [--workers N] [--json] | "
             + "ai-lint <games-dir> [--workers N] [--examples N] [--output file] [--json] | "
             + "ai-style <games-dir> [--workers N] [--json] | "
             + "ai-belief <games-dir> [--games N] [--json] | "

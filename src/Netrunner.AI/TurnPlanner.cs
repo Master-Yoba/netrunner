@@ -116,16 +116,23 @@ internal sealed class TurnPlanner
 
     /// <summary>The cards the opponent's unseen cards are dealt from: Hard's known list when it deals from it, otherwise the pool.</summary>
     internal OpponentCardPool PoolFor(PlayerSide side, AgentKnowledge knowledge) =>
-        DealsFromTracker && knowledge.Tracker is not null && DealsFromList && knowledge.OpponentList is { } list
+        PoolFor(side, knowledge, DealsFromTracker && DealsFromList);
+
+    /// <summary>The opponent's list when <paramref name="fromList"/> and the agent knows it (with a tracker), otherwise the pool.</summary>
+    internal OpponentCardPool PoolFor(PlayerSide side, AgentKnowledge knowledge, bool fromList) =>
+        fromList && knowledge.Tracker is not null && knowledge.OpponentList is { } list
             ? new OpponentCardPool.Decklist(list.ToDictionary(entry => new CardDefinitionId(entry.DefinitionId), entry => entry.Quantity))
             : OpponentPool(side);
 
     /// <summary>One state sampled from the agent's observation, with the tracker's pins when the profile deals from them.</summary>
-    internal GameState Deal(PlayerSide side, AgentKnowledge knowledge, OpponentCardPool pool, PlanningContext planning)
+    internal GameState Deal(PlayerSide side, AgentKnowledge knowledge, OpponentCardPool pool, PlanningContext planning) =>
+        Deal(side, knowledge, pool, planning, DealsFromTracker && PinsTracked);
+
+    /// <summary>One state sampled from the agent's observation, pinning the tracker's beliefs when <paramref name="pinned"/>.</summary>
+    internal static GameState Deal(PlayerSide side, AgentKnowledge knowledge, OpponentCardPool pool, PlanningContext planning, bool pinned)
     {
         long sampling = ProfileTimings.Start();
-        SamplerKnowledge known = DealsFromTracker && knowledge.Tracker is not null && PinsTracked
-            ? Pins(knowledge.Tracker, side, planning) : SamplerKnowledge.None;
+        SamplerKnowledge known = pinned && knowledge.Tracker is not null ? Pins(knowledge.Tracker, side, planning) : SamplerKnowledge.None;
         GameState state = planning.Determinizer.Sample(known, pool, planning.Random);
         ProfileTimings.Stop("plan.sample", sampling);
         return state;
@@ -224,6 +231,35 @@ internal sealed class TurnPlanner
             steps++;
         }
         return (state, steps);
+    }
+
+    /// <summary>
+    /// Bot plan S1.2, the teacher: <paramref name="first"/> applied to a sample, then both sides' rollout choices until
+    /// the game ends, <paramref name="horizonTurns"/> turns have passed (0: no limit), or <paramref name="cap"/> simulated
+    /// decisions. The value is 1 or 0 for a finished game, otherwise the fitted evaluation's win probability for
+    /// <paramref name="side"/>; null when the action is not legal in the sample.
+    /// </summary>
+    internal double? PlayOut(GameState sample, ActionId first, PlayerSide side, AgentKnowledge knowledge,
+        ObservationDeterminizer determinizer, int horizonTurns, int evaluation, int cap)
+    {
+        ApplyResult applied = Simulate(sample, first, determinizer);
+        if (!applied.Accepted) return null;
+        GameState state = applied.State;
+        int lastTurn = horizonTurns > 0 ? sample.Turn.TurnNumber + horizonTurns : int.MaxValue;
+        for (int steps = 0; steps < cap && state.Outcome.Kind == GameOutcomeKind.Ongoing && state.PendingDecision is not null
+            && state.Turn.TurnNumber < lastTurn && Choose(state, knowledge, determinizer, side) is { } action; steps++)
+        {
+            applied = Simulate(state, action, determinizer);
+            if (!applied.Accepted) break;
+            state = applied.State;
+        }
+        if (state.Outcome.Kind != GameOutcomeKind.Ongoing) return state.Outcome.Winner == side ? 1 : 0;
+        long scoring = ProfileTimings.Start();
+        AgentFeatures features = ObservationReader.Read(ObservationBuilder.Build(state, side, determinizer.Behavior),
+            _configuration.FeatureVersion);
+        double value = FittedEvaluation.WinProbability(features, _catalog, evaluation, determinizer.Behavior.Version);
+        ProfileTimings.Stop("plan.leaf", scoring);
+        return value;
     }
 
     private static ApplyResult Simulate(GameState state, ActionId action, ObservationDeterminizer determinizer)
