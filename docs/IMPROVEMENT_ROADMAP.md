@@ -1,5 +1,8 @@
 # Post-M5 improvement roadmap
 
+> **AI track (4 October 2026):** the bot work continues in [BOT_PLAN.md](BOT_PLAN.md), which is authoritative over the
+> A* entries below.
+
 Status: Waves 0 to 4.5 done ([Wave 4.5 summary](WAVE_4_5_PROGRESS.md#wave-45-summary-1-october-2026)); Wave 5 done ([progress](WAVE_5_PROGRESS.md)); Wave 5.5 built ([progress](WAVE_5_5_PROGRESS.md))
 Covers: [engine and architecture](ENGINE_ARCHITECTURE_PLAN.md) (E*),
 [AI opponent](AI_OPPONENT_PLAN.md) (A*) and

@@ -9,10 +9,12 @@ records, audits and reviews (M0 to M5) are kept unchanged in
 - [Product requirements (PRD v0.2)](netrunner_solo_prd_v0.2.md)
 - [Implementation plan](IMPLEMENTATION_PLAN.md): milestones, architecture and
   decisions
+- [Bot plan](BOT_PLAN.md): the authoritative AI opponent plan (search first,
+  October 2026) and its [implementation steps](BOT_PLAN_STEPS.md)
 - [Improvement roadmap](IMPROVEMENT_ROADMAP.md): the post-M5 waves, ordering
   the three plans below
   - [Engine and architecture plan](ENGINE_ARCHITECTURE_PLAN.md) (E*)
-  - [AI opponent plan](AI_OPPONENT_PLAN.md) (A*)
+  - [AI opponent plan](AI_OPPONENT_PLAN.md) (A*), superseded by the bot plan
   - [UI/UX redesign plan](UI_UX_REDESIGN_PLAN.md) (U*)
 - [Wave 3 progress](WAVE_3_PROGRESS.md): the current wave and its evidence
 - [Wave 2 progress](WAVE_2_PROGRESS.md): Wave 2 and its gate evidence
