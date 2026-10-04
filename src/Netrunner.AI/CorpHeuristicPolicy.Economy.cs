@@ -11,6 +11,8 @@ public sealed partial class CorpHeuristicPolicy
         CardBehaviorDefinition? behavior = context.Definition(card)?.Behavior;
         if (behavior is null) return Value(-50, "play/unmodelled", approximate: true, fallback: true);
         int effect = Effects(context, behavior.Instructions, card, behavior.Controller);
+        // v30: a play only possible before the turn's first action finishes (Petty Cash) is now or never this turn.
+        if (context.Generation >= 25 && effect - play.CreditCost * context.CreditValue > 0 && NowOrNever(behavior.Conditions)) effect += NowOrNeverBonus;
         return new(effect >= 10000 ? 100 : 0, effect - play.CreditCost * context.CreditValue,
             "play/effect-minus-current-cost", Approximate: effect < 10000);
     }
@@ -28,6 +30,10 @@ public sealed partial class CorpHeuristicPolicy
                 - ability.Costs.Where(cost => cost.Kind == BehaviorCostKind.Credits).Sum(cost => cost.Amount))
             return Value(-100, "ability/play-it-cannot-pay-for", approximate: true);
         int benefit = Effects(context, declaration.Instructions, card, context.Features.Side);
+        // v30: Petty Cash from Archives refunds its click: a free gain, and only before the turn's first action finishes.
+        if (context.Generation >= 25 && NowOrNever(declaration.Conditions) && context.Definition(card)?.Behavior?.Instructions is { } played
+            && HeuristicContext.Flatten(played).Any(instruction => instruction.Kind == BehaviorInstructionKind.GainClicks))
+            benefit += NowOrNeverBonus;
         int costs = ability.Costs.Where(cost => cost.Kind == BehaviorCostKind.Credits).Sum(cost => cost.Amount) * context.CreditValue;
         costs += ability.Costs.Where(cost => cost.Kind == BehaviorCostKind.TrashSelf
             || (context.Generation >= 10 && cost.Kind == BehaviorCostKind.RemoveSelfFromGame)).Sum(_ => context.CardValue(card, installed: true));
@@ -92,6 +98,32 @@ public sealed partial class CorpHeuristicPolicy
             grip: context.Features.Board.HiddenZoneCounts.RunnerGrip, corpRezBudget: context.Self.Credits).CanGetIn;
     }
 
+    /// <summary>v30: what taking a now-or-never play first is worth: the turn's other plays stay available after it.</summary>
+    private const int NowOrNeverBonus = 300;
+
+    /// <summary>v30: whether a play or ability is legal only before the turn's first action finishes.</summary>
+    private static bool NowOrNever(IReadOnlyList<BehaviorCondition>? conditions) =>
+        conditions?.Any(condition => condition.Kind == BehaviorConditionKind.NoActionFinishedThisTurn) == true;
+
+    /// <summary>
+    /// v30: IP Enforcement's install of an agenda worth X from the Runner's score area: the Runner loses those points and the
+    /// Corp holds the agenda again, with a counter while the Runner stays tagged. When scoring it this turn wins, the play wins.
+    /// </summary>
+    private static int ReclaimValue(HeuristicContext context, BehaviorCardFilter? filter, int tagsRemoved)
+    {
+        AgentCard? agenda = context.Features.Board.RunnerScore.Where(card => context.Definition(card)?.Agenda is not null
+                && (filter?.AgendaPoints is not { } points || context.Definition(card)!.Printed.AgendaPoints == points))
+            .OrderByDescending(card => context.Definition(card)!.Printed.AgendaPoints).FirstOrDefault();
+        if (agenda is null) return 0;
+        CardEvaluationDescriptor definition = context.Definition(agenda)!;
+        int points = definition.Printed.AgendaPoints;
+        int counters = context.Opponent.Tags > tagsRemoved ? 1 : 0;
+        int remaining = Math.Max(0, definition.Printed.AdvancementRequirement - counters);
+        bool scoresNow = remaining <= context.Self.Clicks - 1 && remaining <= context.Self.Credits;
+        if (scoresNow && context.Self.AgendaPoints + points >= 7) return 20000;
+        return points * 350 + (scoresNow ? points * 300 : points * 120);
+    }
+
     /// <summary>A card that makes the Corp money: when played, when its turn begins, or by its abilities.</summary>
     private static bool IsEconomy(CardEvaluationDescriptor? definition) =>
         definition?.Behavior is { } behavior
@@ -105,6 +137,7 @@ public sealed partial class CorpHeuristicPolicy
         int total = 0;
         BehaviorTarget? chosenTarget = null;
         int chosenCount = 1;
+        int tagsRemoved = 0;
         foreach (BehaviorInstruction instruction in instructions)
         {
             if (instruction.Kind == BehaviorInstructionKind.Choose && instruction.Choice?.Target is { } target)
@@ -125,7 +158,7 @@ public sealed partial class CorpHeuristicPolicy
                 // Elevation (EL.3): counters, faces, agendas and turn structure.
                 case BehaviorInstructionKind.AddCounter: total += amount * 70; break;
                 case BehaviorInstructionKind.RemoveCounter: total -= amount * 50; break;
-                case BehaviorInstructionKind.RemoveTags: total -= amount * 150; break;
+                case BehaviorInstructionKind.RemoveTags: total -= amount * 150; tagsRemoved += amount; break;
                 case BehaviorInstructionKind.FlipSelf: total += 50; break;
                 case BehaviorInstructionKind.ForfeitAgenda: total -= 600; break;
                 case BehaviorInstructionKind.GainAllottedClicksNextTurn: total += sign * amount * 90; break;
@@ -144,6 +177,9 @@ public sealed partial class CorpHeuristicPolicy
                 case BehaviorInstructionKind.PurgeVirusCounters: total += 60; break;
                 case BehaviorInstructionKind.AddBreachAccess: total -= amount * 150; break;
                 case BehaviorInstructionKind.RefillRecurringCredits: total += 2 * context.CreditValue; break;
+                case BehaviorInstructionKind.InstallCard when context.Generation >= 25 && instruction.SourceZone == BehaviorZone.ScoreArea:
+                    total += ReclaimValue(context, instruction.Target?.Filter, tagsRemoved);
+                    break;
                 case BehaviorInstructionKind.InstallCard when instruction.IsZoneInstall: total += 250; break;
                 case BehaviorInstructionKind.GainClicks: total += sign * amount * 100; break;
                 case BehaviorInstructionKind.Draw:
@@ -220,8 +256,11 @@ public sealed partial class CorpHeuristicPolicy
                         + (option.Costs ?? []).Where(cost => cost.Kind == BehaviorCostKind.Credits).Sum(cost => cost.Amount) * 100);
                     break;
                 case BehaviorInstructionKind.Choose:
-                    if (instruction.Choice is { Options.Count: > 0 } choice)
-                        total += choice.Options.Max(option => Effects(context, option.Instructions, source, controller)
+                    // v30: only the options the Runner's tags allow (IP Enforcement's X, PR #97's review).
+                    if (instruction.Choice is { Options.Count: > 0 } choice
+                        && choice.Options.Where(option => context.Generation < 25 || option.Condition is not { Kind: BehaviorConditionKind.RunnerTagsAtLeast } tagged
+                            || context.Opponent.Tags >= (tagged.Value ?? 1)).ToArray() is { Length: > 0 } offered)
+                        total += offered.Max(option => Effects(context, option.Instructions, source, controller)
                             - (option.Costs ?? []).Where(cost => cost.Kind == BehaviorCostKind.Credits).Sum(cost => cost.Amount) * context.CreditValue);
                     else total += 100;
                     break;

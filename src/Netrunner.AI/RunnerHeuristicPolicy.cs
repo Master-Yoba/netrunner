@@ -145,6 +145,13 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// on accessing a faceup agenda is priced; and with one card in the grip the Runner draws before running unknown ICE.
     /// </summary>
     public const string V25 = "runner-heuristic-v25";
+    /// <summary>
+    /// V25 against its self-flatlines (docs/BOT_STRATEGY_1.md): after a successful run, a grip too small for an operation that
+    /// punishes one (Measured Response's 4 meat damage at threat 4) is drawn up, as likely as the Corp holding one; a run
+    /// event's trap risk counts the grip without the event; at match point an empty grip draws before running a possible
+    /// trap; and a breaker trashed at the run's end (Mayfly) is priced as spent by the run.
+    /// </summary>
+    public const string V26 = "runner-heuristic-v26";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
     /// V18 is V15 with only the reinstall fix (no install over its own copy or a second console), a fix that can only remove
@@ -156,21 +163,21 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// where V20 won 6. V22 (A9c, 2 October) is: at Standard and Easy it plays as V21 (its counting needs the Corp's list),
     /// and at Hard it was level with V21 on the bot ladder. V23 (bot loop 1, 3 October) is the default while loop 1 plays
     /// against it: its fixes remove plays that flatline the Runner itself. V24 (loop 1's deferred fixes, 4 October) is the
-    /// default loop 2 played against. V25 (bot loop 2, 4 October) is the default.
+    /// default loop 2 played against. V25 (bot loop 2, 4 October) was the default until V26.
     /// </remarks>
-    public const string PolicyVersion = V25;
+    public const string PolicyVersion = V26;
     /// <summary>
     /// The planner's model of the Runner. It stays V7, which Corp v9 was measured
     /// with, so the shipped Corp planner plays as it did.
     /// </summary>
     public const string LatestHeuristic = V7;
-    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25];
+    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25, V26];
 
     /// <summary>Whether the version's memory of a face-down root card survives installs in that root (v20).</summary>
-    public static bool KeepsRootMemoryThroughInstalls(string version) => version is V20 or V21 or V22 or V23 or V24 or V25;
+    public static bool KeepsRootMemoryThroughInstalls(string version) => version is V20 or V21 or V22 or V23 or V24 or V25 or V26;
 
     /// <summary>Whether the version keeps the A9a tracker of the Corp's hidden cards (v21).</summary>
-    public static bool UsesTracker(string version) => version is V21 or V22 or V23 or V24 or V25;
+    public static bool UsesTracker(string version) => version is V21 or V22 or V23 or V24 or V25 or V26;
 
     public RunnerHeuristicPolicy() : this(PolicyVersion) { }
 
@@ -178,10 +185,10 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     {
         if (!Versions.Contains(version)) throw new ArgumentException($"Unknown Runner policy version '{version}'.", nameof(version));
         Version = version;
-        Generation = version switch { V1 => 1, V4 => 3, V5 => 4, V6 => 5, V7 or V8 or V9 => 6, V10 => 7, V11 or V12 => 8, V13 => 9, V14 => 10, V15 => 11, V16 => 12, V17 => 13, V18 => 14, V19 => 15, V20 => 16, V21 => 17, V22 => 18, V23 => 19, V24 => 20, V25 => 21, _ => 2 };
+        Generation = version switch { V1 => 1, V4 => 3, V5 => 4, V6 => 5, V7 or V8 or V9 => 6, V10 => 7, V11 or V12 => 8, V13 => 9, V14 => 10, V15 => 11, V16 => 12, V17 => 13, V18 => 14, V19 => 15, V20 => 16, V21 => 17, V22 => 18, V23 => 19, V24 => 20, V25 => 21, V26 => 22, _ => 2 };
         // V18 on: only the Hard profile (A6) has planner parameters, so Standard and Easy play as before.
         Plans = version is V3 or V8 or V9 || Generation >= 14;
-        Repairs = version is V4 or V5 or V6 or V7 or V8 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16 or V17 or V18 or V19 or V20 or V21 or V22 or V23 or V24 or V25;
+        Repairs = version is V4 or V5 or V6 or V7 or V8 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16 or V17 or V18 or V19 or V20 or V21 or V22 or V23 or V24 or V25 or V26;
     }
 
     /// <summary>Whether this version has the playtest repairs (V4).</summary>
@@ -258,7 +265,7 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     private static AgentUtility Evaluate(HeuristicContext context, AgentAction action) => action.Kind switch
     {
         ActionKind.GainCredit => Value(Credit(context), "economy/credit-and-install-reserve"),
-        ActionKind.DrawCard => Value(context.Features.Board.HiddenZoneCounts.RunnerStack > 0 ? context.DrawValue
+        ActionKind.DrawCard => Value(context.Features.Board.HiddenZoneCounts.RunnerStack > 0 ? context.DrawValue + PunisherDraw(context)
             + (context.Features.Hand.Length < 2 && context.Features.Board.Servers.SelectMany(server => server.Ice).Any(card => context.Definition(card)?.Ice?.Subroutines.Any(subroutine => subroutine is DamageSubroutineSpec) == true) ? 80 : 0) : -1000, "economy/draw-and-survival"),
         ActionKind.PlayCard => Play(context, (PlayCardParameters)action.Parameters),
         ActionKind.InstallCard when action.Parameters is BehaviorInstallChoiceParameters behaviorInstall =>
@@ -297,6 +304,17 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
         ActionKind.EndTurn => 10,
         _ => 0,
     }, "fallback/conservative-issued-choice", true, UsedFallback: true);
+
+    /// <summary>v26: after a successful run, drawing up to the grip that survives the Corp's punishing operations comes first.</summary>
+    private static int PunisherDraw(HeuristicContext context)
+    {
+        if (context.Generation < 22 || context.Features.Board.TurnFacts?.Runner.ThisTurn?.SuccessfulRun != true) return 0;
+        (int grip, double chance) = RunnerInference.Punishers(context);
+        return grip > context.Features.Hand.Length ? (int)Math.Min(700, chance * PunishedGame) : 0;
+    }
+
+    /// <summary>v26: what a flatline to a punishing operation costs, before the chance the Corp holds one.</summary>
+    private const int PunishedGame = 4000;
 
     private static AgentUtility Value(int score, string reason, bool approximate = false, bool fallback = false) => new(0, score, reason, approximate, UsedFallback: fallback);
     private static int Credit(HeuristicContext context)

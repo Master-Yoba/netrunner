@@ -22,7 +22,7 @@ public sealed partial class RunnerHeuristicPolicy
                 .Sum(trigger => Effects(context, trigger.Instructions, card, PlayerSide.Runner)) ?? 0 : 0;
             AgentUtility utility = Run(context, context.Server(play.TargetServerId), runEvent.HostedCredits,
                 (runEvent.BreachAccessModifier?.Delta ?? 0) * 140 + (runEvent.SuccessDraw?.DrawCount ?? 0) * context.DrawValue + kept,
-                upfrontCost: play.CreditCost, knownSuccessValue: success);
+                upfrontCost: play.CreditCost, knownSuccessValue: success, gripSpent: 1);
             return utility with { Reason = "run/event-benefit-and-issued-cost" };
         }
         if (definition?.Behavior is not { } behavior) return Value(-50, "play/unmodelled", true, true);

@@ -106,6 +106,56 @@ internal static class RunnerInference
         return context.Knowledge?.Reveals.Any(reveal => Lethal(reveal.DefinitionId)) == true ? Math.Max(share, 0.2) : share;
     });
 
+    /// <summary>
+    /// Runner v26 (self-flatlines): the grip a Runner needs at the end of a turn with a successful run, against the Corp's
+    /// operations that punish one (Measured Response: threat 4, 4 meat damage unless the Runner pays 8), and the chance the
+    /// Corp holds one. It counts each such operation the Corp may still hold, by the tier's prior, whose threat condition
+    /// holds, which the Corp can pay for after a turn's credits, and which the Runner can't pay off. The chance is the
+    /// operations' share of the Corp's unseen cards over a hand of them, and at least one in three once the Runner has seen
+    /// one of them this game. Grip 0 when there is none.
+    /// </summary>
+    public static (int Grip, double Chance) Punishers(HeuristicContext context) => context.Memo("punishers", () =>
+    {
+        int threat = Math.Max(context.Self.AgendaPoints, context.Opponent.AgendaPoints);
+        IReadOnlyDictionary<string, double> prior = Prior(context);
+        int need = 0;
+        double copies = 0;
+        bool seen = false;
+        foreach ((string definition, double weight) in prior)
+        {
+            // Every copy already seen: the Corp can't hold one (PR #97's review).
+            if (weight <= 0) continue;
+            if (!context.Catalog.TryGet(new CardDefinitionId(definition), out CardEvaluationDescriptor card)
+                || card.Printed.CardClass != RuntimeCardClass.Operation || card.Behavior is not { } behavior
+                || !behavior.Conditions.Any(condition => condition.Kind == BehaviorConditionKind.SuccessfulRunDuringRunnerLastTurn)
+                || behavior.Conditions.Any(condition => condition.Kind == BehaviorConditionKind.ThreatLevelAtLeast && threat < (condition.Value ?? 0))
+                || (card.Printed.PlayCost ?? 0) > context.Opponent.Credits + 3)
+                continue;
+            int damage = Damage(behavior.Instructions);
+            if (damage == 0) continue;
+            need = Math.Max(need, damage);
+            copies += weight;
+            seen |= context.Knowledge?.Reveals.Any(reveal => reveal.DefinitionId == definition) == true;
+        }
+        if (need == 0) return (0, 0.0);
+        double total = prior.Values.Sum();
+        int hand = Math.Max(1, context.Features.Board.HiddenZoneCounts.CorpHand);
+        double chance = total <= 0 ? 0 : 1 - Math.Pow(1 - Math.Min(1, copies / total), hand);
+        return (need, seen ? Math.Max(chance, 1.0 / 3) : chance);
+
+        // Damage the Runner can't pay its way out of with the credits it has.
+        int Damage(IEnumerable<BehaviorInstruction> instructions) => instructions.Sum(instruction => instruction switch
+        {
+            { Kind: BehaviorInstructionKind.DealDamage } => instruction.Amount,
+            { Kind: BehaviorInstructionKind.Choose, Choice: { Options.Count: > 0 } choice } when choice.Chooser == BehaviorChooser.Runner =>
+                choice.Options.Where(option => (option.Costs ?? []).Where(cost => cost.Kind == BehaviorCostKind.Credits).Sum(cost => cost.Amount)
+                    <= context.Self.Credits).Select(option => Damage(option.Instructions)).DefaultIfEmpty(0).Min(),
+            { Kind: BehaviorInstructionKind.Choose, Choice: { Options.Count: > 0 } choice } => choice.Options.Max(option => Damage(option.Instructions)),
+            { Kind: BehaviorInstructionKind.Branch, Branch: { } branch } => Math.Max(Damage(branch.WhenTrue), Damage(branch.WhenFalse)),
+            _ => 0,
+        });
+    });
+
     /// <summary>The credits the Corp pays for an ambush's damage on access (Byte!'s 4), or 0 when it costs nothing.</summary>
     private static int AmbushCost(CardEvaluationDescriptor card) => card.Behavior?.Triggers
         .Where(trigger => trigger.Occurrence == OccurrenceKind.CardAccessed)

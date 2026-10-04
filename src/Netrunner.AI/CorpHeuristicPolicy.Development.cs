@@ -50,6 +50,8 @@ public sealed partial class CorpHeuristicPolicy
                 if (server?.Kind is ServerKind.Headquarters or ServerKind.RAndD) score = (int)(score * context.OpponentScorePressure);
             }
             score -= install.CreditCost * context.CreditValue;
+            if (context.Generation >= 25 && FreeIceInstalls(context) >= context.Features.Hand.Count(card => context.Definition(card)?.Ice is not null))
+                score -= 100 + install.CreditCost * context.CreditValue;
             if (context.Self.Credits - install.CreditCost < ice.RezCost) score -= 200;
         }
         else if (definition.Agenda is not null)
@@ -113,7 +115,11 @@ public sealed partial class CorpHeuristicPolicy
                         && RunnerGetsIn(context, server, install.CreditCost + definition.Printed.AdvancementRequirement)
                         && (context.AgendaCount < 2 || context.Generation >= 18
                             && context.Features.Board.Servers.FirstOrDefault(value => value.Kind == ServerKind.Headquarters) is { } hq
-                            && !RunnerGetsIn(context, hq, install.CreditCost))
+                            && !RunnerGetsIn(context, hq, install.CreditCost)
+                            // v30 (bot loop 2's reviews): an HQ access takes one random card, a breakable remote's agenda is
+                            // taken outright, so HQ is the safer place until agendas fill most of it (Off the Books behind a
+                            // lone Kessleroid against Principia, two agendas in a hand of five).
+                            || context.Generation >= 25 && context.AgendaCount * 10 < context.Features.Hand.Length * 6)
                         // v22 (reviews of the losses to Codex, 1 October): a full HQ of other cards only means a discard.
                         && (context.Generation >= 17 || context.Features.Hand.Length < (context.Self.MaximumHandSize ?? 5));
                 }
@@ -343,6 +349,17 @@ public sealed partial class CorpHeuristicPolicy
                 : Math.Min(200, SuccessfulRunsOn(context, server) * 70);
         return score;
     }
+
+    /// <summary>
+    /// v30: the ICE installs from HQ the Corp's rezzed cards make for it when its action phase ends (Mercia B4LL4RD's, a credit
+    /// cheaper and without a click). While they cover every piece of ICE in HQ, installing one by hand spends a click and
+    /// credits for nothing; Palisade went in on the last click and credit beside a rezzed Mercia.
+    /// </summary>
+    private static int FreeIceInstalls(HeuristicContext context) => context.Features.Board.Servers.SelectMany(server => server.Root)
+        .OfType<AgentCard>().Where(card => card.Rezzed == true)
+        .Count(card => context.Definition(card)?.Behavior?.Triggers.Any(trigger => trigger.Occurrence == OccurrenceKind.ActionPhaseEnded
+            && trigger.Instructions.Any(instruction => instruction.Kind == BehaviorInstructionKind.InstallCard
+                && instruction.SourceZone == BehaviorZone.Headquarters && instruction.Target?.Filter?.CardType == BehaviorCardType.Ice)) == true);
 
     /// <summary>
     /// v28: whether an installed card has lost value a fresh copy would restore: rezzed, and holding fewer of the credits it
