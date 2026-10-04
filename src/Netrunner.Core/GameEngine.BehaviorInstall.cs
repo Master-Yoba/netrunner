@@ -101,9 +101,7 @@ public static partial class GameEngine
                 || card.OwnerSide != side
                 || !working.RuntimeCardCatalog.TryGet(card.DefinitionId, out CardRuntimeSpec? spec)
                 || !IsBasicInstallClass(side, spec.CardClass)
-                || !BehaviorCardMatches(working, card.Id, instruction.Target!.Filter)
-                // A card installed only on a host (a trojan on ICE) needs a host choice this install doesn't make.
-                || HostingSpec(working, card) is not null)
+                || !BehaviorCardMatches(working, card.Id, instruction.Target!.Filter))
             {
                 continue;
             }
@@ -119,18 +117,24 @@ public static partial class GameEngine
                     continue;
                 }
 
-                InstallPlan? plan = BuildInstallPlan(
-                    working,
-                    side,
-                    card.Id,
-                    destinationKind,
-                    serverId,
-                    createNewRemote,
-                    InstallInitiationKind.BehaviorZoneInstall,
-                    zoneRule: rule);
-                if (plan is not null)
+                // A card installed only on a host (a trojan on ICE) is offered once for each legal host.
+                foreach (CardInstanceId? hostCardId in InstallHosts(working, card))
                 {
-                    choices.Add(new BehaviorInstallChoice(card.Id, destinationKind, serverId, createNewRemote, plan.InstallCost));
+                    InstallPlan? plan = BuildInstallPlan(
+                        working,
+                        side,
+                        card.Id,
+                        destinationKind,
+                        serverId,
+                        createNewRemote,
+                        InstallInitiationKind.BehaviorZoneInstall,
+                        hostCardId: hostCardId,
+                        zoneRule: rule);
+                    if (plan is not null)
+                    {
+                        choices.Add(new BehaviorInstallChoice(card.Id, destinationKind, serverId, createNewRemote, plan.InstallCost,
+                            hostCardId));
+                    }
                 }
             }
         }
@@ -166,7 +170,9 @@ public static partial class GameEngine
             .Select(choice => new LegalAction(
                 working.Allocator.NextActionId(),
                 ActionKind.InstallCard,
-                $"Install {choice.CardId.Value} ({choice.CreditCost} credits)",
+                choice.HostCardId is { } host
+                    ? $"Install {choice.CardId.Value} on {host.Value} ({choice.CreditCost} credits)"
+                    : $"Install {choice.CardId.Value} ({choice.CreditCost} credits)",
                 new BehaviorInstallChoiceParameters(frame.FrameIdentity, choice)))
             .ToList();
         if (frame.Optional)
@@ -221,6 +227,7 @@ public static partial class GameEngine
                 choice.ServerId,
                 choice.CreateNewRemote,
                 InstallInitiationKind.BehaviorZoneInstall,
+                hostCardId: choice.HostCardId,
                 zoneRule: rule)
             ?? throw new ResolutionFailureException("The chosen behavior install is no longer legal.");
         if (plan.InstallCost != choice.CreditCost)
@@ -247,7 +254,8 @@ public static partial class GameEngine
             plan.CandidateReplacementDefinitionIds,
             InstallInitiationKind.BehaviorZoneInstall,
             frame.FrameIdentity,
-            plan.InstallCostQuote));
+            plan.InstallCostQuote,
+            hostCardId: choice.HostCardId));
     }
 
     /// <summary>Called by the install pipeline when a zone install commits.</summary>

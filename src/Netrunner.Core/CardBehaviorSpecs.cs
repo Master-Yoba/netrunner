@@ -350,7 +350,8 @@ public sealed record InstallCardSubroutineSpec : IceSubroutineSpec
     public InstallCardSubroutineSpec(
         IceInstallDestinationRule destinationRule = IceInstallDestinationRule.Normal,
         IceInstallCostRule costRule = IceInstallCostRule.Normal,
-        bool iceOnly = false)
+        bool iceOnly = false,
+        bool headquartersOnly = false)
     {
         if (!Enum.IsDefined(destinationRule))
         {
@@ -388,6 +389,7 @@ public sealed record InstallCardSubroutineSpec : IceSubroutineSpec
         DestinationRule = destinationRule;
         CostRule = costRule;
         IceOnly = iceOnly;
+        HeadquartersOnly = headquartersOnly;
     }
 
     [JsonInclude]
@@ -401,6 +403,21 @@ public sealed record InstallCardSubroutineSpec : IceSubroutineSpec
     [JsonInclude]
     [JsonRequired]
     public bool IceOnly { get; private set; }
+
+    /// <summary>"Install 1 card from HQ" (Scatter Field), where Ansel 1.0's installs from HQ or Archives.</summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool HeadquartersOnly { get; private set; }
+
+    // The behavior fingerprint prints each subroutine: HeadquartersOnly appears only when set, so every other install
+    // subroutine (Ansel 1.0, Brân 1.0) keeps its fingerprint and the games saved with it.
+    protected override bool PrintMembers(System.Text.StringBuilder builder)
+    {
+        builder.Append("DestinationRule = ").Append(DestinationRule).Append(", CostRule = ").Append(CostRule)
+            .Append(", IceOnly = ").Append(IceOnly);
+        if (HeadquartersOnly) builder.Append(", HeadquartersOnly = True");
+        return true;
+    }
 }
 
 /// <summary>Typed restriction applied for the remainder of the active run.</summary>

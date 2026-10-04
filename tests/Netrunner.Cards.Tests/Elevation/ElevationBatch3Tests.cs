@@ -143,6 +143,27 @@ public sealed class ElevationBatch3Tests
     }
 
     [Fact]
+    [Trait("ElevationCard", "35002")]
+    public void TopanInstallsATrojanOnIce()
+    {
+        // Bot loop 2 (Codex review): Topan's install left out cards that install only on a host (Botulus).
+        const string Botulus = "30004";
+        GameState state = new ElevationBoard(PlayerSide.Runner) { RunnerCredits = 5, GripFiller = 2 }
+            .Add("35002", Place.RunnerIdentity)
+            .Add(Botulus, Place.Grip)
+            .Add(CorpFillerIce, Place.Ice)
+            .Begin();
+        state = Apply(state, action => action.Parameters is AbilityActionParameters { AbilityKey: "topan-install" }).State;
+        CardInstanceId ice = Card(state, CorpFillerIce);
+        state = Apply(state, action => action.Parameters is BehaviorInstallChoiceParameters { Choice: { } choice }
+            && choice.CardId == Card(state, Botulus) && choice.HostCardId == ice).State;
+        state = RoundTrip(ToAction(state));
+
+        Assert.Equal(ice, state.GetCard(Card(state, Botulus)).HostCardId);
+        Assert.Equal(5, Player(state, PlayerSide.Runner).Credits);
+    }
+
+    [Fact]
     [Trait("ElevationCard", "35001")]
     public void RyoGainsAndTheCorpTrashesFromHqAfterASubroutineResolved()
     {
@@ -253,6 +274,24 @@ public sealed class ElevationBatch3Tests
         Assert.False(CanBreak(state, Mayfly));
     }
 
+    [Fact]
+    [Trait("ElevationCard", "35054")]
+    public void SemakSamunIsNotBrokenByAHostedTrojan()
+    {
+        // Bot loop 2 (Codex review): Botulus's hosted counter broke the subroutine only a fracter may break.
+        const string Botulus = "30004";
+        GameState state = new ElevationBoard(PlayerSide.Runner) { RunnerCredits = 10, GripFiller = 5 }
+            .Add("35054", Place.Ice, rezzed: true)
+            .Add(Botulus, Place.Grip)
+            .Begin();
+        state = ToAction(state);
+        state = Apply(state, action => action.Parameters is InstallCardParameters install
+            && install.CardId == Card(state, Botulus) && install.HostCardId == Card(state, "35054")).State;
+        state = RunTo(ToAction(state), ElevationBoard.Remote, InEncounter);
+
+        Assert.False(CanBreak(state, Botulus));
+    }
+
     [Theory]
     [Trait("ElevationCard", "35054")]
     [InlineData("suffer-damage")]
@@ -311,6 +350,24 @@ public sealed class ElevationBatch3Tests
 
         Assert.Equal(Card(state, "35042"), state.RunState!.Encounter!.IceId);
         Assert.Equal(breakableAtOnce, CanBreak(state, Buzzsaw));
+    }
+
+    [Fact]
+    [Trait("ElevationCard", "35042")]
+    public void ScatterFieldInstallsOnlyFromHq()
+    {
+        // Bot loop 2 (Codex review): "install 1 card from HQ" offered Archives cards too, as Ansel 1.0's subroutine does.
+        GameState state = new ElevationBoard(PlayerSide.Runner)
+            .Add("35042", Place.Ice, rezzed: true)
+            .Add(CorpFillerIce, Place.Archives)
+            .Begin();
+        state = RunTo(state, ElevationBoard.Remote, InEncounter);
+        state = PassUntil(state, static value => value.PendingDecision?.LegalActions
+            .Any(static action => action.Parameters is IceSubroutineChoiceParameters) == true);
+
+        IceSubroutineChoiceParameters offered = Assert.Single(state.PendingDecision!.LegalActions
+            .Select(static action => action.Parameters).OfType<IceSubroutineChoiceParameters>());
+        Assert.Equal(IceSubroutineChoiceKind.Decline, offered.Choice);
     }
 
     [Fact]

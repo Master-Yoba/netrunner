@@ -1021,7 +1021,7 @@ public static partial class GameEngine
     {
         if (initiationKind == InstallInitiationKind.BehaviorZoneInstall)
         {
-            return zoneRule is null
+            return zoneRule is null || !IsLegalInstallHost(working, cardId, hostCardId)
                 ? null
                 : BuildInstallPlanCore(working, side, cardId, destinationKind, serverId, createNewRemote,
                     initiationKind, inwardAnchorIceId, zoneRule);
