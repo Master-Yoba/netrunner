@@ -49,7 +49,7 @@ public static partial class RatingLadder
     /// in its own seat, and "hard".
     /// </summary>
     public static IReadOnlyList<string> EntrantOrder { get; } =
-        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard-w3", "standard-c1", "standard-r22", "standard-c26", "standard-r23", "standard-c27", "standard-r24", "standard-c28", "standard", "standard-plan", "standard-plan-fit", "standard-run", "standard-rez", "standard-w4a", "standard-w4b", "standard-arch", "standard-rarch", "standard-rgen", "standard-w4c", "standard-c13", "standard-w4d", "standard-c14", "standard-c15", "standard-c16", "standard-r13", "standard-c17", "standard-c18", "standard-c19", "standard-r14", "standard-c20", "standard-r15", "standard-c21", "standard-r16", "standard-c22", "standard-b3", "standard-c23", "standard-r17", "standard-r18", "standard-c24", "standard-r19", "standard-w5", "standard-r21", "hard-r21", "hard-a9c", "hard-a9d", "hard-a9d-list", "hard-a9d-pins", "glacier", "rush", "asset-spam", "aggressive", "rig-builder", "hard", "hard-wide", "hard-weight", "hard-rez", "hard-model"];
+        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard-w3", "standard-c1", "standard-r22", "standard-c26", "standard-r23", "standard-c27", "standard-r24", "standard-c28", "standard-r25", "standard-c29", "standard", "standard-plan", "standard-plan-fit", "standard-run", "standard-rez", "standard-w4a", "standard-w4b", "standard-arch", "standard-rarch", "standard-rgen", "standard-w4c", "standard-c13", "standard-w4d", "standard-c14", "standard-c15", "standard-c16", "standard-r13", "standard-c17", "standard-c18", "standard-c19", "standard-r14", "standard-c20", "standard-r15", "standard-c21", "standard-r16", "standard-c22", "standard-b3", "standard-c23", "standard-r17", "standard-r18", "standard-c24", "standard-r19", "standard-w5", "standard-r21", "hard-r21", "hard-a9c", "hard-a9d", "hard-a9d-list", "hard-a9d-pins", "glacier", "rush", "asset-spam", "aggressive", "rig-builder", "hard", "hard-wide", "hard-weight", "hard-rez", "hard-model"];
 
     private const double EloScale = 400 / 2.302585092994046;
     private const double Ridge = 0.01;
@@ -157,6 +157,12 @@ public static partial class RatingLadder
             // Corp v26 with the default Runner: bot loop 1 measures Corp v27 against it.
             "standard-c26" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
                 side == PlayerSide.Corp ? CorpHeuristicPolicy.V26 : RunnerHeuristicPolicy.PolicyVersion),
+            // Corp v29 with the default Runner: the sequencing work measures Corp v30 against it.
+            "standard-c29" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
+                side == PlayerSide.Corp ? CorpHeuristicPolicy.V29 : RunnerHeuristicPolicy.PolicyVersion),
+            // Runner v25 with the default Corp: the self-flatline work measures Runner v26 against it.
+            "standard-r25" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
+                side == PlayerSide.Corp ? CorpHeuristicPolicy.PolicyVersion : RunnerHeuristicPolicy.V25),
             // Corp v28 with the default Runner: bot loop 2 measures Corp v29 against it.
             "standard-c28" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
                 side == PlayerSide.Corp ? CorpHeuristicPolicy.V28 : RunnerHeuristicPolicy.PolicyVersion),
