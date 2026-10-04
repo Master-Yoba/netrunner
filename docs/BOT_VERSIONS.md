@@ -53,6 +53,10 @@ agents observing every new state (12%), mostly the tracker update.
 | Leaf (observation build and fitted evaluation), per rollout | 217 µs | 6.1% |
 | Dealing a sample (`ObservationDeterminizer.Sample`, tracker pins) | 75 µs | 0.7% |
 
+The observation step splits about evenly (4 Hard games, re-profiled after S0.3): `ObservationBuilder.Build` 113 µs and
+`ObservationReader.Read` 124 µs, the read being the JSON round trip that decodes the observation into features; in
+whole-game rollouts the build is 15.7% and the read 17.4% of a step, against 54.8% for simulated `Apply`.
+
 A turn rollout is 14.9 simulated steps and 3.5 ms; 61% of its steps are forced and skip the observation. The heuristic
 itself is under a tenth of planning: the cost of a rollout is the engine and the observation it reads, which is what
 the rollout policy (plan 4.3, S0.4) targets. Simulated `Apply` here is 121 µs, not the 47 µs of Wave 3's engine bench:
