@@ -1,5 +1,9 @@
 # The bot loop workflow
 
+> **Demoted (4 October 2026):** an outside-player arm runs only when the user asks, under [BOT_PLAN.md](BOT_PLAN.md)
+> section 7. Sections 1–5 here are its how-to; section 7 (verification) is replaced by BOT_PLAN.md section 6, and
+> findings become puzzles and lints rather than one-off fixes.
+
 How to run one loop of the [bot improvement plan](BOT_IMPROVEMENT_PLAN.md): LLM games against the bot, LLM reviews of
 those games, findings confirmed against the replays, then one batch of fixes. Loops 1 and 2 ([BOT_LOOP_1.md](BOT_LOOP_1.md),
 [BOT_LOOP_2.md](BOT_LOOP_2.md)) followed it. A loop runs only when the user asks for one: plans never schedule LLM games or

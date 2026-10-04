@@ -1,5 +1,9 @@
 # AI opponent improvement plan
 
+> **Superseded for new work (4 October 2026):** [BOT_PLAN.md](BOT_PLAN.md) is the authoritative bot plan. This document
+> is kept as the record of phases A1–A9 through Wave 5.5; its open items (A4 run search, A5 expert iteration, A9d)
+> continue there, redesigned.
+
 Status: proposed, not started
 Baseline: `corp-heuristic-v2` and `runner-heuristic-v1` (Standard and Easy
 profiles), frozen in `data/m5/benchmarks/frozen-profiles-v1.json`
