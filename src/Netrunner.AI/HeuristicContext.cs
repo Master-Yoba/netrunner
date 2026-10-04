@@ -33,7 +33,7 @@ internal sealed class HeuristicContext
     /// </summary>
     /// <summary>A card-effect install choice (Synapse Global, Off the Books) valued as the equivalent install action.</summary>
     public static InstallCardParameters AsInstall(BehaviorInstallChoice choice) =>
-        new(choice.CardId, choice.DestinationKind, choice.ServerId, choice.CreateNewRemote, choice.CreditCost);
+        new(choice.CardId, choice.DestinationKind, choice.ServerId, choice.CreateNewRemote, choice.CreditCost, hostCardId: choice.HostCardId);
 
     public static int EffectAmount(HeuristicContext context, BehaviorInstruction instruction, AgentCard? source)
     {
@@ -63,6 +63,9 @@ internal sealed class HeuristicContext
     /// Semak-samun) does what its instructions do; earlier versions saw it as harmless.
     /// </summary>
     public bool ReadsBehaviorSubroutines => Features.Side == PlayerSide.Runner ? Generation >= 20 : Generation >= 23;
+
+    /// <summary>Bot loop 2 (Runner v25, Corp v29): Scatter Field's +4 strength while it is its server's only ICE is seen.</summary>
+    public bool SeesOnlyIceStrength => Features.Side == PlayerSide.Runner ? Generation >= 21 : Generation >= 24;
 
     public AgentPlayer Self => Features.Self;
     public AgentPlayer Opponent => Features.Opponent;

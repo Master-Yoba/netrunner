@@ -77,6 +77,21 @@ public sealed partial class CorpHeuristicPolicy
             .OrderDescending().Take(count).Sum() - keepForLater;
     }
 
+    /// <summary>
+    /// v29: whether the run in progress can't get past the ICE still ahead, the one encountered included, with the Runner's
+    /// credits and clicks and the Corp rezzing what it can pay for.
+    /// </summary>
+    private static bool RunStopsAnyway(HeuristicContext context)
+    {
+        if (context.Features.Board.Run is not { EndReason: null, Successful: false } run || run.CurrentIceIndex < 0) return false;
+        AgentServer? server = context.Features.Board.Servers.FirstOrDefault(value => value.Id == run.AttackedServer);
+        if (server is null) return false;
+        int last = run.Step == RunTimingStep.JackOutDecision ? run.CurrentIceIndex - 1 : run.CurrentIceIndex;
+        if (last < 0) return false;
+        return !RunModel.Plan(context, server, last, context.Opponent.Credits + run.RunCredits, context.Opponent.Clicks,
+            grip: context.Features.Board.HiddenZoneCounts.RunnerGrip, corpRezBudget: context.Self.Credits).CanGetIn;
+    }
+
     /// <summary>A card that makes the Corp money: when played, when its turn begins, or by its abilities.</summary>
     private static bool IsEconomy(CardEvaluationDescriptor? definition) =>
         definition?.Behavior is { } behavior
@@ -173,6 +188,21 @@ public sealed partial class CorpHeuristicPolicy
                     total += context.Features.Board.RunnerRig.Where(card => context.Definition(card)?.Printed.CardClass == RuntimeCardClass.Resource)
                         .Select(card => context.CardValue(card, installed: true)).DefaultIfEmpty(0).Max() / 3;
                     break;
+                // v29 (bot loop 2): trashing its own card costs the Corp the cheapest it can choose (LEO's bioroid), where the
+                // target filter's missing card type had matched the Runner's cards and made it a gain.
+                case BehaviorInstructionKind.TrashCard when context.Generation >= 24 && self
+                    && instruction.Target is { Kind: BehaviorTargetKind.ChosenCard } && chosenTarget?.Filter?.OwnerSide == PlayerSide.Corp:
+                    // The candidates are the target selector's: LEO's bioroid must be in the attacked server. Any other
+                    // selector is priced at its dearest candidate.
+                    IEnumerable<int> own = context.Features.Board.Servers
+                        .Where(server => !chosenTarget.IsInAttackedServer || server.Id == context.Features.Board.Run?.AttackedServer)
+                        .SelectMany(server => server.Ice.Concat(server.Root)).OfType<AgentCard>()
+                        .Where(card => MatchesTarget(context, card, chosenTarget) && (chosenTarget.Filter.Rezzed is not { } rezzed || (card.Rezzed == true) == rezzed)
+                            && (chosenTarget.Filter.Subtype is not { } subtype || context.Definition(card)?.Printed.Subtypes
+                                .Contains(subtype, StringComparer.OrdinalIgnoreCase) == true))
+                        .Select(card => context.CardValue(card, installed: true)).DefaultIfEmpty(0);
+                    total -= chosenTarget.Selector is null || chosenTarget.IsInAttackedServer ? own.Min() : own.Max();
+                    break;
                 case BehaviorInstructionKind.TrashCard when context.Generation >= 4 && self
                     && instruction.Target is { Kind: BehaviorTargetKind.ChosenCard }:
                     // v7: a trash effect is worth its best legal Runner target (Retribution).
@@ -207,6 +237,11 @@ public sealed partial class CorpHeuristicPolicy
                         };
                         total += Effects(context, condition ? branch.WhenTrue : branch.WhenFalse, source, controller);
                     }
+                    break;
+                // v29 (bot loop 2): ending a run the ICE ahead stops anyway gains little; LEO trashed the Brân it had just
+                // rezzed against a Runner who couldn't break it.
+                case BehaviorInstructionKind.EndRun when context.Generation >= 24 && RunStopsAnyway(context):
+                    total += 50;
                     break;
                 case BehaviorInstructionKind.EndRun:
                     AgentServer? attacked = context.Features.Board.Servers.FirstOrDefault(server => server.Id == context.Features.Board.Run?.AttackedServer);

@@ -147,7 +147,7 @@ public sealed partial class RunnerHeuristicPolicy
                 case BehaviorInstructionKind.AddToHand: total += 180; break;
                 // v23 (bot loop 1): Topan spent a click installing from a grip of events.
                 case BehaviorInstructionKind.InstallCard when context.Generation >= 19 && instruction.SourceZone == BehaviorZone.Grip
-                    && !GripHolds(context, instruction.Target?.Filter, install: true):
+                    && !GripHolds(context, instruction.Target?.Filter, install: true, discount: instruction.Amount):
                     break;
                 case BehaviorInstructionKind.InstallCard:
                     total += 350;
@@ -209,10 +209,17 @@ public sealed partial class RunnerHeuristicPolicy
         return types.Contains(IceType.Any) || new[] { IceType.Barrier, IceType.CodeGate, IceType.Sentry }.All(types.Contains);
     }
 
-    /// <summary>v23: whether the grip holds a card a filter takes; an install never takes an event.</summary>
-    private static bool GripHolds(HeuristicContext context, BehaviorCardFilter? filter, bool install) =>
+    /// <summary>
+    /// v23: whether the grip holds a card a filter takes; an install never takes an event. v25 (bot loop 2): nor a card the
+    /// Runner can't pay for after the discount, or one it wouldn't install (Topan spent clicks installing nothing with 1
+    /// credit, and replaced its own Verbal Plasticity).
+    /// </summary>
+    private static bool GripHolds(HeuristicContext context, BehaviorCardFilter? filter, bool install, int discount = 0) =>
         context.Features.Hand.Any(card => context.Definition(card) is { } definition
             && !(install && definition.Printed.CardClass == RuntimeCardClass.Event)
+            && !(install && context.Generation >= 21 && (Math.Max(0, (definition.Printed.InstallCost ?? 0) - discount) > context.Self.Credits
+                || ReplacesItsOwn(context, card) || definition.Icebreaker is not null
+                    && context.Features.Board.RunnerRig.Any(installed => installed.DefinitionId == card.DefinitionId)))
             && (filter?.CardType ?? BehaviorCardType.Any) switch
             {
                 BehaviorCardType.Any => true,

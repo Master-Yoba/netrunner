@@ -86,6 +86,9 @@ public sealed partial class RunnerHeuristicPolicy
             risk = (int)(risk * budget * coverage);
             if (context.Self.Credits >= 4) risk -= unknown * 60;
         }
+        // v25 (bot loop 2): with one card or none in the grip, unknown ICE that does damage flatlines the Runner, and with a
+        // click to spare it draws first; it ran an unknown remote into Empiricist's 3 net damage with one card.
+        if (context.Generation >= 21 && unknown > 0 && context.Features.Hand.Length <= 1 && context.Self.Clicks >= 2) risk += unknown * 250;
         if (unknown == 0) extraValue += knownSuccessValue;
         if (matchPoint)
         {
@@ -118,6 +121,9 @@ public sealed partial class RunnerHeuristicPolicy
         // hit the Runner a second time.
         int lastIce = run.Encounter is { Status: RunEncounterStatus.Complete } encounter
             && encounter.Ice?.Id == run.CurrentIce?.Id ? run.CurrentIceIndex - 1 : run.CurrentIceIndex;
+        // v25 (bot loop 2): at the jack-out decision the current ICE is passed, encountered or not; an unrezzed Ansel the
+        // Runner had just passed counted as unknown ICE ahead, and it jacked out of an open path to an agenda.
+        if (context.Generation >= 21 && run.Step == RunTimingStep.JackOutDecision) lastIce = run.CurrentIceIndex - 1;
         (int cost, int loss, int damage, bool blocked, int unknown) = Protection(context, server, lastIce);
         RunForecast? forecast = context.Generation >= 6
             ? RunModel.Plan(context, server, lastIce, context.Self.Credits + run.RunCredits, context.Self.Clicks)
@@ -324,6 +330,14 @@ public sealed partial class RunnerHeuristicPolicy
         int total = 0;
         for (int index = 0; index < server.Root.Length; index++)
         {
+            // v25 (bot loop 2): the Corp's identity may punish accessing a faceup agenda (BANGUN's 2 meat damage); the Runner
+            // accessed one with a card in its grip.
+            if (context.Generation >= 21 && server.Root[index] is { } faceUp && context.Definition(faceUp)?.Agenda is not null)
+                total += context.Features.Board.CorpIdentity.SelectMany(identity => context.Definition(identity)?.Behavior?.Triggers ?? [])
+                    .Where(trigger => trigger.Occurrence == OccurrenceKind.CardAccessed && trigger.Condition == BehaviorTriggerCondition.FaceUpInstalledSubject
+                        && trigger.SubjectCardFilter?.CardType == BehaviorCardType.Agenda)
+                    .SelectMany(trigger => HeuristicContext.Flatten(trigger.Instructions))
+                    .Where(instruction => instruction.Kind == BehaviorInstructionKind.DealDamage).Sum(instruction => instruction.Amount);
             AgentCard? card = server.Root[index] ?? context.RememberedRoot(server, index);
             if (context.Definition(card)?.Behavior is not { } behavior) continue;
             foreach (BehaviorInstruction instruction in behavior.Triggers.Where(trigger => trigger.Occurrence == OccurrenceKind.CardAccessed)

@@ -226,10 +226,10 @@ public sealed class BotLoop1Tests
     }
 
     /// <summary>The version's choice for a side at the recorded decision, having watched the game to it.</summary>
-    private static async Task<LegalAction> ChooseAtAsync(string fixture, string version, long sequence, PlayerSide side = PlayerSide.Runner) =>
+    internal static async Task<LegalAction> ChooseAtAsync(string fixture, string version, long sequence, PlayerSide side = PlayerSide.Runner) =>
         (await ChooseWithStateAtAsync(fixture, version, sequence, side)).Chosen;
 
-    private static async Task<(LegalAction Chosen, GameState State)> ChooseWithStateAtAsync(string fixture, string version, long sequence,
+    internal static async Task<(LegalAction Chosen, GameState State)> ChooseWithStateAtAsync(string fixture, string version, long sequence,
         PlayerSide side)
     {
         (LadderSavedGame saved, FullMatchDefinition definition) = Assert.Single(LadderGameArchive.Read(

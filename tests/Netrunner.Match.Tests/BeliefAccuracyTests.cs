@@ -11,7 +11,9 @@ public sealed class BeliefAccuracyTests
     {
         if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
         string root = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "Fixtures", "saved-games");
+        // The bot loops' fixtures are games cut off at the decision their test asks about, not games played out.
         IReadOnlyList<BeliefScore> scores = BeliefAccuracy.Score(Directory.EnumerateDirectories(root).Order(StringComparer.Ordinal)
+            .Where(directory => !Path.GetFileName(directory).StartsWith("loop", StringComparison.Ordinal))
             .SelectMany(LadderGameArchive.Read));
 
         foreach (BeliefScore score in scores)

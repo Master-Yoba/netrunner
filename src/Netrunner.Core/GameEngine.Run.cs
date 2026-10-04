@@ -1424,12 +1424,15 @@ public static partial class GameEngine
                 owner = GetPlayer(working, PlayerSide.Corp).Id;
                 prompt = installSpec.DestinationRule == IceInstallDestinationRule.DirectlyInward
                     ? "Resolve the ICE subroutine: choose an ICE from HQ or Archives to install directly inward."
-                    : "Resolve the ICE subroutine: choose a Corp card from HQ or Archives to install.";
+                    : installSpec.HeadquartersOnly
+                        ? "Resolve the ICE subroutine: choose a Corp card from HQ to install."
+                        : "Resolve the ICE subroutine: choose a Corp card from HQ or Archives to install.";
                 InstallInitiationKind initiationKind = installSpec.DestinationRule == IceInstallDestinationRule.DirectlyInward
                     ? InstallInitiationKind.IceSubroutineInwardIgnoreCosts
                     : InstallInitiationKind.IceSubroutineNormal;
                 foreach (ZoneState sourceZone in working.Zones
-                             .Where(zone => zone.Kind is ZoneKind.CorpHand or ZoneKind.CorpDiscard
+                             .Where(zone => (zone.Kind == ZoneKind.CorpHand
+                                     || zone.Kind == ZoneKind.CorpDiscard && !installSpec.HeadquartersOnly)
                                  && zone.OwnerSide == PlayerSide.Corp
                                  && zone.ServerId is null)
                              .OrderBy(zone => zone.Kind == ZoneKind.CorpHand ? 0 : 1))

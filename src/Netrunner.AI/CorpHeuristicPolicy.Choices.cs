@@ -145,7 +145,9 @@ public sealed partial class CorpHeuristicPolicy
         CardEvaluationDescriptor? definition = context.Definition(card);
         // v24 (Codex reviews, 1 October): trashing the Runner's card is worth its threat; the sign made Retribution pick the
         // Runner's least useful card.
-        if (context.Generation == 19 && intent == BehaviorInstructionKind.TrashCard && definition?.Printed.Side == PlayerSide.Runner)
+        // v29 (bot loop 2): again from v29 on; Bumi declined to trash the Botulus that kept breaking R&D's Palisade.
+        if ((context.Generation == 19 || context.Generation >= 24) && intent == BehaviorInstructionKind.TrashCard
+            && definition?.Printed.Side == PlayerSide.Runner)
             return RunnerThreat(context, card);
         return intent switch
         {

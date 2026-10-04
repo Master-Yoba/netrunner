@@ -35,7 +35,8 @@ public sealed record BehaviorInstallChoice
         InstallDestinationKind destinationKind,
         ServerId? serverId,
         bool createNewRemote,
-        int creditCost)
+        int creditCost,
+        CardInstanceId? hostCardId = null)
     {
         if (!Enum.IsDefined(destinationKind))
         {
@@ -48,6 +49,7 @@ public sealed record BehaviorInstallChoice
         ServerId = serverId;
         CreateNewRemote = createNewRemote;
         CreditCost = creditCost;
+        HostCardId = hostCardId;
     }
 
     [JsonInclude]
@@ -67,6 +69,11 @@ public sealed record BehaviorInstallChoice
     [JsonInclude]
     [JsonRequired]
     public int CreditCost { get; private set; }
+
+    /// <summary>The ICE a card installed only on a host goes on (Botulus from Topan's install); null for any other card.</summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public CardInstanceId? HostCardId { get; private set; }
 }
 
 /// <summary>

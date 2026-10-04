@@ -231,7 +231,7 @@ public static class ElevationBatch3Specs
         strength: 0,
         IceType.CodeGate,
         rezCost: 3,
-        [new InstallCardSubroutineSpec(), new EndRunSubroutineSpec()],
+        [new InstallCardSubroutineSpec(headquartersOnly: true), new EndRunSubroutineSpec()],
         [],
         valueModifiers:
         [

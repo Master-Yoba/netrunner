@@ -95,7 +95,18 @@ public static partial class GameEngine
         && working.Zones.Any(zone => zone.Id == card.ZoneId && zone.Kind == ZoneKind.RunnerRig)
         && (working.RulesState?.Counters.Any(counter => counter.CardId == card.Id
             && counter.CounterName == "virus" && counter.Count > 0) ?? false)
-        && (run.Encounter?.Subroutines.Any(subroutine => !subroutine.Broken && !subroutine.Resolved) ?? false);
+        && (run.Encounter?.Subroutines.Any(subroutine => !subroutine.Broken && !subroutine.Resolved) ?? false)
+        && BreakRestrictionAllows(working, card, run);
+
+    /// <summary>
+    /// EL-BREAK-RESTRICTION: ICE whose subroutines only a breaker of one subtype may break (Semak-samun's fracter) can't be
+    /// broken with a hosted program's counters (Botulus) unless that program has the subtype.
+    /// </summary>
+    private static bool BreakRestrictionAllows(WorkingState working, CardInstanceState card, RunState run) =>
+        run.Encounter is not { } encounter
+        || !working.BehaviorCatalog.TryGetIce(GetCard(working, encounter.IceId).DefinitionId, out IceBehaviorSpec ice)
+        || ice.BreakableOnlyBySubtype is not { } required
+        || CardSubtypes(working.RuntimeCardCatalog, card.DefinitionId).Contains(required, StringComparer.Ordinal);
 
     private static void ConsumeHostedCounterBreak(WorkingState working, RunState run, CardInstanceState card,
         int quantity, int hostedCredits, CostQuote? costQuote, SubroutineId? subroutineId)
