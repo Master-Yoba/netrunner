@@ -5,8 +5,9 @@ namespace Netrunner.AI;
 public sealed partial class RunnerHeuristicPolicy
 {
     /// <param name="knownSuccessValue">v24: value the run pays only if it succeeds, counted when no ICE on the path is unknown.</param>
+    /// <param name="gripSpent">v26: cards leaving the grip to make the run (a run event itself).</param>
     private static AgentUtility Run(HeuristicContext context, AgentServer? server, int extraRunCredits = 0, int extraValue = 0,
-        int upfrontCost = 0, int knownSuccessValue = 0)
+        int upfrontCost = 0, int knownSuccessValue = 0, int gripSpent = 0)
     {
         if (server is null) return Value(-1000, "run/unknown-server", true, true);
         (int cost, int loss, int damage, bool blocked, int unknown) = Protection(context, server, server.Ice.Length - 1, upfrontCost);
@@ -38,7 +39,9 @@ public sealed partial class RunnerHeuristicPolicy
             // v21 (A9b): each face-down root card is a trap as likely as the tracker says (an Urtica Cipher seen in HQ, now in a
             // naked remote), and the rest as before: an advanced unknown card in proportion to the Corp playing traps (Hard knows
             // the list).
-            trapRisk = TrackedTrapRisk(context, server);
+            // v26 (self-flatlines): with the grip as it is once a run event has left it; Clean Getaway was played into Byte!
+            // with the ambush priced against the grip it was still in.
+            trapRisk = TrackedTrapRisk(context, server, context.Generation >= 22 ? context.Features.Hand.Length - gripSpent : null);
         }
         else if (context.Generation >= 8)
         {
@@ -60,6 +63,8 @@ public sealed partial class RunnerHeuristicPolicy
         // neither the trap's risk nor even a possible flatline keeps the Runner out.
         bool matchPoint = context.Generation >= 11 && server.Kind == ServerKind.Remote && UnknownAdvancedRoots(context, server).Any()
             && context.Opponent.AgendaPoints >= 4;
+        // v26 (self-flatlines): not while the Runner can draw before it runs; it ran a trap with an empty grip and four clicks.
+        if (matchPoint && context.Generation >= 22 && context.Features.Hand.Length - gripSpent <= 1 && context.Self.Clicks >= 2) matchPoint = false;
         // v11 (self-play review, 28 September): a possible trap that would flatline the Runner isn't worth the access.
         if (context.Generation >= 8 && !matchPoint && LethalTrap(context, server)) return Value(-1000, "run/possible-lethal-trap", true);
         if (context.Generation >= 17 && !matchPoint && LikelyLethalTrap(context, server)) return Value(-1000, "run/likely-lethal-trap", true);
@@ -90,6 +95,17 @@ public sealed partial class RunnerHeuristicPolicy
         // click to spare it draws first; it ran an unknown remote into Empiricist's 3 net damage with one card.
         if (context.Generation >= 21 && unknown > 0 && context.Features.Hand.Length <= 1 && context.Self.Clicks >= 2) risk += unknown * 250;
         if (unknown == 0) extraValue += knownSuccessValue;
+        // v26: the turn's first successful run arms the Corp's punishing operations (Measured Response); without the clicks
+        // left to draw up to the grip that survives them, the Runner doesn't make it. The run itself may steal an agenda that
+        // brings the threat level up (the Runner stole its way to 4 points on its last click, with 2 cards in its grip).
+        // The cost is the game, as likely as the Corp holding one.
+        int punished = 0;
+        if (context.Generation >= 22)
+        {
+            (int after, double chance) = RunnerInference.Punishers(context, stolen: 2, credits: funds - cost - loss);
+            bool arms = context.Features.Board.TurnFacts?.Runner.ThisTurn?.SuccessfulRun != true || after > RunnerInference.Punishers(context).Grip;
+            if (arms && after > context.Features.Hand.Length + context.Self.Clicks - 1) punished = (int)Math.Min(800, chance * PunishedGame);
+        }
         if (matchPoint)
         {
             trapRisk = Math.Min(trapRisk, 200);
@@ -98,7 +114,7 @@ public sealed partial class RunnerHeuristicPolicy
         int score = RunnerValues.Server(context, server) + rewards + extraValue
             - (upfrontCost + Math.Max(0, cost - extraRunCredits) + loss) * context.CreditValue
             - damage * 160 - risk - repeated * 180 - (funds - cost - loss - tollCredits < reserve ? 220 : 0)
-            - (tollCredits + tollClicks * ClickCredits) * context.CreditValue - trapRisk - tagCost;
+            - (tollCredits + tollClicks * ClickCredits) * context.CreditValue - trapRisk - tagCost - punished;
         // v11: an aggressive deck runs whenever it can afford to; a big rig holds back until its rig covers every ICE type.
         // v15 (reviews of the losses to Codex, 1 October): not on a run that can gain nothing, such as an Archives of
         // operations the Runner has already seen; aggression sent it there turn after turn.
@@ -145,6 +161,9 @@ public sealed partial class RunnerHeuristicPolicy
             - damage * 160 - unknown * 220 - (forecast?.Tags ?? 0) * 300,
             "run/continue-visible-affordable-line", true);
     }
+
+    /// <summary>v26: what a flatline to a punishing operation costs, before the chance the Corp holds one.</summary>
+    private const int PunishedGame = 4000;
 
     /// <summary>What a click is worth in credits when paying a toll.</summary>
     private const int ClickCredits = 2;
@@ -271,10 +290,10 @@ public sealed partial class RunnerHeuristicPolicy
         && UnknownAdvancedRoots(context, server).Any(counters => 2 + counters > context.Features.Hand.Length);
 
     /// <summary>v21 (A9b): the trap risk of a server's face-down root cards, from the tracker and the prior over the rest.</summary>
-    private static int TrackedTrapRisk(HeuristicContext context, AgentServer server)
+    private static int TrackedTrapRisk(HeuristicContext context, AgentServer server, int? gripAfter = null)
     {
         double risk = 0;
-        int grip = context.Features.Hand.Length;
+        int grip = gripAfter ?? context.Features.Hand.Length;
         for (int index = 0; index < server.Root.Length; index++)
         {
             if (server.Root[index] is not null || context.RememberedRoot(server, index) is not null) continue;
