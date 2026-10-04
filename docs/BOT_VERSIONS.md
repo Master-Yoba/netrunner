@@ -129,3 +129,30 @@ cost that isn't a decision is the agents reading every new state (S0.1: 12% of a
 allocating: `ObservationReader.Read` decodes each observation by a JSON round trip and `Digest` hashes canonical JSON.
 That is the agent's own work, so S0.2 leaves it; S0.4's thin view for rollouts is the first place to cut it, and the
 same view would serve `OfflineAgent.Observe`.
+
+### S0.3: budget scaling on the shipped leaf (4 October 2026)
+
+Entrants `standard-x1`, `-x2`, `-x4` and `-x8`: Hard's planner at 1, 2, 4 and 8 times its samples (Corp 3 → 24 samples
+of width 3 on set 4, dealing from the tracker and the Runner's list; Runner 4 → 32 samples of width 3 on set 3), each
+against each in both seats on the Core Battle Box. S0.1's costs put the default run (×1, ×4, ×16 at 480 deals) at about
+4.3 hours on this box, so the step's fallback ran: ×1 to ×8 at 240 deals, `--batch-deals 48 --stop-when-clear`.
+
+```bash
+scripts/ai-ladder.sh --content gateway-elevation --entrants standard-x1,standard-x2,standard-x4,standard-x8 \
+  --deals 240 --batch-deals 48 --stop-when-clear --workers 12
+```
+
+3,840 games (no stop: no seat separated), no errors, none capped, 2.6 hours. Elo against the next smaller budget, with
+the 95% interval:
+
+| Seat | ×2 over ×1 | ×4 over ×2 | ×8 over ×4 | ×8 over ×1 |
+|---|---|---|---|---|
+| Corp | −8 [−39, 18] | −5 [−33, 21] | +3 [−23, 32] | −10 [−36, 15] |
+| Runner | −18 [−52, 7] | +2 [−22, 28] | −1 [−30, 22] | −17 [−47, 8] |
+
+**Reading: not monotone in either seat.** Eight times the samples is no stronger than one, for the Corp and for the
+Runner alike; every point is at or below ×1. The plan expected the Corp's result and a weak gain for the Runner; there
+is none. Runner Hard's 80 Elo over Standard therefore comes from planning at all (the rollout's view of the turn) and
+not from a more accurate mean of it: what more samples sharpen is a leaf difference that carries no ranking signal,
+scored as a raw log-odds term added to the heuristic's score. This is the plan's diagnosis (section 1.3) measured, and
+it puts S4 (the leaf) ahead of any budget change; S5 starts from Standard's budget, not a higher one.
