@@ -9,7 +9,9 @@ namespace Netrunner.Match;
 public sealed record LadderGame(string Id, string ContentId, ulong GameSeed, string Corp, string Runner, int Deal = -1);
 
 /// <summary>Corp score is 1 for a Corp win, 0 for a Runner win and 0.5 for a capped game.</summary>
-public sealed record LadderGameResult(LadderGame Game, double CorpScore, bool Capped, int Actions, string? Error);
+/// <remarks><paramref name="FinalStateHash"/> is the game's last state (S0.2: two ladders' games compare by it), null on an error.</remarks>
+public sealed record LadderGameResult(LadderGame Game, double CorpScore, bool Capped, int Actions, string? Error,
+    string? FinalStateHash = null);
 
 public sealed record LadderRating(PlayerSide Side, string Entrant, double Elo, double Lower, double Upper, int Games, double ScoreRate);
 
@@ -294,12 +296,21 @@ public static partial class RatingLadder
         CancellationToken cancellationToken = default) => PlayAsync(game, actionCap, null, cancellationToken);
 
     /// <param name="keep">Receives each finished or capped game with its replay (<c>ai-ladder --save-games</c>).</param>
+    /// <param name="verify">Whether the game is checked as it is played (<see cref="FullMatchRunner.RunAsync"/>).</param>
+    public static Task<LadderGameResult> PlayAsync(LadderGame game, int actionCap, Action<LadderSavedGame>? keep, bool verify,
+        CancellationToken cancellationToken = default) => PlayAsync(game, actionCap, keep, CreateAgent, verify, cancellationToken);
+
     public static Task<LadderGameResult> PlayAsync(LadderGame game, int actionCap, Action<LadderSavedGame>? keep,
-        CancellationToken cancellationToken = default) => PlayAsync(game, actionCap, keep, CreateAgent, cancellationToken);
+        CancellationToken cancellationToken = default) => PlayAsync(game, actionCap, keep, CreateAgent, true, cancellationToken);
 
     /// <param name="agents">Makes each seat's agent from its entrant name (the LLM opponent's games pass their own).</param>
+    public static Task<LadderGameResult> PlayAsync(LadderGame game, int actionCap, Action<LadderSavedGame>? keep,
+        Func<string, PlayerSide, FullMatchDefinition, IGameAgent> agents, CancellationToken cancellationToken = default) =>
+        PlayAsync(game, actionCap, keep, agents, true, cancellationToken);
+
+    /// <param name="verify">Whether the game is checked as it is played (<see cref="FullMatchRunner.RunAsync"/>).</param>
     public static async Task<LadderGameResult> PlayAsync(LadderGame game, int actionCap, Action<LadderSavedGame>? keep,
-        Func<string, PlayerSide, FullMatchDefinition, IGameAgent> agents, CancellationToken cancellationToken = default)
+        Func<string, PlayerSide, FullMatchDefinition, IGameAgent> agents, bool verify, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(game);
         ArgumentNullException.ThrowIfNull(agents);
@@ -308,15 +319,15 @@ public static partial class RatingLadder
         {
             FullMatchResult result = await FullMatchRunner.RunAsync(definition, actionCap,
                 agents(game.Corp, PlayerSide.Corp, definition),
-                agents(game.Runner, PlayerSide.Runner, definition), cancellationToken).ConfigureAwait(false);
+                agents(game.Runner, PlayerSide.Runner, definition), verify, cancellationToken).ConfigureAwait(false);
             double score = result.Outcome.Winner == PlayerSide.Corp ? 1 : 0;
             keep?.Invoke(new LadderSavedGame(game, score, false, result.Replay));
-            return new LadderGameResult(game, score, false, result.ActionCount, null);
+            return new LadderGameResult(game, score, false, result.ActionCount, null, result.FinalStateHash);
         }
         catch (FullMatchStallException stall)
         {
             keep?.Invoke(new LadderSavedGame(game, 0.5, true, stall.Replay));
-            return new LadderGameResult(game, 0.5, true, stall.Replay.Actions.Count, null);
+            return new LadderGameResult(game, 0.5, true, stall.Replay.Actions.Count, null, stall.Replay.ExpectedFinalStateHash);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {

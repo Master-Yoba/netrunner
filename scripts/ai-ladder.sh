@@ -2,7 +2,7 @@
 # Head-to-head AI rating ladder on official content; the Gateway deck pool
 # unless --content says otherwise (bot tuning targets the legal decks). Usage:
 #   scripts/ai-ladder.sh [--content gateway|official] [--entrants random,contract,easy,standard] [--seeds-per-pairing N]
-#     [--seed S] [--bootstrap N] [--workers N] [--output <new dir>] [--save-games <new dir>] [--json]
+#     [--seed S] [--bootstrap N] [--workers N] [--verify-replays-every N] [--output <new dir>] [--save-games <new dir>] [--json]
 # Needs the provisioned System Gateway snapshot and never downloads it.
 set -euo pipefail
 

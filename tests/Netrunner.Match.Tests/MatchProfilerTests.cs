@@ -28,6 +28,27 @@ public sealed class MatchProfilerTests
     }
 
     [Fact]
+    public async Task AnUncheckedGameIsTheSameGameWithoutTheChecks()
+    {
+        FullMatchDefinition definition = RulesFuzzRunner.CreateDefinition(RulesFuzzRunner.DeveloperContentId, 11);
+        FullMatchResult checkedGame = await Play(definition);
+        ProfileTimings? previous = ProfileTimings.Current;
+        ProfileTimings.Current = new ProfileTimings();
+        try
+        {
+            FullMatchResult fast = await FullMatchRunner.RunAsync(definition, RatingLadder.DefaultActionCap,
+                RatingLadder.CreateAgent("standard", PlayerSide.Corp, definition),
+                RatingLadder.CreateAgent("standard", PlayerSide.Runner, definition), verify: false);
+            Assert.Equal(checkedGame.FinalStateHash, fast.FinalStateHash);
+            Assert.Equal(checkedGame.ActionCount, fast.Replay.Actions.Count);
+            Assert.Null(ProfileTimings.Current["match.round-trip"]);
+            Assert.Null(ProfileTimings.Current["match.replay-verify"]);
+            Assert.True(ReplayVerifier.Verify(fast.Replay, definition.Behavior, definition.Runtime).Success);
+        }
+        finally { ProfileTimings.Current = previous; }
+    }
+
+    [Fact]
     public async Task AGameProfileTimesEveryActionOnce()
     {
         GameProfile profile = await MatchProfiler.ProfileGamesAsync([RulesFuzzRunner.DeveloperContentId], 3, "standard", games: 1,

@@ -285,7 +285,7 @@ public static partial class CliCommands
             + "ai-llm-play --output new-dir [--side corp|runner|both] [--games N] [--seed S] [--opponent ENTRANT] [--reasoning low|medium|high] [--model NAME] | "
             + "ai-llm-review <games-dir> --side corp|runner --output new-dir [--entrant NAME] [--game ID]... [--games N] [--skip N] [--temperature T] [--reasoning low|medium|high] [--min-tool-calls N] [--check] [--model NAME] [--logs-only] | "
             + "ai-ladder [--content developer|official] [--entrants random,contract,easy,standard] [--seeds-per-pairing N] "
-            + "[--seed <unsigned-integer>] [--bootstrap N] [--action-cap N] [--workers 1..64] [--output <new directory>] [--json] | "
+            + "[--seed <unsigned-integer>] [--bootstrap N] [--action-cap N] [--workers 1..64] [--verify-replays-every N] [--output <new directory>] [--json] | "
             + "playtest-summary <session-directory|zip> | "
             + "ai-selfplay --content <corp~runner> --seed <n> [--corp <entrant>] [--runner <entrant>] --output <new dir> | "
             + "ai-review <session-directory> [--profile standard|easy] [--side corp|runner] [--all] [--output <new file>] [--json] | "
