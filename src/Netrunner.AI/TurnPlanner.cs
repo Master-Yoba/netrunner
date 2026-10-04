@@ -246,9 +246,11 @@ internal sealed class TurnPlanner
         bool own = owner == side;
         OfflineAgentConfiguration configuration = own ? _configuration : _opponentConfiguration;
         long observing = ProfileTimings.Start();
-        AgentFeatures features = ObservationReader.Read(ObservationBuilder.Build(state, owner, determinizer.Behavior),
-            configuration.FeatureVersion);
-        ProfileTimings.Stop("plan.choose.observation", observing);
+        Observation observation = ObservationBuilder.Build(state, owner, determinizer.Behavior);
+        ProfileTimings.Stop("plan.choose.observation.build", observing);
+        observing = ProfileTimings.Start();
+        AgentFeatures features = ObservationReader.Read(observation, configuration.FeatureVersion);
+        ProfileTimings.Stop("plan.choose.observation.read", observing);
         if (features.Actions.IsEmpty) return null;
         long evaluating = ProfileTimings.Start();
         ImmutableArray<AgentCandidate> candidates = (own ? _policy : _opponentPolicy).EvaluateDecision(features,
