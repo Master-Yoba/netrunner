@@ -26,7 +26,7 @@ gate.
   agent decision, the per-action state round trip (`EngineJson.Serialize` and `DeserializeState`,
   `FullMatchRunner.cs:45`), authoritative `GameEngine.Apply`, and at the end replay serialization and
   `ReplayVerifier.Verify`. Also report the cost of one rollout step at the end-of-turn horizon and of a whole-game
-  rollout, with today's full heuristic and (once S0.4 exists) with the rollout policy, so S0.3 and S1.2 can be sized.
+  rollout, so S0.3 and S1.2 can be sized.
 - Add `--profile-plan` that takes a saved game and a sequence, replays to it, and times one `TurnPlanner.Plan` call
   split into: sampling (`ObservationDeterminizer.Sample`), simulated `Apply`, `ObservationBuilder.Build` inside
   `TurnPlanner.Choose`, heuristic evaluation inside `Choose`, and leaf scoring.
@@ -62,26 +62,28 @@ gate.
   bounds above zero in both seats, S4 still runs, but S5 may start from a higher budget sooner.
 - **Record:** the table in `docs/BOT_VERSIONS.md`.
 
-### S0.4 The rollout policy, first implementation
+### S0.4 Rollout cost, cut where the trace says
 
-**Independent of S0.2 and S0.3; needs S0.1's planner profile.** Built here, not in S5.1, because S1.2's teacher plays
-its deep rollouts with it, so the labels and the shipped planner share one rollout policy.
+**Independent of S0.2 and S0.3; needs S0.1's planner profile.** Revised on 4 October after S0.1's split and a CPU trace
+of 60 Hard decisions and 32 whole-game rollouts (`dotnet-trace`, `dotnet-sampled-thread-time`). The plan's first rollout
+policy (the heuristic at a reduced work budget with a cached `HeuristicContext`) can only reach the heuristic, which is
+about a tenth of a rollout step; the step is simulated `Apply` (about half), then the observation build and read (about
+a sixth each). So S0.4 takes exact cost out where the trace finds it, and the rollout policy stays today's: the
+planner's own per-step `Choose`, which S1.2's teacher therefore shares with the shipped planner.
 
-- `RolloutPolicy` in `src/Netrunner.AI/` per the plan's 4.3: the heuristic at a `rollout-work` budget (start 4,000)
-  with a `HeuristicContext` cached per rollout, reading the simulation state through a thin view for the acting side
-  instead of rebuilding an observation every step. Deterministic given the sample and the agent's random stream.
-- `TurnPlanner` gains a profile parameter to use it in place of today's per-step `Choose`, off by default, so every
-  shipped profile and frozen digest is unchanged.
-- **Gate:** the twin tests pass with it on; S0.1's rollout-step and whole-game costs re-measured with it; the planner
-  with it on is not worse than with it off on a 240-deal box ladder at Hard settings (it should be level: same leaf,
-  cheaper steps).
-- **Record:** the cost before and after, and the ladder, in `docs/BOT_VERSIONS.md`. If the whole-game cost is still too
-  high for S1.2's teacher at 32 samples, say so here: S1.2 then starts at the 4-turn horizon, and the distilled table
-  policy (4.3's second implementation) is scheduled before S5.
+- **Done:** the observation read builds its JSON options once (a tenth of a read); the behaviour catalog computes each
+  definition's fingerprint once instead of for every issued ability action (about a sixth of planner time in the
+  trace, `BehaviorCatalogFingerprint.ComputeDefinition`).
+- **Shelved:** an exact direct observation-to-features mapper (about a seventh of planner time, but a hand-written copy
+  of the serializer's semantics over some forty record types), and a thin state-to-features view (the same plus a
+  second copy of the information boundary). Revisit only if S5's budgets need them after S5.0.
+- **Gate:** exact changes only: a 240-deal box ladder identical game by game to S0.2's fast-mode run (same final state
+  hashes), and S0.1's costs re-measured.
+- **Record:** the trace's top costs, the costs before and after, and the ladder, in `docs/BOT_VERSIONS.md`.
 
 ## S1. The regret suite (M)
 
-**Independent of S0.3; needs S0.1's planner profile and S0.4's rollout policy to size the teacher.**
+**Independent of S0.3; needs S0.1's planner profile and S0.4's costs to size the teacher.**
 
 ### S1.1 Decision roots
 
@@ -101,9 +103,9 @@ its deep rollouts with it, so the labels and the shipped planner share one rollo
 - `ai-regret label <suite-dir> --samples 32 --horizon game|<turns> --evaluation 4 --workers 12`: for each root,
   rebuilds the observation and checkpoint at the sequence, deals 32 shared samples from the tracker and pool as
   `TurnPlanner.Pins` does, rolls out every candidate on every sample **past the leaf's horizon** (to the game's end
-  with S0.4's rollout policy, or `<turns>` turns and then the leaf; start with `game` and fall back to 4 turns if
-  S0.4's whole-game rollout cost makes 8,000 roots exceed about four hours on 12 workers), and writes per-candidate mean
-  win probability with its standard error over the samples, the root value (the best candidate's) and the horizon
+  with the planner's rollout choices, or `<turns>` turns and then the leaf; start with `game` and fall back to 4 turns
+  if S0.4's whole-game rollout cost makes 8,000 roots exceed about four hours on 12 workers), and writes per-candidate
+  mean win probability with its standard error over the samples, the root value (the best candidate's) and the horizon
   used. Deterministic given the suite's seed. The point of the depth is that labels come from play, not from the leaf
   section 1.3 of the plan calls noise.
 - **Noise floor:** `ai-regret label --repeat <n> --repeat-seed S` labels a random `n` roots (start 200) a second time
@@ -248,6 +250,20 @@ its deep rollouts with it, so the labels and the shipped planner share one rollo
 
 ## S5. The planner becomes Standard (L)
 
+### S5.0 Engine cost of simulation
+
+**Before S5.1; can run any time after S0.** S0.1 says Standard cannot plan 8 samples × width 4 inside 50 ms p95 unless a
+rollout step gets cheaper, and S0.4's trace says the step is mostly simulated `Apply`. Take exact cost out of
+`GameEngine.Apply` in `ApplyMode.Simulation`, in the order the trace ranks it, re-tracing after each:
+
+- `DeterministicHash.ForState` (about 8% of `ApplyCore`) and `StateInvariantValidator.Validate` (about 7%): whether a
+  simulated state needs its hash and its invariants checked at every step, or only where a rollout's result is used. A
+  change here is a decision that simulated states are trusted, so it is taken with the user, not by a step.
+- `TurnFactsState` copies (about 5% of all time), `BehaviorStaticModifierProjection.Sum` (about 6%), and building the
+  working state (`WorkingState.Build` and its constructor, about 8% of `ApplyCore`).
+- **Gate:** each change is exact: a 240-deal box ladder identical game by game to the run before it, the per-slice
+  fuzz on every pool (an engine change), and the costs re-measured into `docs/BOT_VERSIONS.md`.
+
 ### S5.1 Pipeline changes in `TurnPlanner`
 
 - **Meaningful-candidate filter:** drop candidates the heuristic marks as bookkeeping (pass, end turn with clicks left
@@ -256,9 +272,10 @@ its deep rollouts with it, so the labels and the shipped planner share one rollo
 - **Probability-space values:** each rollout's leaf as a win probability; candidate value = mean(leaf − root) +
   `static-mix` × (leaf after the first action − root). Remove the raw log-odds sum and the heuristic score from the value;
   the heuristic orders candidates and breaks ties within `plan-tie` (start 0.005).
-- **Rollout policy:** S0.4's `RolloutPolicy` becomes the planner's default; profile against S0.1 and, if a Standard
-  decision cannot fit 50 ms p95 at 8 samples × width 4, implement the distilled table policy and record both numbers.
-  If the rollout policy changes here, re-label the regret suite with it, so the teacher and the planner still share one.
+- **Rollout policy:** today's per-step `Choose` (S0.4). Profile against S0.1 after S5.0 and, if a Standard decision
+  still cannot fit 50 ms p95 at 8 samples × width 4, implement the plan's 4.3 options (the heuristic at a reduced work
+  budget, then the distilled table policy) and record each number. If the rollout policy changes here, re-label the
+  regret suite with it, so the teacher and the planner still share one.
 - **Work budget:** `rollout-budget` (simulated decisions per root) in the profile; the planner stops sampling when it is
   spent and scores what it has. No wall-clock checks inside a decision.
 - Everything behind profile parameters so Hard's current behaviour stays reproducible until the switch.
@@ -308,7 +325,7 @@ the plan is the way to get them, on the user's ask).
 S0 measure ──> S1 regret suite ──> S4 set 5 ──> S5 planner Standard ──> S6 rounds
            ──> S2 puzzles ───────┘        (S2 independent after S1.1)
            ──> S3 one live policy ────────┘  (S3 independent; before S4)
-(S0 includes S0.4, the rollout policy the teacher in S1.2 plays with)
+(S5.0, the engine cost of simulation, can run any time after S0 and must land before S5.1)
 ```
 
 Elapsed, one developer with an agent: S0 one week including the ladder speedup; S1, S2 and S3 two to three weeks in

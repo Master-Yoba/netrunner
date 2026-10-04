@@ -191,9 +191,10 @@ First implementation: the current heuristic at a reduced work budget with a cach
 Second, if profiling says so: a distilled table policy (action kind × a few features) fitted to the heuristic's choices.
 Profiling in S0 decides which is needed to fit the budgets.
 
-The first implementation is built in S0 (step S0.4 in the steps document), not with the planner in S5, because the
-teacher (5.1) plays its deep rollouts with it: the labels and the shipped planner then share one rollout policy, and a
-whole-game rollout costs what this policy costs, not what the full heuristic does.
+S0 measured it (steps S0.1 and S0.4): the heuristic is about a tenth of a rollout step, simulated `Apply` about half,
+and the observation build and read a sixth each. So the rollout policy stays the planner's own per-step choice for now,
+which the teacher (5.1) shares, and the cost is taken out of the engine's simulation first (step S5.0); the two
+implementations above wait until S5's budgets are measured against that.
 
 ### 4.4 One live policy, frozen history
 

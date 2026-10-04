@@ -160,3 +160,54 @@ is none. Runner Hard's 80 Elo over Standard therefore comes from planning at all
 not from a more accurate mean of it: what more samples sharpen is a leaf difference that carries no ranking signal,
 scored as a raw log-odds term added to the heuristic's score. This is the plan's diagnosis (section 1.3) measured, and
 it puts S4 (the leaf) ahead of any budget change; S5 starts from Standard's budget, not a higher one.
+
+### S0.4: rollout cost, cut where the trace says (4 October 2026)
+
+**The trace.** `dotnet-trace collect --profile dotnet-sampled-thread-time` over `engine-bench --profile-plan
+strategy1-match-point-draw --sequence 329 --profile hard --repeats 60 --rollout-samples 32` (60 Runner Hard decisions
+and 32 whole-game rollouts, 14.7 s), inclusive time:
+
+| Function | Share of all time |
+|---|---:|
+| `GameEngine.ApplyCore` (simulated and the replay to the root) | 57.7% |
+| `BehaviorCatalogFingerprint.ComputeDefinition` (under `MaterializeAbilityActionParameters`) | 16.3% |
+| `ObservationReader.Read` | 13.7% |
+| `ObservationBuilder.Build` (95% of it `BuildPublicState`) | 12.7% |
+| `RunnerHeuristicPolicy.EvaluateDecision` (the agent's own heuristic, at the root and in rollouts) | about 10% |
+| `BehaviorStaticModifierProjection.Sum` | 6.0% |
+| `TurnFactsState` copies | 4.9% |
+
+Within `ApplyCore`: `Advance` 62%, `ConsumeAction` 11%, `DeterministicHash.ForState` 8%,
+`StateInvariantValidator.Validate` 7%, building the working state 8%. Within the read: JSON parsing 47%, JSON writing
+35%, and the legal actions' own parameter round trip 13%.
+
+**The changes**, both exact:
+
+- `BehaviorCatalog.GetDefinitionFingerprint` computes each definition's fingerprint once (the catalog and its
+  definitions are immutable); it was recomputed, a SHA-256 over a rebuilt string, for every issued ability action and
+  behaviour frame.
+- `ObservationReader` builds its decoding options once and decodes from UTF-8 bytes (about a tenth of a read: since
+  .NET 7, copies of equal options already share their metadata, so the copy per call was cheaper than it looked).
+
+**Costs after** (the same seeds and games as S0.1; the same action counts, 4,879 and 4,059):
+
+| | S0.1 | S0.4 | Change |
+|---|---:|---:|---:|
+| A Hard plan | 37.7 ms | 33.2 ms | −12% |
+| Simulated `Apply`, per step (Hard games) | 121 µs | 99 µs | −18% |
+| Whole-game rollout from a Standard game's turn start | 63.7 ms | 53.8 ms | −16% |
+| Whole-game rollout from a Hard game's turn start | 77.3 ms | 67.4 ms | −13% |
+| Authoritative `Apply` (Standard games) | 692 µs | 648 µs | −6% |
+| A Standard box game, per action | 4,785 µs | 4,505 µs | −6% |
+
+**Gate: identical game by game.** The 240-deal box ladder of S0.2 (`standard-c29,standard`, every 8th game checked)
+again: all 960 games identical to S0.2's fast-mode run (deal seed, winner, action count, final state hash), the same
+ratings, no errors; 347 s against 396 s (−12%), so about 410 two-entrant deals now fit in 10 minutes.
+
+**Shelved:** an exact direct observation-to-features mapper (at most the read's 14%, but a hand-written copy of the
+serializer's semantics over some forty record types) and a thin state-to-features view. The rest of the engine's
+simulation cost is step S5.0 of [BOT_PLAN_STEPS.md](BOT_PLAN_STEPS.md), before S5.1.
+
+**For S1.2:** a whole-game rollout from an average turn start is now about 55 to 67 ms, so the teacher at 32 samples of
+about 4 candidates is about 8 s a root, and 8,000 roots about 18 CPU-hours: at the 5.9× the box's 12 workers measured
+in S0.2, about 3 hours, inside S1.2's four.
