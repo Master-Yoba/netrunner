@@ -1,0 +1,106 @@
+# The bot loop workflow
+
+How to run one loop of the [bot improvement plan](BOT_IMPROVEMENT_PLAN.md): LLM games against the bot, LLM reviews of
+those games, findings confirmed against the replays, then one batch of fixes. Loops 1 and 2 ([BOT_LOOP_1.md](BOT_LOOP_1.md),
+[BOT_LOOP_2.md](BOT_LOOP_2.md)) followed it. A loop runs only when the user asks for one: plans never schedule LLM games or
+reviews on their own.
+
+## Roles and budget
+
+- **Player:** Claude Sonnet 5.5 (`scripts/ai-claude-play.sh`), about $1 a game, two games at a time.
+- **Reviewer:** Codex gpt-6.1-sol (`scripts/ai-codex-review.sh`, reasoning medium), **one review at a time**, so a quota
+  cut-off spoils at most one review.
+- **Opponent:** the Standard bot with the Balanced personality, at the current default versions.
+- **Size:** 12 games. In 6, Sonnet plays the Runner against the bot's Corp; in 6, the Corp against the bot's Runner.
+
+## 1. Start from a clean baseline
+
+- Branch from `dev` after the previous loop has merged: `git checkout -b feat/bot-loop-<n> dev`.
+- The bot versions the loop plays are the defaults on that commit. Record them in `docs/BOT_LOOP_<n>.md`.
+
+## 2. Deals
+
+Write `data/ai/llm-loops/loop-<n>.deals`, one line each: `NNN corp~runner seat`, where seat is Sonnet's side.
+
+- **Box baseline, every loop:** deals 001–007 on the Core Battle Box, unchanged, so loops compare.
+- **NSG rotation:** five deals numbered `<n>01`–`<n>05` from the NSG Core Sets decks, taking the plan's rotation table in
+  order (gap-covering decks first).
+- Sonnet's deck comes from the same set as the bot's: box against box, NSG against NSG.
+
+## 3. Play
+
+```sh
+scripts/ai-claude-play.sh --output artifacts/llm-loops/loop-<n> --deals data/ai/llm-loops/loop-<n>.deals \
+  --seed 20261003 --opponent standard --parallel 2 --budget-usd 3 > artifacts/llm-loops/loop-<n>.log 2>&1
+```
+
+- The log's last line gives the bot's wins per side and the cost.
+- A game that ends with `exit 1, error` and few choices is an API failure, not a game result. Replay its deal alone
+  into `artifacts/llm-loops/loop-<n>-retry` with a one-line deals file.
+
+## 4. Review
+
+Build the two corpora from the saved games (`game-NNN/game/*-NNN.json`, not `result.json`):
+
+- `corpus-bot-corp`: the games where Sonnet played the Runner;
+- `corpus-bot-runner`: the games where Sonnet played the Corp.
+
+Then review them one stream at a time (`artifacts/llm-loops/loop-<n>/review.sh`):
+
+```sh
+scripts/ai-codex-review.sh $L/corpus-bot-corp --side corp --output $L/review-bot-corp --games 6 --model gpt-6.1-sol --reasoning medium
+scripts/ai-codex-review.sh $L/corpus-bot-runner --side runner --output $L/review-bot-runner --games 6 --model gpt-6.1-sol --reasoning medium
+```
+
+Pass `--games 6`: the default is 5. Collect every `review.findings` entry into `artifacts/llm-loops/loop-<n>/findings.json`.
+
+## 5. Triage
+
+Confirm each finding against the replay before fixing anything:
+
+- **Probe the decision.** Replay the game to the finding's sequence and print every candidate with the bot's score and
+  reason. Do it in a scratch test that is never committed; the loop 1 and 2 probes are `ZzProbeTests` (a `PROBE`
+  environment variable names the corpus, game, side, version and sequences). Games recorded before an engine fix may stop
+  replaying after it, so probe them in a worktree at the loop's base commit (`.tools/probe-worktree`).
+- **Classify it:**
+  - an **engine bug** (the rules or a card's text broken): fix it with a card test in `tests/Netrunner.Cards.Tests`;
+  - a **bot mistake** (a legal play the bot valued wrongly): fix the policy, version-gated;
+  - a **misread** by the reviewer or the player: record it and drop it.
+- **Merge duplicates.** One cause often shows up in several games.
+- **Defer** what needs a design change rather than a fix, or what the replay doesn't confirm, and say why.
+
+## 6. Fix in one batch
+
+- **New policy versions:** each side's fixes go into a new version (Runner v<k+1>, Corp v<m+1>), gated by its generation,
+  so every earlier version plays as before. Make it the default, add a ladder entrant for the previous version
+  (`standard-r<k>`, `standard-c<m>`), and update `PolicyVersionTests`.
+- **Fix the cause, not the card.** Prefer a rule that covers the card's family (every behavior subroutine, every copy
+  that hasn't run down) over a check for one card name.
+- **Regression tests at the recorded decision.** Rebind the game to the current catalog, cut it just after the decision,
+  and save it under `tests/Netrunner.Match.Tests/Fixtures/saved-games/loop<n>-<game>`. Each test asserts the previous
+  version's choice and the new one's (`BotLoop<n>Tests`).
+- **Catalog changes** (a card spec fix) change the catalog fingerprint: rebind every fixture of that pool, and regenerate
+  `docs/generated/card-coverage.*` when card tests change.
+
+## 7. Verify
+
+Per AGENTS.md's tiers, with no other load on the machine:
+
+- `make bot-check`;
+- ladders of each new version against the previous one, on the Core Battle Box (`gateway-elevation`) and Gateway, 240
+  deals with `--stop-when-clear`;
+- `ai-runner-diagnosis` on the box ladder's saved games;
+- the per-slice fuzz on the pools `scripts/affected-pools.sh` lists (all of them for engine or bot changes);
+- `make gates REF=<commit>`.
+
+A fix confirmed in the replay is kept even when the ladder shows no change: the bots seldom create each other's rare
+positions. Neutral is fine; a separated loss is not.
+
+## 8. Report and ship
+
+- Write `docs/BOT_LOOP_<n>.md`: the games and their results; every finding, with its game, sequence and verdict; the
+  deferred items with their reasons; and the verification.
+- Commit in scoped pieces: engine fixes, policy batch, docs. Push, then open a PR into `dev`.
+- Wait about 10 minutes for the automated review, fix what is valid, reply to every thread, then merge with one push to
+  `dev`.
+- Report to the user and stop: the next loop waits for their decision.
