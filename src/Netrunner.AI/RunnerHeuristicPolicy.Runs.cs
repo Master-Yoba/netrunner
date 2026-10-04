@@ -10,6 +10,8 @@ public sealed partial class RunnerHeuristicPolicy
         int upfrontCost = 0, int knownSuccessValue = 0, int gripSpent = 0)
     {
         if (server is null) return Value(-1000, "run/unknown-server", true, true);
+        // v26: the grip the run is made with, once a run event has left it (PR #97's review: every lethal check reads it).
+        int grip = context.Generation >= 22 ? context.Features.Hand.Length - gripSpent : context.Features.Hand.Length;
         (int cost, int loss, int damage, bool blocked, int unknown) = Protection(context, server, server.Ice.Length - 1, upfrontCost);
         // v7: the whole-run model (A4a) costs the run as one path, tolls included.
         // v21 (A9b): face-down ICE it's confident of from what it saw is planned as that ICE, which the Corp can rez.
@@ -22,7 +24,7 @@ public sealed partial class RunnerHeuristicPolicy
             (cost, loss, damage, blocked, unknown) = (forecast.Credits, forecast.CreditsLost, forecast.Damage, !forecast.CanGetIn, forecast.UnknownIce);
         int reserve = server.Root.Where(card => RunnerValues.Trash(context, card) >= 350).Select(card => context.Definition(card)?.Printed.TrashCost ?? 0).DefaultIfEmpty(0).Min();
         int funds = context.Self.Credits - upfrontCost + extraRunCredits;
-        if (blocked || damage > context.Features.Hand.Length || cost > funds - loss)
+        if (blocked || damage > grip || cost > funds - loss)
             return Value(-1000, "run/known-unaffordable-or-lethal", true);
         // V5: the run itself spends a click, and what's left must pay a known approach toll.
         (bool tollBlocked, int tollCredits, int tollClicks) = forecast is not null ? (false, 0, forecast.Clicks)
@@ -41,7 +43,7 @@ public sealed partial class RunnerHeuristicPolicy
             // the list).
             // v26 (self-flatlines): with the grip as it is once a run event has left it; Clean Getaway was played into Byte!
             // with the ambush priced against the grip it was still in.
-            trapRisk = TrackedTrapRisk(context, server, context.Generation >= 22 ? context.Features.Hand.Length - gripSpent : null);
+            trapRisk = TrackedTrapRisk(context, server, grip);
         }
         else if (context.Generation >= 8)
         {
@@ -64,15 +66,15 @@ public sealed partial class RunnerHeuristicPolicy
         bool matchPoint = context.Generation >= 11 && server.Kind == ServerKind.Remote && UnknownAdvancedRoots(context, server).Any()
             && context.Opponent.AgendaPoints >= 4;
         // v26 (self-flatlines): not while the Runner can draw before it runs; it ran a trap with an empty grip and four clicks.
-        if (matchPoint && context.Generation >= 22 && context.Features.Hand.Length - gripSpent <= 1 && context.Self.Clicks >= 2) matchPoint = false;
+        if (matchPoint && context.Generation >= 22 && grip <= 1 && context.Self.Clicks >= 2) matchPoint = false;
         // v11 (self-play review, 28 September): a possible trap that would flatline the Runner isn't worth the access.
-        if (context.Generation >= 8 && !matchPoint && LethalTrap(context, server)) return Value(-1000, "run/possible-lethal-trap", true);
-        if (context.Generation >= 17 && !matchPoint && LikelyLethalTrap(context, server)) return Value(-1000, "run/likely-lethal-trap", true);
+        if (context.Generation >= 8 && !matchPoint && LethalTrap(context, server, grip)) return Value(-1000, "run/possible-lethal-trap", true);
+        if (context.Generation >= 17 && !matchPoint && LikelyLethalTrap(context, server, grip)) return Value(-1000, "run/likely-lethal-trap", true);
         // v13 (playtest, 30 September): a known trap's damage is certain (the Runner kept running a known Urtica Cipher).
         if (context.Generation >= 9)
         {
             int trap = KnownAccessDamage(context, server);
-            if (trap > context.Features.Hand.Length) return Value(-1000, "run/known-lethal-access", true);
+            if (trap > grip) return Value(-1000, "run/known-lethal-access", true);
             damage += trap;
         }
         int rewards = SuccessRewards(context, server);
@@ -277,8 +279,8 @@ public sealed partial class RunnerHeuristicPolicy
     /// whose trap damage, 2 plus its counters (Urtica Cipher), would exceed the grip,
     /// against a Corp the Runner has seen play such traps.
     /// </summary>
-    private static bool LethalTrap(HeuristicContext context, AgentServer server) => SeenTrap(context)
-        && UnknownAdvancedRoots(context, server).Any(counters => 2 + counters > context.Features.Hand.Length);
+    private static bool LethalTrap(HeuristicContext context, AgentServer server, int? grip = null) => SeenTrap(context)
+        && UnknownAdvancedRoots(context, server).Any(counters => 2 + counters > (grip ?? context.Features.Hand.Length));
 
     /// <summary>v21 (A9b): the trap risk of a server's face-down root cards, from the tracker and the prior over the rest.</summary>
     private static int TrackedTrapRisk(HeuristicContext context, AgentServer server, int? gripAfter = null)
@@ -305,9 +307,9 @@ public sealed partial class RunnerHeuristicPolicy
     }
 
     /// <summary>v21 (A9b): whether the tracker puts an even chance or more on accessing a trap that would flatline the Runner.</summary>
-    private static bool LikelyLethalTrap(HeuristicContext context, AgentServer server)
+    private static bool LikelyLethalTrap(HeuristicContext context, AgentServer server, int? gripAfter = null)
     {
-        int grip = context.Features.Hand.Length;
+        int grip = gripAfter ?? context.Features.Hand.Length;
         double lethal = 0;
         for (int index = 0; index < server.Root.Length; index++)
         {

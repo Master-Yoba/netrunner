@@ -123,6 +123,8 @@ internal static class RunnerInference
         bool seen = false;
         foreach ((string definition, double weight) in prior)
         {
+            // Every copy already seen: the Corp can't hold one (PR #97's review).
+            if (weight <= 0) continue;
             if (!context.Catalog.TryGet(new CardDefinitionId(definition), out CardEvaluationDescriptor card)
                 || card.Printed.CardClass != RuntimeCardClass.Operation || card.Behavior is not { } behavior
                 || !behavior.Conditions.Any(condition => condition.Kind == BehaviorConditionKind.SuccessfulRunDuringRunnerLastTurn)

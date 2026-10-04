@@ -52,8 +52,9 @@ public sealed class BotStrategy1Tests
     public async Task IpEnforcementTakesBackAStolenAgenda(string version, bool plays)
     {
         if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
-        // A tagged Runner holds the Corp's agendas; v29 valued IP Enforcement at its tags alone.
-        (LegalAction chosen, GameState state) = await ChooseWithStateAtAsync("strategy1-ip-enforcement", version, 197, PlayerSide.Corp);
+        // At 5 points against a tagged Runner holding the Corp's 2-point agenda: IP Enforcement takes it back and scores it
+        // this turn. v29 valued the play at its tags alone.
+        (LegalAction chosen, GameState state) = await ChooseWithStateAtAsync("strategy1-ip-enforcement", version, 603, PlayerSide.Corp);
         bool enforcement = chosen.Parameters is PlayCardParameters play && state.GetCard(play.CardId).DefinitionId.Value == "35066";
         Assert.True(plays == enforcement, $"{version} chose {chosen.Kind} {chosen.Description}.");
     }

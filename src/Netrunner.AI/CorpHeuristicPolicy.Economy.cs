@@ -256,8 +256,11 @@ public sealed partial class CorpHeuristicPolicy
                         + (option.Costs ?? []).Where(cost => cost.Kind == BehaviorCostKind.Credits).Sum(cost => cost.Amount) * 100);
                     break;
                 case BehaviorInstructionKind.Choose:
-                    if (instruction.Choice is { Options.Count: > 0 } choice)
-                        total += choice.Options.Max(option => Effects(context, option.Instructions, source, controller)
+                    // v30: only the options the Runner's tags allow (IP Enforcement's X, PR #97's review).
+                    if (instruction.Choice is { Options.Count: > 0 } choice
+                        && choice.Options.Where(option => context.Generation < 25 || option.Condition is not { Kind: BehaviorConditionKind.RunnerTagsAtLeast } tagged
+                            || context.Opponent.Tags >= (tagged.Value ?? 1)).ToArray() is { Length: > 0 } offered)
+                        total += offered.Max(option => Effects(context, option.Instructions, source, controller)
                             - (option.Costs ?? []).Where(cost => cost.Kind == BehaviorCostKind.Credits).Sum(cost => cost.Amount) * context.CreditValue);
                     else total += 100;
                     break;
