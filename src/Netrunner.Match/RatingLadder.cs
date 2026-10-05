@@ -336,6 +336,12 @@ public static partial class RatingLadder
         }
         catch (FullMatchStallException stall)
         {
+            // A capped game is rare and suspect, so its replay is always verified, as fuzz does, checked or not.
+            ReplayArtifact replay = EngineJson.Deserialize<ReplayArtifact>(EngineJson.Serialize(stall.Replay), definition.Behavior,
+                definition.Runtime);
+            ReplayVerificationResult verified = ReplayVerifier.Verify(replay, definition.Behavior, definition.Runtime);
+            if (!verified.Success)
+                return new LadderGameResult(game, 0.5, false, 0, $"Capped game's replay failed: {verified.Message}");
             keep?.Invoke(new LadderSavedGame(game, 0.5, true, stall.Replay));
             return new LadderGameResult(game, 0.5, true, stall.Replay.Actions.Count, null, stall.Replay.ExpectedFinalStateHash);
         }

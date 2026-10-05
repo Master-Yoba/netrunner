@@ -53,6 +53,24 @@ public sealed class AiLadderCommandTests
         }
     }
 
+    [Fact]
+    public void ACappedGameIsAlwaysVerified()
+    {
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = CliCommands.Run(["ai-ladder", "--content", "developer", "--entrants", "random,contract", "--seeds-per-pairing", "1",
+            "--bootstrap", "0", "--action-cap", "20", "--verify-replays-every", "1000", "--json"], output, error);
+
+        Assert.True(exitCode is 0 or 1, error.ToString());
+        using JsonDocument report = JsonDocument.Parse(output.ToString());
+        Assert.Equal(0, report.RootElement.GetProperty("errors").GetInt32());
+        JsonElement[] results = [.. report.RootElement.GetProperty("results").EnumerateArray()];
+        Assert.All(results, result => Assert.True(result.GetProperty("capped").GetBoolean()));
+        Assert.All(results, result => Assert.True(result.GetProperty("verified").GetBoolean()));
+        Assert.Equal(results.Length, report.RootElement.GetProperty("verifiedGames").GetInt32());
+    }
+
     [Theory]
     [InlineData("--verify-replays-every", "0")]
     [InlineData("--entrants", "random")]
