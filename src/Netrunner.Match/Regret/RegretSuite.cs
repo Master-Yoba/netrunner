@@ -57,6 +57,28 @@ public sealed record RegretSuite(ImmutableArray<RegretGame> Games, ImmutableArra
         return options;
     }
 
+    /// <summary>
+    /// The suite with one root per position and held out by deal (bot plan S1.1). A deal's games share their positions
+    /// until play diverges, so a position drawn in two of them is kept once (the first by game id), and a deal's games
+    /// are all held out or all not, so no position is in both splits. Labels of dropped roots are dropped with them.
+    /// </summary>
+    public RegretSuite Deduplicated()
+    {
+        static bool HeldOut(RegretGame game) => game.Source == "finding" || RegretRoots.StableHash($"{game.ContentId}|{game.GameSeed}") % 5 == 0;
+        var games = Games.ToDictionary(game => game.Id, game => game with { Split = HeldOut(game) ? "held-out" : "train" }, StringComparer.Ordinal);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var roots = ImmutableArray.CreateBuilder<RegretRoot>();
+        foreach (RegretRoot root in Roots.OrderBy(root => root.GameId, StringComparer.Ordinal).ThenBy(root => root.Sequence))
+        {
+            RegretGame game = games[root.GameId];
+            string position = $"{game.ContentId}|{game.GameSeed}|{string.Join(',', game.Choices.Take((int)root.Sequence - 1))}";
+            if (seen.Add(position)) roots.Add(root with { Split = game.Split });
+        }
+        HashSet<string> kept = [.. roots.Select(root => root.Id)];
+        return new RegretSuite([.. games.Values.OrderBy(game => game.Id, StringComparer.Ordinal)], roots.ToImmutable(),
+            Labels.IsDefault ? [] : [.. Labels.Where(label => kept.Contains(label.RootId))]);
+    }
+
     public static RegretSuite Load(string directory)
     {
         ArgumentException.ThrowIfNullOrEmpty(directory);

@@ -100,6 +100,24 @@ public sealed class RegretSuiteTests
         Assert.Equal(0.1, noise.MedianStandardError, 6);
     }
 
+    [Fact]
+    public void TheCommittedBoxSuiteIsWhole()
+    {
+        RegretSuite suite = RegretSuite.Load(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "data", "ai", "regret",
+            "gateway-elevation"));
+        HashSet<string> games = [.. suite.Games.Select(game => game.Id)];
+        HashSet<string> roots = [.. suite.Roots.Select(root => root.Id)];
+
+        Assert.Equal(suite.Games.Length, games.Count);
+        Assert.Equal(suite.Roots.Length, roots.Count);
+        Assert.All(suite.Roots, root => Assert.Contains(root.GameId, games));
+        Assert.All(suite.Roots, root => Assert.InRange(root.Candidates.Length, 2, 6));
+        Assert.Equal(roots, suite.Labels.Select(label => label.RootId).ToHashSet());
+        var byId = suite.Roots.ToDictionary(root => root.Id);
+        Assert.All(suite.Labels, label => Assert.Equal(byId[label.RootId].Candidates.Length, label.Values.Length));
+        Assert.Contains(suite.Roots, root => root.Categories.Contains("finding"));
+    }
+
     private static bool Official => CardDataResource.EmbeddedMode == CardDataResource.OfficialMode;
 
     private static (LadderSavedGame Saved, FullMatchDefinition Definition) Saved() => Assert.Single(LadderGameArchive.Read(

@@ -17,6 +17,8 @@ public static partial class CliCommands
     ///   [--labels FILE] [--repeat N --repeat-seed S]
     /// ai-regret score SUITE-DIR --version V[,V...] [--profile P] [--split all|held-out|train] [--labels FILE]
     ///   [--blunders N] [--bootstrap N] [--workers N] [--json]
+    /// ai-regret findings SUITE-DIR --manifest FILE --fixtures DIR --content POOL [--labelled N]
+    /// ai-regret dedupe SUITE-DIR
     /// </summary>
     private static int RunAiRegret(string[] args, TextWriter output, TextWriter error)
     {
@@ -32,6 +34,7 @@ public static partial class CliCommands
                 "label" => RegretLabelCommand(args[2], options, output, error),
                 "score" => RegretScoreCommand(args[2], options, output),
                 "findings" => RegretFindingsCommand(args[2], options, output),
+                "dedupe" => RegretDedupeCommand(args[2], options, output),
                 _ => throw new ArgumentException($"Unknown ai-regret command '{args[1]}'."),
             };
         }
@@ -94,13 +97,15 @@ public static partial class CliCommands
         if (Directory.Exists(destination) || File.Exists(destination)) throw new ArgumentException("--output must name a new directory.");
         if (!Directory.Exists(gamesDirectory)) throw new ArgumentException($"No saved games in '{gamesDirectory}'.");
         IReadOnlyList<(LadderSavedGame Game, FullMatchDefinition Definition)> saved = LadderGameArchive.ReadAll(gamesDirectory, options.Workers);
-        // One game in five is held out, by game, in the order of the games' ids.
+        // The split is set by deal once the roots are drawn (RegretSuite.Deduplicated).
         RegretGame[] games = [.. saved.OrderBy(entry => entry.Game.Game.Id, StringComparer.Ordinal).AsParallel().AsOrdered()
             .WithDegreeOfParallelism(options.Workers)
-            .Select((entry, index) => RegretGames.FromSaved(entry.Game, entry.Definition, index % 5 == 0 ? "held-out" : "train", "ladder"))];
+            .Select(entry => RegretGames.FromSaved(entry.Game, entry.Definition, "train", "ladder"))];
         var sampling = new RegretSampling(options.TurnRoots, options.RunRoots, options.Labelled, Seed: options.Seed);
         RegretRoot[] roots = [.. ForGames(games, options.Workers, error, "roots", game => RegretRoots.Sample(game, sampling)).SelectMany(found => found)];
-        new RegretSuite([.. games], [.. roots], []).Save(destination);
+        RegretSuite suite = new RegretSuite([.. games], [.. roots], []).Deduplicated();
+        suite.Save(destination);
+        roots = [.. suite.Roots];
         output.WriteLine(string.Create(CultureInfo.InvariantCulture,
             $"ai-regret roots games={games.Length} roots={roots.Length} turn={roots.Count(root => root.Kind == RegretRoots.TurnKind)} run={roots.Count(root => root.Kind == RegretRoots.RunKind)} held-out={roots.Count(root => root.Split == "held-out")} output={destination}"));
         return 0;
@@ -150,6 +155,7 @@ public static partial class CliCommands
         RegretSuite suite = RegretSuite.Load(suiteDirectory);
         var labels = RegretSuite.ReadLines<RegretLabel>(Path.Combine(suiteDirectory, options.LabelsFile)).ToDictionary(label => label.RootId);
         RegretRoot[] roots = [.. suite.Roots.Where(root => options.Split == "all" || root.Split == options.Split)];
+        var rootsById = roots.ToDictionary(root => root.Id);
         var byGame = roots.GroupBy(root => root.GameId).ToDictionary(group => group.Key, group => group.ToList());
         var results = new List<(string Version, PlayerSide Side, ImmutableArray<RegretChoice> Choices, TimeSpan Elapsed)>();
         foreach (string version in options.Versions)
@@ -181,7 +187,15 @@ public static partial class CliCommands
                 .ToArray(),
             blunders = result.Choices.Where(choice => choice.Regret is not null).OrderByDescending(choice => choice.Regret)
                 .ThenBy(choice => choice.RootId, StringComparer.Ordinal).Take(options.Blunders)
-                .Select(choice => new { choice, values = labels[choice.RootId].Values }).ToArray(),
+                .Select(choice => new
+                {
+                    choice,
+                    values = labels[choice.RootId].Values.Select(value => new
+                    {
+                        value,
+                        description = rootsById[choice.RootId].Candidates.First(candidate => candidate.Group == value.Group).Description,
+                    }).ToArray(),
+                }).ToArray(),
         }).ToArray();
         if (options.Json)
         {
@@ -199,8 +213,9 @@ public static partial class CliCommands
             {
                 output.WriteLine(string.Create(CultureInfo.InvariantCulture,
                     $"  blunder {blunder.choice.RootId} regret={blunder.choice.Regret:F3} chose \"{blunder.choice.ChosenDescription}\" ({blunder.choice.Reason})"));
-                foreach (RegretValue value in blunder.values.OrderByDescending(value => value.Mean))
-                    output.WriteLine(string.Create(CultureInfo.InvariantCulture, $"      {value.Mean:F3} ±{value.StandardError:F3} {value.Group}"));
+                foreach (var line in blunder.values.OrderByDescending(line => line.value.Mean))
+                    output.WriteLine(string.Create(CultureInfo.InvariantCulture,
+                        $"      {line.value.Mean:F3} ±{line.value.StandardError:F3} {line.description[..Math.Min(line.description.Length, 110)]}"));
             }
         }
         foreach (RegretComparison comparison in comparisons)
@@ -248,6 +263,20 @@ public static partial class CliCommands
         new RegretSuite([.. suite.Games.Where(game => !added.Contains(game.Id)).Concat(games)],
             [.. suite.Roots.Where(root => !added.Contains(root.GameId)).Concat(roots)], []).Save(suiteDirectory);
         output.WriteLine($"ai-regret findings games={games.Count} roots={roots.Count} of {findings.Count}");
+        return 0;
+    }
+
+    /// <summary>Applies <see cref="RegretSuite.Deduplicated"/> to a suite and its labels files in place.</summary>
+    private static int RegretDedupeCommand(string suiteDirectory, RegretOptions options, TextWriter output)
+    {
+        RegretSuite suite = RegretSuite.Load(suiteDirectory);
+        RegretSuite deduplicated = suite.Deduplicated();
+        deduplicated.Save(suiteDirectory);
+        HashSet<string> kept = [.. deduplicated.Roots.Select(root => root.Id)];
+        foreach (string file in Directory.EnumerateFiles(suiteDirectory, "labels*.jsonl.gz").Order(StringComparer.Ordinal))
+            RegretSuite.WriteLines(file, RegretSuite.ReadLines<RegretLabel>(file).Where(label => kept.Contains(label.RootId)).ToArray());
+        output.WriteLine(string.Create(CultureInfo.InvariantCulture,
+            $"ai-regret dedupe roots={suite.Roots.Length}->{deduplicated.Roots.Length} held-out={deduplicated.Roots.Count(root => root.Split == "held-out")}"));
         return 0;
     }
 
