@@ -16,7 +16,8 @@ public static partial class CliCommands
     /// --deals (A1b) plays a fixed budget of deals spread over the pool's pairings; with
     /// --stop-when-clear it stops after any batch where every seat's difference is clear at 99%.
     /// --verify-replays-every N (bot plan S0.2; default 8, as fuzz uses) checks every Nth game as it is played (the
-    /// per-action save-and-reload and the replay's verification) and plays the rest unchecked; 1 checks every game.
+    /// per-action save-and-reload and the replay's verification) and plays the rest unchecked; 1 checks every game. A
+    /// capped game's replay is always verified.
     /// </summary>
     private static int RunAiLadder(string[] args, TextWriter output, TextWriter error)
     {
@@ -178,7 +179,7 @@ public static partial class CliCommands
             bootstrap,
             actionCap,
             verifyReplaysEvery,
-            verifiedGames = verified.Count,
+            verifiedGames = ordered.Count(result => verified.Contains(result.Game.Id) || result.Capped),
             entrants,
             games = report.Games,
             capped = report.Capped,
@@ -208,7 +209,8 @@ public static partial class CliCommands
                 capped = result.Capped,
                 actions = result.Actions,
                 finalStateHash = result.FinalStateHash,
-                verified = verified.Contains(result.Game.Id),
+                // Checked as played, or capped: a capped game's replay is always verified.
+                verified = verified.Contains(result.Game.Id) || result.Capped,
             }),
         });
         if (destination is not null)
