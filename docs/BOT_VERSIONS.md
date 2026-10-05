@@ -407,3 +407,35 @@ The seat-swap pairs are identical because an agent's random stream is seeded fro
 `RatingLadderTests.TheLiveAndThePreviousVersionShareTheirSeeds` asserts it, so a change that seeds from the version
 fails there instead of voiding this gate. `make bot-check` passes (AI 136, Match 1,107, CLI 185), the quick M5 cases
 unchanged.
+
+### S1.4: every meaningful group (5 October 2026)
+
+`ai-regret extend` gave every root of the box suite its meaningful groups (those whose priority band is within one of
+the best group's, a planned candidate read through the planner's offset): 32,821 groups became 57,109 (5.0 to 8.8 a
+root), in 2 min 49 s. The new groups have no labels yet; S1.5 labels them all. `ai-regret score --label-missing` labelled,
+on demand, every group the S1.3 versions chose that had no value (68 Runner, 88 Corp, each with its root's settings and
+seed), so the table below counts every choice:
+
+| Comparison | S1.3 (choices outside the top six dropped) | S1.4 (every choice labelled) |
+|---|---|---|
+| Runner v24 − v25 | +0.0025 [0.0019, 0.0033] | +0.0030 [0.0023, 0.0038] |
+| Runner v24 − v26 | +0.0024 [0.0017, 0.0033] | +0.0029 [0.0021, 0.0039] |
+| Runner v25 − v26 | −0.0001 [−0.0002, 0.0002] | −0.0001 [−0.0004, 0.0002] |
+| Corp v28 − v29 | +0.0005 [−0.0002, 0.0012] | +0.0005 [−0.0001, 0.0011] |
+| Corp v28 − v30 | +0.0013 [0.0004, 0.0024] | +0.0016 [−0.0004, 0.0033] |
+| Corp v29 − v30 | +0.0008 [0.0001, 0.0017] | +0.0011 [−0.0005, 0.0028] |
+| Runner v26 − v27, Corp v30 − v31 | | 0.0000 [0.0000, 0.0000] |
+
+**Gate:** no version has an unlabelled choice. The bias the S1.3 record named is confirmed: counting the older versions'
+choices outside the heuristic's best six raises every difference. Those choices are rare and costly, so the Corp's
+intervals also widen past zero; the Runner's separation holds. The live v31 and v27 choose as v30 and v26 at every root
+(S3's agreement check).
+
+| Version (Standard) | Regret, all | Held out |
+|---|---|---|
+| Runner v24 | 0.0410 [0.0393, 0.0430] | 0.0399 |
+| Runner v25 | 0.0380 [0.0364, 0.0397] | 0.0354 |
+| Runner v26, v27 | 0.0381 [0.0365, 0.0399] | 0.0359 |
+| Corp v28 | 0.0313 [0.0285, 0.0344] | 0.0295 |
+| Corp v29 | 0.0309 [0.0281, 0.0338] | 0.0291 |
+| Corp v30, v31 | 0.0297 [0.0268, 0.0327] | 0.0263 |
