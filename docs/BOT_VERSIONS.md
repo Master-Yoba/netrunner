@@ -368,3 +368,41 @@ what the planner (S5) is expected to move.
 install root held the teacher's lead at 128 samples, and inference needs a position where the right choice depends on a
 card the bot can only infer), and 10 of 54 held out against a third (the converted tests cannot be held out). The NSG
 Core set has only the 5 converted tests; certified puzzles for it need an NSG regret suite.
+
+## Policy versions
+
+### S3: one live policy (5 October 2026)
+
+**Corp v31 and Runner v27** are the live policies: v30's and v26's behaviour with every version check resolved and the
+dead branches deleted. Every earlier version is `LegacyCorpPolicy` or `LegacyRunnerPolicy` under
+`src/Netrunner.AI/Legacy/`: the policy files of 94a7404, changed only by the class's name, which
+`PolicyVersionTests.TheLegacyFilesAreThePoliciesFrozenAtS3` pins by hash. `OfflinePolicies.Create` routes by version;
+the profiles give v31 and v27 v30's and v26's settings; the ladder's `standard-prev` entrant is v30 and v26.
+
+| Policy files | Lines | `Generation` references |
+|---|---:|---:|
+| Before (9 files, every version) | 2,760 | 135 |
+| Live after (Corp v31, Runner v27) | 2,583 | 4 (the context's generation, pinned) |
+| Legacy (frozen copies) | 2,760 | 135 |
+
+Besides the resolved checks, the Runner's run code lost its first estimate (`Protection`) and its approach-toll fallback,
+which the whole-run model replaced in every live game, and its v16 rules for Creative Commission and Docklands Pass; the
+Corp lost v24's end-the-run subroutine value. Those versions were never defaults.
+
+**What stays versioned: the shared helpers.** `HeuristicContext`, `RunnerValues` and `RunModel` still switch on the
+generation (about 20 checks), because every helper of the heuristic stack takes a `HeuristicContext` and freezing them
+would split shared types (`CardTracker`, the run model) across a type boundary. The live policies pass v30's and v26's
+generation (25 and 22). A later change to a helper must leave the older generations' behaviour alone, which the frozen
+benchmark digests and the identity ladder below check, or move that helper into `Legacy/` first.
+
+**Gate: identical game by game.** `--entrants standard-prev,standard --deals 240 --verify-replays-every 8`: each deal's
+four games (v31 or v30 against v27 or v26) must end in the same state.
+
+| Pool | Deals | Games | Deals whose four games are identical | Errors |
+|---|---:|---:|---:|---:|
+| Core Battle Box | 240 | 960 | 240 | 0 |
+| Gateway | 240 | 960 | 240 | 0 |
+
+The seat-swap pairs are identical because an agent's random stream is seeded from the match seed and its side only;
+`RatingLadderTests.TheLiveAndThePreviousVersionShareTheirSeeds` asserts it, so a change that seeds from the version fails
+there instead of voiding this gate. `make bot-check` passes (AI 136, Match 1,107, CLI 185), the quick M5 cases unchanged.

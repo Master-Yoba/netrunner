@@ -252,6 +252,14 @@ converted puzzle.
 
 **Independent of S1 and S2. Do it before S4 changes the heuristic's features.**
 
+**Outcome (5 October; the record is in `docs/BOT_VERSIONS.md`).** Corp v31 and Runner v27 are live, without a version
+check of their own (135 `Generation` references to 4); `Legacy/` holds the 94a7404 policy files, pinned by hash. The
+gate's ladders (box and Gateway, 240 deals each) are identical game by game. The shared helpers (`HeuristicContext`,
+`RunnerValues`, `RunModel`) keep their generation switches, since freezing them would split shared types; a helper change
+in S4 or S5 must leave the older generations alone or move the helper into `Legacy/` first. `standard-prev` is v30 and
+v26 from the legacy files until S5; the frozen-build anchor under `.tools/ladder-anchors/` is built when S5 first needs a
+previous live version that is not legacy code.
+
 - Copy `CorpHeuristicPolicy*.cs` and `RunnerHeuristicPolicy*.cs` to `src/Netrunner.AI/Legacy/` as `LegacyCorpPolicy`
   and `LegacyRunnerPolicy` serving every version through v30 and v26. `OfflinePolicies.Create` routes those versions
   there. `CorpPolicyProfiles` and `RunnerPolicyProfiles` keep constructing their profiles.
