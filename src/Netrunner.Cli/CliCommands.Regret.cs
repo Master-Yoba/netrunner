@@ -288,14 +288,8 @@ public static partial class CliCommands
     }
 
     /// <summary>The scored version's bot for a seat, keeping its reasons.</summary>
-    private static OfflineAgent Scored(FullMatchDefinition definition, PlayerSide side, string profile, string version)
-    {
-        OfflineAgent agent = OfflineMatchFactory.CreateOpponent(definition, side == PlayerSide.Corp ? PlayerSide.Runner : PlayerSide.Corp, profile, version);
-        var scored = new OfflineAgent(agent.Configuration, OfflinePolicies.Create(agent.Configuration),
-            new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior), null, captureDiagnostics: true);
-        if (agent.Checkpoint.Knowledge.OpponentList is { } list) scored.KnowOpponentList(list.Select(entry => (entry.DefinitionId, entry.Quantity)));
-        return scored;
-    }
+    private static OfflineAgent Scored(FullMatchDefinition definition, PlayerSide side, string profile, string version) =>
+        SavedDecision.Agent(definition, side, version, profile, diagnostics: true);
 
     /// <summary>Runs <paramref name="work"/> over the games on <paramref name="workers"/> threads, in the games' order, reporting progress.</summary>
     private static T[] ForGames<T>(RegretGame[] games, int workers, TextWriter error, string what, Func<RegretGame, T> work)

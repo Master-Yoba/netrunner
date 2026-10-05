@@ -1,0 +1,489 @@
+[
+  {
+    "id": "topan-last-card",
+    "title": "Topan doesn't install the last card into a flatline",
+    "category": "punisher-risk",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop1-topan-last-card",
+    "sequence": 140,
+    "side": "runner",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "useAbility",
+          "parameters": {
+            "abilityKey": "topan-install"
+          }
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "BotLoop1Tests.TopanDoesNotInstallItsLastCardIntoAFlatline"
+  },
+  {
+    "id": "semak-samun-damage",
+    "title": "Semak-samun's damage isn't taken with too few cards",
+    "category": "punisher-risk",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop1-semak-samun-damage",
+    "sequence": 120,
+    "side": "runner",
+    "acceptance": {
+      "accept": [
+        {
+          "parameters": {
+            "optionKeys": [
+              "end-run"
+            ]
+          }
+        }
+      ]
+    },
+    "source": "BotLoop1Tests.SemakSamunsDamageIsNotTakenWithTooFewCards"
+  },
+  {
+    "id": "measured-response-paid",
+    "title": "Measured Response is paid rather than flatlining",
+    "category": "punisher-risk",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop1-measured-response",
+    "sequence": 285,
+    "side": "runner",
+    "acceptance": {
+      "accept": [
+        {
+          "parameters": {
+            "optionKeys": [
+              "pay-eight"
+            ]
+          }
+        }
+      ]
+    },
+    "source": "BotLoop1Tests.MeasuredResponseIsPaidRatherThanFlatlining"
+  },
+  {
+    "id": "topan-only-events",
+    "title": "Topan isn't used with only events in the grip",
+    "category": "hand-management",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop1-005",
+    "sequence": 120,
+    "side": "runner",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "useAbility",
+          "parameters": {
+            "abilityKey": "topan-install"
+          }
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "BotLoop1Tests.TopanIsNotUsedWithOnlyEventsInTheGrip"
+  },
+  {
+    "id": "madani-no-program",
+    "title": "Madani doesn't host with no program in the grip",
+    "category": "hand-management",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop1-007",
+    "sequence": 128,
+    "side": "runner",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "useAbility",
+          "parameters": {
+            "abilityKey": "madani-host"
+          }
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "BotLoop1Tests.MadaniDoesNotHostWithNoProgramInTheGrip"
+  },
+  {
+    "id": "byte-springs",
+    "title": "The Corp springs Byte! when the Runner accesses it from R&D",
+    "category": "access-and-trash",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop1-002",
+    "sequence": 131,
+    "side": "corp",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "useTrigger"
+        }
+      ]
+    },
+    "source": "BotLoop1Tests.TheCorpSpringsByteWhenTheRunnerAccessesItFromRAndD"
+  },
+  {
+    "id": "phat-gioan-rezzed",
+    "title": "Ph\u1eadt Gioan Baotixita is rezzed to gather counters",
+    "category": "rez-timing",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop1-002",
+    "sequence": 52,
+    "side": "corp",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "rezCard",
+          "parameters": {
+            "cardId": "def:35051"
+          }
+        }
+      ]
+    },
+    "source": "BotLoop1Tests.PhatGioanBaotixitaIsRezzedToGatherCounters"
+  },
+  {
+    "id": "humanoid-resources-rezzed",
+    "title": "Humanoid Resources is rezzed with the clicks to use it",
+    "category": "rez-timing",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop1-003",
+    "sequence": 167,
+    "side": "corp",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "rezCard",
+          "parameters": {
+            "cardId": "def:35039"
+          }
+        }
+      ]
+    },
+    "source": "BotLoop1Tests.HumanoidResourcesIsRezzedWithTheClicksToUseIt"
+  },
+  {
+    "id": "mutual-favor-covered",
+    "title": "Mutual Favor isn't played when every ICE type is covered",
+    "category": "hand-management",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop1-006",
+    "sequence": 154,
+    "side": "runner",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "playCard",
+          "parameters": {
+            "cardId": "def:30011"
+          }
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "BotLoop1Tests.MutualFavorIsNotPlayedWhenEveryIceTypeIsCovered"
+  },
+  {
+    "id": "second-marjanah",
+    "title": "A second Marjanah isn't installed",
+    "category": "hand-management",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop1-006",
+    "sequence": 251,
+    "side": "runner",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "installCard",
+          "parameters": {
+            "cardId": "def:30016"
+          }
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "BotLoop1Tests.ASecondMarjanahIsNotInstalled"
+  },
+  {
+    "id": "clean-getaway",
+    "title": "Clean Getaway is played on a run the Runner sees succeed",
+    "category": "economy",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop1-006",
+    "sequence": 532,
+    "side": "runner",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "playCard",
+          "parameters": {
+            "cardId": "def:35014"
+          }
+        }
+      ]
+    },
+    "source": "BotLoop1Tests.CleanGetawayIsPlayedOnARunTheRunnerSeesSucceed"
+  },
+  {
+    "id": "n-pot-whole",
+    "title": "N-Pot is broken whole at threat five",
+    "category": "punisher-risk",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop1-006",
+    "sequence": 606,
+    "side": "runner",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "pumpBreaker"
+        }
+      ]
+    },
+    "source": "BotLoop1Tests.NPotIsBrokenWholeAtThreatFive"
+  },
+  {
+    "id": "n-pot-credit-break",
+    "title": "N-Pot's credit break is used with no clicks left",
+    "category": "economy",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop1-007",
+    "sequence": 47,
+    "side": "runner",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "useBioroidAbility"
+        }
+      ]
+    },
+    "source": "BotLoop1Tests.NPotsCreditBreakIsUsedWithNoClicksLeft"
+  },
+  {
+    "id": "measured-response-trashed",
+    "title": "Measured Response is trashed from HQ when it would flatline",
+    "category": "access-and-trash",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop1-005",
+    "sequence": 127,
+    "side": "runner",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "trashAccessedCard"
+        }
+      ]
+    },
+    "source": "BotLoop1Tests.MeasuredResponseIsTrashedFromHqWhenItWouldFlatline"
+  },
+  {
+    "id": "ambush-remote",
+    "title": "An unknown remote isn't run with a grip an ambush would flatline",
+    "category": "punisher-risk",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop1-005",
+    "sequence": 130,
+    "side": "runner",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "startRun",
+          "parameters": {
+            "serverId": "server:341"
+          }
+        },
+        {
+          "kind": "playCard",
+          "parameters": {
+            "targetServerId": "server:341"
+          }
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "BotLoop1Tests.AnUnknownRemoteIsNotRunWithAGripAnAmbushWouldFlatline"
+  },
+  {
+    "id": "mahkota-own-copy",
+    "title": "Mahkota Langit Grid doesn't replace its own unrezzed copy",
+    "category": "economy",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop1-001",
+    "sequence": 327,
+    "side": "corp",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "installCard",
+          "parameters": {
+            "cardId": "def:35082",
+            "requiredReplacementCardIds": [
+              "def:35082"
+            ]
+          }
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "BotLoop1Tests.MahkotaLangitGridDoesNotReplaceItsOwnUnrezzedCopy"
+  },
+  {
+    "id": "petty-cash-archives",
+    "title": "Petty Cash isn't played from Archives without its cost",
+    "category": "economy",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop1-003",
+    "sequence": 329,
+    "side": "corp",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "useAbility",
+          "parameters": {
+            "abilityKey": "petty-cash-from-archives"
+          }
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "BotLoop1Tests.PettyCashIsNotPlayedFromArchivesWithoutItsCost"
+  },
+  {
+    "id": "pt-untaian-paid",
+    "title": "PT Untaian's counter is paid for on an unrezzed trap",
+    "category": "economy",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop1-002",
+    "sequence": 57,
+    "side": "corp",
+    "acceptance": {
+      "accept": [
+        {
+          "parameters": {
+            "optionKeys": [
+              "pay"
+            ]
+          }
+        }
+      ]
+    },
+    "source": "BotLoop1Tests.PtUntaiansCounterIsPaidForOnAnUnrezzedTrap"
+  },
+  {
+    "id": "muslihat-free-card",
+    "title": "Muslihat's free card is taken even as a second copy",
+    "category": "hand-management",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop2-006",
+    "sequence": 140,
+    "side": "runner",
+    "acceptance": {
+      "accept": [
+        {
+          "parameters": {
+            "cardIds": [
+              "def:30016"
+            ]
+          }
+        }
+      ]
+    },
+    "source": "BotLoop2Tests.MuslihaTsFreeCardIsTakenEvenAsASecondCopy"
+  },
+  {
+    "id": "measured-response-draw",
+    "title": "After a successful run the grip is drawn up against Measured Response",
+    "category": "punisher-risk",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "strategy1-measured-response",
+    "sequence": 781,
+    "side": "runner",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "drawCard"
+        }
+      ]
+    },
+    "source": "BotStrategy1Tests.AfterASuccessfulRunTheGripIsDrawnUpAgainstMeasuredResponse"
+  },
+  {
+    "id": "match-point-draw",
+    "title": "At match point an empty grip draws before running a trap",
+    "category": "punisher-risk",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "strategy1-match-point-draw",
+    "sequence": 329,
+    "side": "runner",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "startRun"
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "BotStrategy1Tests.AtMatchPointAnEmptyGripDrawsBeforeRunningATrap"
+  },
+  {
+    "id": "petty-cash-first",
+    "title": "Petty Cash is played before the turn's first action finishes",
+    "category": "sequencing",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "strategy1-petty-cash",
+    "sequence": 101,
+    "side": "corp",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "playCard",
+          "parameters": {
+            "cardId": "def:35081"
+          }
+        }
+      ]
+    },
+    "source": "BotStrategy1Tests.PettyCashIsPlayedBeforeTheTurnsFirstActionFinishes"
+  },
+  {
+    "id": "ip-enforcement-win",
+    "title": "IP Enforcement takes back a stolen agenda",
+    "category": "sequencing",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "strategy1-ip-enforcement",
+    "sequence": 603,
+    "side": "corp",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "playCard",
+          "parameters": {
+            "cardId": "def:35066"
+          }
+        }
+      ]
+    },
+    "source": "BotStrategy1Tests.IpEnforcementTakesBackAStolenAgenda"
+  }
+]

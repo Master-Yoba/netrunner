@@ -41,6 +41,9 @@ public static class LadderGameArchive
     public static IReadOnlyList<(LadderSavedGame Game, FullMatchDefinition Definition)> ReadAll(string directory, int workers) =>
         Paths(directory).AsParallel().AsOrdered().WithDegreeOfParallelism(Math.Clamp(workers, 1, 64)).Select(Load).ToArray();
 
+    /// <summary>One saved game file, with the definition its deal replays under.</summary>
+    public static (LadderSavedGame Game, FullMatchDefinition Definition) ReadFile(string path) => Load(path);
+
     private static IEnumerable<string> Paths(string directory) =>
         Directory.EnumerateFiles(directory, "*.json").Order(StringComparer.Ordinal);
 
