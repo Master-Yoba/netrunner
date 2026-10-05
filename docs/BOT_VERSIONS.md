@@ -412,9 +412,9 @@ unchanged.
 
 `ai-regret extend` gave every root of the box suite its meaningful groups (those whose priority band is within one of
 the best group's, a planned candidate read through the planner's offset): 32,821 groups became 57,109 (5.0 to 8.8 a
-root), in 2 min 49 s. The new groups have no labels yet; S1.5 labels them all. `ai-regret score --label-missing` labelled,
-on demand, every group the S1.3 versions chose that had no value (68 Runner, 88 Corp, each with its root's settings and
-seed), so the table below counts every choice:
+root), in 2 min 49 s. The new groups have no labels yet; S1.5 labels them all. `ai-regret score --label-missing`
+labelled, on demand, every group the S1.3 versions chose that had no value (68 Runner, 88 Corp, each with its root's
+settings and seed), so the table below counts every choice:
 
 | Comparison | S1.3 (choices outside the top six dropped) | S1.4 (every choice labelled) |
 |---|---|---|
