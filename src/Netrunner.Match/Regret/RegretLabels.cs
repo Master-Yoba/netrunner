@@ -32,6 +32,8 @@ public static class RegretLabels
             TeacherSettings rooted = settings with { Seed = settings.Seed ^ RegretRoots.StableHash(root.Id) };
             IReadOnlyList<TeacherValue> values = RolloutTeacher.Evaluate(teachers[root.Side], observation,
                 [.. root.Candidates.Select(candidate => new ActionId(candidate.ActionIds[0]))], rooted);
+            // A root no sample could play every candidate on has no label: it is scored as unlabelled.
+            if (values.Any(value => value.PlayOuts == 0)) return;
             labels.Add(new RegretLabel(root.Id, settings.Samples, settings.HorizonTurns, settings.Evaluation, rooted.Seed,
                 [.. root.Candidates.Zip(values, (candidate, value) => new RegretValue(candidate.Group, value.Mean, value.StandardError, value.PlayOuts))]));
         });

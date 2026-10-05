@@ -134,10 +134,11 @@ public static partial class CliCommands
         // --missing labels only the roots the file has no label for, and keeps the rest.
         ImmutableArray<RegretLabel> kept = options.Missing && File.Exists(labelsPath) ? RegretSuite.ReadLines<RegretLabel>(labelsPath) : [];
         HashSet<string> labelled = [.. kept.Select(label => label.RootId)];
-        ImmutableArray<RegretLabel> labels = Label(suite, [.. suite.Roots.Select(root => root.Id).Where(id => !labelled.Contains(id))], options, error);
+        HashSet<string> wanted = [.. suite.Roots.Select(root => root.Id).Where(id => !labelled.Contains(id))];
+        ImmutableArray<RegretLabel> labels = Label(suite, wanted, options, error);
         RegretSuite.WriteLines(labelsPath, kept.Concat(labels).OrderBy(label => label.RootId, StringComparer.Ordinal));
         output.WriteLine(string.Create(CultureInfo.InvariantCulture,
-            $"ai-regret label roots={labels.Length} samples={options.Samples} horizon={(options.HorizonTurns == 0 ? "game" : options.HorizonTurns.ToString(CultureInfo.InvariantCulture))} seconds={started.Elapsed.TotalSeconds:F0} file={options.LabelsFile}"));
+            $"ai-regret label roots={labels.Length} unlabellable={wanted.Count - labels.Length} samples={options.Samples} horizon={(options.HorizonTurns == 0 ? "game" : options.HorizonTurns.ToString(CultureInfo.InvariantCulture))} seconds={started.Elapsed.TotalSeconds:F0} file={options.LabelsFile}"));
         return 0;
     }
 
@@ -259,9 +260,15 @@ public static partial class CliCommands
                 else roots.Add(root);
             }
         }
-        HashSet<string> added = [.. games.Select(game => game.Id)];
-        new RegretSuite([.. suite.Games.Where(game => !added.Contains(game.Id)).Concat(games)],
-            [.. suite.Roots.Where(root => !added.Contains(root.GameId)).Concat(roots)], []).Save(suiteDirectory);
+        // Every earlier finding goes, including those the manifest no longer lists, with its labels in every labels file:
+        // the findings are relabelled from their current fixtures (label --missing).
+        HashSet<string> replaced = [.. suite.Games.Where(game => game.Source == "finding").Select(game => game.Id).Concat(games.Select(game => game.Id))];
+        new RegretSuite([.. suite.Games.Where(game => !replaced.Contains(game.Id)).Concat(games)],
+            [.. suite.Roots.Where(root => !replaced.Contains(root.GameId)).Concat(roots)], []).Save(suiteDirectory);
+        HashSet<string> gamesOf = [.. replaced];
+        foreach (string file in Directory.EnumerateFiles(suiteDirectory, "labels*.jsonl.gz").Order(StringComparer.Ordinal))
+            RegretSuite.WriteLines(file, RegretSuite.ReadLines<RegretLabel>(file)
+                .Where(label => !gamesOf.Contains(label.RootId[..label.RootId.LastIndexOf('#')])).ToArray());
         output.WriteLine($"ai-regret findings games={games.Count} roots={roots.Count} of {findings.Count}");
         return 0;
     }

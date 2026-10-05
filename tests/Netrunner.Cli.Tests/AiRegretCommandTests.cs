@@ -1,4 +1,5 @@
 using Netrunner.Cards;
+using Netrunner.Match.Regret;
 using Xunit;
 
 namespace Netrunner.Cli.Tests;
@@ -32,6 +33,42 @@ public sealed class AiRegretCommandTests
         finally
         {
             if (Directory.Exists(suite)) Directory.Delete(suite, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void RerunningFindingsReplacesThemAndTheirLabels()
+    {
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
+        string suite = Path.Combine(Path.GetTempPath(), $"netrunner-regret-{Guid.NewGuid():N}");
+        string fixtures = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Netrunner.Match.Tests", "Fixtures", "saved-games");
+        string one = Path.Combine(Path.GetTempPath(), $"netrunner-findings-{Guid.NewGuid():N}.json");
+        string none = Path.Combine(Path.GetTempPath(), $"netrunner-findings-{Guid.NewGuid():N}.json");
+        File.WriteAllText(one, """{"findings":[{"fixture":"strategy1-petty-cash","sequence":101,"side":"corp","test":"T.Petty"}]}""");
+        File.WriteAllText(none, """{"findings":[]}""");
+        try
+        {
+            using var output = new StringWriter();
+            using var error = new StringWriter();
+            string[] findings = ["--fixtures", fixtures, "--content", "gateway-elevation"];
+            Assert.Equal(0, CliCommands.Run(["ai-regret", "roots", Path.Combine(fixtures, "strategy1-petty-cash"), "--output", suite,
+                "--turn-roots", "1", "--run-roots", "0"], output, error));
+            Assert.Equal(0, CliCommands.Run(["ai-regret", "findings", suite, "--manifest", one, .. findings], output, error));
+            Assert.Equal(0, CliCommands.Run(["ai-regret", "label", suite, "--samples", "1", "--horizon", "1"], output, error));
+            Assert.Contains(RegretSuite.Load(suite).Labels, label => label.RootId.StartsWith("finding-", StringComparison.Ordinal));
+
+            Assert.Equal(0, CliCommands.Run(["ai-regret", "findings", suite, "--manifest", none, .. findings], output, error));
+
+            RegretSuite rebuilt = RegretSuite.Load(suite);
+            Assert.DoesNotContain(rebuilt.Games, game => game.Source == "finding");
+            Assert.DoesNotContain(rebuilt.Labels, label => label.RootId.StartsWith("finding-", StringComparison.Ordinal));
+            Assert.NotEmpty(rebuilt.Labels);
+        }
+        finally
+        {
+            if (Directory.Exists(suite)) Directory.Delete(suite, recursive: true);
+            File.Delete(one);
+            File.Delete(none);
         }
     }
 

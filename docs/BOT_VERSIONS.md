@@ -229,7 +229,12 @@ keeps a position once and holds a deal out whole. **6,512 roots** (Runner 3,960,
 23 box findings of `data/ai/regret/findings.json` (`ai-regret findings`; the 5 NSG Core findings wait for an NSG suite).
 
 **Teacher.** The latest Hard bot of the acting side, having watched the game: samples dealt from its tracker's pins and
-the opponent's list, both sides playing the planner's rollout choices.
+the opponent's list, both sides playing the planner's rollout choices. Every candidate is played on the same samples: a
+deal where one candidate cannot be played (a nested choice naming a card in a hidden zone the deal replaced) is dropped
+for all of them and another dealt, up to twice the samples asked for, and a root with no such deal is left unlabelled
+(the review of #101). Two findings were affected: `loop1-002#131` (a Corp trigger) and `loop2-006#140` (Muslihat's
+search of the stack) now have 4 and 6 common play-outs instead of 3 against 32. Keeping the cards a viewer's own
+pending choice names when the sampler deals is the fix at the root, in `ObservationSampler`, and is left for later.
 
 | Horizon (8 samples, 180 roots) | Median standard error | Median gap, best two | Best tied | Time |
 |---|---:|---:|---:|---:|
@@ -253,16 +258,17 @@ with 200-draw bootstrap intervals:
 | Comparison | Regret difference | Ladder (240 deals, Elo) |
 |---|---|---|
 | Runner v24 − v25 | +0.0025 [0.0019, 0.0033] | v25 over v24: +6 [−28, 49] |
-| Runner v24 − v26 | +0.0024 [0.0018, 0.0033] | |
+| Runner v24 − v26 | +0.0024 [0.0017, 0.0033] | |
 | Runner v25 − v26 | −0.0001 [−0.0002, 0.0002] | v26 over v25: +3 [−35, 52] |
 | Corp v28 − v29 | +0.0005 [−0.0002, 0.0012] | v29 over v28: +12 [−23, 54] |
 | Corp v28 − v30 | +0.0013 [0.0004, 0.0024] | |
 | Corp v29 − v30 | +0.0008 [0.0001, 0.0017] | v30 over v29: +50 [10, 96] |
 
 Runner v24 against v25, which the ladder left unresolved, separates clearly, as do v24 against v26 and Corp v28 against
-v30; and the suite agrees with the one change the ladder did resolve (Corp v30 over v29). Where the gains are: Runner v25's over v24 in turn actions (regret 0.0469 → 0.0438), Corp v29's
-over v28 in run choices (0.0204 → 0.0192), Corp v30's in turn actions (0.0354 → 0.0348). v26's self-flatline fixes are
-too rare to show at the suite's size (v25 and v26 are level).
+v30; and the suite agrees with the one change the ladder did resolve (Corp v30 over v29). Where the gains are: Runner
+v25's over v24 in turn actions (regret 0.0469 → 0.0438), Corp v29's over v28 in run choices (0.0204 → 0.0192), Corp
+v30's in turn actions (0.0354 → 0.0348). v26's self-flatline fixes are too rare to show at the suite's size (v25 and v26
+are level).
 
 | Version (Standard) | Regret, all | Turn | Run | Held out | Agreement | Unlabelled |
 |---|---|---|---|---|---|---:|

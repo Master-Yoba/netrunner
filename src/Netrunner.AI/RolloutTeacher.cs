@@ -10,7 +10,10 @@ namespace Netrunner.AI;
 /// <param name="Cap">Simulated decisions after which a play-out is scored where it stands.</param>
 public sealed record TeacherSettings(int Samples, ulong Seed, int HorizonTurns = 0, int Evaluation = 4, int Cap = PlannerProbe.GameRolloutCap);
 
-/// <summary>A candidate's teacher value: the mean win probability over its play-outs and the standard error of that mean.</summary>
+/// <summary>
+/// A candidate's teacher value: the mean win probability over its play-outs and the standard error of that mean. Every
+/// candidate of one evaluation has the same play-outs; none (and a NaN mean) when no sample could play them all.
+/// </summary>
 public sealed record TeacherValue(ActionId Action, double Mean, double StandardError, int PlayOuts);
 
 /// <summary>
@@ -38,12 +41,22 @@ public static class RolloutTeacher
         var planning = new PlanningContext(determinizer, new DeterministicRandom(settings.Seed));
         OpponentCardPool pool = planner.PoolFor(side, knowledge, fromList: true);
         var values = candidates.Select(_ => new List<double>()).ToArray();
-        for (int sample = 0; sample < settings.Samples; sample++)
+        // Every candidate is played on the same samples. A sample where one candidate cannot be played (a choice naming a
+        // hidden card the deal replaced) is dropped for all, and another is dealt, up to twice the samples asked for.
+        double[] played = new double[candidates.Count];
+        for (int dealt = 0; dealt < 2 * settings.Samples && values[0].Count < settings.Samples; dealt++)
         {
             GameState state = TurnPlanner.Deal(side, knowledge, pool, planning, pinned: true);
-            for (int index = 0; index < candidates.Count; index++)
-                if (planner.PlayOut(state, candidates[index], side, knowledge, determinizer, settings.HorizonTurns, settings.Evaluation,
-                    settings.Cap) is { } value) values[index].Add(value);
+            bool whole = true;
+            for (int index = 0; index < candidates.Count && whole; index++)
+            {
+                double? value = planner.PlayOut(state, candidates[index], side, knowledge, determinizer, settings.HorizonTurns,
+                    settings.Evaluation, settings.Cap);
+                if (value is { } known) played[index] = known;
+                else whole = false;
+            }
+            if (whole)
+                for (int index = 0; index < candidates.Count; index++) values[index].Add(played[index]);
         }
         return [.. candidates.Select((action, index) => Summarize(action, values[index]))];
     }

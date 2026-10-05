@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Netrunner.AI;
 using Netrunner.Cards;
 using Netrunner.Core;
@@ -75,6 +76,34 @@ public sealed class RegretSuiteTests
     }
 
     [Fact]
+    public void EveryCandidateIsPlayedOnTheSameSamples()
+    {
+        if (!Official) return;
+        // At this choice a candidate names a hidden card some deals replace (the review of #101).
+        (LadderSavedGame saved, FullMatchDefinition definition) = Assert.Single(LadderGameArchive.Read(
+            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "Fixtures", "saved-games", "loop1-002")));
+        RegretGame game = RegretGames.FromSaved(saved, definition, "held-out", "finding");
+        RegretRoot root = Assert.Single(RegretRoots.At(game, new HashSet<long> { 131 }, new RegretSampling(), []));
+
+        OfflineAgent teacher = (OfflineAgent)RatingLadder.CreateAgent("hard", root.Side, definition);
+        GameState? state = null;
+        foreach (RegretPosition position in RegretGames.Positions(game, definition))
+        {
+            AgentLifecycleHost.Observe(teacher, position.State, definition.Behavior);
+            if (position.Sequence == root.Sequence) { state = position.State; break; }
+        }
+        IReadOnlyList<TeacherValue> values = RolloutTeacher.Evaluate(teacher,
+            ObservationBuilder.Build(state!, root.Side, definition.Behavior, definition.Runtime),
+            [.. root.Candidates.Select(candidate => new ActionId(candidate.ActionIds[0]))], new TeacherSettings(Samples: 16, Seed: 3, HorizonTurns: 1));
+
+        // The same samples for every candidate, never one candidate's subset; a root with none is left unlabelled.
+        int playOuts = Assert.Single(values.Select(value => value.PlayOuts).Distinct());
+        Assert.InRange(playOuts, 0, 16);
+        ImmutableArray<RegretLabel> labels = RegretLabels.Label(game, [root], new TeacherSettings(Samples: 16, Seed: 3, HorizonTurns: 1));
+        Assert.Equal(playOuts == 0, labels.IsEmpty);
+    }
+
+    [Fact]
     public void TheReportRanksVersionsOnTheSameRootsAndMeasuresItsNoise()
     {
         RegretChoice Choice(string root, double regret) =>
@@ -112,7 +141,9 @@ public sealed class RegretSuiteTests
         Assert.Equal(suite.Roots.Length, roots.Count);
         Assert.All(suite.Roots, root => Assert.Contains(root.GameId, games));
         Assert.All(suite.Roots, root => Assert.InRange(root.Candidates.Length, 2, 6));
-        Assert.Equal(roots, suite.Labels.Select(label => label.RootId).ToHashSet());
+        // A root no sample could play every candidate on is left unlabelled; there are few.
+        Assert.Subset(roots, suite.Labels.Select(label => label.RootId).ToHashSet());
+        Assert.True(suite.Labels.Length >= suite.Roots.Length * 0.99);
         var byId = suite.Roots.ToDictionary(root => root.Id);
         Assert.All(suite.Labels, label => Assert.Equal(byId[label.RootId].Candidates.Length, label.Values.Length));
         Assert.Contains(suite.Roots, root => root.Categories.Contains("finding"));
