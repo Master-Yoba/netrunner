@@ -117,7 +117,6 @@
     "split": "tuning",
     "gameId": "loop1-002",
     "sequence": 131,
-    "side": "corp",
     "acceptance": {
       "accept": [
         {
@@ -135,7 +134,6 @@
     "split": "tuning",
     "gameId": "loop1-002",
     "sequence": 52,
-    "side": "corp",
     "acceptance": {
       "accept": [
         {
@@ -156,7 +154,6 @@
     "split": "tuning",
     "gameId": "loop1-003",
     "sequence": 167,
-    "side": "corp",
     "acceptance": {
       "accept": [
         {
@@ -324,7 +321,6 @@
     "split": "tuning",
     "gameId": "loop1-001",
     "sequence": 327,
-    "side": "corp",
     "acceptance": {
       "reject": [
         {
@@ -349,7 +345,6 @@
     "split": "tuning",
     "gameId": "loop1-003",
     "sequence": 329,
-    "side": "corp",
     "acceptance": {
       "reject": [
         {
@@ -371,7 +366,6 @@
     "split": "tuning",
     "gameId": "loop1-002",
     "sequence": 57,
-    "side": "corp",
     "acceptance": {
       "accept": [
         {
@@ -452,7 +446,6 @@
     "split": "tuning",
     "gameId": "strategy1-petty-cash",
     "sequence": 101,
-    "side": "corp",
     "acceptance": {
       "accept": [
         {
@@ -473,7 +466,6 @@
     "split": "tuning",
     "gameId": "strategy1-ip-enforcement",
     "sequence": 603,
-    "side": "corp",
     "acceptance": {
       "accept": [
         {
@@ -485,5 +477,587 @@
       ]
     },
     "source": "BotStrategy1Tests.IpEnforcementTakesBackAStolenAgenda"
+  },
+  {
+    "id": "teacher-00152981",
+    "title": "The teacher's playCard at ation-box-muslihat-00086 #909",
+    "category": "run-targeting",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "standard-vs-standard-elevation-box-nebula-fast-advance~elevation-box-muslihat-00086",
+    "sequence": 909,
+    "side": "runner",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "startRun",
+          "parameters": {
+            "serverId": "server:10"
+          }
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.435\u00b10.029, next 0.261"
+  },
+  {
+    "id": "teacher-e311a6ac",
+    "title": "The teacher's startRun at tion-box-magdalene-00210 #161",
+    "category": "run-targeting",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "standard-c29-vs-standard-c29-elevation-box-untaian-shell-game~elevation-box-magdalene-00210",
+    "sequence": 161,
+    "side": "runner",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "startRun",
+          "parameters": {
+            "serverId": "server:7"
+          }
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.219\u00b10.011, next 0.049"
+  },
+  {
+    "id": "teacher-47f84833",
+    "title": "The teacher's startRun at levation-box-topan-00052 #196",
+    "category": "run-targeting",
+    "kind": "decision",
+    "split": "held-out",
+    "gameId": "standard-c29-vs-standard-elevation-box-untaian-shell-game~elevation-box-topan-00052",
+    "sequence": 196,
+    "side": "runner",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "startRun",
+          "parameters": {
+            "serverId": "server:7"
+          }
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.285\u00b10.019, next 0.030"
+  },
+  {
+    "id": "teacher-2920124f",
+    "title": "The teacher's startRun at ation-box-muslihat-00218 #313",
+    "category": "run-targeting",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "standard-c29-vs-standard-c29-elevation-box-nebula-fast-advance~elevation-box-muslihat-00218",
+    "sequence": 313,
+    "side": "runner",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "gainCredit"
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.613\u00b10.022, next 0.427"
+  },
+  {
+    "id": "teacher-b39f5b92",
+    "title": "The teacher's continueRun at levation-box-topan-00103 #271",
+    "category": "run-targeting",
+    "kind": "decision",
+    "split": "held-out",
+    "gameId": "standard-vs-standard-c29-elevation-box-zwicky-supermodernism~elevation-box-topan-00103",
+    "sequence": 271,
+    "side": "runner",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "continueRun"
+        }
+      ]
+    },
+    "negativeControl": false,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.318\u00b10.028, next 0.143"
+  },
+  {
+    "id": "teacher-cb2c69f6",
+    "title": "The teacher's continueRun at tion-box-magdalene-00057 #686",
+    "category": "run-targeting",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "standard-vs-standard-elevation-box-zwicky-supermodernism~elevation-box-magdalene-00057",
+    "sequence": 686,
+    "side": "runner",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "continueRun"
+        }
+      ]
+    },
+    "negativeControl": false,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.853\u00b10.030, next 0.495"
+  },
+  {
+    "id": "teacher-4b40e915",
+    "title": "The teacher's continueRun at ation-box-muslihat-00062 #314",
+    "category": "run-targeting",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "standard-c29-vs-standard-elevation-box-nebula-fast-advance~elevation-box-muslihat-00062",
+    "sequence": 314,
+    "side": "runner",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "continueRun"
+        }
+      ]
+    },
+    "negativeControl": false,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.719\u00b10.023, next 0.502"
+  },
+  {
+    "id": "teacher-ad565c84",
+    "title": "The teacher's continueRun at ation-box-muslihat-00026 #756",
+    "category": "run-targeting",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "standard-c29-vs-standard-elevation-box-nebula-fast-advance~elevation-box-muslihat-00026",
+    "sequence": 756,
+    "side": "runner",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "continueRun"
+        }
+      ]
+    },
+    "negativeControl": false,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.824\u00b10.032, next 0.296"
+  },
+  {
+    "id": "teacher-20e668e7",
+    "title": "The teacher's rezCard at levation-box-topan-00130 #471",
+    "category": "rez-timing",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "standard-vs-standard-elevation-box-leo-glacier~elevation-box-topan-00130",
+    "sequence": 471,
+    "side": "corp",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "passPriority"
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.768\u00b10.029, next 0.549"
+  },
+  {
+    "id": "teacher-e5d97a1a",
+    "title": "The teacher's rezCard at ation-box-muslihat-00137 #121",
+    "category": "rez-timing",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "standard-c29-vs-standard-elevation-box-untaian-shell-game~elevation-box-muslihat-00137",
+    "sequence": 121,
+    "side": "corp",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "passPriority"
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.947\u00b10.010, next 0.728"
+  },
+  {
+    "id": "teacher-44d22315",
+    "title": "The teacher's passPriority at ation-box-muslihat-00131 #184",
+    "category": "rez-timing",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "standard-vs-standard-c29-elevation-box-leo-glacier~elevation-box-muslihat-00131",
+    "sequence": 184,
+    "side": "corp",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "rezCard",
+          "parameters": {
+            "cardId": "def:30073"
+          }
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.673\u00b10.011, next 0.425"
+  },
+  {
+    "id": "teacher-bfad8833",
+    "title": "The teacher's rezCard at levation-box-topan-00022 #437",
+    "category": "rez-timing",
+    "kind": "decision",
+    "split": "held-out",
+    "gameId": "standard-vs-standard-elevation-box-leo-glacier~elevation-box-topan-00022",
+    "sequence": 437,
+    "side": "corp",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "passPriority"
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.645\u00b10.020, next 0.240"
+  },
+  {
+    "id": "teacher-d031e97d",
+    "title": "The teacher's rezCard at tion-box-magdalene-00222 #254",
+    "category": "rez-timing",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "standard-c29-vs-standard-c29-elevation-box-untaian-shell-game~elevation-box-magdalene-00222",
+    "sequence": 254,
+    "side": "corp",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "rezCard",
+          "parameters": {
+            "cardId": "def:35054"
+          }
+        }
+      ]
+    },
+    "negativeControl": false,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.983\u00b10.008, next 0.720"
+  },
+  {
+    "id": "teacher-acda6263",
+    "title": "The teacher's rezCard at levation-box-topan-00229 #92",
+    "category": "rez-timing",
+    "kind": "decision",
+    "split": "held-out",
+    "gameId": "standard-vs-standard-c29-elevation-box-nebula-fast-advance~elevation-box-topan-00229",
+    "sequence": 92,
+    "side": "corp",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "rezCard",
+          "parameters": {
+            "cardId": "def:35063"
+          }
+        }
+      ]
+    },
+    "negativeControl": false,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 1.000\u00b10.000, next 0.795"
+  },
+  {
+    "id": "teacher-4da9c5de",
+    "title": "The teacher's rezCard at tion-box-magdalene-00192 #436",
+    "category": "rez-timing",
+    "kind": "decision",
+    "split": "held-out",
+    "gameId": "standard-c29-vs-standard-elevation-box-leo-glacier~elevation-box-magdalene-00192",
+    "sequence": 436,
+    "side": "corp",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "rezCard",
+          "parameters": {
+            "cardId": "def:30038"
+          }
+        }
+      ]
+    },
+    "negativeControl": false,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.443\u00b10.009, next 0.243"
+  },
+  {
+    "id": "teacher-9becf188",
+    "title": "The teacher's rezCard at levation-box-topan-00151 #626",
+    "category": "rez-timing",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "standard-vs-standard-c29-elevation-box-zwicky-supermodernism~elevation-box-topan-00151",
+    "sequence": 626,
+    "side": "corp",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "rezCard",
+          "parameters": {
+            "cardId": "def:30039"
+          }
+        }
+      ]
+    },
+    "negativeControl": false,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 1.000\u00b10.000, next 0.664"
+  },
+  {
+    "id": "teacher-d907ce15",
+    "title": "The teacher's playCard at ation-box-muslihat-00080 #773",
+    "category": "economy",
+    "kind": "decision",
+    "split": "held-out",
+    "gameId": "standard-vs-standard-elevation-box-zwicky-supermodernism~elevation-box-muslihat-00080",
+    "sequence": 773,
+    "side": "corp",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "installCard",
+          "parameters": {
+            "cardId": "def:35039",
+            "destinationKind": "serverRoot",
+            "createNewRemote": true
+          }
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 1.000\u00b10.000, next 0.804"
+  },
+  {
+    "id": "teacher-8b1c9af3",
+    "title": "The teacher's useAbility at levation-box-topan-00022 #520",
+    "category": "economy",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "standard-c29-vs-standard-c29-elevation-box-leo-glacier~elevation-box-topan-00022",
+    "sequence": 520,
+    "side": "corp",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "passPriority"
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.999\u00b10.001, next 0.618"
+  },
+  {
+    "id": "teacher-e0d88291",
+    "title": "The teacher's playCard at levation-box-topan-00223 #305",
+    "category": "economy",
+    "kind": "decision",
+    "split": "held-out",
+    "gameId": "standard-c29-vs-standard-elevation-box-zwicky-supermodernism~elevation-box-topan-00223",
+    "sequence": 305,
+    "side": "corp",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "installCard",
+          "parameters": {
+            "cardId": "def:30067",
+            "serverId": "server:1221",
+            "destinationKind": "serverRoot",
+            "createNewRemote": false
+          }
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 1.000\u00b10.000, next 0.066"
+  },
+  {
+    "id": "teacher-7a456081",
+    "title": "The teacher's installCard at ation-box-muslihat-00119 #1080",
+    "category": "agenda-exposure",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "standard-c29-vs-standard-c29-elevation-box-leo-glacier~elevation-box-muslihat-00119",
+    "sequence": 1080,
+    "side": "corp",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "installCard",
+          "parameters": {
+            "cardId": "def:30069",
+            "serverId": "server:2490",
+            "destinationKind": "serverRoot",
+            "createNewRemote": false
+          }
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.656\u00b10.029, next 0.248"
+  },
+  {
+    "id": "teacher-9bcefcf7",
+    "title": "The teacher's installCard at levation-box-topan-00070 #658",
+    "category": "agenda-exposure",
+    "kind": "decision",
+    "split": "held-out",
+    "gameId": "standard-c29-vs-standard-c29-elevation-box-leo-glacier~elevation-box-topan-00070",
+    "sequence": 658,
+    "side": "corp",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "drawCard"
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.938\u00b10.021, next 0.467"
+  },
+  {
+    "id": "teacher-9570ba07",
+    "title": "The teacher's installCard at levation-box-topan-00085 #444",
+    "category": "agenda-exposure",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "standard-c29-vs-standard-elevation-box-nebula-fast-advance~elevation-box-topan-00085",
+    "sequence": 444,
+    "side": "corp",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "installCard",
+          "parameters": {
+            "cardId": "def:30071",
+            "destinationKind": "serverRoot",
+            "createNewRemote": true
+          }
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 1.000\u00b10.000, next 0.610"
+  },
+  {
+    "id": "teacher-93609fc4",
+    "title": "The teacher's installCard at ation-box-muslihat-00086 #707",
+    "category": "agenda-exposure",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "standard-c29-vs-standard-c29-elevation-box-nebula-fast-advance~elevation-box-muslihat-00086",
+    "sequence": 707,
+    "side": "corp",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "installCard",
+          "parameters": {
+            "cardId": "def:35060",
+            "serverId": "server:820",
+            "destinationKind": "serverRoot",
+            "createNewRemote": false
+          }
+        }
+      ]
+    },
+    "negativeControl": false,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.891\u00b10.022, next 0.730"
+  },
+  {
+    "id": "teacher-9316ce82",
+    "title": "The teacher's chooseBehavior at loop1-semak-samun-damage #120",
+    "category": "punisher-risk",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "finding-loop1-semak-samun-damage",
+    "sequence": 120,
+    "side": "runner",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "chooseBehavior",
+          "parameters": {
+            "optionKeys": [
+              "end-run"
+            ]
+          }
+        }
+      ]
+    },
+    "negativeControl": false,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.160\u00b10.009, next 0.000"
+  },
+  {
+    "id": "teacher-df4609f1",
+    "title": "The teacher's chooseBehavior at -loop1-measured-response #285",
+    "category": "punisher-risk",
+    "kind": "decision",
+    "split": "held-out",
+    "gameId": "finding-loop1-measured-response",
+    "sequence": 285,
+    "side": "runner",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "chooseBehavior",
+          "parameters": {
+            "optionKeys": [
+              "pay-eight"
+            ]
+          }
+        }
+      ]
+    },
+    "negativeControl": false,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.863\u00b10.017, next 0.000"
+  },
+  {
+    "id": "teacher-dc91ae5e",
+    "title": "The teacher's noAccessAction at ation-box-muslihat-00002 #664",
+    "category": "access-and-trash",
+    "kind": "decision",
+    "split": "held-out",
+    "gameId": "standard-vs-standard-c29-elevation-box-nebula-fast-advance~elevation-box-muslihat-00002",
+    "sequence": 664,
+    "side": "runner",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "noAccessAction"
+        }
+      ]
+    },
+    "negativeControl": false,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.290\u00b10.020, next 0.132"
   }
 ]

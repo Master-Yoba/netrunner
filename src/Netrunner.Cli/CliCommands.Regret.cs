@@ -15,7 +15,7 @@ public static partial class CliCommands
     /// ai-regret roots GAMES-DIR --output SUITE-DIR [--turn-roots N] [--run-roots N] [--labelled N] [--seed S] [--workers N]
     /// ai-regret label SUITE-DIR [--samples N] [--horizon game|TURNS] [--evaluation N] [--seed S] [--workers N]
     ///   [--labels FILE] [--repeat N --repeat-seed S]
-    /// ai-regret score SUITE-DIR --version V[,V...] [--profile P] [--split all|held-out|train] [--labels FILE]
+    /// ai-regret score SUITE-DIR --version V[,V...]|latest [--profile P] [--split all|held-out|train] [--labels FILE]
     ///   [--blunders N] [--bootstrap N] [--workers N] [--json]
     /// ai-regret findings SUITE-DIR --manifest FILE --fixtures DIR --content POOL [--labelled N]
     /// ai-regret dedupe SUITE-DIR
@@ -70,7 +70,13 @@ public static partial class CliCommands
                     "--labels" => options with { LabelsFile = Next() },
                     "--repeat" => options with { Repeat = Int("--repeat", 1, 100_000) },
                     "--repeat-seed" => options with { RepeatSeed = ulong.Parse(Next(), NumberStyles.None, CultureInfo.InvariantCulture) },
-                    "--version" => options with { Versions = Next().Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) },
+                    // "latest" is both sides' latest versions.
+                    "--version" => options with
+                    {
+                        Versions = [.. Next().Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                            .SelectMany(version => version == "latest"
+                                ? new[] { CorpHeuristicPolicy.PolicyVersion, RunnerHeuristicPolicy.PolicyVersion } : [version])],
+                    },
                     "--profile" => options with { Profile = Next() },
                     "--split" => options with
                     {

@@ -15,7 +15,7 @@ public static partial class CliCommands
     /// Bot plan S2, the puzzle suite:
     /// ai-puzzles run SET-DIR [--corp V] [--runner V] [--profile P] [--split all|tuning|held-out] [--workers N] [--json]
     /// ai-puzzles import SET-DIR SAVED-GAME-FILE --id ID [--source TEXT]
-    /// ai-puzzles show SET-DIR --game ID --sequence N [--teacher SAMPLES] [--horizon game|TURNS]
+    /// ai-puzzles show SET-DIR --game ID --sequence N [--teacher SAMPLES] [--horizon game|TURNS] [--json]
     /// ai-puzzles import SET-DIR --suite SUITE-DIR --game ID (a regret suite's game)
     /// ai-puzzles find SUITE-DIR --side corp|runner [--turn-start true] [--hand DEF,...] [--installed DEF,...]
     ///   [--legal KIND[:DEF],...] [--limit N] [--workers N]
@@ -99,7 +99,7 @@ public static partial class CliCommands
                     detail = result.Detail,
                     reason = result.Reason,
                 }),
-            }, PuzzleSet.Json));
+            }, RegretSuite.Json));
             return 0;
         }
         output.WriteLine(string.Create(CultureInfo.InvariantCulture,
@@ -191,6 +191,23 @@ public static partial class CliCommands
                 ObservationBuilder.Build(state, side, definition.Behavior, definition.Runtime),
                 [.. groups.Select(group => new ActionId(group.ActionIds[0]))],
                 new TeacherSettings(ProfileInt(samples, "--teacher", 1, 4096), 1, horizon == "game" ? 0 : ProfileInt(horizon, "--horizon", 1, 100)));
+        }
+        if (options.ContainsKey("--json"))
+        {
+            output.WriteLine(System.Text.Json.JsonSerializer.Serialize(new
+            {
+                game = game.Id,
+                sequence,
+                side,
+                groups = groups.Select((group, index) => new
+                {
+                    kind = group.Kind,
+                    parameters = RegretRoots.Parameters(state, pending.LegalActions.First(action => action.Id.Value == group.ActionIds[0])),
+                    mean = values?[index].Mean,
+                    standardError = values?[index].StandardError,
+                }),
+            }, RegretSuite.Json));
+            return 0;
         }
         for (int index = 0; index < groups.Count; index++)
             output.WriteLine(string.Create(CultureInfo.InvariantCulture,
