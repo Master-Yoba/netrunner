@@ -19,13 +19,21 @@ records; their confirmed findings become puzzles (section 5.3).
 
 ### 1.1 Where the bots are
 
-The defaults are Corp v30 and Runner v26, Standard profile. Standard is a one-step greedy scorer: every engine-issued
-action gets an integer `(Priority, Score)` from hand-tuned literal weights, and the highest priority then the highest
-score wins (`OfflineAgent`, `RunnerHeuristicPolicy`, `CorpHeuristicPolicy`). Hard adds the turn planner
-(`TurnPlanner`): 3–4 determinized samples of the top 3 heuristic candidates, rolled out to the end of the turn by both
-sides' heuristics and scored by a logistic "fitted evaluation" of win probability (`FittedEvaluation`, feature set 4),
-blended into the heuristic score. Runner Hard is about 80 Elo above Standard; Corp Hard is level with Standard at every
-planner setting tried.
+The defaults are Corp v30 and Runner v26, Standard profile. The heuristic is a one-step greedy scorer: every
+engine-issued action gets an integer `(Priority, Score)` from hand-tuned literal weights, and the highest priority then
+the highest score wins (`OfflineAgent`, `RunnerHeuristicPolicy`, `CorpHeuristicPolicy`). The turn planner
+(`TurnPlanner`) takes determinized samples of the top heuristic candidates, rolls each out to the end of the turn by
+both sides' heuristics, scores the result by a logistic "fitted evaluation" of win probability (`FittedEvaluation`), and
+blends that into the heuristic score. Who plans (corrected by S0.1's profile; the profiles in `CorpPolicyProfiles` and
+`RunnerPolicyProfiles`):
+
+| Seat | Standard | Hard |
+|---|---|---|
+| Corp v30 | Planner, 3 samples × width 3, set 4 | The same planner, dealing samples from the tracker and the Runner's list |
+| Runner v26 | Heuristic only | Planner, 4 samples × width 3, set 3 |
+
+Runner Hard is about 80 Elo above Standard; Corp Hard is level with Standard at every planner setting tried, and its
+default differs from Standard only in how samples are dealt.
 
 On the Core Battle Box (the pool human players meet), Standard's Runner wins 31% against Standard's Corp.
 
@@ -183,6 +191,11 @@ First implementation: the current heuristic at a reduced work budget with a cach
 Second, if profiling says so: a distilled table policy (action kind × a few features) fitted to the heuristic's choices.
 Profiling in S0 decides which is needed to fit the budgets.
 
+S0 measured it (steps S0.1 and S0.4): the heuristic is about a tenth of a rollout step, simulated `Apply` about half,
+and the observation build and read a sixth each. So the rollout policy stays the planner's own per-step choice for now,
+which the teacher (5.1) shares, and the cost is taken out of the engine's simulation first (step S5.0); the two
+implementations above wait until S5's budgets are measured against that.
+
 ### 4.4 One live policy, frozen history
 
 - `LegacyCorpPolicy` and `LegacyRunnerPolicy` are copies of today's `CorpHeuristicPolicy` and `RunnerHeuristicPolicy`
@@ -223,7 +236,13 @@ A fixed corpus of recorded decision roots with teacher labels, scored in minutes
   numbers across candidates. Its rollouts go **deeper than the leaf's horizon**: to the game's end with the rollout
   policy where S0.1's costs allow it, otherwise a fixed number of turns (start 4) and then the leaf. A label is then
   mostly the result of play, not a reading of set 4, so fitting set 5 to it does not inherit set 4's bias. It writes each
-  candidate's value and the horizon it used.
+  candidate's value, its standard error over the samples, and the horizon it used.
+- **Label noise.** A rollout to the game's end returns a win or a loss, so 32 samples give a candidate's value to about
+  ±0.09, and common random numbers help less as the rollouts diverge over several turns, while candidates often differ
+  by a few points. Regret *differences* between versions stay unbiased under that noise; agreement and "the best
+  candidate" do not. So the suite records its **noise floor**: a subset of roots labelled twice with independent sample
+  seeds, reporting how often the two labellings pick different best candidates. Agreement is reported against that
+  floor, and roots whose top two candidates are within their standard errors count as ties (any of them is "best").
 - **Scores per policy version:**
   - **Regret:** mean over roots of (teacher's best value − teacher's value of the version's choice), in win-probability
     points. The main number.
@@ -243,8 +262,9 @@ CLI: `ai-regret label <games-dir> --output <suite>` and `ai-regret score <suite>
   deserializes the **whole state before every action** (a save-and-reload check), then serializes, deserializes and
   re-verifies its whole replay at the end (`FullMatchRunner`). A ladder mode keeps both checks on every Nth game (as
   `fuzz --verify-replays-every` does) and skips them otherwise; the fuzz and the verified games keep them on. Profile
-  one game and remove the next cost after those. Target: 1,000 deals (2,000 games) on the box pool in under 10 minutes
-  on 12 workers.
+  one game and remove the next cost after those. Target: 1,000 deals on the box pool in under 10 minutes on 12
+  workers. (A two-entrant deal is four games, both entrants in both seats; S0.2 measured 2.4 games a second, so 10
+  minutes buys about 360 deals on this box: see [BOT_VERSIONS.md](BOT_VERSIONS.md).)
 - **Size by claim.** A claim of strength uses 1,000 deals with `--stop-when-clear`; a no-harm check on another pool
   uses 240. Report the interval, never the point alone.
 - **Budget-scaling ladder.** Entrants `standard-x1`, `standard-x4`, `standard-x16` (the same policy at 1×, 4× and 16×
@@ -319,8 +339,10 @@ effects), and any learned dynamics.
 
 - **The teacher repeats the leaf's mistakes.** More samples of a biased leaf do not remove the bias. Mitigation: the
   teacher's rollouts run past the leaf's horizon (to the game's end, or several turns then the leaf), so labels come
-  from play; S4.2 fits set 4 to the same labels as a control, so a gain is attributed to the target or to the features;
-  the puzzle suite and the ladder gate each round; teacher drift is reported; a round that fails either is discarded.
+  from play, played by the same rollout policy the planner ships with (4.3); deep labels are noisier, so the suite
+  measures its own noise floor (5.1) and agreement is read against it; S4.2 fits set 4 to the same labels as a control,
+  so a gain is attributed to the target or to the features; the puzzle suite and the ladder gate each round; teacher
+  drift is reported; a round that fails either is discarded.
 - **Rollout cost blows the latency budget.** Mitigation: S0 profiles before anything is built on it; the rollout policy
   is designed for cost (4.3); `rollout-budget` is a profile parameter; Standard may plan fewer samples than Hard.
 - **Freezing legacy code doubles the policy source for a while.** Mitigation: the legacy files are never edited; they

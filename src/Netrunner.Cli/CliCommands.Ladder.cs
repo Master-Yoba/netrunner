@@ -11,10 +11,13 @@ public static partial class CliCommands
     /// <summary>
     /// ai-ladder [--content developer|official|gateway] [--entrants random,contract,easy-m5,standard-m5,easy,standard]
     /// [--seeds-per-pairing N | --deals N [--batch-deals B] [--stop-when-clear]] [--seed S] [--bootstrap N]
-    /// [--action-cap N] [--workers 1..64] [--output new-dir] [--json]. Exit 0 when every seat
+    /// [--action-cap N] [--workers 1..64] [--verify-replays-every N] [--output new-dir] [--json]. Exit 0 when every seat
     /// separates in the expected order, 1 when it does not or a game failed, 2 for invalid arguments.
     /// --deals (A1b) plays a fixed budget of deals spread over the pool's pairings; with
     /// --stop-when-clear it stops after any batch where every seat's difference is clear at 99%.
+    /// --verify-replays-every N (bot plan S0.2; default 8, as fuzz uses) checks every Nth game as it is played (the
+    /// per-action save-and-reload and the replay's verification) and plays the rest unchecked; 1 checks every game. A
+    /// capped game's replay is always verified.
     /// </summary>
     private static int RunAiLadder(string[] args, TextWriter output, TextWriter error)
     {
@@ -29,6 +32,7 @@ public static partial class CliCommands
         int bootstrap = 200;
         int actionCap = RatingLadder.DefaultActionCap;
         int workers = 1;
+        int verifyReplaysEvery = 8;
         string? destination = null;
         string? saveGames = null;
         try
@@ -75,6 +79,9 @@ public static partial class CliCommands
                     case "--workers" when index + 1 < args.Length:
                         workers = ReadInt(args[++index], "--workers", 1, 64);
                         break;
+                    case "--verify-replays-every" when index + 1 < args.Length:
+                        verifyReplaysEvery = ReadInt(args[++index], "--verify-replays-every", 1, 1000);
+                        break;
                     case "--output" when index + 1 < args.Length:
                         destination = args[++index];
                         break;
@@ -116,13 +123,18 @@ public static partial class CliCommands
         var results = new ConcurrentDictionary<string, LadderGameResult>(StringComparer.Ordinal);
         int dealsPlayed = 0;
         bool stoppedEarly = false;
+        var verified = new HashSet<string>(StringComparer.Ordinal);
         void Play(IReadOnlyList<LadderGame> batch)
         {
+            // A game's place in the whole ladder decides whether it is checked, so batches and workers don't change it.
+            foreach ((LadderGame game, int index) in batch.Select((game, index) => (game, games.Count + index)))
+                if (index % verifyReplaysEvery == 0) verified.Add(game.Id);
             games.AddRange(batch);
             Parallel.ForEachAsync(batch, new ParallelOptions { MaxDegreeOfParallelism = workers },
                 async (game, cancellation) =>
                     results[game.Id] = await RatingLadder.PlayAsync(game, actionCap,
-                        saveGames is null ? null : saved => LadderGameArchive.Write(saveGames, saved), cancellation).ConfigureAwait(false))
+                        saveGames is null ? null : saved => LadderGameArchive.Write(saveGames, saved), verified.Contains(game.Id),
+                        cancellation).ConfigureAwait(false))
                 .GetAwaiter().GetResult();
         }
         if (deals is not { } budget)
@@ -166,6 +178,8 @@ public static partial class CliCommands
             deckWarnings = deckComparisons.Where(comparison => comparison.Warning),
             bootstrap,
             actionCap,
+            verifyReplaysEvery,
+            verifiedGames = ordered.Count(result => verified.Contains(result.Game.Id) || result.Capped),
             entrants,
             games = report.Games,
             capped = report.Capped,
@@ -194,6 +208,9 @@ public static partial class CliCommands
                 corpScore = result.CorpScore,
                 capped = result.Capped,
                 actions = result.Actions,
+                finalStateHash = result.FinalStateHash,
+                // Checked as played, or capped: a capped game's replay is always verified.
+                verified = verified.Contains(result.Game.Id) || result.Capped,
             }),
         });
         if (destination is not null)

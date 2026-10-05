@@ -51,11 +51,21 @@ public static class ObservationReader
     internal static string Hash<T>(T value) => Convert.ToHexString(SHA256.HashData(
         Encoding.UTF8.GetBytes(CanonicalJson.Serialize(value)))).ToLowerInvariant();
 
-    private static T Decode<T>(IReadOnlyDictionary<string, object?> value)
+    /// <summary>
+    /// The engine's options, skipping unmapped members. Built once: <see cref="EngineJson.Options"/> is a fresh copy on
+    /// every read, and a fresh copy rebuilds every type's serialization metadata (bot plan S0.4: it was most of a read).
+    /// </summary>
+    private static readonly JsonSerializerOptions DecodeOptions = CreateDecodeOptions();
+
+    private static JsonSerializerOptions CreateDecodeOptions()
     {
-        JsonSerializerOptions options = EngineJson.Options;
+        JsonSerializerOptions options = EngineJson.CreateOptions();
         options.UnmappedMemberHandling = JsonUnmappedMemberHandling.Skip;
-        return JsonSerializer.Deserialize<T>(JsonSerializer.Serialize(value, options), options)
-            ?? throw new ArgumentException("Null observation section.");
+        options.MakeReadOnly(populateMissingResolver: true);
+        return options;
     }
+
+    private static T Decode<T>(IReadOnlyDictionary<string, object?> value) =>
+        JsonSerializer.Deserialize<T>(JsonSerializer.SerializeToUtf8Bytes(value, DecodeOptions), DecodeOptions)
+            ?? throw new ArgumentException("Null observation section.");
 }

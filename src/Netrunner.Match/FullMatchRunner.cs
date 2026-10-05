@@ -9,8 +9,17 @@ public sealed record FullMatchResult(GameOutcome Outcome, int ActionCount, strin
 /// <summary>Bounded observation-only agent driver over the same setup and reducer as the client.</summary>
 public static class FullMatchRunner
 {
-    public static async Task<FullMatchResult> RunAsync(FullMatchDefinition definition, int actionCap = 1000,
-        IGameAgent? corpAgent = null, IGameAgent? runnerAgent = null, CancellationToken cancellationToken = default)
+    public static Task<FullMatchResult> RunAsync(FullMatchDefinition definition, int actionCap = 1000,
+        IGameAgent? corpAgent = null, IGameAgent? runnerAgent = null, CancellationToken cancellationToken = default) =>
+        RunAsync(definition, actionCap, corpAgent, runnerAgent, true, cancellationToken);
+
+    /// <param name="verify">
+    /// Whether to check the game as it is played: a save-and-reload of the state before every action, and the finished
+    /// replay's round trip and verification. Off only for ladder games that a sibling verified game vouches for (bot plan
+    /// S0.2, <c>ai-ladder --verify-replays-every</c>); the game itself is the same either way.
+    /// </param>
+    public static async Task<FullMatchResult> RunAsync(FullMatchDefinition definition, int actionCap, IGameAgent? corpAgent,
+        IGameAgent? runnerAgent, bool verify, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(definition);
         if (actionCap <= 0 || actionCap > SimulationFixtureDocument.MaximumActionCap)
@@ -31,20 +40,31 @@ public static class FullMatchRunner
             cancellationToken.ThrowIfCancellationRequested();
             PendingDecision pending = state.PendingDecision ?? throw Stall("Full match stalled without a decision.");
             PlayerSide side = state.GetPlayer(pending.Owner).Side;
+            long started = ProfileTimings.Start();
             Observation observation = ObservationBuilder.Build(state, side, definition.Behavior, definition.Runtime);
+            ProfileTimings.Stop("match.observation", started);
             IGameAgent activeAgent = side == PlayerSide.Corp ? corpAgent : runnerAgent;
             ActionId action;
+            started = ProfileTimings.Start();
             try
             {
                 action = await activeAgent.ChooseActionAsync(observation, cancellationToken).ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();
             }
             catch { AgentLifecycleHost.Discard(activeAgent); throw; }
+            ProfileTimings.Stop("match.decide", started);
             // Every yield is a persistence boundary, including setup, nested effects,
             // paid windows, and forced discards. Restore with both frozen catalogs.
-            state = EngineJson.DeserializeState(EngineJson.Serialize(state), definition.Behavior, definition.Runtime);
+            if (verify)
+            {
+                started = ProfileTimings.Start();
+                state = EngineJson.DeserializeState(EngineJson.Serialize(state), definition.Behavior, definition.Runtime);
+                ProfileTimings.Stop("match.round-trip", started);
+            }
             var submission = new ActionSubmission(pending.Owner, pending.Id, pending.Revision, action);
+            started = ProfileTimings.Start();
             ApplyResult result = GameEngine.Apply(state, submission, definition.Behavior, definition.Runtime);
+            ProfileTimings.Stop("match.apply", started);
             if (!result.Accepted)
             {
                 AgentLifecycleHost.Discard(activeAgent);
@@ -61,8 +81,13 @@ public static class FullMatchRunner
         }
         string finalHash = DeterministicHash.ForState(state);
         ReplayArtifact replay = new(initial, state.InitialSeed, actions, expectedFinalStateHash: finalHash);
+        if (!verify) return new FullMatchResult(state.Outcome, actions.Count, finalHash, replay);
+        long finishing = ProfileTimings.Start();
         replay = EngineJson.Deserialize<ReplayArtifact>(EngineJson.Serialize(replay), definition.Behavior, definition.Runtime);
+        ProfileTimings.Stop("match.replay-round-trip", finishing);
+        finishing = ProfileTimings.Start();
         ReplayVerificationResult verified = ReplayVerifier.Verify(replay, definition.Behavior, definition.Runtime);
+        ProfileTimings.Stop("match.replay-verify", finishing);
         if (!verified.Success)
         {
             throw new InvalidOperationException($"Full match replay failed: {verified.Message}");

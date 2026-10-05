@@ -117,6 +117,11 @@ public static partial class CliCommands
             return RunAiLlmReview(args, output, error);
         }
 
+        if (args.Length > 0 && args[0] == "ai-regret")
+        {
+            return RunAiRegret(args, output, error);
+        }
+
         if (args.Length > 0 && args[0] == "ai-lint")
         {
             return RunAiLint(args, output, error);
@@ -274,6 +279,12 @@ public static partial class CliCommands
             + "[--workers 1..64] [--differential] [--output <new directory>] [--json] | "
             + "fuzz-repro <failure-directory> [--json] | "
             + "engine-bench [--content developer|official] [--games N] [--seed <unsigned-integer>] [--json] | "
+            + "engine-bench --profile-game [--content POOL] [--profile ENTRANT] [--games N] [--seed S] [--rollout-roots N] [--rollout-samples N] [--json] | "
+            + "engine-bench --profile-plan <games-dir> --sequence N [--profile ENTRANT] [--repeats N] [--rollout-samples N] [--json] | "
+            + "ai-regret roots <games-dir> --output <suite-dir> [--turn-roots N] [--run-roots N] [--labelled N] [--seed S] [--workers N] | "
+            + "ai-regret label <suite-dir> [--samples N] [--horizon game|TURNS] [--evaluation N] [--seed S] [--workers N] [--labels FILE] [--missing] [--repeat N --repeat-seed S] | "
+            + "ai-regret score <suite-dir> --version V[,V...] [--profile P] [--split all|held-out|train] [--labels FILE] [--blunders N] [--bootstrap N] [--workers N] [--json] | "
+            + "ai-regret findings <suite-dir> --manifest FILE --fixtures DIR --content POOL [--labelled N] | ai-regret dedupe <suite-dir> | "
             + "ai-lint <games-dir> [--workers N] [--examples N] [--output file] [--json] | "
             + "ai-style <games-dir> [--workers N] [--json] | "
             + "ai-belief <games-dir> [--games N] [--json] | "
@@ -283,7 +294,7 @@ public static partial class CliCommands
             + "ai-llm-play --output new-dir [--side corp|runner|both] [--games N] [--seed S] [--opponent ENTRANT] [--reasoning low|medium|high] [--model NAME] | "
             + "ai-llm-review <games-dir> --side corp|runner --output new-dir [--entrant NAME] [--game ID]... [--games N] [--skip N] [--temperature T] [--reasoning low|medium|high] [--min-tool-calls N] [--check] [--model NAME] [--logs-only] | "
             + "ai-ladder [--content developer|official] [--entrants random,contract,easy,standard] [--seeds-per-pairing N] "
-            + "[--seed <unsigned-integer>] [--bootstrap N] [--action-cap N] [--workers 1..64] [--output <new directory>] [--json] | "
+            + "[--seed <unsigned-integer>] [--bootstrap N] [--action-cap N] [--workers 1..64] [--verify-replays-every N] [--output <new directory>] [--json] | "
             + "playtest-summary <session-directory|zip> | "
             + "ai-selfplay --content <corp~runner> --seed <n> [--corp <entrant>] [--runner <entrant>] --output <new dir> | "
             + "ai-review <session-directory> [--profile standard|easy] [--side corp|runner] [--all] [--output <new file>] [--json] | "

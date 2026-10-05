@@ -105,7 +105,7 @@ public sealed class TurnPlannerTests
     }
 
     /// <summary>Swaps the identities of two of <paramref name="owner"/>'s cards in hand or deck, which the other side can't see.</summary>
-    private static GameState? SwapTwoHiddenCards(GameState state, PlayerSide owner)
+    internal static GameState? SwapTwoHiddenCards(GameState state, PlayerSide owner)
     {
         Dictionary<ZoneId, ZoneState> zones = state.Zones.ToDictionary(zone => zone.Id);
         ZoneKind hand = owner == PlayerSide.Corp ? ZoneKind.CorpHand : ZoneKind.RunnerGrip;

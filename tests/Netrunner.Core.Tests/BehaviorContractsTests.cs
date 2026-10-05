@@ -712,6 +712,18 @@ public sealed class BehaviorContractsTests
     }
 
     [Fact]
+    public void ADefinitionFingerprintIsComputedOnceAndStaysTheSame()
+    {
+        CardBehaviorDefinition definition = CreateTaggedDefinition(BehaviorCondition.Tagged(PlayerSide.Runner));
+        BehaviorCatalog catalog = new BehaviorCatalogBuilder("test:memo").Add(definition).Build();
+        string first = catalog.GetDefinitionFingerprint(SearchCardId);
+
+        Assert.Equal(BehaviorCatalogFingerprint.ComputeDefinition(definition), first);
+        Assert.Same(first, catalog.GetDefinitionFingerprint(SearchCardId));
+        Assert.Throws<KeyNotFoundException>(() => catalog.GetDefinitionFingerprint(new CardDefinitionId("unregistered")));
+    }
+
+    [Fact]
     public void HostedCreditOperandAndCostParticipateInCatalogEqualityAndFingerprint()
     {
         CardBehaviorDefinition defaultLoad = new(

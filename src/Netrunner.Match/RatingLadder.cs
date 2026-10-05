@@ -1,3 +1,4 @@
+using System.Globalization;
 using Netrunner.AI;
 using Netrunner.Cards;
 using Netrunner.Core;
@@ -9,7 +10,9 @@ namespace Netrunner.Match;
 public sealed record LadderGame(string Id, string ContentId, ulong GameSeed, string Corp, string Runner, int Deal = -1);
 
 /// <summary>Corp score is 1 for a Corp win, 0 for a Runner win and 0.5 for a capped game.</summary>
-public sealed record LadderGameResult(LadderGame Game, double CorpScore, bool Capped, int Actions, string? Error);
+/// <remarks><paramref name="FinalStateHash"/> is the game's last state (S0.2: two ladders' games compare by it), null on an error.</remarks>
+public sealed record LadderGameResult(LadderGame Game, double CorpScore, bool Capped, int Actions, string? Error,
+    string? FinalStateHash = null);
 
 public sealed record LadderRating(PlayerSide Side, string Entrant, double Elo, double Lower, double Upper, int Games, double ScoreRate);
 
@@ -49,7 +52,7 @@ public static partial class RatingLadder
     /// in its own seat, and "hard".
     /// </summary>
     public static IReadOnlyList<string> EntrantOrder { get; } =
-        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard-w3", "standard-c1", "standard-r22", "standard-c26", "standard-r23", "standard-c27", "standard-r24", "standard-c28", "standard-r25", "standard-c29", "standard", "standard-plan", "standard-plan-fit", "standard-run", "standard-rez", "standard-w4a", "standard-w4b", "standard-arch", "standard-rarch", "standard-rgen", "standard-w4c", "standard-c13", "standard-w4d", "standard-c14", "standard-c15", "standard-c16", "standard-r13", "standard-c17", "standard-c18", "standard-c19", "standard-r14", "standard-c20", "standard-r15", "standard-c21", "standard-r16", "standard-c22", "standard-b3", "standard-c23", "standard-r17", "standard-r18", "standard-c24", "standard-r19", "standard-w5", "standard-r21", "hard-r21", "hard-a9c", "hard-a9d", "hard-a9d-list", "hard-a9d-pins", "glacier", "rush", "asset-spam", "aggressive", "rig-builder", "hard", "hard-wide", "hard-weight", "hard-rez", "hard-model"];
+        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard-w3", "standard-c1", "standard-r22", "standard-c26", "standard-r23", "standard-c27", "standard-r24", "standard-c28", "standard-r25", "standard-c29", "standard", "standard-plan", "standard-plan-fit", "standard-run", "standard-rez", "standard-w4a", "standard-w4b", "standard-arch", "standard-rarch", "standard-rgen", "standard-w4c", "standard-c13", "standard-w4d", "standard-c14", "standard-c15", "standard-c16", "standard-r13", "standard-c17", "standard-c18", "standard-c19", "standard-r14", "standard-c20", "standard-r15", "standard-c21", "standard-r16", "standard-c22", "standard-b3", "standard-c23", "standard-r17", "standard-r18", "standard-c24", "standard-r19", "standard-w5", "standard-r21", "hard-r21", "hard-a9c", "hard-a9d", "hard-a9d-list", "hard-a9d-pins", "glacier", "rush", "asset-spam", "aggressive", "rig-builder", "hard", "hard-wide", "hard-weight", "hard-rez", "hard-model", "standard-x1", "standard-x2", "standard-x4", "standard-x8", "standard-x16"];
 
     private const double EloScale = 400 / 2.302585092994046;
     private const double Ridge = 0.01;
@@ -100,6 +103,11 @@ public static partial class RatingLadder
             "hard-rez" => Tuned(OfflineMatchFactory.CreateOpponent(definition, other, "hard"), definition,
                 ("run-samples", RunnerPolicyProfiles.RunSamples), ("run-width", 2)),
             "hard-model" => Tuned(OfflineMatchFactory.CreateOpponent(definition, other, "hard"), definition, ("plan-model", 1)),
+            // Bot plan S0.3, diagnostics: Hard's planner at 1, 2, 4, 8 and 16 times its samples, on its own leaf. Strength
+            // that doesn't grow with the samples means the leaf carries no signal.
+            "standard-x1" or "standard-x2" or "standard-x4" or "standard-x8" or "standard-x16" =>
+                Scaled(OfflineMatchFactory.CreateOpponent(definition, other, "hard"), definition, int.Parse(entrant["standard-x".Length..],
+                    CultureInfo.InvariantCulture)),
             // A6 personalities: Standard with the style in its own seat, plain Standard in the other.
             "glacier" or "rush" or "asset-spam" or "aggressive" or "rig-builder" => OfflineMatchFactory.CreateOpponent(definition, other, "standard", null,
                 AgentPersonalities.Keys[entrant] is var personality && AgentPersonalities.Side(personality) == side ? personality : AgentPersonality.Balanced),
@@ -268,6 +276,10 @@ public static partial class RatingLadder
         return new OfflineAgent(configuration, OfflinePolicies.Create(configuration), new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior));
     }
 
+    /// <summary>The same agent planning <paramref name="multiple"/> times its samples (bot plan S0.3).</summary>
+    private static OfflineAgent Scaled(OfflineAgent agent, FullMatchDefinition definition, int multiple) => Tuned(agent, definition,
+        ("plan-samples", agent.Configuration.Parameters["plan-samples"] * multiple));
+
     /// <summary>The same agent with planner settings added or replaced.</summary>
     private static OfflineAgent Tuned(OfflineAgent agent, FullMatchDefinition definition, params (string Key, int Value)[] settings)
     {
@@ -294,12 +306,21 @@ public static partial class RatingLadder
         CancellationToken cancellationToken = default) => PlayAsync(game, actionCap, null, cancellationToken);
 
     /// <param name="keep">Receives each finished or capped game with its replay (<c>ai-ladder --save-games</c>).</param>
+    /// <param name="verify">Whether the game is checked as it is played (<see cref="FullMatchRunner.RunAsync"/>).</param>
+    public static Task<LadderGameResult> PlayAsync(LadderGame game, int actionCap, Action<LadderSavedGame>? keep, bool verify,
+        CancellationToken cancellationToken = default) => PlayAsync(game, actionCap, keep, CreateAgent, verify, cancellationToken);
+
     public static Task<LadderGameResult> PlayAsync(LadderGame game, int actionCap, Action<LadderSavedGame>? keep,
-        CancellationToken cancellationToken = default) => PlayAsync(game, actionCap, keep, CreateAgent, cancellationToken);
+        CancellationToken cancellationToken = default) => PlayAsync(game, actionCap, keep, CreateAgent, true, cancellationToken);
 
     /// <param name="agents">Makes each seat's agent from its entrant name (the LLM opponent's games pass their own).</param>
+    public static Task<LadderGameResult> PlayAsync(LadderGame game, int actionCap, Action<LadderSavedGame>? keep,
+        Func<string, PlayerSide, FullMatchDefinition, IGameAgent> agents, CancellationToken cancellationToken = default) =>
+        PlayAsync(game, actionCap, keep, agents, true, cancellationToken);
+
+    /// <param name="verify">Whether the game is checked as it is played (<see cref="FullMatchRunner.RunAsync"/>).</param>
     public static async Task<LadderGameResult> PlayAsync(LadderGame game, int actionCap, Action<LadderSavedGame>? keep,
-        Func<string, PlayerSide, FullMatchDefinition, IGameAgent> agents, CancellationToken cancellationToken = default)
+        Func<string, PlayerSide, FullMatchDefinition, IGameAgent> agents, bool verify, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(game);
         ArgumentNullException.ThrowIfNull(agents);
@@ -308,15 +329,21 @@ public static partial class RatingLadder
         {
             FullMatchResult result = await FullMatchRunner.RunAsync(definition, actionCap,
                 agents(game.Corp, PlayerSide.Corp, definition),
-                agents(game.Runner, PlayerSide.Runner, definition), cancellationToken).ConfigureAwait(false);
+                agents(game.Runner, PlayerSide.Runner, definition), verify, cancellationToken).ConfigureAwait(false);
             double score = result.Outcome.Winner == PlayerSide.Corp ? 1 : 0;
             keep?.Invoke(new LadderSavedGame(game, score, false, result.Replay));
-            return new LadderGameResult(game, score, false, result.ActionCount, null);
+            return new LadderGameResult(game, score, false, result.ActionCount, null, result.FinalStateHash);
         }
         catch (FullMatchStallException stall)
         {
+            // A capped game is rare and suspect, so its replay is always verified, as fuzz does, checked or not.
+            ReplayArtifact replay = EngineJson.Deserialize<ReplayArtifact>(EngineJson.Serialize(stall.Replay), definition.Behavior,
+                definition.Runtime);
+            ReplayVerificationResult verified = ReplayVerifier.Verify(replay, definition.Behavior, definition.Runtime);
+            if (!verified.Success)
+                return new LadderGameResult(game, 0.5, false, 0, $"Capped game's replay failed: {verified.Message}");
             keep?.Invoke(new LadderSavedGame(game, 0.5, true, stall.Replay));
-            return new LadderGameResult(game, 0.5, true, stall.Replay.Actions.Count, null);
+            return new LadderGameResult(game, 0.5, true, stall.Replay.Actions.Count, null, stall.Replay.ExpectedFinalStateHash);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {

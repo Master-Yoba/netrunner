@@ -98,21 +98,7 @@ public sealed class PlaytestWave5Tests
     private static async Task<(LegalAction Chosen, GameState State)> ChooseAtAsync(string fixture, PlayerSide side, string version, long sequence)
     {
         (LadderSavedGame saved, FullMatchDefinition definition) = Load(fixture);
-        GameState state = saved.Replay.InitialSnapshot.ToState();
-        PlayerSide human = side == PlayerSide.Corp ? PlayerSide.Runner : PlayerSide.Corp;
-        OfflineAgent agent = OfflineMatchFactory.CreateOpponent(definition, human, "standard", version);
-        AgentLifecycleHost.Observe(agent, state, definition.Behavior);
-        foreach (ReplayAction recorded in saved.Replay.Actions)
-        {
-            if (recorded.Sequence == sequence)
-            {
-                PendingDecision pending = state.PendingDecision!;
-                ActionId id = await agent.ChooseActionAsync(ObservationBuilder.Build(state, side, definition.Behavior, definition.Runtime));
-                return (pending.LegalActions.Single(action => action.Id == id), state);
-            }
-            state = GameEngine.Apply(state, recorded.Submission, definition.Behavior, definition.Runtime).State;
-            AgentLifecycleHost.Observe(agent, state, definition.Behavior);
-        }
-        throw new InvalidOperationException($"The game has no action {sequence}.");
+        SavedChoice choice = await SavedDecision.ChooseAsync(saved.Replay, definition, sequence, side, version);
+        return (choice.Chosen, choice.State);
     }
 }

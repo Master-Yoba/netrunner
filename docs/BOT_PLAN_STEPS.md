@@ -62,9 +62,37 @@ gate.
   bounds above zero in both seats, S4 still runs, but S5 may start from a higher budget sooner.
 - **Record:** the table in `docs/BOT_VERSIONS.md`.
 
+### S0.4 Rollout cost, cut where the trace says
+
+**Independent of S0.2 and S0.3; needs S0.1's planner profile.** Revised on 4 October after S0.1's split and a CPU trace
+of 60 Hard decisions and 32 whole-game rollouts (`dotnet-trace`, `dotnet-sampled-thread-time`). The plan's first rollout
+policy (the heuristic at a reduced work budget with a cached `HeuristicContext`) can only reach the heuristic, which is
+about a tenth of a rollout step; the step is simulated `Apply` (about half), then the observation build and read (about
+a sixth each). So S0.4 takes exact cost out where the trace finds it, and the rollout policy stays today's: the
+planner's own per-step `Choose`, which S1.2's teacher therefore shares with the shipped planner.
+
+- **Done:** the observation read builds its JSON options once (a tenth of a read); the behaviour catalog computes each
+  definition's fingerprint once instead of for every issued ability action (about a sixth of planner time in the
+  trace, `BehaviorCatalogFingerprint.ComputeDefinition`).
+- **Shelved:** an exact direct observation-to-features mapper (about a seventh of planner time, but a hand-written copy
+  of the serializer's semantics over some forty record types), and a thin state-to-features view (the same plus a
+  second copy of the information boundary). Revisit only if S5's budgets need them after S5.0.
+- **Gate:** exact changes only: a 240-deal box ladder identical game by game to S0.2's fast-mode run (same final state
+  hashes), and S0.1's costs re-measured.
+- **Record:** the trace's top costs, the costs before and after, and the ladder, in `docs/BOT_VERSIONS.md`.
+
 ## S1. The regret suite (M)
 
-**Independent of S0.3; needs S0.1's planner profile to size the teacher.**
+**Independent of S0.3; needs S0.1's planner profile and S0.4's costs to size the teacher.**
+
+**Outcome (5 October; the record is in `docs/BOT_VERSIONS.md`).** The box suite is `data/ai/regret/gateway-elevation`:
+960 games stored as choice indices, 6,512 roots after deduplication (a deal's games share positions, so a position is
+kept once and a deal is held out whole), and 23 findings. The teacher labels at **32 samples and a 4-turn horizon, then
+the leaf**: the game's-end horizon was mostly ties at 8 samples and past four hours at 32. The noise floor is 51% best
+disagreement but a mean flip cost of 0.018, so regret, paired on the same labels, is the number; agreement is not. The
+gate holds: Runner v24 separates from v25 and v26, Corp v30 from v28 and v29, about 2 minutes a version. Because the
+labels end in set 4's leaf, S4.2's set 4 control and S6's relabelling matter more, and a deeper horizon is worth trying
+once S5.0 makes rollouts cheaper.
 
 ### S1.1 Decision roots
 
@@ -84,16 +112,29 @@ gate.
 - `ai-regret label <suite-dir> --samples 32 --horizon game|<turns> --evaluation 4 --workers 12`: for each root,
   rebuilds the observation and checkpoint at the sequence, deals 32 shared samples from the tracker and pool as
   `TurnPlanner.Pins` does, rolls out every candidate on every sample **past the leaf's horizon** (to the game's end
-  with the rollout policy, or `<turns>` turns and then the leaf; start with `game` and fall back to 4 turns if S0.1's
-  whole-game rollout cost makes 8,000 roots exceed about four hours on 12 workers), and writes per-candidate mean win
-  probability, the root value (the best candidate's) and the horizon used. Deterministic given the suite's seed. The
-  point of the depth is that labels come from play, not from the leaf section 1.3 of the plan calls noise.
+  with the planner's rollout choices, or `<turns>` turns and then the leaf; start with `game` and fall back to 4 turns
+  if S0.4's whole-game rollout cost makes 8,000 roots exceed about four hours on 12 workers), and writes per-candidate
+  mean win probability with its standard error over the samples, the root value (the best candidate's) and the horizon
+  used. Deterministic given the suite's seed. The point of the depth is that labels come from play, not from the leaf
+  section 1.3 of the plan calls noise.
+- **Noise floor:** `ai-regret label --repeat <n> --repeat-seed S` labels a random `n` roots (start 200) a second time
+  with independent sample seeds and writes how often the two labellings pick different best candidates, and the median
+  standard error. The suite carries it, and `score` reports agreement against it (the plan's 5.1).
 - Move the saved-decision replay into `Netrunner.Match` as `SavedDecision.Replay` and put **every** test copy of
-  `ChooseAtAsync` on it: `BotLoop1Tests` (the shared one), `CorpPlaytestV11Tests`, `CorpPlaytestV13Tests`,
-  `CorpPlaytestV15Tests`, `CorpPlaytestV17Tests`, `CorpCodexV20Tests`, `PlaytestWave5Tests`, `RunnerInferenceV21Tests`
-  and `SelfPlayReviewTests`, plus the callers in `CorpAgendaHidingV16Tests`, `CorpLintV19Tests`, `CorpPlaytestV14Tests`,
-  `CorpPlaytestV18Tests`, `RunnerCodexV14Tests` and `RunnerPlaytestV13Tests`. One replay path, so a root in the suite and
-  a root in a test are the same thing.
+  `ChooseAtAsync` on it. There are 15 copies, and they differ in shape, so `SavedDecision.Replay` must cover:
+  - finding the decision by sequence number, or by a predicate over the state and pending decision
+    (`CorpLintV19Tests`);
+  - returning the replayed state with the choice, as most copies do (`BotLoop1Tests.ChooseWithStateAtAsync`,
+    `RunnerCodexV14Tests.ChooseInAsync`), and the match definition (`CorpAgendaHidingV16Tests`);
+  - either side acting (`PlaytestWave5Tests` and `BotLoop1Tests` take it);
+  - both fixture formats: `LadderGameArchive` saved games, and raw `Fixtures/*-replay.json` replays whose content and
+    seed the test names (`CorpPlaytestV13Tests`, `CorpPlaytestV14Tests`, `SelfPlayReviewTests`).
+
+  The copies: `BotLoop1Tests` (shared with `BotLoop2Tests` and `BotStrategy1Tests`), `CorpAgendaHidingV16Tests`,
+  `CorpCodexV20Tests`, `CorpLintV19Tests`, `CorpPlaytestV11Tests`, `CorpPlaytestV13Tests`, `CorpPlaytestV14Tests`,
+  `CorpPlaytestV15Tests`, `CorpPlaytestV17Tests`, `CorpPlaytestV18Tests`, `PlaytestWave5Tests`, `RunnerCodexV14Tests`,
+  `RunnerInferenceV21Tests`, `RunnerPlaytestV13Tests` and `SelfPlayReviewTests`. One replay path, so a root in the suite
+  and a root in a test are the same thing; every moved test still passes unchanged in what it asserts.
 - If reducing `--per-game` is still needed, record it.
 
 ### S1.3 Scoring and the blunder list
@@ -103,10 +144,17 @@ gate.
   per pool, per category, with a 200-draw bootstrap interval over roots; `--blunders N` lists the N highest-regret
   roots with every candidate's value and the version's reason string.
 - **Gate:** the suite separates what the ladder could not: Runner v24, v25 and v26 scored on the same suite in under
-  five minutes each, with intervals that order at least two of them. If no pair separates, first check the teacher:
-  compare its labels at `--horizon game` and at the turn's end on 200 roots, and if they disagree on the best candidate
-  in more than a quarter, the short horizon is the problem and labels must use the deep one. Only then treat the roots
-  as too easy: raise `--per-game` on roots where the heuristic's top two scores are close and re-label.
+  five minutes each, with intervals that order at least two of them. If no pair separates, first check the teacher on
+  the noise-floor roots:
+  - if the deep labelling disagrees with *itself* (the noise floor) on more than about a third of best candidates, the
+    labels are too noisy to rank: raise `--samples` on those roots or move to the 4-turn horizon (less noise, a little
+    of the leaf's bias), and re-label;
+  - otherwise compare the deep labels with turn's-end labels on the same roots; disagreement **above the noise floor**
+    by more than a quarter means the short horizon is the problem and labels must stay deep. Disagreement at or below
+    the floor says nothing about the horizon.
+
+  Only then treat the roots as too easy: raise `--per-game` on roots where the heuristic's top two scores are close and
+  re-label.
 - **Record:** the three versions' table, the labelling time, and the first blunder list in `docs/BOT_VERSIONS.md`.
 
 ## S2. Puzzle suite v2 (M)
@@ -162,10 +210,15 @@ gate.
   `standard-prev` is Corp v30 and Runner v26 from the legacy files; afterwards it is the frozen build.
 - **Gate** (needs nothing from S1 or S2):
   - a 240-deal box ladder and a 240-deal Gateway ladder of v31 against v30 and v27 against v26, with `--save-games`,
-    where every game comes out identical to its pair: the same winner, action count and final state hash. That is a
-    stronger check than any suite, since it covers every decision in 960 games;
-  - `PolicyVersionTests` extended: every version through v30 and v26 constructs, and the legacy files are byte-identical
-    to the policy files at the commit the step branched from;
+    where every game comes out identical to its seat-swapped pair on the same deal: the same winner, action count and
+    final state hash. That is a stronger check than any suite, since it covers every decision in 960 games. It is valid
+    because an agent's random stream is seeded from the match seed and its side only
+    (`AgentLifecycleHost.DerivePolicySeed`, called from `OfflineMatchFactory`), never from the policy version or the
+    configuration digest; a test asserts that, so a later change that seeds from the version fails loudly instead of
+    voiding this gate;
+  - `PolicyVersionTests` extended: every version through v30 and v26 constructs, and the legacy files differ from the
+    policy files at the commit the step branched from only in the rename lines (class names and namespace), checked by
+    a normalized diff in the test;
   - every frozen benchmark digest, saved-game fixture and twin test unchanged;
   - `make gates` passes.
   - When S1 exists, 100% agreement on the regret suite is added as a cheap repeat of the same check.
@@ -206,6 +259,20 @@ gate.
 
 ## S5. The planner becomes Standard (L)
 
+### S5.0 Engine cost of simulation
+
+**Before S5.1; can run any time after S0.** S0.1 says Standard cannot plan 8 samples × width 4 inside 50 ms p95 unless a
+rollout step gets cheaper, and S0.4's trace says the step is mostly simulated `Apply`. Take exact cost out of
+`GameEngine.Apply` in `ApplyMode.Simulation`, in the order the trace ranks it, re-tracing after each:
+
+- `DeterministicHash.ForState` (about 8% of `ApplyCore`) and `StateInvariantValidator.Validate` (about 7%): whether a
+  simulated state needs its hash and its invariants checked at every step, or only where a rollout's result is used. A
+  change here is a decision that simulated states are trusted, so it is taken with the user, not by a step.
+- `TurnFactsState` copies (about 5% of all time), `BehaviorStaticModifierProjection.Sum` (about 6%), and building the
+  working state (`WorkingState.Build` and its constructor, about 8% of `ApplyCore`).
+- **Gate:** each change is exact: a 240-deal box ladder identical game by game to the run before it, the per-slice
+  fuzz on every pool (an engine change), and the costs re-measured into `docs/BOT_VERSIONS.md`.
+
 ### S5.1 Pipeline changes in `TurnPlanner`
 
 - **Meaningful-candidate filter:** drop candidates the heuristic marks as bookkeeping (pass, end turn with clicks left
@@ -214,9 +281,10 @@ gate.
 - **Probability-space values:** each rollout's leaf as a win probability; candidate value = mean(leaf − root) +
   `static-mix` × (leaf after the first action − root). Remove the raw log-odds sum and the heuristic score from the value;
   the heuristic orders candidates and breaks ties within `plan-tie` (start 0.005).
-- **Rollout policy** per the plan's 4.3: the heuristic at `rollout-work` budget (start 4,000) with a cached context per
-  rollout; profile against S0.1 and, if a Standard decision cannot fit 50 ms p95 at 8 samples × width 4, implement the
-  distilled table policy and record both numbers.
+- **Rollout policy:** today's per-step `Choose` (S0.4). Profile against S0.1 after S5.0 and, if a Standard decision
+  still cannot fit 50 ms p95 at 8 samples × width 4, implement the plan's 4.3 options (the heuristic at a reduced work
+  budget, then the distilled table policy) and record each number. If the rollout policy changes here, re-label the
+  regret suite with it, so the teacher and the planner still share one.
 - **Work budget:** `rollout-budget` (simulated decisions per root) in the profile; the planner stops sampling when it is
   spent and scores what it has. No wall-clock checks inside a decision.
 - Everything behind profile parameters so Hard's current behaviour stays reproducible until the switch.
@@ -266,6 +334,7 @@ the plan is the way to get them, on the user's ask).
 S0 measure ──> S1 regret suite ──> S4 set 5 ──> S5 planner Standard ──> S6 rounds
            ──> S2 puzzles ───────┘        (S2 independent after S1.1)
            ──> S3 one live policy ────────┘  (S3 independent; before S4)
+(S5.0, the engine cost of simulation, can run any time after S0 and must land before S5.1)
 ```
 
 Elapsed, one developer with an agent: S0 one week including the ladder speedup; S1, S2 and S3 two to three weeks in

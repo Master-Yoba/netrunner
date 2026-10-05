@@ -68,23 +68,8 @@ public sealed class CorpPlaytestV11Tests
     private static async Task<(LegalAction Chosen, GameState State)> ChooseAtAsync(long sequence)
     {
         FullMatchDefinition definition = RulesFuzzRunner.CreateDefinition("gateway-quick-and-dirty~gateway-stolen-goods", 8751913655046395946);
-        ReplayArtifact replay = EngineJson.Deserialize<ReplayArtifact>(File.ReadAllText(Path.Combine(AppContext.BaseDirectory,
-            "..", "..", "..", "Fixtures", "playtest-weyland-remotes-replay.json")), definition.Behavior, definition.Runtime);
-        GameState state = replay.InitialSnapshot.ToState();
-        OfflineAgent agent = OfflineMatchFactory.CreateOpponent(definition, PlayerSide.Runner, "standard", CorpHeuristicPolicy.V11);
-        AgentLifecycleHost.Observe(agent, state, definition.Behavior);
-        foreach (ReplayAction recorded in replay.Actions)
-        {
-            if (recorded.Sequence == sequence)
-            {
-                PendingDecision pending = state.PendingDecision!;
-                Assert.Equal(PlayerSide.Corp, state.GetPlayer(pending.Owner).Side);
-                ActionId id = await agent.ChooseActionAsync(ObservationBuilder.Build(state, PlayerSide.Corp, definition.Behavior, definition.Runtime));
-                return (pending.LegalActions.Single(action => action.Id == id), state);
-            }
-            state = GameEngine.Apply(state, recorded.Submission, definition.Behavior, definition.Runtime).State;
-            AgentLifecycleHost.Observe(agent, state, definition.Behavior);
-        }
-        throw new InvalidOperationException($"The replay has no action {sequence}.");
+        ReplayArtifact replay = SavedDecision.ReadReplay(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "Fixtures", "playtest-weyland-remotes-replay.json"), definition);
+        SavedChoice choice = await SavedDecision.ChooseAsync(replay, definition, sequence, PlayerSide.Corp, CorpHeuristicPolicy.V11);
+        return (choice.Chosen, choice.State);
     }
 }

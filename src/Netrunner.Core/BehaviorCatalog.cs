@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Security.Cryptography;
 using System.Text;
@@ -2690,6 +2691,7 @@ public sealed class BehaviorCatalog : IBehaviorCatalog, IBehaviorCardClassificat
     private readonly IReadOnlyDictionary<CardDefinitionId, CardBehaviorDefinition> _generic;
     private readonly ReadOnlyDictionary<CardDefinitionId, BehaviorCardType> _cardTypes;
     private readonly ReadOnlyDictionary<CardDefinitionId, IReadOnlyList<string>> _cardSubtypes;
+    private readonly ConcurrentDictionary<CardDefinitionId, string> _definitionFingerprints = new();
 
     internal BehaviorCatalog(
         string version,
@@ -2809,15 +2811,24 @@ public sealed class BehaviorCatalog : IBehaviorCatalog, IBehaviorCardClassificat
         BehaviorCatalogFingerprint.ComputeCard(
             definitionId, _ice, _icebreakers, _assets, _agendas, _runEvents, _generic, _cardTypes, _cardSubtypes);
 
-    /// <summary>Returns the stable fingerprint of one generic definition.</summary>
+    /// <summary>
+    /// Returns the stable fingerprint of one generic definition. The catalog and its definitions are immutable, so each
+    /// fingerprint is computed once (bot plan S0.4: recomputing it for every issued ability action was a sixth of a
+    /// planner's time).
+    /// </summary>
     public string GetDefinitionFingerprint(CardDefinitionId definitionId)
     {
+        if (_definitionFingerprints.TryGetValue(definitionId, out string? fingerprint))
+        {
+            return fingerprint;
+        }
+
         if (!_generic.TryGetValue(definitionId, out CardBehaviorDefinition? definition))
         {
             throw new KeyNotFoundException($"Generic behavior definition '{definitionId}' is not registered.");
         }
 
-        return BehaviorCatalogFingerprint.ComputeDefinition(definition);
+        return _definitionFingerprints.GetOrAdd(definitionId, BehaviorCatalogFingerprint.ComputeDefinition(definition));
     }
 
     public bool TryGetCardType(CardDefinitionId definitionId, out BehaviorCardType cardType) =>
