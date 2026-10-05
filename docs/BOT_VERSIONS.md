@@ -296,3 +296,64 @@ missed wins the 4-turn horizon sees and the one-step heuristic does not:
 | Corp v30 | `…zwicky-supermodernism~…topan-00223#305` | 1.00 | Install card (0.00) | Play card 35078 (1.00) |
 | Corp v30 | `…nebula-fast-advance~…topan-00085#1011` | 0.94 | Pass priority (0.06) | Rez card 35082 (1.00) |
 | Corp v30 | `…untaian-shell-game~…magdalene-00030#561` | 0.88 | Install 35051 in a new remote (0.13) | Install it in server:1516, or advance (1.00) |
+
+## The puzzle suite
+
+### S2: puzzle suite v2 (5 October 2026)
+
+**Format** (`data/ai/puzzles/<pool>`): the regret suite's compact games and `puzzles.json`. A puzzle is a root (a game
+and a sequence), a kind, one of the plan's ten categories, a split, and an acceptance:
+
+- `decision`: the bot's choice must match one of `accept` (action kind and a subset of its parameters, card instances
+  read as definitions) and none of `reject`. A negative control rejects the tempting action instead of naming the
+  answer.
+- `line`: the turn is played out from the root by both sides' production bots, and every predicate holds over the puzzle
+  side's actions and the state at the turn's end (`installed`, `counters`, `credits`, `grip`, `successfulRun`, `action`,
+  `before`, `precedes`, `first`).
+- `nested`: the line is played to the first decision of the puzzle side where an action matches `at`, and the choice
+  there is judged as a decision.
+
+`ai-puzzles run` scores a set per category; `show`, `find` and `import` are the authoring aids (`show --teacher N`
+prints the teacher's value of every choice at a root).
+
+**Content.**
+
+- The 28 saved-decision tests of loops 1 and 2 and strategy 1, as decision puzzles (23 box, 5 NSG Core), split `tuning`:
+  the bots were fixed against them. Corp v26 with Runner v22 pass 1 of the 23 box puzzles; the defaults pass all 28.
+- 26 **teacher-certified** box puzzles: regret suite roots where the best group led the next by 0.15 or more at 32
+  samples, relabelled at 128 samples with an independent seed and kept where the lead held (0.15 or more, the best's
+  standard error 0.04 or less; 54 of 95 held) and the accepted actions match no clearly worse group; capped at 8 a
+  category. 14 are negative controls: the heuristic's first choice is clearly worse and is rejected. A third (10) is
+  held out by a hash of the id.
+- **Deferred findings the teacher does not certify** (4-turn horizon, 128 samples; none is made a puzzle): Petty Cash as
+  the turn's first action (24 lean-credit Corp turn starts: level with the best alternative or worse, by up to 0.2);
+  Ritual first (20 Runner turn starts: level or worse in 18, ahead by 0.02 in 2); Spin Doctor before the install that
+  trashes it (its remove-from-game ability is not offered at the 20 turn starts found, so the line cannot be posed
+  there). The loop 2 games these findings came from no longer replay under today's card behaviour (an action becomes
+  illegal within the first 115), so their exact positions could not be used. Mercia's free install, a second Jailbreak
+  on an unchanged R&D, GAMEDRAGON™ Pro and the NSG Core items (Synapse Global, Touch-ups) wait for positions.
+
+**Baseline** (Standard; box set 49 puzzles, 10 held out; NSG Core set 5):
+
+| Category | v30 / v26 | v29 / v25 | v28 / v24 |
+|---|---|---|---|
+| sequencing | 2/2 | 0/2 | 0/2 |
+| agenda exposure | **0/4** | 0/4 | 0/4 |
+| punisher risk | 9/9 | 7/9 | 7/9 |
+| run targeting | 4/8 | 4/8 | 4/8 |
+| economy | 5/8 | 5/8 | 6/8 |
+| access and trash | 3/3 | 3/3 | 3/3 |
+| rez timing | 6/10 | 6/10 | 6/10 |
+| hand management | 5/5 | 5/5 | 4/5 |
+| **Box, all** | **34/49** | 30/49 | 30/49 |
+| Box, held out | 5/10 | 5/10 | 5/10 |
+| NSG Core | 5/5 | 5/5 | 1/5 |
+
+**Gate:** agenda exposure is at 0 of 4 for the defaults, so the suite has room to move. The teacher-certified puzzles
+score the same for all three version pairs (the heuristic's choice at those roots did not change between them); they are
+what the planner (S5) is expected to move.
+
+**Short of the target.** 54 puzzles against 60, 8 of the 10 categories (no ICE placement or inference puzzle yet: no ICE
+install root held the teacher's lead at 128 samples, and inference needs a position where the right choice depends on a
+card the bot can only infer), and 10 of 54 held out against a third (the converted tests cannot be held out). The NSG
+Core set has only the 5 converted tests; certified puzzles for it need an NSG regret suite.

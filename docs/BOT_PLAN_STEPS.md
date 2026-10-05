@@ -161,6 +161,15 @@ once S5.0 makes rollouts cheaper.
 
 **Independent of S1 after S1.1's root format exists.**
 
+**Outcome (5 October; the record is in `docs/BOT_VERSIONS.md`).** `data/ai/puzzles/gateway-elevation` (49 puzzles) and
+`nsg-core-sets` (5): the 28 converted tests and 26 teacher-certified decisions, 8 categories, 25 negative controls. The
+defaults score 34/49 and 5/5; agenda exposure is 0/4, which meets the gate. Three deferred findings (Petty Cash first,
+Ritual first, Spin Doctor before its trash) are not certified by the teacher and are recorded rather than made puzzles;
+the target of 60 puzzles, ICE placement and inference, a third held out, and an NSG Core suite are still open. The old
+saved-decision tests stay until S3 freezes the versions before v31 and v27: their halves that pin the older versions'
+choices guard code that is still live until then, and `PuzzleSuiteTests` already asserts that the defaults pass every
+converted puzzle.
+
 ### S2.1 Manifest and runner
 
 - `data/ai/puzzles/<pool>/puzzles.json`: each puzzle names a root (S1.1 format), a kind (`decision`, `line`,
