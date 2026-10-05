@@ -12,7 +12,7 @@ public sealed partial class CorpHeuristicPolicy
         if (behavior is null) return Value(-50, "play/unmodelled", approximate: true, fallback: true);
         int effect = Effects(context, behavior.Instructions, card, behavior.Controller);
         // v30: a play only possible before the turn's first action finishes (Petty Cash) is now or never this turn.
-        if (context.Generation >= 25 && effect - play.CreditCost * context.CreditValue > 0 && NowOrNever(behavior.Conditions)) effect += NowOrNeverBonus;
+        if (effect - play.CreditCost * context.CreditValue > 0 && NowOrNever(behavior.Conditions)) effect += NowOrNeverBonus;
         return new(effect >= 10000 ? 100 : 0, effect - play.CreditCost * context.CreditValue,
             "play/effect-minus-current-cost", Approximate: effect < 10000);
     }
@@ -24,19 +24,19 @@ public sealed partial class CorpHeuristicPolicy
         if (declaration is null) return Value(-50, "ability/unmodelled", approximate: true, fallback: true);
         // v28 (bot loop 1): an ability that plays its own card plays nothing when the Corp can't pay the card's cost (Petty Cash
         // from Archives with 2 credits spent the click for nothing).
-        if (context.Generation >= 23 && declaration.Instructions.Any(instruction => instruction.Kind == BehaviorInstructionKind.PlayCard
+        if (declaration.Instructions.Any(instruction => instruction.Kind == BehaviorInstructionKind.PlayCard
                 && instruction.Target?.Kind == BehaviorTargetKind.Self)
             && (context.Definition(card)?.Printed.PlayCost ?? 0) > context.Self.Credits
                 - ability.Costs.Where(cost => cost.Kind == BehaviorCostKind.Credits).Sum(cost => cost.Amount))
             return Value(-100, "ability/play-it-cannot-pay-for", approximate: true);
         int benefit = Effects(context, declaration.Instructions, card, context.Features.Side);
         // v30: Petty Cash from Archives refunds its click: a free gain, and only before the turn's first action finishes.
-        if (context.Generation >= 25 && NowOrNever(declaration.Conditions) && context.Definition(card)?.Behavior?.Instructions is { } played
+        if (NowOrNever(declaration.Conditions) && context.Definition(card)?.Behavior?.Instructions is { } played
             && HeuristicContext.Flatten(played).Any(instruction => instruction.Kind == BehaviorInstructionKind.GainClicks))
             benefit += NowOrNeverBonus;
         int costs = ability.Costs.Where(cost => cost.Kind == BehaviorCostKind.Credits).Sum(cost => cost.Amount) * context.CreditValue;
         costs += ability.Costs.Where(cost => cost.Kind == BehaviorCostKind.TrashSelf
-            || (context.Generation >= 10 && cost.Kind == BehaviorCostKind.RemoveSelfFromGame)).Sum(_ => context.CardValue(card, installed: true));
+            || cost.Kind == BehaviorCostKind.RemoveSelfFromGame).Sum(_ => context.CardValue(card, installed: true));
         return Value(benefit - costs, "ability/payoff-minus-cost", approximate: true);
     }
 
@@ -177,7 +177,7 @@ public sealed partial class CorpHeuristicPolicy
                 case BehaviorInstructionKind.PurgeVirusCounters: total += 60; break;
                 case BehaviorInstructionKind.AddBreachAccess: total -= amount * 150; break;
                 case BehaviorInstructionKind.RefillRecurringCredits: total += 2 * context.CreditValue; break;
-                case BehaviorInstructionKind.InstallCard when context.Generation >= 25 && instruction.SourceZone == BehaviorZone.ScoreArea:
+                case BehaviorInstructionKind.InstallCard when instruction.SourceZone == BehaviorZone.ScoreArea:
                     total += ReclaimValue(context, instruction.Target?.Filter, tagsRemoved);
                     break;
                 case BehaviorInstructionKind.InstallCard when instruction.IsZoneInstall: total += 250; break;
@@ -202,15 +202,15 @@ public sealed partial class CorpHeuristicPolicy
                         _ => amount,
                     };
                     total += amount > context.Features.Board.HiddenZoneCounts.RunnerGrip ? 10000
-                        : (int)(amount * 100 * (context.Generation >= 7 ? context.CorpProfile.DamageWeight : 1));
+                        : (int)(amount * 100 * context.CorpProfile.DamageWeight);
                     break;
-                case BehaviorInstructionKind.AddTags when context.Generation >= 4:
+                case BehaviorInstructionKind.AddTags:
                     // v7: clearing a tag costs the Runner a click and 2 credits, and
                     // while tagged its resources can be trashed (Wave 4 C1 audit).
                     // v12: a tag deck's punishments make each tag worth more.
                     // v13 (playtest, 29 September): a tag the Corp can't punish this turn is cleared by the
                     // Runner next turn, so it's worth only the click and two credits that costs.
-                    if (context.Generation >= 8 && context.Features.Side == PlayerSide.Corp && !CanPunishTagThisTurn(context))
+                    if (context.Features.Side == PlayerSide.Corp && !CanPunishTagThisTurn(context))
                     {
                         total += amount * 150;
                         break;
@@ -218,15 +218,11 @@ public sealed partial class CorpHeuristicPolicy
                     total += (int)(amount * (250 + context.Features.Board.RunnerRig
                         .Where(card => context.Definition(card)?.Printed.CardClass == RuntimeCardClass.Resource)
                         .Select(card => context.CardValue(card, installed: true)).DefaultIfEmpty(0).Max() / 2)
-                        * (context.Generation >= 7 ? context.CorpProfile.TagWeight : 1));
-                    break;
-                case BehaviorInstructionKind.AddTags:
-                    total += context.Features.Board.RunnerRig.Where(card => context.Definition(card)?.Printed.CardClass == RuntimeCardClass.Resource)
-                        .Select(card => context.CardValue(card, installed: true)).DefaultIfEmpty(0).Max() / 3;
+                        * context.CorpProfile.TagWeight);
                     break;
                 // v29 (bot loop 2): trashing its own card costs the Corp the cheapest it can choose (LEO's bioroid), where the
                 // target filter's missing card type had matched the Runner's cards and made it a gain.
-                case BehaviorInstructionKind.TrashCard when context.Generation >= 24 && self
+                case BehaviorInstructionKind.TrashCard when self
                     && instruction.Target is { Kind: BehaviorTargetKind.ChosenCard } && chosenTarget?.Filter?.OwnerSide == PlayerSide.Corp:
                     // The candidates are the target selector's: LEO's bioroid must be in the attacked server. Any other
                     // selector is priced at its dearest candidate.
@@ -239,16 +235,15 @@ public sealed partial class CorpHeuristicPolicy
                         .Select(card => context.CardValue(card, installed: true)).DefaultIfEmpty(0);
                     total -= chosenTarget.Selector is null || chosenTarget.IsInAttackedServer ? own.Min() : own.Max();
                     break;
-                case BehaviorInstructionKind.TrashCard when context.Generation >= 4 && self
+                case BehaviorInstructionKind.TrashCard when self
                     && instruction.Target is { Kind: BehaviorTargetKind.ChosenCard }:
                     // v7: a trash effect is worth its best legal Runner target (Retribution).
                     total += context.Features.Board.RunnerRig.Where(card => MatchesTarget(context, card, chosenTarget))
                         .Select(card => context.CardValue(card, installed: true)).DefaultIfEmpty(0).Max();
                     break;
-                case BehaviorInstructionKind.Choose when context.Generation >= 3 && instruction.Choice is { Options.Count: 0 }:
+                case BehaviorInstructionKind.Choose when instruction.Choice is { Options.Count: 0 }:
                     break; // A card-target choice; the following instructions value the best target.
-                case BehaviorInstructionKind.Choose when context.Generation >= 4
-                    && instruction.Choice is { Options.Count: > 0 } runnerChoice
+                case BehaviorInstructionKind.Choose when instruction.Choice is { Options.Count: > 0 } runnerChoice
                     && ChooserSide(runnerChoice.Chooser, controller) != context.Features.Side:
                     // v7: the opponent picks the option least good for us, and the
                     // credits it pays are ours to value (Public Trail: a tag or 8 credits).
@@ -258,7 +253,7 @@ public sealed partial class CorpHeuristicPolicy
                 case BehaviorInstructionKind.Choose:
                     // v30: only the options the Runner's tags allow (IP Enforcement's X, PR #97's review).
                     if (instruction.Choice is { Options.Count: > 0 } choice
-                        && choice.Options.Where(option => context.Generation < 25 || option.Condition is not { Kind: BehaviorConditionKind.RunnerTagsAtLeast } tagged
+                        && choice.Options.Where(option => option.Condition is not { Kind: BehaviorConditionKind.RunnerTagsAtLeast } tagged
                             || context.Opponent.Tags >= (tagged.Value ?? 1)).ToArray() is { Length: > 0 } offered)
                         total += offered.Max(option => Effects(context, option.Instructions, source, controller)
                             - (option.Costs ?? []).Where(cost => cost.Kind == BehaviorCostKind.Credits).Sum(cost => cost.Amount) * context.CreditValue);
@@ -279,7 +274,7 @@ public sealed partial class CorpHeuristicPolicy
                     break;
                 // v29 (bot loop 2): ending a run the ICE ahead stops anyway gains little; LEO trashed the Brân it had just
                 // rezzed against a Runner who couldn't break it.
-                case BehaviorInstructionKind.EndRun when context.Generation >= 24 && RunStopsAnyway(context):
+                case BehaviorInstructionKind.EndRun when RunStopsAnyway(context):
                     total += 50;
                     break;
                 case BehaviorInstructionKind.EndRun:
@@ -290,20 +285,19 @@ public sealed partial class CorpHeuristicPolicy
                     break;
                 // v28 (bot loop 1): the targets the choice can take, cards installed this turn included unless it says not
                 // (PT Untaian's counter on an Urtica Cipher installed that turn was worth nothing and declined).
-                case BehaviorInstructionKind.AdvanceCard when context.Generation >= 23 && chosenTarget is { } advanced:
+                case BehaviorInstructionKind.AdvanceCard when chosenTarget is { } advanced:
                     total += AdvanceTargets(context, advanced.Kind != BehaviorTargetKind.InstalledCardNotThisTurn)
                         .Where(target => advanced.Filter?.Rezzed is not { } rezzed || (target.Rezzed == true) == rezzed)
                         .Select(target => AdvanceTargetValue(context, target, amount, context.Self.Clicks - 1)).DefaultIfEmpty(0).Max();
                     break;
-                case BehaviorInstructionKind.AdvanceCard when context.Generation >= 3:
+                case BehaviorInstructionKind.AdvanceCard:
                     // Playing the card spends a click before the counters land.
                     total += AdvanceTargets(context).Select(target => AdvanceTargetValue(context, target, amount, context.Self.Clicks - 1))
                         .DefaultIfEmpty(0).Max();
                     break;
-                case BehaviorInstructionKind.AdvanceCard: total += amount * 110; break;
                 case BehaviorInstructionKind.RezIgnoringCosts: total += 300; break;
                 case BehaviorInstructionKind.Search: total += 180; break;
-                case BehaviorInstructionKind.ShuffleIntoDeck when context.Generation >= 10 && self
+                case BehaviorInstructionKind.ShuffleIntoDeck when self
                     && instruction.SourceZone == BehaviorZone.Archives:
                     total += ArchivesShuffleValue(context, chosenCount, source);
                     break;

@@ -179,6 +179,11 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     /// rather than spending the last click.
     /// </summary>
     public const string V30 = "corp-heuristic-v30";
+    /// <summary>
+    /// V30's behaviour as the one live policy (bot plan S3): the version checks resolved to V30's and the dead branches gone.
+    /// Every earlier version is <see cref="LegacyCorpPolicy"/>, frozen.
+    /// </summary>
+    public const string V31 = "corp-heuristic-v31";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
     /// V23 fixes V22's faults the reviews of batch 4's losses to Codex found (1 October: known traps advanced, two agendas
@@ -189,44 +194,41 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     /// V26 (A9c and A9d, 2 October) is: at Standard and Easy it plays as V25 (its counting needs the Runner's list), and at
     /// Hard it was level with V25 on the bot ladder. V27 (bot loop 1, 3 October) is the default while the loop measures it.
     /// V28 (loop 1's deferred fixes, 4 October) is the default loop 2 played against. V29 (bot loop 2, 4 October) is the
-    /// default until V30.
+    /// default until V30. V31 (bot plan S3) is V30 as the live policy, identical game by game.
     /// </remarks>
-    public const string PolicyVersion = V30;
+    public const string PolicyVersion = V31;
     /// <summary>The latest version that never plans: the planner's model of the Corp.</summary>
     public const string LatestHeuristic = V8;
-    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25, V26, V27, V28, V29, V30];
+    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25, V26, V27, V28, V29, V30, V31];
 
     /// <summary>Whether the version keeps the A9 tracker of the Runner's hidden cards (v26).</summary>
-    public static bool UsesTracker(string version) => version is V26 or V27 or V28 or V29 or V30;
+    public static bool UsesTracker(string version) => version is V26 or V27 or V28 or V29 or V30 or V31;
 
     public CorpHeuristicPolicy() : this(PolicyVersion) { }
 
     public CorpHeuristicPolicy(string version)
     {
-        if (!Versions.Contains(version)) throw new ArgumentException($"Unknown Corp policy version '{version}'.", nameof(version));
+        if (version != V31) throw new ArgumentException($"The live Corp policy is {V31}; '{version}' is {nameof(LegacyCorpPolicy)}.", nameof(version));
         Version = version;
-        Generation = version switch { V2 => 1, V3 => 2, V7 => 4, V8 or V9 or V10 => 5, V11 => 6, V12 => 7, V13 => 8, V14 => 9, V15 => 10, V16 => 11, V17 => 12, V18 => 13, V19 => 14, V20 => 15, V21 => 16, V22 => 17, V23 => 18, V24 => 19, V25 => 20, V26 => 21, V27 => 22, V28 => 23, V29 => 24, V30 => 25, _ => 3 };
-        Plans = version is V5 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16 or V17 or V18 or V19 or V20 or V21 or V22 or V23 or V24 or V25 or V26 or V27 or V28 or V29 or V30;
-        Repairs = version is V6 or V7 or V8 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16 or V17 or V18 or V19 or V20 or V21 or V22 or V23 or V24 or V25 or V26 or V27 or V28 or V29 or V30;
     }
 
-    /// <summary>Whether this version has the playtest repairs (V6).</summary>
-    private bool Repairs { get; }
-
-    private bool Plans { get; }
+    /// <summary>
+    /// The generation the shared helpers (<see cref="HeuristicContext"/>, RunnerValues, RunModel) still switch on: V30's. They
+    /// keep their switches for <see cref="LegacyCorpPolicy"/>; the live policy has none of its own.
+    /// </summary>
+    private const int ContextGeneration = 25;
 
     public ImmutableArray<AgentCandidate> EvaluateDecision(AgentFeatures features, AgentKnowledge knowledge, AgentObjective? objective,
         OfflineAgentConfiguration configuration, ICardEvaluationCatalog catalog, AgentWorkBudget budget, PlanningContext? planning)
     {
         ImmutableArray<AgentCandidate> heuristic = ((IOfflinePolicy)this).EvaluateDecision(features, knowledge, objective,
             configuration, catalog, budget);
-        if (!Plans || planning is null) return heuristic;
+        if (planning is null) return heuristic;
         var planner = new TurnPlanner(this, configuration, catalog);
         return planner.Applies(features) ? planner.Plan(features, heuristic, knowledge, planning) : heuristic;
     }
 
     public string Version { get; }
-    private int Generation { get; }
 
     public void ValidateAction(AgentFeatures features, AgentAction action)
     {
@@ -261,30 +263,27 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     {
         ValidateAction(features, action);
         if (!budget.TrySpend(8 + features.VisibleCards().Count() * 2)) return Fallback(features, action) with { UsedFallback = true };
-        var context = new HeuristicContext(features, catalog, configuration, Generation)
+        var context = new HeuristicContext(features, catalog, configuration, ContextGeneration)
         {
-            Knowledge = Generation >= 6 ? knowledge : null,
+            Knowledge = knowledge,
         };
         return action.Kind switch
         {
-            ActionKind.GainCredit => Value(context.CreditValue + (context.Self.Credits < (Repairs ? ProtectionReserve(context) : context.RezReserve) ? 150 : 0),
+            ActionKind.GainCredit => Value(context.CreditValue + (context.Self.Credits < ProtectionReserve(context) ? 150 : 0),
                 "economy/basic-credit-and-rez-reserve"),
             ActionKind.DrawCard => Value(features.Board.HiddenZoneCounts.CorpDeck > 1 ? context.DrawValue : -10000, "economy/draw-reserve"),
             ActionKind.PlayCard => Play(context, Require<PlayCardParameters>(action)),
             ActionKind.InstallCard when action.Parameters is BehaviorInstallChoiceParameters behaviorInstall =>
                 behaviorInstall.Choice is { } chosen
-                    ? Install(context, HeuristicContext.AsInstall(chosen), Repairs)
+                    ? Install(context, HeuristicContext.AsInstall(chosen))
                     : Value(0, "install/decline-card-effect"),
-            ActionKind.InstallCard => Install(context, Require<InstallCardParameters>(action), Repairs),
-            ActionKind.RezCard => Rez(context, Require<RezCardParameters>(action).CardId, Require<RezCardParameters>(action).CreditCost, Repairs),
+            ActionKind.InstallCard => Install(context, Require<InstallCardParameters>(action)),
+            ActionKind.RezCard => Rez(context, Require<RezCardParameters>(action).CardId, Require<RezCardParameters>(action).CreditCost),
             ActionKind.RezIce => Rez(context, Require<RunIceParameters>(action).IceId, Require<RunIceParameters>(action).CostQuote?.EffectiveCost
-                ?? context.Definition(Require<RunIceParameters>(action).IceId)?.Ice?.RezCost ?? 0, Repairs),
-            ActionKind.AdvanceAgenda or ActionKind.AdvanceCard => Advance(context, Require<AdvanceCardParameters>(action), Repairs),
+                ?? context.Definition(Require<RunIceParameters>(action).IceId)?.Ice?.RezCost ?? 0),
+            ActionKind.AdvanceAgenda or ActionKind.AdvanceCard => Advance(context, Require<AdvanceCardParameters>(action)),
             ActionKind.ScoreAgenda => Score(context, Require<ScoreAgendaParameters>(action)),
-            ActionKind.TrashTaggedResource => Generation >= 8
-                ? TrashTagged(context, Require<TrashTaggedResourceParameters>(action))
-                : Value(context.CardValue(context.Card(Require<TrashTaggedResourceParameters>(action).CardId), installed: true)
-                    - Require<TrashTaggedResourceParameters>(action).CreditCost * context.CreditValue, "pressure/trash-tagged-resource"),
+            ActionKind.TrashTaggedResource => TrashTagged(context, Require<TrashTaggedResourceParameters>(action)),
             ActionKind.PurgeVirusCounters => Purge(context, Require<PurgeVirusCountersParameters>(action)),
             ActionKind.UseAbility => Ability(context, Require<AbilityActionParameters>(action)),
             ActionKind.ChooseBehavior => ChooseBehavior(context, Require<BehaviorChoiceParameters>(action)),

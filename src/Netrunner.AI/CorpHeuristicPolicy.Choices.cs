@@ -17,13 +17,7 @@ public sealed partial class CorpHeuristicPolicy
     {
         if (choice.Choice == IceSubroutineChoiceKind.Decline) return Value(0, "subroutine/decline");
         if (choice.Choice == IceSubroutineChoiceKind.TrashInstalledRunnerCard && choice.CardId is { } target)
-            return Value(context.Generation == 19 ? RunnerThreat(context, context.Card(target))
-                : context.CardValue(context.Card(target), installed: true), "subroutine/remove-coverage", approximate: true);
-        // v24 (Codex reviews, 1 October): ending the run is worth what the run would reach; Ballista trashed Cleaver instead,
-        // and the Runner went on to steal Offworld Office.
-        // Only v24 (with its other fixes below): it lost to Codex where v23 won, and v25 leaves them out.
-        if (context.Generation == 19 && choice.Choice == IceSubroutineChoiceKind.EndRun)
-            return Value(context.ServerValue(context.Features.Board.Servers.FirstOrDefault(server => server.Id == context.Features.Board.Run?.AttackedServer)) + 100, "subroutine/end-run-protects-server", approximate: true);
+            return Value(context.CardValue(context.Card(target), installed: true), "subroutine/remove-coverage", approximate: true);
         if (choice.Choice == IceSubroutineChoiceKind.InstallCard && choice.CardId is { } incoming)
         {
             CardEvaluationDescriptor? definition = context.Definition(incoming);
@@ -31,7 +25,7 @@ public sealed partial class CorpHeuristicPolicy
             bool exposingWinningHq = context.Opponent.AgendaPoints >= 5 && context.AgendaCount > 0
                 && context.Features.Board.Run?.AttackedServer == context.Features.Board.Servers.Single(value => value.Kind == ServerKind.Headquarters).Id
                 && definition?.Ice is { } ice && ice.RezCost > context.Self.Credits;
-            if (context.Generation >= 12 && definition is { Ice: null })
+            if (definition is { Ice: null })
                 return Value(RootInstallBySubroutine(context, server, definition) - choice.CreditCost * context.CreditValue,
                     "subroutine/root-install-minus-displaced", approximate: true);
             int value = exposingWinningHq ? -1000 : context.ServerValue(server) / ((server?.Ice.Length ?? 0) + 1)
@@ -52,7 +46,7 @@ public sealed partial class CorpHeuristicPolicy
     {
         // An agenda goes in only behind ICE; in a new or open remote the Runner simply takes it. v19 (oddity
         // lints, 1 October): nor into the server being run, where the Runner is about to access it.
-        bool beingRun = context.Generation >= 14 && server is not null && context.Features.Board.Run?.AttackedServer == server.Id;
+        bool beingRun = server is not null && context.Features.Board.Run?.AttackedServer == server.Id;
         int gain = definition.Agenda is not null ? (beingRun ? -600 : (server?.Ice.Length ?? 0) > 0 ? 200 : -400)
             : definition.Printed.CardClass == RuntimeCardClass.Asset ? 160 : 100;
         if (server is not { Kind: ServerKind.Remote }) return gain;
@@ -92,7 +86,7 @@ public sealed partial class CorpHeuristicPolicy
                 int effect = Effects(context, option.Instructions, null, plan.Controller);
                 // v28 (bot loop 1): a useful counter a choice places saves the click an advance would spend (PT Untaian's
                 // 1-credit counter at the end of the discard phase was declined every turn).
-                if (context.Generation >= 23 && effect > 0)
+                if (effect > 0)
                     effect += option.Instructions.Where(instruction => instruction.Kind == BehaviorInstructionKind.AdvanceCard).Sum(instruction => instruction.Amount) * 100;
                 return effect - (option.Costs ?? []).Where(cost => cost.Kind == BehaviorCostKind.Credits).Sum(cost => cost.Amount) * context.CreditValue;
             });
@@ -108,9 +102,9 @@ public sealed partial class CorpHeuristicPolicy
         int amount = plan.Consumers.FirstOrDefault(instruction => instruction.Kind == BehaviorInstructionKind.AdvanceCard)?.Amount ?? 1;
         // v20 (Codex review, 1 October): Sprint shuffled its two most valuable cards from HQ, the winning agenda among
         // them; from HQ, a card shuffled back is a card lost, and an agenda is hidden only when it can't win.
-        bool fromHand = context.Generation >= 15 && intent == BehaviorInstructionKind.ShuffleIntoDeck
+        bool fromHand = intent == BehaviorInstructionKind.ShuffleIntoDeck
             && plan.Consumers.Any(instruction => instruction.Kind == BehaviorInstructionKind.ShuffleIntoDeck && instruction.SourceZone == BehaviorZone.Headquarters);
-        int score = context.Generation >= 13 && intent == BehaviorInstructionKind.AdvanceCard
+        int score = intent == BehaviorInstructionKind.AdvanceCard
             ? choice.CardIds.Sum(id => AdvanceTargetValue(context, context.Card(id), Math.Max(1, amount), context.Self.Clicks))
             : fromHand ? choice.CardIds.Sum(id => ShuffleFromHandValue(context, context.Card(id)))
             : choice.CardIds.Sum(id => TargetValue(context, id, intent));
@@ -146,7 +140,7 @@ public sealed partial class CorpHeuristicPolicy
         // v24 (Codex reviews, 1 October): trashing the Runner's card is worth its threat; the sign made Retribution pick the
         // Runner's least useful card.
         // v29 (bot loop 2): again from v29 on; Bumi declined to trash the Botulus that kept breaking R&D's Palisade.
-        if ((context.Generation == 19 || context.Generation >= 24) && intent == BehaviorInstructionKind.TrashCard
+        if (intent == BehaviorInstructionKind.TrashCard
             && definition?.Printed.Side == PlayerSide.Runner)
             return RunnerThreat(context, card);
         return intent switch

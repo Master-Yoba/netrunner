@@ -102,7 +102,7 @@ public sealed class CorpPolicyAdvancementTests
     private static async Task<ImmutableArray<(ActionKind Kind, int Score)>> Evaluate(TacticalBoard board, string version)
     {
         GameState state = board.Action(PlayerSide.Corp);
-        var agent = new OfflineAgent(CorpPolicyProfiles.Create("standard", 5301, version), new CorpHeuristicPolicy(version),
+        var agent = new OfflineAgent(CorpPolicyProfiles.Create("standard", 5301, version), OfflinePolicies.Create(CorpPolicyProfiles.Create("standard", 5301, version)),
             new GatewayEvaluationCatalog(board.Runtime, board.Behavior), captureDiagnostics: true);
         AgentLifecycleHost.Observe(agent, state, board.Behavior);
         Observation observation = ObservationBuilder.Build(state, PlayerSide.Corp, board.Behavior);

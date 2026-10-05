@@ -23,9 +23,14 @@ public static class OfflinePolicies
     public static IOfflinePolicy Create(OfflineAgentConfiguration configuration)
     {
         Validate(configuration);
-        return configuration.Side == PlayerSide.Corp
-            ? new CorpHeuristicPolicy(configuration.PolicyVersion)
-            : new RunnerHeuristicPolicy(configuration.PolicyVersion);
+        // Bot plan S3: one live policy a side; every earlier version is frozen legacy code.
+        return (configuration.Side, configuration.PolicyVersion) switch
+        {
+            (PlayerSide.Corp, CorpHeuristicPolicy.V31) => new CorpHeuristicPolicy(configuration.PolicyVersion),
+            (PlayerSide.Corp, _) => new LegacyCorpPolicy(configuration.PolicyVersion),
+            (_, RunnerHeuristicPolicy.V27) => new RunnerHeuristicPolicy(configuration.PolicyVersion),
+            _ => new LegacyRunnerPolicy(configuration.PolicyVersion),
+        };
     }
 
     /// <summary>The latest version for a side that never plans.</summary>

@@ -7,6 +7,25 @@ namespace Netrunner.Match.Tests;
 
 public sealed class RatingLadderTests
 {
+    /// <summary>
+    /// Bot plan S3: an agent's random stream comes from the match seed and its side, never its version, so a version that
+    /// plays as another (v31 as v30) plays the same games: the seat-swap identity gate depends on it.
+    /// </summary>
+    [Fact]
+    public void TheLiveAndThePreviousVersionShareTheirSeeds()
+    {
+        FullMatchDefinition definition = RulesFuzzRunner.CreateDefinition(
+            CardDataResource.EmbeddedMode == CardDataResource.OfficialMode ? RulesFuzzRunner.GatewayElevationContentIds[0] : RulesFuzzRunner.DeveloperContentId, 9);
+        foreach (PlayerSide side in new[] { PlayerSide.Corp, PlayerSide.Runner })
+        {
+            var live = (OfflineAgent)RatingLadder.CreateAgent("standard", side, definition);
+            var previous = (OfflineAgent)RatingLadder.CreateAgent("standard-prev", side, definition);
+            Assert.Equal(live.Configuration.PolicySeed, previous.Configuration.PolicySeed);
+            Assert.Equal(side == PlayerSide.Corp ? CorpHeuristicPolicy.V30 : RunnerHeuristicPolicy.V26, previous.Configuration.PolicyVersion);
+            Assert.Equal(side == PlayerSide.Corp ? CorpHeuristicPolicy.V31 : RunnerHeuristicPolicy.V27, live.Configuration.PolicyVersion);
+        }
+    }
+
     [Fact]
     public void BudgetScalingEntrantsPlanAMultipleOfHardsSamples()
     {
