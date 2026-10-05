@@ -81,6 +81,16 @@ public sealed class PolicyVersionTests
     };
 
     [Fact]
+    public void APlannedCandidateSharesTheBandOfItsPriority()
+    {
+        Assert.Equal(0, PlannerPriorities.Band(0));
+        Assert.Equal(-1, PlannerPriorities.Band(-1));
+        Assert.Equal(-100, PlannerPriorities.Band(-100));
+        Assert.Equal(0, PlannerPriorities.Band(PlannerPriorities.Planned));
+        Assert.Equal(-1, PlannerPriorities.Band(PlannerPriorities.Planned - 1));
+    }
+
+    [Fact]
     public void LatestVersionsAreTheDefaultsAndUnknownVersionsFail()
     {
         Assert.Equal(RunnerHeuristicPolicy.V27, OfflinePolicies.Configure(PlayerSide.Runner, "standard", 1).PolicyVersion);

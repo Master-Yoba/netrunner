@@ -333,3 +333,15 @@ internal sealed class TurnPlanner
         return _pools[side] = new OpponentCardPool.AnyOf(cards);
     }
 }
+
+/// <summary>
+/// The heuristic's priority bands, read through the planner's offset (bot plan S1.4): a planned candidate's priority is
+/// <see cref="Planned"/> plus its band, so a planned and an unplanned candidate of one band compare as equals.
+/// </summary>
+public static class PlannerPriorities
+{
+    public const int Planned = TurnPlanner.PlannedPriority;
+
+    /// <summary>The band of a candidate's priority: 0 for an ordinary action, below it for a discouraged or vetoed one.</summary>
+    public static int Band(int priority) => priority >= Planned / 2 ? priority - Planned : priority;
+}

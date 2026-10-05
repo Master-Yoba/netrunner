@@ -140,7 +140,8 @@ public sealed class RegretSuiteTests
         Assert.Equal(suite.Games.Length, games.Count);
         Assert.Equal(suite.Roots.Length, roots.Count);
         Assert.All(suite.Roots, root => Assert.Contains(root.GameId, games));
-        Assert.All(suite.Roots, root => Assert.InRange(root.Candidates.Length, 2, 6));
+        Assert.All(suite.Roots, root => Assert.True(root.Candidates.Length >= 1));
+        Assert.All(suite.Roots, root => Assert.Equal(root.Candidates.Length, root.Candidates.Select(candidate => candidate.Group).Distinct().Count()));
         // A root no sample could play every candidate on is left unlabelled; there are few.
         Assert.Subset(roots, suite.Labels.Select(label => label.RootId).ToHashSet());
         Assert.True(suite.Labels.Length >= suite.Roots.Length * 0.99);

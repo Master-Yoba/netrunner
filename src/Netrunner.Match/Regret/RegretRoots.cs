@@ -11,10 +11,11 @@ namespace Netrunner.Match.Regret;
 /// <summary>How roots are drawn from a game (bot plan S1.1).</summary>
 /// <param name="TurnRoots">Turn-action roots kept per game, drawn from those whose two best candidate groups are close.</param>
 /// <param name="RunRoots">Run-choice roots kept per game (continue or jack out, trash or not, rez or not).</param>
-/// <param name="Labelled">Candidate groups the teacher labels at a root, the heuristic's best first.</param>
+/// <param name="Labelled">At most this many candidate groups at a root, the heuristic's best first; 0 keeps every meaningful
+/// group (S1.4): every group whose priority band is within one of the best group's.</param>
 /// <param name="CloseShare">Two groups are close when their priorities are equal and their scores within this share of the best.</param>
 /// <param name="Seed">The draw's seed.</param>
-public sealed record RegretSampling(int TurnRoots = 7, int RunRoots = 2, int Labelled = 6, double CloseShare = 0.2, ulong Seed = 1);
+public sealed record RegretSampling(int TurnRoots = 7, int RunRoots = 2, int Labelled = 0, double CloseShare = 0.2, ulong Seed = 1);
 
 /// <summary>Draws a game's decision roots, judging candidates by the latest Standard heuristic of the acting side.</summary>
 public static partial class RegretRoots
@@ -93,6 +94,35 @@ public static partial class RegretRoots
     private static string Truncate(string value, int length) => value.Length <= length ? value : value[..length] + "…";
 
     /// <summary>
+    /// The roots of a game with every meaningful group (S1.4): each root keeps its groups, in their order, and gains those of
+    /// the heuristic's meaningful groups it lacked, after them. Labels of the groups it had stay valid.
+    /// </summary>
+    public static ImmutableArray<RegretRoot> Extend(RegretGame game, IReadOnlyList<RegretRoot> roots, RegretSampling sampling)
+    {
+        ArgumentNullException.ThrowIfNull(game);
+        ArgumentNullException.ThrowIfNull(roots);
+        ArgumentNullException.ThrowIfNull(sampling);
+        var bySequence = roots.ToDictionary(root => root.Sequence);
+        FullMatchDefinition definition = RegretGames.Definition(game);
+        var agents = new Dictionary<PlayerSide, OfflineAgent>
+        {
+            [PlayerSide.Corp] = Judge(definition, PlayerSide.Corp),
+            [PlayerSide.Runner] = Judge(definition, PlayerSide.Runner),
+        };
+        var extended = new Dictionary<long, RegretRoot>();
+        RegretGames.Replay(game, definition, position =>
+        {
+            foreach (OfflineAgent agent in agents.Values) AgentLifecycleHost.Observe(agent, position.State, definition.Behavior);
+            if (!bySequence.TryGetValue(position.Sequence, out RegretRoot? root)) return;
+            RegretRoot? meaningful = Root(game, definition, position, agents, sampling, finding: true);
+            HashSet<string> had = [.. root.Candidates.Select(candidate => candidate.Group)];
+            extended[position.Sequence] = meaningful is null ? root
+                : root with { Candidates = [.. root.Candidates, .. meaningful.Candidates.Where(candidate => !had.Contains(candidate.Group))] };
+        });
+        return [.. roots.Select(root => extended.GetValueOrDefault(root.Sequence, root))];
+    }
+
+    /// <summary>
     /// The roots at given decisions of a game, whatever their kind (the loops' and strategy work's findings): every
     /// decision with at least two distinct choices, its groups ranked and cut as a drawn root's are.
     /// </summary>
@@ -147,7 +177,18 @@ public static partial class RegretRoots
             if (!close) return null;
         }
         return new RegretRoot($"{game.Id}#{position.Sequence}", game.Id, position.Sequence, side, kind, game.Split,
-            [kind, side == PlayerSide.Corp ? "corp" : "runner"], [.. ranked.Take(sampling.Labelled)]);
+            [kind, side == PlayerSide.Corp ? "corp" : "runner"], [.. Meaningful(ranked, utilities, sampling.Labelled)]);
+    }
+
+    /// <summary>
+    /// The groups worth labelling, in the heuristic's order (S1.4): those whose priority band is within one of the best
+    /// group's (a discouraged action next to ordinary ones, not a vetoed one), cut to <paramref name="cap"/> when it is set.
+    /// </summary>
+    internal static IEnumerable<RegretCandidate> Meaningful(IReadOnlyList<RegretCandidate> ranked, Dictionary<string, AgentUtility> utilities, int cap)
+    {
+        int best = PlannerPriorities.Band(Best(ranked[0], utilities).Priority);
+        IEnumerable<RegretCandidate> kept = ranked.Where(group => PlannerPriorities.Band(Best(group, utilities).Priority) >= best - 1);
+        return cap > 0 ? kept.Take(cap) : kept;
     }
 
     private static AgentUtility Best(RegretCandidate group, Dictionary<string, AgentUtility> utilities) => group.ActionIds

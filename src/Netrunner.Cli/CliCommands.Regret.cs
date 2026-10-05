@@ -19,6 +19,7 @@ public static partial class CliCommands
     ///   [--blunders N] [--bootstrap N] [--workers N] [--json]
     /// ai-regret findings SUITE-DIR --manifest FILE --fixtures DIR --content POOL [--labelled N]
     /// ai-regret dedupe SUITE-DIR
+    /// ai-regret extend SUITE-DIR [--labelled N] [--workers N] (every meaningful group at every root, S1.4)
     /// </summary>
     private static int RunAiRegret(string[] args, TextWriter output, TextWriter error)
     {
@@ -35,6 +36,7 @@ public static partial class CliCommands
                 "score" => RegretScoreCommand(args[2], options, output),
                 "findings" => RegretFindingsCommand(args[2], options, output),
                 "dedupe" => RegretDedupeCommand(args[2], options, output),
+                "extend" => RegretExtendCommand(args[2], options, output, error),
                 _ => throw new ArgumentException($"Unknown ai-regret command '{args[1]}'."),
             };
         }
@@ -47,11 +49,12 @@ public static partial class CliCommands
 
     private sealed record RegretOptions(string? Output, int TurnRoots, int RunRoots, int Labelled, ulong Seed, int Workers, int Samples,
         int HorizonTurns, int Evaluation, string LabelsFile, int Repeat, ulong RepeatSeed, string[] Versions, string Profile, string Split,
-        int Blunders, int Bootstrap, bool Json, bool Missing = false, string? Manifest = null, string? Fixtures = null, string? Content = null)
+        int Blunders, int Bootstrap, bool Json, bool Missing = false, string? Manifest = null, string? Fixtures = null, string? Content = null,
+        bool LabelMissing = false)
     {
         public static RegretOptions Parse(string[] args)
         {
-            var options = new RegretOptions(null, 7, 2, 6, 1, 1, 32, 0, 4, RegretSuite.LabelsFile, 0, 2, [], "standard", "all", 0, 200, false);
+            var options = new RegretOptions(null, 7, 2, 0, 1, 1, 32, 0, 4, RegretSuite.LabelsFile, 0, 2, [], "standard", "all", 0, 200, false);
             for (int index = 3; index < args.Length; index++)
             {
                 string Next() => index + 1 < args.Length ? args[++index] : throw new ArgumentException($"{args[index]} needs a value.");
@@ -61,7 +64,7 @@ public static partial class CliCommands
                     "--output" => options with { Output = Next() },
                     "--turn-roots" => options with { TurnRoots = Int("--turn-roots", 0, 1000) },
                     "--run-roots" => options with { RunRoots = Int("--run-roots", 0, 1000) },
-                    "--labelled" => options with { Labelled = Int("--labelled", 2, 64) },
+                    "--labelled" => options with { Labelled = Int("--labelled", 0, 64) },
                     "--seed" => options with { Seed = ulong.Parse(Next(), NumberStyles.None, CultureInfo.InvariantCulture) },
                     "--workers" => options with { Workers = Int("--workers", 1, 64) },
                     "--samples" => options with { Samples = Int("--samples", 1, 4096) },
@@ -87,6 +90,7 @@ public static partial class CliCommands
                     "--bootstrap" => options with { Bootstrap = Int("--bootstrap", 0, 100_000) },
                     "--json" => options with { Json = true },
                     "--missing" => options with { Missing = true },
+                    "--label-missing" => options with { LabelMissing = true },
                     "--manifest" => options with { Manifest = Next() },
                     "--fixtures" => options with { Fixtures = Next() },
                     "--content" => options with { Content = Next() },
@@ -177,6 +181,8 @@ public static partial class CliCommands
                 .SelectMany(found => found).OrderBy(choice => choice.RootId, StringComparer.Ordinal)];
             results.Add((version, side, choices, started.Elapsed));
         }
+        if (options.LabelMissing && LabelMissing(suiteDirectory, suite, labels, results.SelectMany(result => result.Choices), options, output) > 0)
+            return RegretScoreCommand(suiteDirectory, options with { LabelMissing = false }, output);
         RegretComparison[] comparisons = [.. results.SelectMany((first, index) => results.Skip(index + 1).Where(second => second.Side == first.Side)
             .Select(second => RegretReport.Compare(first.Version, first.Choices, second.Version, second.Choices, options.Bootstrap, options.Seed)))];
         var report = results.Select(result => new
@@ -276,6 +282,58 @@ public static partial class CliCommands
             RegretSuite.WriteLines(file, RegretSuite.ReadLines<RegretLabel>(file)
                 .Where(label => !gamesOf.Contains(label.RootId[..label.RootId.LastIndexOf('#')])).ToArray());
         output.WriteLine($"ai-regret findings games={games.Count} roots={roots.Count} of {findings.Count}");
+        return 0;
+    }
+
+    /// <summary>
+    /// S1.4: labels the groups the scored versions chose that have no value, with each root's own teacher settings and
+    /// seed, and writes them into the suite and its labels file; returns how many were labelled.
+    /// </summary>
+    private static int LabelMissing(string suiteDirectory, RegretSuite suite, Dictionary<string, RegretLabel> labels,
+        IEnumerable<RegretChoice> choices, RegretOptions options, TextWriter output)
+    {
+        var rootsById = suite.Roots.ToDictionary(root => root.Id);
+        var wanted = choices.Where(choice => choice.Regret is null && choice.Missing is not null && labels.ContainsKey(choice.RootId))
+            .GroupBy(choice => choice.RootId)
+            .Select(group => (Root: rootsById[group.Key], Label: labels[group.Key],
+                Groups: (IReadOnlyList<RegretCandidate>)[.. group.Select(choice => choice.Missing!).DistinctBy(candidate => candidate.Group)
+                    .Where(candidate => !labels[group.Key].Values.Any(value => value.Group == candidate.Group))]))
+            .Where(request => request.Groups.Count > 0).ToList();
+        if (wanted.Count == 0) return 0;
+        var byGame = wanted.GroupBy(request => request.Root.GameId).ToDictionary(group => group.Key, group => group.ToList());
+        RegretGame[] games = [.. suite.Games.Where(game => byGame.ContainsKey(game.Id))];
+        var found = ForGames(games, options.Workers, TextWriter.Null, "label-missing",
+                game => RegretLabels.LabelGroups(game, [.. byGame[game.Id].Select(request => (request.Root, request.Label, request.Groups))]))
+            .SelectMany(values => values).ToDictionary(pair => pair.Key, pair => pair.Value);
+        var groupsByRoot = wanted.ToDictionary(request => request.Root.Id, request => request.Groups);
+        RegretRoot[] roots = [.. suite.Roots.Select(root => groupsByRoot.TryGetValue(root.Id, out var added)
+            ? root with { Candidates = [.. root.Candidates, .. added.Where(candidate => root.Candidates.All(had => had.Group != candidate.Group))] }
+            : root)];
+        new RegretSuite(suite.Games, [.. roots], []).Save(suiteDirectory);
+        RegretLabel[] merged = [.. labels.Values.Select(label => found.TryGetValue(label.RootId, out var added)
+            ? label with { Values = [.. label.Values, .. added] } : label).OrderBy(label => label.RootId, StringComparer.Ordinal)];
+        RegretSuite.WriteLines(Path.Combine(suiteDirectory, options.LabelsFile), merged);
+        int count = found.Values.Sum(values => values.Length);
+        output.WriteLine(string.Create(CultureInfo.InvariantCulture,
+            $"ai-regret label-missing roots={found.Count} groups={count} of {wanted.Sum(request => request.Groups.Count)} wanted"));
+        return count;
+    }
+
+    /// <summary>
+    /// S1.4: gives every root of a suite its meaningful groups (the heuristic's band rule), keeping the groups and labels it
+    /// had; the new groups are labelled by a relabel or on demand (<c>score --label-missing</c>).
+    /// </summary>
+    private static int RegretExtendCommand(string suiteDirectory, RegretOptions options, TextWriter output, TextWriter error)
+    {
+        RegretSuite suite = RegretSuite.Load(suiteDirectory);
+        var sampling = new RegretSampling(Labelled: options.Labelled, Seed: options.Seed);
+        var byGame = suite.Roots.GroupBy(root => root.GameId).ToDictionary(group => group.Key, group => group.ToList());
+        RegretGame[] games = [.. suite.Games.Where(game => byGame.ContainsKey(game.Id))];
+        RegretRoot[] roots = [.. ForGames(games, options.Workers, error, "extend", game => RegretRoots.Extend(game, byGame[game.Id], sampling))
+            .SelectMany(found => found)];
+        new RegretSuite(suite.Games, [.. roots], []).Save(suiteDirectory);
+        output.WriteLine(string.Create(CultureInfo.InvariantCulture,
+            $"ai-regret extend roots={roots.Length} groups={suite.Roots.Sum(root => root.Candidates.Length)}->{roots.Sum(root => root.Candidates.Length)}"));
         return 0;
     }
 

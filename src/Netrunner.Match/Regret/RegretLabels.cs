@@ -40,6 +40,38 @@ public static class RegretLabels
         return labels.ToImmutable();
     }
 
+    /// <summary>
+    /// Labels further groups at roots that have a label (S1.4, <c>ai-regret score --label-missing</c>): each with the root's
+    /// own settings and seed, so the new groups are played on the samples the root's other groups were.
+    /// </summary>
+    public static IReadOnlyDictionary<string, ImmutableArray<RegretValue>> LabelGroups(RegretGame game,
+        IReadOnlyList<(RegretRoot Root, RegretLabel Label, IReadOnlyList<RegretCandidate> Groups)> requests)
+    {
+        ArgumentNullException.ThrowIfNull(game);
+        ArgumentNullException.ThrowIfNull(requests);
+        var values = new Dictionary<string, ImmutableArray<RegretValue>>(StringComparer.Ordinal);
+        if (requests.Count == 0) return values;
+        FullMatchDefinition definition = RegretGames.Definition(game);
+        var bySequence = requests.ToDictionary(request => request.Root.Sequence);
+        var teachers = new Dictionary<PlayerSide, OfflineAgent>
+        {
+            [PlayerSide.Corp] = Teacher(definition, PlayerSide.Corp),
+            [PlayerSide.Runner] = Teacher(definition, PlayerSide.Runner),
+        };
+        RegretGames.Replay(game, definition, position =>
+        {
+            foreach (OfflineAgent teacher in teachers.Values) AgentLifecycleHost.Observe(teacher, position.State, definition.Behavior);
+            if (!bySequence.TryGetValue(position.Sequence, out var request)) return;
+            var settings = new TeacherSettings(request.Label.Samples, request.Label.Seed, request.Label.HorizonTurns, request.Label.Evaluation);
+            IReadOnlyList<TeacherValue> found = RolloutTeacher.Evaluate(teachers[request.Root.Side],
+                ObservationBuilder.Build(position.State, request.Root.Side, definition.Behavior, definition.Runtime),
+                [.. request.Groups.Select(group => new ActionId(group.ActionIds[0]))], settings);
+            values[request.Root.Id] = [.. request.Groups.Zip(found, (group, value) => new RegretValue(group.Group, value.Mean, value.StandardError, value.PlayOuts))
+                .Where(value => value.PlayOuts > 0)];
+        });
+        return values;
+    }
+
     private static OfflineAgent Teacher(FullMatchDefinition definition, PlayerSide side) =>
         RatingLadder.CreateAgent("hard", side, definition) as OfflineAgent
             ?? throw new InvalidOperationException("The Hard bot is not an offline agent.");
@@ -50,8 +82,9 @@ public static class RegretLabels
 /// <param name="Regret">The best labelled value minus the chosen group's, in win probability; null when unlabelled.</param>
 /// <param name="Agrees">Whether the chosen group is the teacher's best.</param>
 /// <param name="AgreesWithinNoise">Whether the chosen group is within the two standard errors' sum of the best.</param>
+/// <param name="Missing">The chosen group when it is not one of the labelled groups (S1.4: labelled on demand).</param>
 public sealed record RegretChoice(string RootId, PlayerSide Side, string Kind, string Split, string? Chosen, string ChosenDescription,
-    string Reason, double? Regret, bool? Agrees, bool? AgreesWithinNoise);
+    string Reason, double? Regret, bool? Agrees, bool? AgreesWithinNoise, RegretCandidate? Missing = null);
 
 /// <summary>Asks a policy version to choose at every root of a game, through the production path (bot plan S1.3).</summary>
 public static class RegretScores
@@ -81,7 +114,10 @@ public static class RegretScores
             string reason = chooser.LastEvaluation?.Candidates.FirstOrDefault(candidate => candidate.ActionId == chosen)?.Utility.Reason ?? "";
             chooser.DiscardDecision();
             string description = position.State.PendingDecision!.LegalActions.First(action => action.Id == chosen).Description;
-            choices.Add(Score(root, labels[root.Id], chosen, description, reason));
+            RegretChoice choice = Score(root, labels[root.Id], chosen, description, reason);
+            choices.Add(choice.Regret is null
+                ? choice with { Missing = RegretRoots.Group(position.State, position.State.PendingDecision!).First(group => group.ActionIds.Contains(chosen.Value)) }
+                : choice);
         });
         return choices.ToImmutable();
     }
