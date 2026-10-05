@@ -88,6 +88,9 @@ Confirm each finding against the replay before fixing anything:
 
 ## 7. Verify
 
+> Replaced by [BOT_PLAN.md](BOT_PLAN.md) section 6 and the tiers in `AGENTS.md` (bot plan S2.3); kept as the record of
+> how loops were verified.
+
 Order the checks so a failure shows before the long runs start, with no other load on the machine. Each step runs only
 on a change that passed the steps before it:
 

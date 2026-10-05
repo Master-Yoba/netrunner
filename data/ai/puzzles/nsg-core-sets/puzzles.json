@@ -1,0 +1,103 @@
+[
+  {
+    "id": "poetri-install",
+    "title": "Poetri's scoring install from R&D is taken",
+    "category": "economy",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop1-101",
+    "sequence": 401,
+    "side": "corp",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "installCard",
+          "parameters": {
+            "choice": {}
+          }
+        }
+      ]
+    },
+    "source": "BotLoop1Tests.PoetrisScoringInstallFromRAndDIsTaken"
+  },
+  {
+    "id": "scatter-field-alone",
+    "title": "A lone Scatter Field is seen at strength four",
+    "category": "run-targeting",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop2-204",
+    "sequence": 78,
+    "side": "runner",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "startRun",
+          "parameters": {
+            "serverId": "server:7"
+          }
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "BotLoop2Tests.ALoneScatterFieldIsSeenAtStrengthFour"
+  },
+  {
+    "id": "one-card-draws",
+    "title": "One card in the grip draws before running unknown ICE",
+    "category": "punisher-risk",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop2-203",
+    "sequence": 704,
+    "side": "runner",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "drawCard"
+        }
+      ]
+    },
+    "source": "BotLoop2Tests.OneCardInTheGripDrawsBeforeRunningUnknownIce"
+  },
+  {
+    "id": "public-access-plaza",
+    "title": "Public Access Plaza is rezzed for its turn income",
+    "category": "rez-timing",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop2-201",
+    "sequence": 163,
+    "side": "corp",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "rezCard",
+          "parameters": {
+            "cardId": "def:35062"
+          }
+        }
+      ]
+    },
+    "source": "BotLoop2Tests.PublicAccessPlazaIsRezzedForItsTurnIncome"
+  },
+  {
+    "id": "amaze-no-agenda",
+    "title": "AMAZE Amusements isn't rezzed in a remote with no agenda",
+    "category": "rez-timing",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop2-202",
+    "sequence": 394,
+    "side": "corp",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "rezCard"
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "BotLoop2Tests.AmazeAmusementsIsNotRezzedInARemoteWithNoAgenda"
+  }
+]

@@ -61,15 +61,29 @@ public static partial class RegretRoots
     /// </summary>
     public static IReadOnlyList<RegretCandidate> Group(GameState state, PendingDecision pending)
     {
-        var definitions = state.Cards.ToDictionary(card => card.Id.Value, card => card.DefinitionId.Value, StringComparer.Ordinal);
-        string Choice(LegalAction action) => CardInstance().Replace(EngineJson.Serialize(action.Parameters),
-            match => definitions.TryGetValue(match.Value, out string? definition) ? "def:" + definition : match.Value);
+        var definitions = Definitions(state);
+        string Choice(LegalAction action) => Parameters(definitions, action);
         return [.. pending.LegalActions
             .GroupBy(action => (action.Kind, Choice: Choice(action)))
             .Select(group => new RegretCandidate($"{group.Key.Kind}|{Short(group.Key.Choice)}", group.Key.Kind,
                 $"{group.First().Description} {Truncate(group.Key.Choice, 200)}", [.. group.Select(action => action.Id.Value).Order(StringComparer.Ordinal)]))
             .OrderBy(candidate => candidate.Group, StringComparer.Ordinal)];
     }
+
+    /// <summary>An action's parameters as JSON with every card instance read as its definition (<c>def:ID</c>).</summary>
+    public static string Parameters(GameState state, LegalAction action)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(action);
+        return Parameters(Definitions(state), action);
+    }
+
+    private static Dictionary<string, string> Definitions(GameState state) =>
+        state.Cards.ToDictionary(card => card.Id.Value, card => card.DefinitionId.Value, StringComparer.Ordinal);
+
+    private static string Parameters(Dictionary<string, string> definitions, LegalAction action) =>
+        CardInstance().Replace(EngineJson.Serialize(action.Parameters),
+            match => definitions.TryGetValue(match.Value, out string? definition) ? "def:" + definition : match.Value);
 
     [GeneratedRegex(@"card:\d+", RegexOptions.CultureInvariant)]
     private static partial Regex CardInstance();

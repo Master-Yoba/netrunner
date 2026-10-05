@@ -117,6 +117,11 @@ public static partial class CliCommands
             return RunAiLlmReview(args, output, error);
         }
 
+        if (args.Length > 0 && args[0] == "ai-puzzles")
+        {
+            return RunAiPuzzles(args, output, error);
+        }
+
         if (args.Length > 0 && args[0] == "ai-regret")
         {
             return RunAiRegret(args, output, error);
@@ -284,6 +289,9 @@ public static partial class CliCommands
             + "ai-regret roots <games-dir> --output <suite-dir> [--turn-roots N] [--run-roots N] [--labelled N] [--seed S] [--workers N] | "
             + "ai-regret label <suite-dir> [--samples N] [--horizon game|TURNS] [--evaluation N] [--seed S] [--workers N] [--labels FILE] [--missing] [--repeat N --repeat-seed S] | "
             + "ai-regret score <suite-dir> --version V[,V...] [--profile P] [--split all|held-out|train] [--labels FILE] [--blunders N] [--bootstrap N] [--workers N] [--json] | "
+            + "ai-puzzles run <set-dir> [--corp V] [--runner V] [--profile P] [--split all|tuning|held-out] [--workers N] [--json] | "
+            + "ai-puzzles import <set-dir> <saved-game-file> --id ID [--source TEXT] | "
+            + "ai-puzzles show <set-dir> --game ID --sequence N [--teacher SAMPLES] [--horizon game|TURNS] | "
             + "ai-regret findings <suite-dir> --manifest FILE --fixtures DIR --content POOL [--labelled N] | ai-regret dedupe <suite-dir> | "
             + "ai-lint <games-dir> [--workers N] [--examples N] [--output file] [--json] | "
             + "ai-style <games-dir> [--workers N] [--json] | "

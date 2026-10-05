@@ -92,7 +92,8 @@ the leaf**: the game's-end horizon was mostly ties at 8 samples and past four ho
 disagreement but a mean flip cost of 0.018, so regret, paired on the same labels, is the number; agreement is not. The
 gate holds: Runner v24 separates from v25 and v26, Corp v30 from v28 and v29, about 2 minutes a version. Because the
 labels end in set 4's leaf, S4.2's set 4 control and S6's relabelling matter more, and a deeper horizon is worth trying
-once S5.0 makes rollouts cheaper.
+once S5.0 makes rollouts cheaper. Two gaps found after the gate are S1.4 and S1.5 below: the labels cover only the
+heuristic's best six groups, and the teacher values a candidate with the heuristic's continuation of the turn.
 
 ### S1.1 Decision roots
 
@@ -157,9 +158,61 @@ once S5.0 makes rollouts cheaper.
   re-label.
 - **Record:** the three versions' table, the labelling time, and the first blunder list in `docs/BOT_VERSIONS.md`.
 
+### S1.4 Label every meaningful group (S)
+
+**During S3; before S4.2.** The first labelling cut each root to the heuristic's best six groups, and a version's
+choice outside them is unlabelled and drops out of its regret. That flatters older versions (the record says so) and
+would hide the planner's choices, which are expected to fall outside the heuristic's top groups.
+
+- `ai-regret roots` keeps every meaningful group (after the filter S5.1 defines; until then, every group whose
+  priority is within one band of the best), with the heuristic's order recorded.
+- `ai-regret score --label-missing` labels an unlabelled choice on demand with the suite's teacher settings and seed,
+  and writes it back, so the suite grows where versions disagree with the heuristic.
+- **Gate:** the unlabelled count is zero for every version in the S1.3 table; the table is re-reported.
+- **Record:** the counts before and after in `docs/BOT_VERSIONS.md`.
+
+### S1.5 The turn-line teacher (M)
+
+**During S3 (it edits `TurnPlanner`, S3 edits the heuristic files); its relabel runs between S3's gate ladders; before
+S4.** S2 found that the teacher, and so the shipped planner, values a candidate followed by the heuristic's play of the
+rest of the turn, which undervalues a first action whose worth depends on its follow-up (plan 1.3 and section 9). The
+horizon does not fix it. The fix is the turn-line search of plan 4.1, built once for both:
+
+- In `TurnPlanner`, behind `plan-lines` (off by default, so Hard and every frozen digest are unchanged): at a turn-action
+  root, enumerate lines of the root side's turn actions with a beam of `plan-width` over the heuristic's candidates at
+  each of its decisions, to the turn's end (clicks spent or the turn passed). Nested choices inside an action, the
+  opponent and later turns stay with today's per-step `Choose`. Score each line on the shared samples; a candidate's
+  value is the best line beginning with it. Sequential halving: every line gets a quarter of the samples, the best half
+  the rest.
+- `ai-regret label --lines` uses it; labels record `lines=true`. Cost estimate from S0.1: about three times the
+  one-step labelling (about six hours for the box suite on this box); if more, lower the beam to 3 and record it.
+- **Gate:**
+  - the twin tests pass with `plan-lines` on;
+  - on the 23 Petty Cash roots and the worst root (`…leo-glacier~…topan-00202#358`), the line teacher's value of
+    Petty Cash first is within noise of the best full line (the artifact is gone);
+  - the whole box suite relabelled; the drift (share of roots whose best group changed, and the mean change of the best
+    value) recorded as S6 would record it;
+  - the 26 certified puzzles re-certified at 128 samples; those that fail are moved to a `teacher-v1` split and kept
+    out of the gate;
+  - S1.3's separation gate passed again on the new labels (Runner v24 against v25 and v26; Corp v30 against v28 and
+    v29).
+- **Record:** the cost, the Petty Cash check, the drift, the recertification and the new S1.3 table in
+  `docs/BOT_VERSIONS.md`.
+
 ## S2. Puzzle suite v2 (M)
 
 **Independent of S1 after S1.1's root format exists.**
+
+**Outcome (5 October; the record is in `docs/BOT_VERSIONS.md`).** `data/ai/puzzles/gateway-elevation` (49 puzzles) and
+`nsg-core-sets` (5): the 28 converted tests and 26 teacher-certified decisions, 8 categories, 25 negative controls. The
+defaults score 34/49 and 5/5; agenda exposure is 0/4, which meets the gate. Three deferred findings (Petty Cash first,
+Ritual first, Spin Doctor before its trash) are not made puzzles: the one-step teacher values a first action with the
+heuristic's continuation, which undervalued Petty Cash first by 0.23 at one root where the full lines are level (plan
+section 9, the teacher's continuation, fixed before S4);
+the target of 60 puzzles, ICE placement and inference, a third held out, and an NSG Core suite are still open. The old
+saved-decision tests stay until S3 freezes the versions before v31 and v27: their halves that pin the older versions'
+choices guard code that is still live until then, and `PuzzleSuiteTests` already asserts that the defaults pass every
+converted puzzle.
 
 ### S2.1 Manifest and runner
 
@@ -281,10 +334,13 @@ rollout step gets cheaper, and S0.4's trace says the step is mostly simulated `A
 - **Probability-space values:** each rollout's leaf as a win probability; candidate value = mean(leaf − root) +
   `static-mix` × (leaf after the first action − root). Remove the raw log-odds sum and the heuristic score from the value;
   the heuristic orders candidates and breaks ties within `plan-tie` (start 0.005).
-- **Rollout policy:** today's per-step `Choose` (S0.4). Profile against S0.1 after S5.0 and, if a Standard decision
-  still cannot fit 50 ms p95 at 8 samples × width 4, implement the plan's 4.3 options (the heuristic at a reduced work
-  budget, then the distilled table policy) and record each number. If the rollout policy changes here, re-label the
-  regret suite with it, so the teacher and the planner still share one.
+- **Turn-line search on** (`plan-lines`, S1.5): Standard and Hard value a candidate at its best line of the turn. The
+  budget below is lines × samples, so S5.0's gains decide the beam Standard can afford inside 50 ms; if a beam of 4 does
+  not fit after S5.0, Standard plans a beam of 3 or fewer samples and the record says which.
+- **Rollout policy:** today's per-step `Choose` (S0.4) for nested choices, the opponent and later turns. Profile against
+  S0.1 after S5.0 and, if a Standard decision still cannot fit 50 ms p95, implement the plan's 4.3 options (the heuristic
+  at a reduced work budget, then the distilled table policy) and record each number. If the rollout policy changes here,
+  re-label the regret suite with it, so the teacher and the planner still share one.
 - **Work budget:** `rollout-budget` (simulated decisions per root) in the profile; the planner stops sampling when it is
   spent and scores what it has. No wall-clock checks inside a decision.
 - Everything behind profile parameters so Hard's current behaviour stays reproducible until the switch.
@@ -301,9 +357,9 @@ rollout step gets cheaper, and S0.4's trace says the step is mostly simulated `A
 
 - Regret suite: Standard's regret below the heuristic's (v31/v27) with the interval clear.
 - Puzzle suite: no category worse; the sequencing and exposure categories better.
-- Ladders on the box pool, 1,000 deals, `--stop-when-clear`: new Standard beats `standard-prev` in both seats with the
-  lower bound above zero; loses to no anchor; Gateway pool level or better; tiers ordered Easy < Standard < Hard in both
-  seats.
+- Ladders on the box pool, about 400 deals (what 10 minutes buys, S0.2), `--stop-when-clear`: new Standard beats
+  `standard-prev` in both seats with the lower bound above zero; loses to no anchor; Gateway pool level or better; tiers
+  ordered Easy < Standard < Hard in both seats.
 - Lint counts per 1,000 games not worse on any lint.
 - Belief and run-model validations in `make bot-check` pass.
 - **Record:** all of it in `docs/BOT_VERSIONS.md`; the human playtest expectation (Standard feels like it plans) noted
@@ -318,8 +374,8 @@ A round is one version. It runs when the previous round's gates are met.
 2. Re-label the whole suite with the teacher at the current Standard's leaf and 4× its budget. Report teacher drift:
    the share of roots whose best candidate changed. Over 15% stops the round for inspection of the top changes.
 3. Refit set 5's weights (a new document version, `evaluation-v5.<round>.json`).
-4. Score the candidate (Standard with the new weights) by S5.3's gates, with 1,000-deal ladders only when the regret
-   suite and puzzles improved.
+4. Score the candidate (Standard with the new weights) by S5.3's gates, with box ladders (about 400 deals) only when
+   the regret suite and puzzles improved.
 5. Work the blunder list: the top 20 roots by regret. Each is a leaf term, a filter bug, a rollout-policy weakness or an
    engine bug; fix what is general, add a puzzle for each, and never a card-named rule.
 6. Record the round in `docs/BOT_VERSIONS.md` and promote or discard.
@@ -331,10 +387,10 @@ the plan is the way to get them, on the user's ask).
 ## Timeline and order
 
 ```text
-S0 measure ──> S1 regret suite ──> S4 set 5 ──> S5 planner Standard ──> S6 rounds
-           ──> S2 puzzles ───────┘        (S2 independent after S1.1)
-           ──> S3 one live policy ────────┘  (S3 independent; before S4)
-(S5.0, the engine cost of simulation, can run any time after S0 and must land before S5.1)
+S0 measure ──> S1 regret suite ──> S1.4 all groups, S1.5 line teacher ──> S4 set 5 ──> S5 planner Standard ──> S6 rounds
+           ──> S2 puzzles ──────────────────────────────────────────────┘
+           ──> S3 one live policy (alongside S1.4 and S1.5; before S4) ──┘
+(S5.0, the engine cost of simulation, can run any time after S0 and must land before S5.1; S1.5 raises its stakes)
 ```
 
 Elapsed, one developer with an agent: S0 one week including the ladder speedup; S1, S2 and S3 two to three weeks in

@@ -41,4 +41,45 @@ for index in "${!pids[@]}"; do
     status=1
   fi
 done
+
+# Bot plan S2.3, the per-change suites (opt in with BOT_CHECK_SUITES=1): the regret suite's held-out roots and the puzzle
+# sets for the latest versions (or BOT_CHECK_VERSIONS), and the Oddity lints over the saved games in BOT_CHECK_LINT_GAMES.
+if [[ "${BOT_CHECK_SUITES:-0}" == 1 ]]; then
+  suites_build="$check_root/.tools/bot-check-cli"
+  if ! dotnet build "$check_root/src/Netrunner.Cli" -c Release --artifacts-path "$suites_build" -m:1 --disable-build-servers \
+    "-p:NetrunnerCardDataGeneratedFile=$suites_build/generated/GeneratedCardData.g.cs" "${official[@]}" \
+    "-p:NetrunnerCardDataInputRoot=$check_root/data/vendor/system-gateway" >"$logs/suites-build.log" 2>&1; then
+    echo "bot-check suites=FAIL (build: $logs/suites-build.log)"
+    exit 1
+  fi
+  cli=(dotnet "$suites_build/bin/Netrunner.Cli/release/Netrunner.Cli.dll")
+  if "${cli[@]}" ai-regret score "$check_root/data/ai/regret/gateway-elevation" --version "${BOT_CHECK_VERSIONS:-latest}" --split held-out \
+    --workers 12 --json >"$logs/regret.json" 2>"$logs/regret.err"; then
+    python3 - "$logs/regret.json" <<'PY'
+import json, sys
+report = json.load(open(sys.argv[1]))["report"]
+print("bot-check regret (box, held-out) " + " ".join(
+    f"{entry['version']}={entry['summaries'][0]['meanRegret']:.4f} [{entry['summaries'][0]['lower']:.4f}, {entry['summaries'][0]['upper']:.4f}]"
+    for entry in report))
+PY
+  else
+    echo "bot-check regret=FAIL ($logs/regret.err)"
+    status=1
+  fi
+  for pool in gateway-elevation nsg-core-sets; do
+    if "${cli[@]}" ai-puzzles run "$check_root/data/ai/puzzles/$pool" --workers 12 >"$logs/puzzles-$pool.log" 2>&1; then
+      echo "bot-check puzzles $pool $(head -1 "$logs/puzzles-$pool.log" | grep -o 'passed=[0-9]*/[0-9]*')"
+    else
+      echo "bot-check puzzles $pool=FAIL ($logs/puzzles-$pool.log)"
+      status=1
+    fi
+  done
+  if [[ -d "${BOT_CHECK_LINT_GAMES:-}" ]]; then
+    "${cli[@]}" ai-lint "$BOT_CHECK_LINT_GAMES" --workers 12 >"$logs/lint.log" 2>&1 \
+      && echo "bot-check lint $(head -1 "$logs/lint.log" | awk '{split($2, g, "="); split($3, f, "="); printf "games=%s findings=%s (%.1f per 1,000 games)", g[2], f[2], 1000 * f[2] / g[2]}')" \
+      || { echo "bot-check lint=FAIL ($logs/lint.log)"; status=1; }
+  else
+    echo "bot-check lint=SKIP (set BOT_CHECK_LINT_GAMES to a saved ladder run)"
+  fi
+fi
 exit "$status"

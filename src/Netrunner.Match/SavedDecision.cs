@@ -1,4 +1,5 @@
 using Netrunner.AI;
+using Netrunner.Cards;
 using Netrunner.Core;
 using Netrunner.Match.Regret;
 
@@ -29,9 +30,22 @@ public static class SavedDecision
         return EngineJson.Deserialize<ReplayArtifact>(File.ReadAllText(path), definition.Behavior, definition.Runtime);
     }
 
-    /// <summary>The <paramref name="version"/> bot of <paramref name="side"/> at <paramref name="profile"/>, as a player meets it.</summary>
-    public static OfflineAgent Agent(FullMatchDefinition definition, PlayerSide side, string? version, string profile = "standard") =>
-        OfflineMatchFactory.CreateOpponent(definition, side == PlayerSide.Corp ? PlayerSide.Runner : PlayerSide.Corp, profile, version);
+    /// <summary>
+    /// The <paramref name="version"/> bot of <paramref name="side"/> at <paramref name="profile"/>, as a player meets it;
+    /// with <paramref name="diagnostics"/>, it keeps its evaluation of every candidate (and so its reasons).
+    /// </summary>
+    public static OfflineAgent Agent(FullMatchDefinition definition, PlayerSide side, string? version, string profile = "standard",
+        bool diagnostics = false)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        OfflineAgent agent = OfflineMatchFactory.CreateOpponent(definition, side == PlayerSide.Corp ? PlayerSide.Runner : PlayerSide.Corp,
+            profile, version);
+        if (!diagnostics) return agent;
+        var keeping = new OfflineAgent(agent.Configuration, OfflinePolicies.Create(agent.Configuration),
+            new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior), null, captureDiagnostics: true);
+        if (agent.Checkpoint.Knowledge.OpponentList is { } list) keeping.KnowOpponentList(list.Select(entry => (entry.DefinitionId, entry.Quantity)));
+        return keeping;
+    }
 
     /// <summary>The <paramref name="version"/> bot's choice at <paramref name="sequence"/> of a replay.</summary>
     public static Task<SavedChoice> ChooseAsync(ReplayArtifact replay, FullMatchDefinition definition, long sequence, PlayerSide side,
