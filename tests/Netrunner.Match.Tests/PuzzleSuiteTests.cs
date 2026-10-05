@@ -102,6 +102,19 @@ public sealed class PuzzleSuiteTests
         Assert.Throws<InvalidDataException>(() => new PuzzleSet([game], [puzzle]).Validate());
         Assert.Throws<InvalidDataException>(() => new PuzzleSet([game], [puzzle with { Category = "economy", Kind = Puzzle.LineKind }]).Validate());
         new PuzzleSet([game], [puzzle with { Category = "economy" }]).Validate();
+        // A line predicate of an unknown kind, or without an operand its kind needs, is refused at load, not at run (the
+        // review of #102).
+        Puzzle Line(LinePredicate predicate) => puzzle with
+        {
+            Category = "economy",
+            Kind = Puzzle.LineKind,
+            Acceptance = new PuzzleAcceptance(Line: [predicate])
+        };
+        foreach (LinePredicate bad in new LinePredicate[] { new("unknown"), new("first"), new("action"), new("before", Match: new ActionMatch()),
+            new("precedes", Then: new ActionMatch()), new("installed"), new("counters"), new("successfulRun") })
+            Assert.Throws<InvalidDataException>(() => new PuzzleSet([game], [Line(bad)]).Validate());
+        new PuzzleSet([game], [Line(new LinePredicate("before", Match: new ActionMatch(), Then: new ActionMatch()))]).Validate();
+        new PuzzleSet([game], [Line(new LinePredicate("credits", AtLeast: 5))]).Validate();
     }
 
     private static bool Official => CardDataResource.EmbeddedMode == CardDataResource.OfficialMode;

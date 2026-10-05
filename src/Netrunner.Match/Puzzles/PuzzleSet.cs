@@ -115,7 +115,21 @@ public sealed record PuzzleSet(ImmutableArray<RegretGame> Games, ImmutableArray<
         File.WriteAllText(Path.Combine(directory, PuzzlesFile), JsonSerializer.Serialize(Puzzles, Json) + "\n");
     }
 
-    /// <summary>Every puzzle has a unique id, a known kind, category and split, a game of the set, and an acceptance its kind uses.</summary>
+    /// <summary>What is wrong with a line predicate: an unknown kind, or a missing operand its kind needs; empty when nothing is.</summary>
+    private static string Problem(LinePredicate predicate) => predicate.Kind switch
+    {
+        "installed" or "counters" when predicate.Card is null => $"a '{predicate.Kind}' predicate without its card",
+        "successfulRun" when predicate.Server is null => "a 'successfulRun' predicate without its server",
+        "action" or "first" when predicate.Match is null => $"a '{predicate.Kind}' predicate without the action to match",
+        "before" or "precedes" when predicate.Match is null || predicate.Then is null => $"a '{predicate.Kind}' predicate without both actions",
+        "installed" or "counters" or "credits" or "grip" or "successfulRun" or "action" or "first" or "before" or "precedes" => "",
+        _ => $"an unknown line predicate '{predicate.Kind}'",
+    };
+
+    /// <summary>
+    /// Every puzzle has a unique id, a known kind, category and split, a game of the set, and an acceptance its kind uses,
+    /// with every line predicate of a known kind and with the operands that kind needs.
+    /// </summary>
     public void Validate()
     {
         HashSet<string> games = [.. Games.Select(game => game.Id)];
@@ -131,7 +145,7 @@ public sealed record PuzzleSet(ImmutableArray<RegretGame> Games, ImmutableArray<
                 : puzzle.Kind != Puzzle.LineKind && puzzle.Acceptance.Accept.IsDefaultOrEmpty && puzzle.Acceptance.Reject.IsDefaultOrEmpty
                     ? "a decision without accepted or rejected actions"
                 : puzzle.Kind == Puzzle.NestedKind && puzzle.Acceptance.At is null ? "a nested puzzle without the decision to stop at"
-                : "";
+                : (puzzle.Acceptance.Line.IsDefault ? [] : puzzle.Acceptance.Line).Select(Problem).FirstOrDefault(found => found.Length > 0) ?? "";
             if (problem.Length > 0) throw new InvalidDataException($"Puzzle '{puzzle.Id}' has {problem}.");
         }
     }
