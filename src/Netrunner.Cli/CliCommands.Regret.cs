@@ -50,7 +50,7 @@ public static partial class CliCommands
     private sealed record RegretOptions(string? Output, int TurnRoots, int RunRoots, int Labelled, ulong Seed, int Workers, int Samples,
         int HorizonTurns, int Evaluation, string LabelsFile, int Repeat, ulong RepeatSeed, string[] Versions, string Profile, string Split,
         int Blunders, int Bootstrap, bool Json, bool Missing = false, string? Manifest = null, string? Fixtures = null, string? Content = null,
-        bool LabelMissing = false, int Lines = 0, string? RootsFile = null)
+        bool LabelMissing = false, int Lines = 0, string? RootsFile = null, int ScreenTurns = 1)
     {
         public static RegretOptions Parse(string[] args)
         {
@@ -92,6 +92,7 @@ public static partial class CliCommands
                     "--missing" => options with { Missing = true },
                     "--label-missing" => options with { LabelMissing = true },
                     "--lines" => options with { Lines = Int("--lines", 0, 16) },
+                    "--screen-turns" => options with { ScreenTurns = Int("--screen-turns", 0, 100) },
                     "--roots" => options with { RootsFile = Next() },
                     "--manifest" => options with { Manifest = Next() },
                     "--fixtures" => options with { Fixtures = Next() },
@@ -159,7 +160,8 @@ public static partial class CliCommands
 
     private static ImmutableArray<RegretLabel> Label(RegretSuite suite, HashSet<string> rootIds, RegretOptions options, TextWriter error)
     {
-        var settings = new TeacherSettings(options.Samples, options.Seed, options.HorizonTurns, options.Evaluation, Lines: options.Lines);
+        var settings = new TeacherSettings(options.Samples, options.Seed, options.HorizonTurns, options.Evaluation, Lines: options.Lines,
+            ScreenTurns: options.ScreenTurns);
         var byGame = suite.Roots.Where(root => rootIds.Contains(root.Id)).GroupBy(root => root.GameId).ToDictionary(group => group.Key, group => group.ToList());
         RegretGame[] games = [.. suite.Games.Where(game => byGame.ContainsKey(game.Id))];
         return [.. ForGames(games, options.Workers, error, "label", game => RegretLabels.Label(game, byGame[game.Id], settings)).SelectMany(found => found)];

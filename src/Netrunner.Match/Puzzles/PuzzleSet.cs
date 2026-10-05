@@ -71,6 +71,12 @@ public sealed record Puzzle(string Id, string Title, string Category, string Kin
     public const string LineKind = "line";
     public const string NestedKind = "nested";
 
+    /// <summary>
+    /// Bot plan S1.5: teacher-certified puzzles the turn-line teacher no longer certifies. They are kept, out of the
+    /// gate; <c>ai-puzzles run --split teacher-v1</c> runs them.
+    /// </summary>
+    public const string RetiredSplit = "teacher-v1";
+
     /// <summary>The ten categories of the plan's 5.3.</summary>
     public static IReadOnlyList<string> Categories { get; } =
         ["sequencing", "agenda-exposure", "punisher-risk", "run-targeting", "economy", "access-and-trash", "ice-placement", "rez-timing",
@@ -139,7 +145,7 @@ public sealed record PuzzleSet(ImmutableArray<RegretGame> Games, ImmutableArray<
             string problem = !ids.Add(puzzle.Id) ? "a duplicate id"
                 : puzzle.Kind is not (Puzzle.DecisionKind or Puzzle.LineKind or Puzzle.NestedKind) ? $"an unknown kind '{puzzle.Kind}'"
                 : !Puzzle.Categories.Contains(puzzle.Category) ? $"an unknown category '{puzzle.Category}'"
-                : puzzle.Split is not ("tuning" or "held-out") ? $"an unknown split '{puzzle.Split}'"
+                : puzzle.Split is not ("tuning" or "held-out" or Puzzle.RetiredSplit) ? $"an unknown split '{puzzle.Split}'"
                 : !games.Contains(puzzle.GameId) ? $"no game '{puzzle.GameId}'"
                 : puzzle.Kind == Puzzle.LineKind && puzzle.Acceptance.Line.IsDefaultOrEmpty ? "a line puzzle without predicates"
                 : puzzle.Kind != Puzzle.LineKind && puzzle.Acceptance.Accept.IsDefaultOrEmpty && puzzle.Acceptance.Reject.IsDefaultOrEmpty

@@ -77,15 +77,18 @@ public sealed class TurnPlannerTests
 
     /// <summary>
     /// A fresh Standard agent that has observed <paramref name="state"/> as its first position; with <paramref name="lines"/>,
-    /// the live version searching lines of the turn (plan-lines, bot plan S1.5).
+    /// the live Hard bot searching lines of the turn (plan-lines, bot plan S1.5; the live Runner's Standard does not plan).
     /// </summary>
     private static OfflineAgent AgentAt(FullMatchDefinition definition, GameState state, PlayerSide side, bool lines = false)
     {
         OfflineAgent fresh = OfflineMatchFactory.CreateOpponent(definition, side == PlayerSide.Corp ? PlayerSide.Runner : PlayerSide.Corp,
-            "standard", lines ? Live(side) : Planning(side));
-        OfflineAgentCheckpoint checkpoint = state.ActionSequence == 0 ? fresh.Checkpoint
-            : fresh.Checkpoint with { ObservationCursor = state.ActionSequence - 1, ObservationDigest = "position" };
+            lines ? "hard" : "standard", lines ? Live(side) : Planning(side));
         OfflineAgentConfiguration configuration = lines ? WithLines(fresh.Configuration) : fresh.Configuration;
+        // A checkpoint belongs to its configuration, so the switched-on agent starts from its own.
+        OfflineAgentCheckpoint start = lines ? new OfflineAgent(configuration, OfflinePolicies.Create(configuration),
+            new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior)).Checkpoint : fresh.Checkpoint;
+        OfflineAgentCheckpoint checkpoint = state.ActionSequence == 0 ? start
+            : start with { ObservationCursor = state.ActionSequence - 1, ObservationDigest = "position" };
         var agent = new OfflineAgent(configuration, OfflinePolicies.Create(configuration),
             new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior), checkpoint, captureDiagnostics: true);
         AgentLifecycleHost.Observe(agent, state, definition.Behavior);

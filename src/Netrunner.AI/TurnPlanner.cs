@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Globalization;
 using System.Text.RegularExpressions;
 using Netrunner.Core;
 
@@ -274,10 +275,14 @@ internal sealed partial class TurnPlanner
     /// <paramref name="side"/> in the same turn the heuristic's <paramref name="ranks"/>[i]-th distinct choice (its last past the
     /// list), and everything else (nested choices, the opponent, later turns) as <see cref="PlayOut"/> plays it. A line is a
     /// rank path, not a list of actions, so it plays on every sample the same way, without reading a sample's hidden cards.
-    /// <paramref name="reached"/> counts the later turn-action decisions the line met.
+    /// <paramref name="reached"/> counts the later turn-action decisions the line met. With a <paramref name="memo"/>, a
+    /// line that leaves the turn in a state another line left it in (the same actions in another order, often) takes that
+    /// line's value: the rest of the play-out is a function of the state. With <paramref name="toTurnEnd"/>, the line is
+    /// scored by the leaf where the root side's turn ends (the teacher's screen).
     /// </summary>
     internal double? PlayLine(GameState sample, ActionId first, IReadOnlyList<int> ranks, PlayerSide side, AgentKnowledge knowledge,
-        ObservationDeterminizer determinizer, int horizonTurns, int evaluation, int cap, out int reached)
+        ObservationDeterminizer determinizer, int horizonTurns, int evaluation, int cap, out int reached,
+        Dictionary<string, double>? memo = null, bool toTurnEnd = false)
     {
         reached = 0;
         ApplyResult applied = Simulate(sample, first, determinizer);
@@ -285,9 +290,19 @@ internal sealed partial class TurnPlanner
         GameState state = applied.State;
         int turn = sample.Turn.TurnNumber;
         int lastTurn = horizonTurns > 0 ? turn + horizonTurns : int.MaxValue;
+        string? key = null;
         for (int steps = 0; steps < cap && state.Outcome.Kind == GameOutcomeKind.Ongoing && state.PendingDecision is { } pending
             && state.Turn.TurnNumber < lastTurn; steps++)
         {
+            if (key is null && (state.Turn.TurnNumber != turn || state.Turn.ActiveSide != side))
+            {
+                if (toTurnEnd) break;
+                if (memo is not null)
+                {
+                    key = string.Create(CultureInfo.InvariantCulture, $"{steps}:{EngineJson.SearchFingerprint(state)}");
+                    if (memo.TryGetValue(key, out double known)) return known;
+                }
+            }
             bool turnAction = pending.Kind == DecisionKind.TurnAction && state.RunState is null && state.Turn.TurnNumber == turn
                 && state.Turn.ActiveSide == side && state.GetPlayer(pending.Owner).Side == side;
             int rank = turnAction && reached < ranks.Count ? ranks[reached] : 0;
@@ -297,6 +312,13 @@ internal sealed partial class TurnPlanner
             if (!applied.Accepted) break;
             state = applied.State;
         }
+        double value = Leaf(state, side, determinizer, evaluation);
+        if (key is not null) memo![key] = value;
+        return value;
+    }
+
+    private double Leaf(GameState state, PlayerSide side, ObservationDeterminizer determinizer, int evaluation)
+    {
         if (state.Outcome.Kind != GameOutcomeKind.Ongoing) return state.Outcome.Winner == side ? 1 : 0;
         long scoring = ProfileTimings.Start();
         AgentFeatures features = ObservationReader.Read(ObservationBuilder.Build(state, side, determinizer.Behavior),
@@ -311,51 +333,62 @@ internal sealed partial class TurnPlanner
 
     /// <summary>
     /// Bot plan S1.5: the best line of the root side's turn by a beam over rank paths (see <see cref="PlayLine"/>).
-    /// <paramref name="play"/> values a rank path on a sample and counts the later turn-action decisions it met. A line's
-    /// children differ from it at the next decision, taking the heuristic's 2nd to <paramref name="width"/>-th choice
-    /// there, and the best <paramref name="width"/> lines go on, to <see cref="LineDepth"/> decisions or the turn's end.
-    /// Sequential halving: every line is valued on the first quarter of the <paramref name="samples"/>, and the better
-    /// half on all of them; the best of those is the line.
+    /// <paramref name="screen"/> values a rank path on a sample and counts the later turn-action decisions it met; every
+    /// line is screened on every sample, or with <paramref name="play"/> on the first quarter of them. A line's children differ from it at the next decision, taking the heuristic's
+    /// 2nd to <paramref name="width"/>-th choice there, and the best <paramref name="width"/> lines go on, to
+    /// <see cref="LineDepth"/> decisions or the turn's end. Without <paramref name="play"/> the best screened line is the
+    /// line. With it (the teacher, whose screen is a short play-out and whose play goes to the horizon), the heuristic's
+    /// own line is played first, and when it meets a later decision the best <paramref name="finalists"/> − 1 other
+    /// screened lines are played too; the best of them is the line, so a candidate is never valued below its heuristic
+    /// continuation on the same samples.
     /// </summary>
     /// <returns>The best line's value on every sample, and its rank path.</returns>
-    internal static (double[] Values, int[] Ranks) BestLine(int samples, Func<int, int[], (double Value, int Reached)> play, int width)
+    internal static (double[] Values, int[] Ranks) BestLine(int samples, Func<int, int[], (double Value, int Reached)> screen, int width,
+        Func<int, int[], (double Value, int Reached)>? play = null, int finalists = 2)
     {
-        int quarter = Math.Max(1, samples / 4);
-        (double Mean, int Reached) Screen(int[] ranks)
+        // Sequential halving: with a play-out to come, the screen sees a quarter of the samples.
+        int screening = play is null ? samples : Math.Max(1, samples / 4);
+        static (double[] Values, double Mean, int Reached) Run(int samples, Func<int, int[], (double Value, int Reached)> value, int[] ranks)
         {
-            double sum = 0;
+            double[] values = new double[samples];
             int reached = 0;
-            for (int index = 0; index < quarter; index++)
+            for (int index = 0; index < samples; index++)
             {
-                (double value, int met) = play(index, ranks);
-                sum += value;
+                (values[index], int met) = value(index, ranks);
                 reached = Math.Max(reached, met);
             }
-            return (sum / quarter, reached);
+            return (values, values.Average(), reached);
         }
-        (double rootMean, int rootReached) = Screen([]);
-        var screened = new List<(int[] Ranks, double Mean, int Reached)> { ([], rootMean, rootReached) };
-        List<(int[] Ranks, double Mean, int Reached)> frontier = [.. screened];
+        (double[] Values, double Mean, int Reached)? played = play is null ? null : Run(samples, play, []);
+        if (played is { Reached: 0 } alone) return (alone.Values, []);
+        var root = (Ranks: Array.Empty<int>(), Screen: Run(screening, screen, []));
+        var screened = new List<(int[] Ranks, (double[] Values, double Mean, int Reached) Screen)> { root };
+        var frontier = new List<(int[] Ranks, (double[] Values, double Mean, int Reached) Screen)> { root };
         for (int level = 0; level < LineDepth; level++)
         {
-            var children = new List<(int[] Ranks, double Mean, int Reached)>();
-            foreach ((int[] ranks, _, int reached) in frontier.Where(line => line.Reached > level))
+            var children = new List<(int[] Ranks, (double[] Values, double Mean, int Reached) Screen)>();
+            foreach ((int[] ranks, _) in frontier.Where(line => line.Screen.Reached > level))
                 for (int rank = 1; rank < width; rank++)
                 {
                     int[] child = [.. ranks, .. Enumerable.Repeat(0, level - ranks.Length), rank];
-                    (double mean, int met) = Screen(child);
-                    children.Add((child, mean, met));
+                    children.Add((child, Run(screening, screen, child)));
                 }
             if (children.Count == 0) break;
             screened.AddRange(children);
-            frontier = [.. frontier.Concat(children).OrderByDescending(line => line.Mean).ThenBy(line => line.Ranks.Length).Take(width)];
+            frontier = [.. frontier.Concat(children).OrderByDescending(line => line.Screen.Mean).ThenBy(line => line.Ranks.Length).Take(width)];
         }
-        (double[] Values, int[] Ranks) best = ([], []);
-        double bestMean = double.NegativeInfinity;
-        foreach ((int[] ranks, _, _) in screened.OrderByDescending(line => line.Mean).ThenBy(line => line.Ranks.Length).Take((screened.Count + 1) / 2))
+        if (played is not { } heuristic)
         {
-            double[] values = [.. Enumerable.Range(0, samples).Select(index => play(index, ranks).Value)];
-            if (values.Average() > bestMean) (best, bestMean) = ((values, ranks), values.Average());
+            var top = screened.OrderByDescending(line => line.Screen.Mean).ThenBy(line => line.Ranks.Length).First();
+            return (top.Screen.Values, top.Ranks);
+        }
+        (double[] Values, int[] Ranks) best = (heuristic.Values, []);
+        double bestMean = heuristic.Mean;
+        foreach ((int[] ranks, _) in screened.Skip(1).OrderByDescending(line => line.Screen.Mean).ThenBy(line => line.Ranks.Length)
+            .Take(finalists - 1))
+        {
+            (double[] values, double mean, _) = Run(samples, play!, ranks);
+            if (mean > bestMean) (best, bestMean) = ((values, ranks), mean);
         }
         return best;
     }

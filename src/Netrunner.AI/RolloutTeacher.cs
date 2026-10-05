@@ -10,8 +10,10 @@ namespace Netrunner.AI;
 /// <param name="Cap">Simulated decisions after which a play-out is scored where it stands.</param>
 /// <param name="Lines">Bot plan S1.5: the beam width of the turn-line search; a candidate is valued at its best line of the
 /// turn. 0 values it followed by the heuristic's play of the rest of the turn.</param>
+/// <param name="ScreenTurns">How far the turn-line search's screen plays a line: turns past the decision, as
+/// <paramref name="HorizonTurns"/> counts them; 0 scores it by the leaf where the root side's turn ends.</param>
 public sealed record TeacherSettings(int Samples, ulong Seed, int HorizonTurns = 0, int Evaluation = 4, int Cap = PlannerProbe.GameRolloutCap,
-    int Lines = 0);
+    int Lines = 0, int ScreenTurns = 1);
 
 /// <summary>
 /// A candidate's teacher value: the mean win probability over its play-outs and the standard error of that mean. Every
@@ -44,7 +46,8 @@ public static class RolloutTeacher
         PlayerSide side = agent.ControlledSide;
         var planning = new PlanningContext(determinizer, new DeterministicRandom(settings.Seed));
         OpponentCardPool pool = planner.PoolFor(side, knowledge, fromList: true);
-        if (settings.Lines > 1) return Lines(planner, candidates, settings, side, knowledge, determinizer, planning, pool);
+        // The turn-line search is for a turn-action root; elsewhere a candidate's line is its heuristic continuation.
+        if (settings.Lines > 1 && observation.Decision?.Kind == DecisionKind.TurnAction) return Lines(planner, candidates, settings, side, knowledge, determinizer, planning, pool);
         var values = candidates.Select(_ => new List<double>()).ToArray();
         // Every candidate is played on the same samples. A sample where one candidate cannot be played (a choice naming a
         // hidden card the deal replaced) is dropped for all, and another is dealt, up to twice the samples asked for.
@@ -68,7 +71,8 @@ public static class RolloutTeacher
 
     /// <summary>
     /// Bot plan S1.5: every candidate valued at its best line of the turn (<see cref="TurnPlanner.BestLine"/>) on the same
-    /// samples, dealt first. A sample where one candidate cannot be played is dropped for all, as above.
+    /// samples, dealt first: the lines are screened by the leaf where the turn ends, and the heuristic's own line and the
+    /// best other are played on. A sample where one candidate cannot be played is dropped for all, as above.
     /// </summary>
     private static TeacherValue[] Lines(TurnPlanner planner, IReadOnlyList<ActionId> candidates, TeacherSettings settings, PlayerSide side,
         AgentKnowledge knowledge, ObservationDeterminizer determinizer, PlanningContext planning, OpponentCardPool pool)
@@ -80,11 +84,18 @@ public static class RolloutTeacher
             if (candidates.All(candidate => TurnPlanner.Playable(state, candidate, determinizer))) samples.Add(state);
         }
         if (samples.Count == 0) return [.. candidates.Select(action => Summarize(action, []))];
+        // One memo for the root: lines of different candidates often leave the turn in the same state.
+        var memo = new Dictionary<string, double>(StringComparer.Ordinal);
+        var screens = new Dictionary<string, double>(StringComparer.Ordinal);
+        int screenTurns = settings.ScreenTurns == 0 ? settings.HorizonTurns : settings.ScreenTurns;
         return [.. candidates.Select(action =>
         {
-            (double[] values, int[] ranks) = TurnPlanner.BestLine(samples.Count, (index, ranks) =>
-                (planner.PlayLine(samples[index], action, ranks, side, knowledge, determinizer, settings.HorizonTurns, settings.Evaluation,
-                    settings.Cap, out int reached) ?? 0, reached), settings.Lines);
+            (double[] values, int[] ranks) = TurnPlanner.BestLine(samples.Count,
+                (index, ranks) => (planner.PlayLine(samples[index], action, ranks, side, knowledge, determinizer, screenTurns,
+                    settings.Evaluation, settings.Cap, out int reached, screens, toTurnEnd: settings.ScreenTurns == 0) ?? 0, reached),
+                settings.Lines,
+                (index, ranks) => (planner.PlayLine(samples[index], action, ranks, side, knowledge, determinizer, settings.HorizonTurns,
+                    settings.Evaluation, settings.Cap, out int reached, memo) ?? 0, reached));
             return Summarize(action, [.. values]) with { Line = ranks };
         })];
     }

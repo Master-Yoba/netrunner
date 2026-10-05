@@ -483,7 +483,7 @@
     "title": "The teacher's playCard at ation-box-muslihat-00086 #909",
     "category": "run-targeting",
     "kind": "decision",
-    "split": "tuning",
+    "split": "teacher-v1",
     "gameId": "standard-vs-standard-elevation-box-nebula-fast-advance~elevation-box-muslihat-00086",
     "sequence": 909,
     "side": "runner",
@@ -499,7 +499,7 @@
     },
     "negativeControl": true,
     "source": "regret suite, teacher 128 samples, 4-turn horizon",
-    "note": "best 0.435\u00b10.029, next 0.261"
+    "note": "best 0.435\u00b10.029, next 0.261; S1.5 line teacher: the rejected run's best line closes the lead to 0.142"
   },
   {
     "id": "teacher-e311a6ac",
@@ -898,7 +898,7 @@
     "title": "The teacher's installCard at ation-box-muslihat-00119 #1080",
     "category": "agenda-exposure",
     "kind": "decision",
-    "split": "tuning",
+    "split": "teacher-v1",
     "gameId": "standard-c29-vs-standard-c29-elevation-box-leo-glacier~elevation-box-muslihat-00119",
     "sequence": 1080,
     "side": "corp",
@@ -917,7 +917,7 @@
     },
     "negativeControl": true,
     "source": "regret suite, teacher 128 samples, 4-turn horizon",
-    "note": "best 0.656\u00b10.029, next 0.248"
+    "note": "best 0.656\u00b10.029, next 0.248; S1.5 line teacher: the rejected install leads to the best line too (0.656, lead 0.000)"
   },
   {
     "id": "teacher-9bcefcf7",
