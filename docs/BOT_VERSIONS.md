@@ -385,9 +385,9 @@ the profiles give v31 and v27 v30's and v26's settings; the ladder's `standard-p
 | Live after (Corp v31, Runner v27) | 2,583 | 4 (the context's generation, pinned) |
 | Legacy (frozen copies) | 2,760 | 135 |
 
-Besides the resolved checks, the Runner's run code lost its first estimate (`Protection`) and its approach-toll fallback,
-which the whole-run model replaced in every live game, and its v16 rules for Creative Commission and Docklands Pass; the
-Corp lost v24's end-the-run subroutine value. Those versions were never defaults.
+Besides the resolved checks, the Runner's run code lost its first estimate (`Protection`) and its approach-toll
+fallback, which the whole-run model replaced in every live game, and its v16 rules for Creative Commission and Docklands
+Pass; the Corp lost v24's end-the-run subroutine value. Those versions were never defaults.
 
 **What stays versioned: the shared helpers.** `HeuristicContext`, `RunnerValues` and `RunModel` still switch on the
 generation (about 20 checks), because every helper of the heuristic stack takes a `HeuristicContext` and freezing them
@@ -404,5 +404,6 @@ four games (v31 or v30 against v27 or v26) must end in the same state.
 | Gateway | 240 | 960 | 240 | 0 |
 
 The seat-swap pairs are identical because an agent's random stream is seeded from the match seed and its side only;
-`RatingLadderTests.TheLiveAndThePreviousVersionShareTheirSeeds` asserts it, so a change that seeds from the version fails
-there instead of voiding this gate. `make bot-check` passes (AI 136, Match 1,107, CLI 185), the quick M5 cases unchanged.
+`RatingLadderTests.TheLiveAndThePreviousVersionShareTheirSeeds` asserts it, so a change that seeds from the version
+fails there instead of voiding this gate. `make bot-check` passes (AI 136, Match 1,107, CLI 185), the quick M5 cases
+unchanged.
