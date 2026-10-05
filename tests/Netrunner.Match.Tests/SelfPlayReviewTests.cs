@@ -46,24 +46,9 @@ public sealed class SelfPlayReviewTests
         PlayerSide side, string version)
     {
         FullMatchDefinition definition = Definition(content, seed);
-        ReplayArtifact replay = EngineJson.Deserialize<ReplayArtifact>(File.ReadAllText(Path.Combine(AppContext.BaseDirectory,
-            "..", "..", "..", "Fixtures", $"selfplay-review-{game}-replay.json")), definition.Behavior, definition.Runtime);
-        GameState state = replay.InitialSnapshot.ToState();
-        OfflineAgent agent = OfflineMatchFactory.CreateOpponent(definition, side == PlayerSide.Corp ? PlayerSide.Runner : PlayerSide.Corp,
-            "standard", version);
-        AgentLifecycleHost.Observe(agent, state, definition.Behavior);
-        foreach (ReplayAction recorded in replay.Actions)
-        {
-            if (recorded.Sequence == sequence)
-            {
-                PendingDecision pending = state.PendingDecision!;
-                Assert.Equal(side, state.GetPlayer(pending.Owner).Side);
-                ActionId id = await agent.ChooseActionAsync(ObservationBuilder.Build(state, side, definition.Behavior, definition.Runtime));
-                return (pending.LegalActions.Single(action => action.Id == id), state);
-            }
-            state = GameEngine.Apply(state, recorded.Submission, definition.Behavior, definition.Runtime).State;
-            AgentLifecycleHost.Observe(agent, state, definition.Behavior);
-        }
-        throw new InvalidOperationException($"The replay has no action {sequence}.");
+        ReplayArtifact replay = SavedDecision.ReadReplay(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "Fixtures",
+            $"selfplay-review-{game}-replay.json"), definition);
+        SavedChoice choice = await SavedDecision.ChooseAsync(replay, definition, sequence, side, version);
+        return (choice.Chosen, choice.State);
     }
 }

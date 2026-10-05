@@ -68,29 +68,16 @@ public sealed class CorpPlaytestV17Tests
         Action<JsonNode>? edit = null)
     {
         FullMatchDefinition definition = RulesFuzzRunner.CreateDefinition(Content, Seed);
-        ReplayArtifact replay = EngineJson.Deserialize<ReplayArtifact>(File.ReadAllText(Path.Combine(AppContext.BaseDirectory,
-            "..", "..", "..", "Fixtures", "playtest-agenda-swap-replay.json")), definition.Behavior, definition.Runtime);
-        GameState state = replay.InitialSnapshot.ToState();
-        OfflineAgent agent = OfflineMatchFactory.CreateOpponent(definition, PlayerSide.Runner, "standard", version);
-        AgentLifecycleHost.Observe(agent, state, definition.Behavior);
-        foreach (ReplayAction recorded in replay.Actions)
+        ReplayArtifact replay = SavedDecision.ReadReplay(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "Fixtures", "playtest-agenda-swap-replay.json"), definition);
+        Func<GameState, GameState>? edited = edit is null ? null : state =>
         {
-            if (recorded.Sequence == sequence)
-            {
-                PendingDecision pending = state.PendingDecision!;
-                ActionId id = await agent.ChooseActionAsync(ObservationBuilder.Build(state, PlayerSide.Corp, definition.Behavior, definition.Runtime));
-                return (pending.LegalActions.Single(action => action.Id == id), state);
-            }
-            state = GameEngine.Apply(state, recorded.Submission, definition.Behavior, definition.Runtime).State;
-            if (edit is not null && recorded.Sequence == sequence - 1)
-            {
-                // Edited before the agent observes it, as if the game had reached it.
-                JsonNode snapshot = JsonNode.Parse(EngineJson.Serialize(GameSnapshot.From(state, definition.Behavior, definition.Runtime)))!;
-                edit(snapshot);
-                state = EngineJson.Deserialize<GameSnapshot>(snapshot.ToJsonString(), definition.Behavior, definition.Runtime).ToState();
-            }
-            AgentLifecycleHost.Observe(agent, state, definition.Behavior);
-        }
-        throw new InvalidOperationException($"The replay has no action {sequence}.");
+            // Edited before the agent observes it, as if the game had reached it.
+            JsonNode snapshot = JsonNode.Parse(EngineJson.Serialize(GameSnapshot.From(state, definition.Behavior, definition.Runtime)))!;
+            edit(snapshot);
+            return EngineJson.Deserialize<GameSnapshot>(snapshot.ToJsonString(), definition.Behavior, definition.Runtime).ToState();
+        };
+        SavedChoice choice = await SavedDecision.ChooseAsync(replay, definition, sequence,
+            SavedDecision.Agent(definition, PlayerSide.Corp, version), edited);
+        return (choice.Chosen, choice.State);
     }
 }

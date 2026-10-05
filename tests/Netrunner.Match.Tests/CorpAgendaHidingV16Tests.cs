@@ -66,20 +66,7 @@ public sealed class CorpAgendaHidingV16Tests
     private static async Task<(LegalAction Chosen, GameState State, FullMatchDefinition Definition)> ChooseAtAsync(string version, long sequence)
     {
         (FullMatchDefinition definition, ReplayArtifact replay) = Load();
-        GameState state = replay.InitialSnapshot.ToState();
-        OfflineAgent agent = OfflineMatchFactory.CreateOpponent(definition, PlayerSide.Runner, "standard", version);
-        AgentLifecycleHost.Observe(agent, state, definition.Behavior);
-        foreach (ReplayAction recorded in replay.Actions)
-        {
-            if (recorded.Sequence == sequence)
-            {
-                PendingDecision pending = state.PendingDecision!;
-                ActionId id = await agent.ChooseActionAsync(ObservationBuilder.Build(state, PlayerSide.Corp, definition.Behavior, definition.Runtime));
-                return (pending.LegalActions.Single(action => action.Id == id), state, definition);
-            }
-            state = GameEngine.Apply(state, recorded.Submission, definition.Behavior, definition.Runtime).State;
-            AgentLifecycleHost.Observe(agent, state, definition.Behavior);
-        }
-        throw new InvalidOperationException($"The replay has no action {sequence}.");
+        SavedChoice choice = await SavedDecision.ChooseAsync(replay, definition, sequence, PlayerSide.Corp, version);
+        return (choice.Chosen, choice.State, definition);
     }
 }

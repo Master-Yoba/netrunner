@@ -85,6 +85,15 @@ planner's own per-step `Choose`, which S1.2's teacher therefore shares with the 
 
 **Independent of S0.3; needs S0.1's planner profile and S0.4's costs to size the teacher.**
 
+**Outcome (5 October; the record is in `docs/BOT_VERSIONS.md`).** The box suite is `data/ai/regret/gateway-elevation`:
+960 games stored as choice indices, 6,512 roots after deduplication (a deal's games share positions, so a position is
+kept once and a deal is held out whole), and 23 findings. The teacher labels at **32 samples and a 4-turn horizon, then
+the leaf**: the game's-end horizon was mostly ties at 8 samples and past four hours at 32. The noise floor is 51% best
+disagreement but a mean flip cost of 0.018, so regret, paired on the same labels, is the number; agreement is not. The
+gate holds: Runner v24 separates from v25 and v26, Corp v30 from v28 and v29, about 2 minutes a version. Because the
+labels end in set 4's leaf, S4.2's set 4 control and S6's relabelling matter more, and a deeper horizon is worth trying
+once S5.0 makes rollouts cheaper.
+
 ### S1.1 Decision roots
 
 - A root record: deal (content ID, game seed), action sequence number, acting side, the agent's checkpoint digest, the
