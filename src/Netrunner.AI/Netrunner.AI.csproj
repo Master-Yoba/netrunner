@@ -5,6 +5,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Netrunner.AI.Tests" />
+    <InternalsVisibleTo Include="Netrunner.Match.Tests" />
   </ItemGroup>
 
   <!-- A5: the position evaluation fitted to self-play outcomes (ai-fit-evaluation). -->

@@ -81,6 +81,53 @@ public sealed class RegretSuiteTests
         Assert.All(real, value => Assert.Equal(lines > 0, value.Line is not null));
     }
 
+    /// <summary>
+    /// Bot plan S1.5: lines that leave the turn in states with equal fingerprints share one play-out in the teacher's memo,
+    /// which is exact only if those play-outs are equal. This plays lines without sharing and checks it, so a state field
+    /// left out of the fingerprint that changes play fails here.
+    /// </summary>
+    [Fact]
+    public void LinesThatLeaveTheTurnInOneStateHaveOnePlayOut()
+    {
+        if (!Official) return;
+        (LadderSavedGame saved, FullMatchDefinition definition) = Saved();
+        OfflineAgent teacher = (OfflineAgent)RatingLadder.CreateAgent("hard", PlayerSide.Corp, definition);
+        GameState? root = null;
+        foreach (RegretPosition position in SavedDecision.Positions(saved.Replay, definition))
+        {
+            AgentLifecycleHost.Observe(teacher, position.State, definition.Behavior);
+            if (position.Sequence == CorpTurn) { root = position.State; break; }
+        }
+        GameState state = root ?? throw new InvalidOperationException("The fixture has no root.");
+        ObservationDeterminizer determinizer = ObservationBuilder.Build(state, PlayerSide.Corp, definition.Behavior, definition.Runtime).Determinizer!;
+        var planner = new TurnPlanner(teacher.Policy, teacher.Configuration, teacher.Catalog);
+        AgentKnowledge knowledge = teacher.Checkpoint.Knowledge;
+        GameState sample = TurnPlanner.Deal(PlayerSide.Corp, knowledge, planner.PoolFor(PlayerSide.Corp, knowledge, fromList: true),
+            new PlanningContext(determinizer, new DeterministicRandom(11)), pinned: true);
+        int[][] lines = [[], [1], [2], [0, 1], [1, 0], [1, 1], [0, 2], [2, 0], [1, 2], [2, 1]];
+
+        var ends = new Dictionary<string, double>(StringComparer.Ordinal);
+        int shared = 0;
+        foreach (LegalAction first in state.PendingDecision!.LegalActions.Take(8))
+            foreach (int[] ranks in lines)
+            {
+                // A memo of its own, so the line is played out whole and the memo only records where it left the turn.
+                var memo = new Dictionary<string, double>(StringComparer.Ordinal);
+                double? value = planner.PlayLine(sample, first.Id, ranks, PlayerSide.Corp, knowledge, determinizer, 1, 4,
+                    PlannerProbe.GameRolloutCap, out _, memo);
+                if (value is not { } played || memo.Count == 0) continue;
+                (string end, double recorded) = Assert.Single(memo);
+                Assert.Equal(played, recorded);
+                if (ends.TryGetValue(end, out double earlier))
+                {
+                    shared++;
+                    Assert.Equal(earlier, played);
+                }
+                else ends[end] = played;
+            }
+        Assert.True(shared > 0, "No two lines left the turn in one state, so nothing was checked.");
+    }
+
     [Fact]
     public void EveryCandidateIsPlayedOnTheSameSamples()
     {
