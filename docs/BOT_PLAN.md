@@ -69,7 +69,15 @@ The Wave 4 and 5 conclusion was "the planner is saturated". The evidence points 
   extracted, so the weights have not seen the corrected features they are applied to.
 - **Compute does not help, which means the leaf is noise.** Corp Hard at 10 samples × width 4 scored 0 Elo against
   3 × 3. If an evaluator carried signal, more rollouts would show it. This is the test argentum calls budget scaling, and
-  it failed before anyone ran it as a test.
+  it failed before anyone ran it as a test. S0.3 then measured it: ×8 samples is no stronger than ×1 in either seat.
+  Part of the reason is the next point: more samples sharpen the value of "this action, then the heuristic's play",
+  which is the wrong quantity whatever the leaf.
+- **The planner's own continuation is the heuristic.** `TurnPlanner.Choose` plays the root side's later decisions in the
+  turn with the plain heuristic. A first action that pays off only with the right follow-up (Petty Cash first, install
+  then advance twice, draw then run) is undervalued whenever the heuristic misplays the follow-up, and re-planning after
+  the action does not help, since the action was already undervalued at the root. S2 found this at a Petty Cash root:
+  the first action lost 0.23 with the heuristic's continuation while the full three-click lines were level. The same
+  rollouts are the teacher's, so the regret suite's labels carry it too.
 - **Rollouts are expensive for the wrong reason.** `ApplyMode.Simulation` costs about 47 µs an action (Wave 3), but
   every simulated decision in `TurnPlanner.Choose` builds a full observation and runs the heuristic with its full work
   budget, so one rollout step costs far more than the engine does.
@@ -122,15 +130,23 @@ These are better than most hobby engines have and are not up for redesign:
 ```text
 observation ──> heuristic (candidate generator: top-K actions with priority and score)
             ──> meaningful-candidate filter (drop dominated and bookkeeping actions)
-            ──> planner: for each of S shared determinized samples, roll each candidate out to the turn's end
-                   rollout policy: a cheap deterministic policy for both sides (4.3)
+            ──> planner: lines of the root side's own turn actions (a beam over the heuristic's top candidates,
+                   to the turn's end); for each of S shared determinized samples, play each line out
+                   rollout policy for everything else (nested choices, the opponent, later turns): cheap and
+                   deterministic (4.3)
                    leaf: evaluation set 5, as win probability (4.2)
-            ──> value(candidate) = mean over samples of  sigmoid-space delta from the root  +  static mix
-            ──> choose the best; re-plan after every accepted action
+            ──> value(line) = mean over samples of  sigmoid-space delta from the root  +  static mix
+            ──> value(candidate) = the best line that begins with it; choose the best; re-plan after every action
 ```
 
 - **The heuristic generates and orders candidates; it no longer decides** for Standard and Hard. Easy keeps the
   heuristic as its decider, with the forgetful tracker, so it stays beatable and quick.
+- **The root side's own turn is searched as lines, not played by the heuristic.** A candidate's value is the best line
+  of the root side's turn actions that begins with it (beam width `plan-width`, depth to the turn's end), scored with
+  shared samples. The heuristic still plays the nested choices inside those actions, the opponent and every later
+  turn. This is what lets the planner find a first action whose worth depends on its follow-up (1.3), and it is the
+  same search the teacher labels with (5.1), so labels and play measure one thing. Lines share work, so the cost is a
+  few times a one-step search, not width to the power of depth; sequential halving across lines keeps it bounded.
 - **Scores are compared in probability space.** Each rollout's leaf is a win probability; the candidate's value is the
   mean of (leaf − root value), so a certain win among three even rollouts reads 0.625 rather than overflowing the sum.
   Wins and losses are 1 and 0, not sentinels.
@@ -230,10 +246,15 @@ A fixed corpus of recorded decision roots with teacher labels, scored in minutes
 
 - **Roots:** turn-action decisions with at least two meaningful candidates, and run choices, sampled from Standard
   self-play on each pool (`ai-ladder --save-games`), plus every confirmed finding from the loops and strategy work.
+  Every meaningful candidate group at a root is labelled, not only the heuristic's best few: a planner is expected to
+  choose outside them, and a choice without a label drops out of regret, which would hide exactly the decisions the
+  planner changes. Where a labelling has cut the groups, `score` labels an unlabelled choice on demand.
   Each root keeps the acting side's observation, the checkpoint, the legal candidates and the deal, so any policy
   version can be asked to choose there (`BotLoop1Tests.ChooseAtAsync` already does this).
 - **Teacher:** the planner at an offline budget (start: 32 samples × every meaningful candidate) with common random
-  numbers across candidates. Its rollouts go **deeper than the leaf's horizon**: to the game's end with the rollout
+  numbers across candidates. It searches the root side's own turn as lines (4.1), so a candidate is valued at its best
+  follow-up rather than the heuristic's; a label made with the heuristic's continuation (the first labelling) is
+  marked as such and replaced. Its rollouts go **deeper than the leaf's horizon**: to the game's end with the rollout
   policy where S0.1's costs allow it, otherwise a fixed number of turns (start 4) and then the leaf. A label is then
   mostly the result of play, not a reading of set 4, so fitting set 5 to it does not inherit set 4's bias. It writes each
   candidate's value, its standard error over the samples, and the horizon it used.
@@ -343,12 +364,14 @@ effects), and any learned dynamics.
   measures its own noise floor (5.1) and agreement is read against it; S4.2 fits set 4 to the same labels as a control,
   so a gain is attributed to the target or to the features; the puzzle suite and the ladder gate each round; teacher
   drift is reported; a round that fails either is discarded.
-- **The teacher's continuation.** The teacher values a candidate followed by the heuristic's play, so a candidate whose
-  worth depends on the next action in the same turn is undervalued when the heuristic misplays it (S2 found Petty Cash
-  first undervalued by 0.23 at one root by this alone; the full lines were level). A longer horizon does not help.
-  Mitigation: before S4 fits to the labels, the teacher plays the rest of the root's own turn by a search (the turn
-  planner, or the best of the root side's choices at each of its decisions in that turn) and only then hands over to the
-  heuristic; the suite is relabelled and the change in labels reported, as teacher drift is.
+- **The teacher's continuation, and the planner's.** Both value a candidate followed by the heuristic's play, so a
+  candidate whose worth depends on the next action in the same turn is undervalued when the heuristic misplays it (S2
+  found Petty Cash first undervalued by 0.23 at one root by this alone; the full lines were level). A longer horizon
+  does not help, and re-planning after the action does not either. Mitigation: the turn-line search of 4.1, built in
+  `TurnPlanner` behind a parameter (S1.5) so the teacher and the shipped planner share it and Hard is unchanged until
+  S5; before S4 fits to the labels, the suite is relabelled with it, the change in labels is reported as teacher drift
+  is, the certified puzzles are re-certified, and S1.3's separation gate is passed again. The cost falls on S5.0: a
+  beam inside 50 ms needs cheaper simulated Apply.
 - **Rollout cost blows the latency budget.** Mitigation: S0 profiles before anything is built on it; the rollout policy
   is designed for cost (4.3); `rollout-budget` is a profile parameter; Standard may plan fewer samples than Hard.
 - **Freezing legacy code doubles the policy source for a while.** Mitigation: the legacy files are never edited; they
