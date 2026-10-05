@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Text.RegularExpressions;
 using Netrunner.Core;
 
 namespace Netrunner.AI;
@@ -21,7 +22,7 @@ namespace Netrunner.AI;
 /// accessed card. Each candidate is played out by both heuristics until the
 /// run ends, and the position is scored there.
 /// </summary>
-internal sealed class TurnPlanner
+internal sealed partial class TurnPlanner
 {
     /// <summary>Simulated decisions per rollout before it is scored where it stands.</summary>
     private const int RolloutDecisionCap = 60;
@@ -47,6 +48,9 @@ internal sealed class TurnPlanner
 
     public int Samples => _configuration.Parameters.GetValueOrDefault("plan-samples");
     public int Width => _configuration.Parameters.GetValueOrDefault("plan-width");
+
+    /// <summary>plan-lines 1 (bot plan S1.5): a turn-action candidate is valued at its best line of the turn, not its heuristic continuation.</summary>
+    public bool Lines => _configuration.Parameters.GetValueOrDefault("plan-lines") == 1;
     public int RunSamples => _configuration.Parameters.GetValueOrDefault("run-samples");
     public int RunWidth => _configuration.Parameters.GetValueOrDefault("run-width");
 
@@ -85,7 +89,20 @@ internal sealed class TurnPlanner
             .Take(run ? RunWidth : Width)];
         var totals = planned.ToDictionary(candidate => candidate.ActionId, _ => 0L);
         OpponentCardPool pool = PoolFor(features.Side, knowledge);
-        for (int sample = 0; sample < samples; sample++)
+        if (!run && Lines)
+        {
+            // Bot plan S1.5: a candidate is valued at its best line of the turn, on the same samples.
+            GameState[] states = [.. Enumerable.Range(0, samples).Select(_ => Deal(features.Side, knowledge, pool, planning))];
+            foreach (AgentCandidate candidate in planned)
+            {
+                long rolling = ProfileTimings.Start();
+                totals[candidate.ActionId] = (long)BestLine(samples, (index, ranks) =>
+                    (Rollout(states[index], candidate.ActionId, ranks, features.Side, knowledge, planning.Determinizer, false, out int reached), reached),
+                    Width).Values.Sum();
+                ProfileTimings.Stop("plan.lines", rolling);
+            }
+        }
+        else for (int sample = 0; sample < samples; sample++)
         {
             GameState state = Deal(features.Side, knowledge, pool, planning);
             foreach (AgentCandidate candidate in planned)
@@ -193,8 +210,13 @@ internal sealed class TurnPlanner
     public int Weight => _configuration.Parameters.GetValueOrDefault("plan-weight", 100);
 
     private long Rollout(GameState sample, ActionId first, PlayerSide side, AgentKnowledge knowledge, ObservationDeterminizer determinizer,
-        bool untilRunEnds)
+        bool untilRunEnds) => Rollout(sample, first, [], side, knowledge, determinizer, untilRunEnds, out _);
+
+    /// <summary>A turn rollout of a line (bot plan S1.5): at the root side's later turn actions, the heuristic's <paramref name="ranks"/>[i]-th choice.</summary>
+    private long Rollout(GameState sample, ActionId first, int[] ranks, PlayerSide side, AgentKnowledge knowledge,
+        ObservationDeterminizer determinizer, bool untilRunEnds, out int reached)
     {
+        reached = 0;
         int turn = sample.Turn.TurnNumber;
         GameState state = sample;
         ActionId? next = first;
@@ -207,7 +229,11 @@ internal sealed class TurnPlanner
                 || state.Turn.TurnNumber != turn || state.Turn.ActiveSide != side
                 || untilRunEnds && state.RunState is null)
                 break;
-            next = Choose(state, knowledge, determinizer, side);
+            bool turnAction = state.PendingDecision.Kind == DecisionKind.TurnAction && state.RunState is null
+                && state.GetPlayer(state.PendingDecision.Owner).Side == side;
+            int rank = turnAction && reached < ranks.Length ? ranks[reached] : 0;
+            if (turnAction) reached++;
+            next = Choose(state, knowledge, determinizer, side, rank);
         }
         return Score(state, side, determinizer);
     }
@@ -240,15 +266,33 @@ internal sealed class TurnPlanner
     /// <paramref name="side"/>; null when the action is not legal in the sample.
     /// </summary>
     internal double? PlayOut(GameState sample, ActionId first, PlayerSide side, AgentKnowledge knowledge,
-        ObservationDeterminizer determinizer, int horizonTurns, int evaluation, int cap)
+        ObservationDeterminizer determinizer, int horizonTurns, int evaluation, int cap) =>
+        PlayLine(sample, first, [], side, knowledge, determinizer, horizonTurns, evaluation, cap, out _);
+
+    /// <summary>
+    /// Bot plan S1.5, a line of the root side's turn: <paramref name="first"/>, then at each later turn-action decision of
+    /// <paramref name="side"/> in the same turn the heuristic's <paramref name="ranks"/>[i]-th distinct choice (its last past the
+    /// list), and everything else (nested choices, the opponent, later turns) as <see cref="PlayOut"/> plays it. A line is a
+    /// rank path, not a list of actions, so it plays on every sample the same way, without reading a sample's hidden cards.
+    /// <paramref name="reached"/> counts the later turn-action decisions the line met.
+    /// </summary>
+    internal double? PlayLine(GameState sample, ActionId first, IReadOnlyList<int> ranks, PlayerSide side, AgentKnowledge knowledge,
+        ObservationDeterminizer determinizer, int horizonTurns, int evaluation, int cap, out int reached)
     {
+        reached = 0;
         ApplyResult applied = Simulate(sample, first, determinizer);
         if (!applied.Accepted) return null;
         GameState state = applied.State;
-        int lastTurn = horizonTurns > 0 ? sample.Turn.TurnNumber + horizonTurns : int.MaxValue;
-        for (int steps = 0; steps < cap && state.Outcome.Kind == GameOutcomeKind.Ongoing && state.PendingDecision is not null
-            && state.Turn.TurnNumber < lastTurn && Choose(state, knowledge, determinizer, side) is { } action; steps++)
+        int turn = sample.Turn.TurnNumber;
+        int lastTurn = horizonTurns > 0 ? turn + horizonTurns : int.MaxValue;
+        for (int steps = 0; steps < cap && state.Outcome.Kind == GameOutcomeKind.Ongoing && state.PendingDecision is { } pending
+            && state.Turn.TurnNumber < lastTurn; steps++)
         {
+            bool turnAction = pending.Kind == DecisionKind.TurnAction && state.RunState is null && state.Turn.TurnNumber == turn
+                && state.Turn.ActiveSide == side && state.GetPlayer(pending.Owner).Side == side;
+            int rank = turnAction && reached < ranks.Count ? ranks[reached] : 0;
+            if (turnAction) reached++;
+            if (Choose(state, knowledge, determinizer, side, rank) is not { } action) break;
             applied = Simulate(state, action, determinizer);
             if (!applied.Accepted) break;
             state = applied.State;
@@ -262,6 +306,64 @@ internal sealed class TurnPlanner
         return value;
     }
 
+    /// <summary>The most later turn-action decisions a line of the turn ranks (bot plan S1.5); past them it takes the heuristic's choice.</summary>
+    internal const int LineDepth = 8;
+
+    /// <summary>
+    /// Bot plan S1.5: the best line of the root side's turn by a beam over rank paths (see <see cref="PlayLine"/>).
+    /// <paramref name="play"/> values a rank path on a sample and counts the later turn-action decisions it met. A line's
+    /// children differ from it at the next decision, taking the heuristic's 2nd to <paramref name="width"/>-th choice
+    /// there, and the best <paramref name="width"/> lines go on, to <see cref="LineDepth"/> decisions or the turn's end.
+    /// Sequential halving: every line is valued on the first quarter of the <paramref name="samples"/>, and the better
+    /// half on all of them; the best of those is the line.
+    /// </summary>
+    /// <returns>The best line's value on every sample, and its rank path.</returns>
+    internal static (double[] Values, int[] Ranks) BestLine(int samples, Func<int, int[], (double Value, int Reached)> play, int width)
+    {
+        int quarter = Math.Max(1, samples / 4);
+        (double Mean, int Reached) Screen(int[] ranks)
+        {
+            double sum = 0;
+            int reached = 0;
+            for (int index = 0; index < quarter; index++)
+            {
+                (double value, int met) = play(index, ranks);
+                sum += value;
+                reached = Math.Max(reached, met);
+            }
+            return (sum / quarter, reached);
+        }
+        (double rootMean, int rootReached) = Screen([]);
+        var screened = new List<(int[] Ranks, double Mean, int Reached)> { ([], rootMean, rootReached) };
+        List<(int[] Ranks, double Mean, int Reached)> frontier = [.. screened];
+        for (int level = 0; level < LineDepth; level++)
+        {
+            var children = new List<(int[] Ranks, double Mean, int Reached)>();
+            foreach ((int[] ranks, _, int reached) in frontier.Where(line => line.Reached > level))
+                for (int rank = 1; rank < width; rank++)
+                {
+                    int[] child = [.. ranks, .. Enumerable.Repeat(0, level - ranks.Length), rank];
+                    (double mean, int met) = Screen(child);
+                    children.Add((child, mean, met));
+                }
+            if (children.Count == 0) break;
+            screened.AddRange(children);
+            frontier = [.. frontier.Concat(children).OrderByDescending(line => line.Mean).ThenBy(line => line.Ranks.Length).Take(width)];
+        }
+        (double[] Values, int[] Ranks) best = ([], []);
+        double bestMean = double.NegativeInfinity;
+        foreach ((int[] ranks, _, _) in screened.OrderByDescending(line => line.Mean).ThenBy(line => line.Ranks.Length).Take((screened.Count + 1) / 2))
+        {
+            double[] values = [.. Enumerable.Range(0, samples).Select(index => play(index, ranks).Value)];
+            if (values.Average() > bestMean) (best, bestMean) = ((values, ranks), values.Average());
+        }
+        return best;
+    }
+
+    /// <summary>Whether <paramref name="first"/> can be played on a sample: the common-sample rule's test.</summary>
+    internal static bool Playable(GameState sample, ActionId first, ObservationDeterminizer determinizer) =>
+        Simulate(sample, first, determinizer).Accepted;
+
     private static ApplyResult Simulate(GameState state, ActionId action, ObservationDeterminizer determinizer)
     {
         long applying = ProfileTimings.Start();
@@ -273,7 +375,7 @@ internal sealed class TurnPlanner
     }
 
     /// <summary>The heuristic choice of whichever side owns the simulated decision.</summary>
-    private ActionId? Choose(GameState state, AgentKnowledge knowledge, ObservationDeterminizer determinizer, PlayerSide side)
+    private ActionId? Choose(GameState state, AgentKnowledge knowledge, ObservationDeterminizer determinizer, PlayerSide side, int rank = 0)
     {
         PendingDecision pending = state.PendingDecision!;
         // A forced choice (usually a pass) needs no observation.
@@ -291,14 +393,39 @@ internal sealed class TurnPlanner
         long evaluating = ProfileTimings.Start();
         ImmutableArray<AgentCandidate> candidates = (own ? _policy : _opponentPolicy).EvaluateDecision(features,
             own ? knowledge : AgentKnowledge.Empty, null, configuration, _catalog, new AgentWorkBudget(configuration.WorkBudget));
-        ActionId chosen = candidates
+        AgentCandidate[] ordered = [.. candidates
             .OrderByDescending(candidate => candidate.Utility.Priority)
             .ThenByDescending(candidate => candidate.Utility.Score)
-            .ThenBy(candidate => candidate.ActionId.Value, StringComparer.Ordinal)
-            .First().ActionId;
+            .ThenBy(candidate => candidate.ActionId.Value, StringComparer.Ordinal)];
+        ActionId chosen = rank == 0 ? ordered[0].ActionId : Distinct(state, pending, ordered, rank);
         ProfileTimings.Stop("plan.choose.heuristic", evaluating);
         return chosen;
     }
+
+    /// <summary>
+    /// The heuristic's <paramref name="rank"/>-th distinct choice (its last past the list), for a line of the turn (bot
+    /// plan S1.5): actions that differ only in which copy of a card they use are one choice.
+    /// </summary>
+    private static ActionId Distinct(GameState state, PendingDecision pending, AgentCandidate[] ordered, int rank)
+    {
+        var definitions = state.Cards.ToDictionary(card => card.Id.Value, card => card.DefinitionId.Value, StringComparer.Ordinal);
+        var actions = pending.LegalActions.ToDictionary(action => action.Id);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        ActionId chosen = ordered[0].ActionId;
+        foreach (AgentCandidate candidate in ordered)
+        {
+            if (!actions.TryGetValue(candidate.ActionId, out LegalAction? action)) continue;
+            string key = action.Kind + CardInstance().Replace(EngineJson.Serialize(action.Parameters),
+                match => definitions.TryGetValue(match.Value, out string? definition) ? "def:" + definition : match.Value);
+            if (!seen.Add(key)) continue;
+            chosen = candidate.ActionId;
+            if (seen.Count > rank) break;
+        }
+        return chosen;
+    }
+
+    [GeneratedRegex(@"card:\d+", RegexOptions.CultureInvariant)]
+    private static partial Regex CardInstance();
 
     private long Score(GameState state, PlayerSide side, ObservationDeterminizer determinizer)
     {

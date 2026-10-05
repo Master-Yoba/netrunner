@@ -15,7 +15,7 @@ public static partial class CliCommands
     /// Bot plan S2, the puzzle suite:
     /// ai-puzzles run SET-DIR [--corp V] [--runner V] [--profile P] [--split all|tuning|held-out] [--workers N] [--json]
     /// ai-puzzles import SET-DIR SAVED-GAME-FILE --id ID [--source TEXT]
-    /// ai-puzzles show SET-DIR --game ID --sequence N [--play I,J,...] [--teacher SAMPLES] [--horizon game|TURNS] [--json]
+    /// ai-puzzles show SET-DIR --game ID --sequence N [--play I,J,...] [--teacher SAMPLES] [--horizon game|TURNS] [--lines W] [--json]
     /// ai-puzzles import SET-DIR --suite SUITE-DIR --game ID (a regret suite's game)
     /// ai-puzzles find SUITE-DIR --side corp|runner [--turn-start true] [--hand DEF,...] [--installed DEF,...]
     ///   [--legal KIND[:DEF],...] [--limit N] [--workers N]
@@ -206,7 +206,8 @@ public static partial class CliCommands
             values = RolloutTeacher.Evaluate(teacher,
                 ObservationBuilder.Build(state, side, definition.Behavior, definition.Runtime),
                 [.. groups.Select(group => new ActionId(group.ActionIds[0]))],
-                new TeacherSettings(ProfileInt(samples, "--teacher", 1, 4096), 1, horizon == "game" ? 0 : ProfileInt(horizon, "--horizon", 1, 100)));
+                new TeacherSettings(ProfileInt(samples, "--teacher", 1, 4096), 1, horizon == "game" ? 0 : ProfileInt(horizon, "--horizon", 1, 100),
+                    Lines: options.TryGetValue("--lines", out string? width) ? ProfileInt(width, "--lines", 0, 16) : 0));
         }
         if (options.ContainsKey("--json"))
         {
@@ -221,13 +222,14 @@ public static partial class CliCommands
                     parameters = RegretRoots.Parameters(state, pending.LegalActions.First(action => action.Id.Value == group.ActionIds[0])),
                     mean = values?[index].Mean,
                     standardError = values?[index].StandardError,
+                    line = values?[index].Line,
                 }),
             }, RegretSuite.Json));
             return 0;
         }
         for (int index = 0; index < groups.Count; index++)
             output.WriteLine(string.Create(CultureInfo.InvariantCulture,
-                $"  {(values is null ? "" : $"{values[index].Mean:F3} ±{values[index].StandardError:F3} ")}{groups[index].Kind} {groups[index].Description}"));
+                $"  {(values is null ? "" : $"{values[index].Mean:F3} ±{values[index].StandardError:F3} ")}{groups[index].Kind} {groups[index].Description}{(values?[index].Line is { Count: > 0 } line ? $" line {string.Join(',', line)}" : "")}"));
         return 0;
     }
 

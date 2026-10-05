@@ -13,8 +13,8 @@ public static partial class CliCommands
     /// <summary>
     /// Bot plan S1, the regret suite:
     /// ai-regret roots GAMES-DIR --output SUITE-DIR [--turn-roots N] [--run-roots N] [--labelled N] [--seed S] [--workers N]
-    /// ai-regret label SUITE-DIR [--samples N] [--horizon game|TURNS] [--evaluation N] [--seed S] [--workers N]
-    ///   [--labels FILE] [--repeat N --repeat-seed S]
+    /// ai-regret label SUITE-DIR [--samples N] [--horizon game|TURNS] [--evaluation N] [--lines W] [--seed S] [--workers N]
+    ///   [--labels FILE] [--repeat N --repeat-seed S] [--roots FILE]
     /// ai-regret score SUITE-DIR --version V[,V...]|latest [--profile P] [--split all|held-out|train] [--labels FILE]
     ///   [--blunders N] [--bootstrap N] [--workers N] [--json]
     /// ai-regret findings SUITE-DIR --manifest FILE --fixtures DIR --content POOL [--labelled N]
@@ -50,7 +50,7 @@ public static partial class CliCommands
     private sealed record RegretOptions(string? Output, int TurnRoots, int RunRoots, int Labelled, ulong Seed, int Workers, int Samples,
         int HorizonTurns, int Evaluation, string LabelsFile, int Repeat, ulong RepeatSeed, string[] Versions, string Profile, string Split,
         int Blunders, int Bootstrap, bool Json, bool Missing = false, string? Manifest = null, string? Fixtures = null, string? Content = null,
-        bool LabelMissing = false)
+        bool LabelMissing = false, int Lines = 0, string? RootsFile = null)
     {
         public static RegretOptions Parse(string[] args)
         {
@@ -91,6 +91,8 @@ public static partial class CliCommands
                     "--json" => options with { Json = true },
                     "--missing" => options with { Missing = true },
                     "--label-missing" => options with { LabelMissing = true },
+                    "--lines" => options with { Lines = Int("--lines", 0, 16) },
+                    "--roots" => options with { RootsFile = Next() },
                     "--manifest" => options with { Manifest = Next() },
                     "--fixtures" => options with { Fixtures = Next() },
                     "--content" => options with { Content = Next() },
@@ -144,17 +146,20 @@ public static partial class CliCommands
         // --missing labels only the roots the file has no label for, and keeps the rest.
         ImmutableArray<RegretLabel> kept = options.Missing && File.Exists(labelsPath) ? RegretSuite.ReadLines<RegretLabel>(labelsPath) : [];
         HashSet<string> labelled = [.. kept.Select(label => label.RootId)];
-        HashSet<string> wanted = [.. suite.Roots.Select(root => root.Id).Where(id => !labelled.Contains(id))];
+        // --roots FILE labels only the roots it lists, one id a line.
+        HashSet<string>? listed = options.RootsFile is { } file
+            ? [.. File.ReadLines(file).Select(line => line.Trim()).Where(line => line.Length > 0)] : null;
+        HashSet<string> wanted = [.. suite.Roots.Select(root => root.Id).Where(id => !labelled.Contains(id) && (listed is null || listed.Contains(id)))];
         ImmutableArray<RegretLabel> labels = Label(suite, wanted, options, error);
         RegretSuite.WriteLines(labelsPath, kept.Concat(labels).OrderBy(label => label.RootId, StringComparer.Ordinal));
         output.WriteLine(string.Create(CultureInfo.InvariantCulture,
-            $"ai-regret label roots={labels.Length} unlabellable={wanted.Count - labels.Length} samples={options.Samples} horizon={(options.HorizonTurns == 0 ? "game" : options.HorizonTurns.ToString(CultureInfo.InvariantCulture))} seconds={started.Elapsed.TotalSeconds:F0} file={options.LabelsFile}"));
+            $"ai-regret label roots={labels.Length} unlabellable={wanted.Count - labels.Length} samples={options.Samples} horizon={(options.HorizonTurns == 0 ? "game" : options.HorizonTurns.ToString(CultureInfo.InvariantCulture))} lines={options.Lines} seconds={started.Elapsed.TotalSeconds:F0} file={options.LabelsFile}"));
         return 0;
     }
 
     private static ImmutableArray<RegretLabel> Label(RegretSuite suite, HashSet<string> rootIds, RegretOptions options, TextWriter error)
     {
-        var settings = new TeacherSettings(options.Samples, options.Seed, options.HorizonTurns, options.Evaluation);
+        var settings = new TeacherSettings(options.Samples, options.Seed, options.HorizonTurns, options.Evaluation, Lines: options.Lines);
         var byGame = suite.Roots.Where(root => rootIds.Contains(root.Id)).GroupBy(root => root.GameId).ToDictionary(group => group.Key, group => group.ToList());
         RegretGame[] games = [.. suite.Games.Where(game => byGame.ContainsKey(game.Id))];
         return [.. ForGames(games, options.Workers, error, "label", game => RegretLabels.Label(game, byGame[game.Id], settings)).SelectMany(found => found)];

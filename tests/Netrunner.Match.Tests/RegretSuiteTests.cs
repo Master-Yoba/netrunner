@@ -44,8 +44,10 @@ public sealed class RegretSuiteTests
         }
     }
 
-    [Fact]
-    public void TheTeacherGivesHiddenStateTwinsTheSameLabelsAndRepeatsItself()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(3)]
+    public void TheTeacherGivesHiddenStateTwinsTheSameLabelsAndRepeatsItself(int lines)
     {
         if (!Official) return;
         (LadderSavedGame saved, FullMatchDefinition definition) = Saved();
@@ -60,7 +62,7 @@ public sealed class RegretSuiteTests
         GameState twin = TurnPlannerTests.SwapTwoHiddenCards(state, PlayerSide.Runner)
             ?? throw new InvalidOperationException("The fixture's Runner has no two different hidden cards.");
         ActionId[] candidates = [.. state.PendingDecision!.LegalActions.Take(3).Select(action => action.Id)];
-        var settings = new TeacherSettings(Samples: 2, Seed: 7, HorizonTurns: 1);
+        var settings = new TeacherSettings(Samples: lines > 0 ? 4 : 2, Seed: 7, HorizonTurns: 1, Lines: lines);
 
         IReadOnlyList<TeacherValue> real = RolloutTeacher.Evaluate(teacher,
             ObservationBuilder.Build(state, PlayerSide.Corp, definition.Behavior, definition.Runtime), candidates, settings);
@@ -69,10 +71,14 @@ public sealed class RegretSuiteTests
         IReadOnlyList<TeacherValue> again = RolloutTeacher.Evaluate(teacher,
             ObservationBuilder.Build(state, PlayerSide.Corp, definition.Behavior, definition.Runtime), candidates, settings);
 
-        Assert.Equal(real, twinned);
-        Assert.Equal(real, again);
-        Assert.All(real, value => Assert.Equal(2, value.PlayOuts));
+        // A line is a list, so the values are compared by their contents.
+        static string Key(TeacherValue value) =>
+            $"{value.Action.Value} {value.Mean:R} {value.StandardError:R} {value.PlayOuts} {string.Join(',', value.Line ?? [])}";
+        Assert.Equal(real.Select(Key), twinned.Select(Key));
+        Assert.Equal(real.Select(Key), again.Select(Key));
+        Assert.All(real, value => Assert.Equal(settings.Samples, value.PlayOuts));
         Assert.All(real, value => Assert.InRange(value.Mean, 0, 1));
+        Assert.All(real, value => Assert.Equal(lines > 0, value.Line is not null));
     }
 
     [Fact]

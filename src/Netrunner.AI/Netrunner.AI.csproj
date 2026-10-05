@@ -3,6 +3,10 @@
     <ProjectReference Include="../Netrunner.Core/Netrunner.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Netrunner.AI.Tests" />
+  </ItemGroup>
+
   <!-- A5: the position evaluation fitted to self-play outcomes (ai-fit-evaluation). -->
   <ItemGroup Condition="Exists('../../data/ai/evaluation-v1.json')">
     <EmbeddedResource Include="../../data/ai/evaluation-v1.json" LogicalName="Netrunner.AI.Data.ai.evaluation-v1.json" />

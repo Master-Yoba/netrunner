@@ -155,10 +155,12 @@ public static class CorpPolicyProfiles
         bool hard = tiers && configuration.ProfileId == "hard";
         bool personality = configuration.Parameters.ContainsKey(AgentPersonalities.ParameterKey);
         int tuning = hard ? configuration.Parameters.Keys.Count(key => HardTuningKeys.Contains(key) && !keys!.Contains(key)) : 0;
+        // Bot plan S1.5: the turn-line search is an optional switch of a tiered profile.
+        bool lines = tiers && configuration.Parameters.ContainsKey("plan-lines");
         if (configuration.Side != PlayerSide.Corp || keys is null
             || !(configuration.ProfileId is "standard" or "easy" || tiers && configuration.ProfileId == "hard")
             || personality && !tiers
-            || configuration.Parameters.Count != keys.Length + (personality ? 1 : 0) + tuning
+            || configuration.Parameters.Count != keys.Length + (personality ? 1 : 0) + (lines ? 1 : 0) + tuning
             || !keys.All(configuration.Parameters.ContainsKey)
             || configuration.Parameters.Any(pair => pair.Key switch
             {
@@ -169,6 +171,7 @@ public static class CorpPolicyProfiles
                 "plan-weight" => pair.Value is < 25 or > 400,
                 "plan-model" => pair.Value is < 0 or > 1,
                 "plan-tracker" => pair.Value is < 0 or > 3,
+                "plan-lines" => pair.Value is < 0 or > 1,
                 "plan-evaluation" => pair.Value is < 0 or > 4,
                 "archetype-primary" or "archetype-secondary" => !Enum.IsDefined((CorpArchetype)pair.Value),
                 AgentPersonalities.ParameterKey => pair.Value == 0 || !AgentPersonalities.IsValid(PlayerSide.Corp, pair.Value),

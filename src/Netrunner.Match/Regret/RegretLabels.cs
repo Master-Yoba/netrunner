@@ -35,7 +35,7 @@ public static class RegretLabels
             // A root no sample could play every candidate on has no label: it is scored as unlabelled.
             if (values.Any(value => value.PlayOuts == 0)) return;
             labels.Add(new RegretLabel(root.Id, settings.Samples, settings.HorizonTurns, settings.Evaluation, rooted.Seed,
-                [.. root.Candidates.Zip(values, (candidate, value) => new RegretValue(candidate.Group, value.Mean, value.StandardError, value.PlayOuts))]));
+                [.. root.Candidates.Zip(values, Value)], settings.Lines));
         });
         return labels.ToImmutable();
     }
@@ -62,15 +62,18 @@ public static class RegretLabels
         {
             foreach (OfflineAgent teacher in teachers.Values) AgentLifecycleHost.Observe(teacher, position.State, definition.Behavior);
             if (!bySequence.TryGetValue(position.Sequence, out var request)) return;
-            var settings = new TeacherSettings(request.Label.Samples, request.Label.Seed, request.Label.HorizonTurns, request.Label.Evaluation);
+            var settings = new TeacherSettings(request.Label.Samples, request.Label.Seed, request.Label.HorizonTurns, request.Label.Evaluation,
+                Lines: request.Label.Lines);
             IReadOnlyList<TeacherValue> found = RolloutTeacher.Evaluate(teachers[request.Root.Side],
                 ObservationBuilder.Build(position.State, request.Root.Side, definition.Behavior, definition.Runtime),
                 [.. request.Groups.Select(group => new ActionId(group.ActionIds[0]))], settings);
-            values[request.Root.Id] = [.. request.Groups.Zip(found, (group, value) => new RegretValue(group.Group, value.Mean, value.StandardError, value.PlayOuts))
-                .Where(value => value.PlayOuts > 0)];
+            values[request.Root.Id] = [.. request.Groups.Zip(found, Value).Where(value => value.PlayOuts > 0)];
         });
         return values;
     }
+
+    private static RegretValue Value(RegretCandidate candidate, TeacherValue value) =>
+        new(candidate.Group, value.Mean, value.StandardError, value.PlayOuts, value.Line is { } line ? [.. line] : null);
 
     private static OfflineAgent Teacher(FullMatchDefinition definition, PlayerSide side) =>
         RatingLadder.CreateAgent("hard", side, definition) as OfflineAgent

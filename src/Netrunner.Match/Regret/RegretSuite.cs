@@ -24,11 +24,15 @@ public sealed record RegretCandidate(string Group, ActionKind Kind, string Descr
 public sealed record RegretRoot(string Id, string GameId, long Sequence, PlayerSide Side, string Kind, string Split,
     ImmutableArray<string> Categories, ImmutableArray<RegretCandidate> Candidates);
 
-/// <summary>A labelled candidate group: the teacher's mean win probability for the acting side, and its standard error.</summary>
-public sealed record RegretValue(string Group, double Mean, double StandardError, int PlayOuts);
+/// <summary>
+/// A labelled candidate group: the teacher's mean win probability for the acting side, and its standard error. With the
+/// turn-line search, <paramref name="Line"/> is its best line: the heuristic's choice at each later turn action (bot plan S1.5).
+/// </summary>
+public sealed record RegretValue(string Group, double Mean, double StandardError, int PlayOuts, int[]? Line = null);
 
-/// <summary>The teacher's labels for one root and how they were made.</summary>
-public sealed record RegretLabel(string RootId, int Samples, int HorizonTurns, int Evaluation, ulong Seed, ImmutableArray<RegretValue> Values)
+/// <summary>The teacher's labels for one root and how they were made; <paramref name="Lines"/> is the turn-line search's beam, 0 without it.</summary>
+public sealed record RegretLabel(string RootId, int Samples, int HorizonTurns, int Evaluation, ulong Seed, ImmutableArray<RegretValue> Values,
+    int Lines = 0)
 {
     /// <summary>The best labelled group, or null when no group has a value.</summary>
     [JsonIgnore]
