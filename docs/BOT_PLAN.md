@@ -265,8 +265,8 @@ CLI: `ai-regret label <games-dir> --output <suite>` and `ai-regret score <suite>
   one game and remove the next cost after those. Target: 1,000 deals on the box pool in under 10 minutes on 12
   workers. (A two-entrant deal is four games, both entrants in both seats; S0.2 measured 2.4 games a second, so 10
   minutes buys about 360 deals on this box: see [BOT_VERSIONS.md](BOT_VERSIONS.md).)
-- **Size by claim.** A claim of strength uses 1,000 deals with `--stop-when-clear`; a no-harm check on another pool
-  uses 240. Report the interval, never the point alone.
+- **Size by claim.** A claim of strength uses the deals 10 minutes buy (about 400 on the box pool, S0.2) with
+  `--stop-when-clear`; a no-harm check on another pool uses 240. Report the interval, never the point alone.
 - **Budget-scaling ladder.** Entrants `standard-x1`, `standard-x4`, `standard-x16` (the same policy at 1×, 4× and 16×
   rollout budget). The result must be monotone with each step's lower bound above zero. A non-monotone result means the
   leaf is not carrying signal; stop and fix the leaf before touching anything else.
@@ -300,7 +300,7 @@ the previous version. New lints come from the blunder list when a class recurs.
 | When | What | Time |
 |---|---|---|
 | Per change | `make bot-check`; `ai-regret score` on the target pool; `ai-puzzles`; lint counts on the last saved run | ~10 min |
-| Per candidate that claims strength | Fast ladder, 1,000 deals, `--stop-when-clear`, target pool; 240 on Gateway for harm | ~15 min |
+| Per candidate that claims strength | Fast ladder, about 400 deals (what 10 minutes buys), `--stop-when-clear`, target pool; 240 on Gateway for harm | ~15 min |
 | Per policy version | Budget-scaling ladder; anchors; `PolicyPerformanceTests` on the reference box; the record in `docs/BOT_VERSIONS.md` | ~30 min |
 | Per batch, before push | `make gates REF=<commit>`; per-slice fuzz when the engine or cards changed | ~30 min |
 
@@ -343,6 +343,12 @@ effects), and any learned dynamics.
   measures its own noise floor (5.1) and agreement is read against it; S4.2 fits set 4 to the same labels as a control,
   so a gain is attributed to the target or to the features; the puzzle suite and the ladder gate each round; teacher
   drift is reported; a round that fails either is discarded.
+- **The teacher's continuation.** The teacher values a candidate followed by the heuristic's play, so a candidate whose
+  worth depends on the next action in the same turn is undervalued when the heuristic misplays it (S2 found Petty Cash
+  first undervalued by 0.23 at one root by this alone; the full lines were level). A longer horizon does not help.
+  Mitigation: before S4 fits to the labels, the teacher plays the rest of the root's own turn by a search (the turn
+  planner, or the best of the root side's choices at each of its decisions in that turn) and only then hands over to the
+  heuristic; the suite is relabelled and the change in labels reported, as teacher drift is.
 - **Rollout cost blows the latency budget.** Mitigation: S0 profiles before anything is built on it; the rollout policy
   is designed for cost (4.3); `rollout-budget` is a profile parameter; Standard may plan fewer samples than Hard.
 - **Freezing legacy code doubles the policy source for a while.** Mitigation: the legacy files are never edited; they

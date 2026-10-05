@@ -164,7 +164,9 @@ once S5.0 makes rollouts cheaper.
 **Outcome (5 October; the record is in `docs/BOT_VERSIONS.md`).** `data/ai/puzzles/gateway-elevation` (49 puzzles) and
 `nsg-core-sets` (5): the 28 converted tests and 26 teacher-certified decisions, 8 categories, 25 negative controls. The
 defaults score 34/49 and 5/5; agenda exposure is 0/4, which meets the gate. Three deferred findings (Petty Cash first,
-Ritual first, Spin Doctor before its trash) are not certified by the teacher and are recorded rather than made puzzles;
+Ritual first, Spin Doctor before its trash) are not made puzzles: the one-step teacher values a first action with the
+heuristic's continuation, which undervalued Petty Cash first by 0.23 at one root where the full lines are level (plan
+section 9, the teacher's continuation, fixed before S4);
 the target of 60 puzzles, ICE placement and inference, a third held out, and an NSG Core suite are still open. The old
 saved-decision tests stay until S3 freezes the versions before v31 and v27: their halves that pin the older versions'
 choices guard code that is still live until then, and `PuzzleSuiteTests` already asserts that the defaults pass every
@@ -310,9 +312,9 @@ rollout step gets cheaper, and S0.4's trace says the step is mostly simulated `A
 
 - Regret suite: Standard's regret below the heuristic's (v31/v27) with the interval clear.
 - Puzzle suite: no category worse; the sequencing and exposure categories better.
-- Ladders on the box pool, 1,000 deals, `--stop-when-clear`: new Standard beats `standard-prev` in both seats with the
-  lower bound above zero; loses to no anchor; Gateway pool level or better; tiers ordered Easy < Standard < Hard in both
-  seats.
+- Ladders on the box pool, about 400 deals (what 10 minutes buys, S0.2), `--stop-when-clear`: new Standard beats
+  `standard-prev` in both seats with the lower bound above zero; loses to no anchor; Gateway pool level or better; tiers
+  ordered Easy < Standard < Hard in both seats.
 - Lint counts per 1,000 games not worse on any lint.
 - Belief and run-model validations in `make bot-check` pass.
 - **Record:** all of it in `docs/BOT_VERSIONS.md`; the human playtest expectation (Standard feels like it plans) noted
@@ -327,8 +329,8 @@ A round is one version. It runs when the previous round's gates are met.
 2. Re-label the whole suite with the teacher at the current Standard's leaf and 4× its budget. Report teacher drift:
    the share of roots whose best candidate changed. Over 15% stops the round for inspection of the top changes.
 3. Refit set 5's weights (a new document version, `evaluation-v5.<round>.json`).
-4. Score the candidate (Standard with the new weights) by S5.3's gates, with 1,000-deal ladders only when the regret
-   suite and puzzles improved.
+4. Score the candidate (Standard with the new weights) by S5.3's gates, with box ladders (about 400 deals) only when
+   the regret suite and puzzles improved.
 5. Work the blunder list: the top 20 roots by regret. Each is a leaf term, a filter bug, a rollout-policy weakness or an
    engine bug; fix what is general, add a puzzle for each, and never a card-named rule.
 6. Record the round in `docs/BOT_VERSIONS.md` and promote or discard.

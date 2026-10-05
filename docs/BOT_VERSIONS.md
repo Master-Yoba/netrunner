@@ -325,13 +325,24 @@ prints the teacher's value of every choice at a root).
   standard error 0.04 or less; 54 of 95 held) and the accepted actions match no clearly worse group; capped at 8 a
   category. 14 are negative controls: the heuristic's first choice is clearly worse and is rejected. A third (10) is
   held out by a hash of the id.
-- **Deferred findings the teacher does not certify** (4-turn horizon, 128 samples; none is made a puzzle): Petty Cash as
-  the turn's first action (24 lean-credit Corp turn starts: level with the best alternative or worse, by up to 0.2);
-  Ritual first (20 Runner turn starts: level or worse in 18, ahead by 0.02 in 2); Spin Doctor before the install that
-  trashes it (its remove-from-game ability is not offered at the 20 turn starts found, so the line cannot be posed
-  there). The loop 2 games these findings came from no longer replay under today's card behaviour (an action becomes
-  illegal within the first 115), so their exact positions could not be used. Mercia's free install, a second Jailbreak
-  on an unchanged R&D, GAMEDRAGON™ Pro and the NSG Core items (Synapse Global, Touch-ups) wait for positions.
+- **Deferred findings the one-step teacher cannot judge** (none is made a puzzle). The teacher values a first action
+  followed by the heuristic's play, so an action whose worth depends on the next click is undervalued whenever the
+  heuristic misplays that click, and no horizon fixes it. Petty Cash as the turn's first action, at 23 lean-credit Corp
+  turn starts: level with the best alternative or worse, by up to 0.23, at 64 samples and a 4-turn horizon; relabelled
+  at 128 samples the sign does not move with the horizon (mean gap −0.023 at 4 turns, −0.027 at 8; 15 level, 8 behind,
+  1 ahead at 8). At the worst root (`…leo-glacier~…topan-00202#358`) the gap is the continuation's: with
+  `ai-puzzles show --play`, Petty Cash then its best second action scores 0.477 against 0.583 for the best line without
+  it, and the two full three-click lines (Petty Cash, install the agenda in the existing remote, install the asset in a
+  new one; or the two installs and a credit) leave the Runner at 0.840 ±0.018 and 0.818 ±0.019 at its next decision:
+  level. Ritual first (20 Runner turn starts, level or worse in 18) is open to the same bias. Spin Doctor's
+  remove-from-game ability is not offered at the 20 turn starts found, so that line cannot be posed there. The loop 2
+  games these findings came from no longer replay under today's card behaviour (an action becomes illegal within the
+  first 115), so their exact positions could not be used. Mercia's free install, a second Jailbreak on an unchanged R&D,
+  GAMEDRAGON™ Pro and the NSG Core items (Synapse Global, Touch-ups) wait for positions.
+- **The same bias in the certified puzzles and the regret suite.** The 26 teacher-certified puzzles and the suite's
+  labels come from the same one-step teacher, so some may be continuation artifacts, most likely where the right action
+  needs a good follow-up in the same turn. They are kept with their source recorded; a teacher that plays the root's own
+  turn by a search, not the heuristic, is the fix (plan section 9).
 
 **Baseline** (Standard; box set 49 puzzles, 10 held out; NSG Core set 5):
 
