@@ -15,7 +15,7 @@ public static partial class CliCommands
     /// Bot plan S2, the puzzle suite:
     /// ai-puzzles run SET-DIR [--corp V] [--runner V] [--profile P] [--split all|tuning|held-out] [--workers N] [--json]
     /// ai-puzzles import SET-DIR SAVED-GAME-FILE --id ID [--source TEXT]
-    /// ai-puzzles show SET-DIR --game ID --sequence N [--teacher SAMPLES] [--horizon game|TURNS] [--json]
+    /// ai-puzzles show SET-DIR --game ID --sequence N [--play I,J,...] [--teacher SAMPLES] [--horizon game|TURNS] [--json]
     /// ai-puzzles import SET-DIR --suite SUITE-DIR --game ID (a regret suite's game)
     /// ai-puzzles find SUITE-DIR --side corp|runner [--turn-start true] [--hand DEF,...] [--installed DEF,...]
     ///   [--legal KIND[:DEF],...] [--limit N] [--workers N]
@@ -172,6 +172,20 @@ public static partial class CliCommands
         RegretPosition position = RegretGames.Positions(game, definition).FirstOrDefault(entry => entry.Sequence == sequence);
         if (position.State is null) throw new ArgumentException($"Game '{id}' has no action {sequence}.");
         GameState state = position.State;
+        // --play I,J,...: the I-th listed choice is applied, then the J-th at the decision that follows, and so on, so a line
+        // can be valued past its first action (the teacher plays each choice on with the heuristic's continuation).
+        var played = new List<GameState>();
+        foreach (string index in options.GetValueOrDefault("--play", "").Split(',', StringSplitOptions.RemoveEmptyEntries))
+        {
+            PendingDecision at = state.PendingDecision ?? throw new ArgumentException("--play runs past the game's end.");
+            IReadOnlyList<RegretCandidate> choices = RegretRoots.Group(state, at);
+            int chosen = ProfileInt(index, "--play", 0, choices.Count - 1);
+            output.WriteLine($"  played {choices[chosen].Kind} {choices[chosen].Description}");
+            ApplyResult applied = GameEngine.Apply(state, new ActionSubmission(at.Owner, at.Id, at.Revision, new ActionId(choices[chosen].ActionIds[0])),
+                definition.Behavior, definition.Runtime);
+            state = applied.Accepted ? applied.State : throw new ArgumentException($"--play: the engine rejected choice {chosen}.");
+            played.Add(state);
+        }
         PendingDecision pending = state.PendingDecision!;
         PlayerSide side = state.GetPlayer(pending.Owner).Side;
         PlayerState player = state.Players.Single(entry => entry.Side == side);
@@ -187,7 +201,9 @@ public static partial class CliCommands
         if (options.TryGetValue("--teacher", out string? samples))
         {
             string horizon = options.GetValueOrDefault("--horizon", "4");
-            values = RolloutTeacher.Evaluate(Watched(game, definition, side, sequence),
+            OfflineAgent teacher = Watched(game, definition, side, sequence);
+            foreach (GameState next in played) AgentLifecycleHost.Observe(teacher, next, definition.Behavior);
+            values = RolloutTeacher.Evaluate(teacher,
                 ObservationBuilder.Build(state, side, definition.Behavior, definition.Runtime),
                 [.. groups.Select(group => new ActionId(group.ActionIds[0]))],
                 new TeacherSettings(ProfileInt(samples, "--teacher", 1, 4096), 1, horizon == "game" ? 0 : ProfileInt(horizon, "--horizon", 1, 100)));
