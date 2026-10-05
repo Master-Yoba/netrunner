@@ -146,7 +146,10 @@ public sealed class RegretSuiteTests
         Assert.Subset(roots, suite.Labels.Select(label => label.RootId).ToHashSet());
         Assert.True(suite.Labels.Length >= suite.Roots.Length * 0.99);
         var byId = suite.Roots.ToDictionary(root => root.Id);
-        Assert.All(suite.Labels, label => Assert.Equal(byId[label.RootId].Candidates.Length, label.Values.Length));
+        // S1.4 extended the roots to every meaningful group; a label holds the groups labelled so far, each once.
+        Assert.All(suite.Labels, label => Assert.Subset(byId[label.RootId].Candidates.Select(candidate => candidate.Group).ToHashSet(),
+            label.Values.Select(value => value.Group).ToHashSet()));
+        Assert.All(suite.Labels, label => Assert.Equal(label.Values.Length, label.Values.Select(value => value.Group).Distinct().Count()));
         Assert.Contains(suite.Roots, root => root.Categories.Contains("finding"));
     }
 
