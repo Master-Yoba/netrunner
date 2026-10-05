@@ -114,11 +114,14 @@ public sealed record RegretSuite(ImmutableArray<RegretGame> Games, ImmutableArra
         return items.ToImmutable();
     }
 
+    /// <summary>Writes the file whole or not at all: a run stopped while writing leaves the previous file.</summary>
     public static void WriteLines<T>(string path, IEnumerable<T> items)
     {
-        using var stream = new GZipStream(File.Create(path), CompressionLevel.SmallestSize);
-        using var writer = new StreamWriter(stream) { NewLine = "\n" };
-        foreach (T item in items) writer.WriteLine(JsonSerializer.Serialize(item, Json));
+        string partial = path + ".partial";
+        using (var stream = new GZipStream(File.Create(partial), CompressionLevel.SmallestSize))
+        using (var writer = new StreamWriter(stream) { NewLine = "\n" })
+            foreach (T item in items) writer.WriteLine(JsonSerializer.Serialize(item, Json));
+        File.Move(partial, path, overwrite: true);
     }
 }
 

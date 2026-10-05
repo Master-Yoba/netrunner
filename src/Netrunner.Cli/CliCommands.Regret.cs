@@ -14,7 +14,7 @@ public static partial class CliCommands
     /// Bot plan S1, the regret suite:
     /// ai-regret roots GAMES-DIR --output SUITE-DIR [--turn-roots N] [--run-roots N] [--labelled N] [--seed S] [--workers N]
     /// ai-regret label SUITE-DIR [--samples N] [--horizon game|TURNS] [--evaluation N] [--lines W] [--seed S] [--workers N]
-    ///   [--labels FILE] [--repeat N --repeat-seed S] [--roots FILE]
+    ///   [--labels FILE] [--repeat N --repeat-seed S] [--roots FILE] (with --repeat, the roots to repeat)
     /// ai-regret score SUITE-DIR --version V[,V...]|latest [--profile P] [--split all|held-out|train] [--labels FILE]
     ///   [--blunders N] [--bootstrap N] [--workers N] [--json]
     /// ai-regret findings SUITE-DIR --manifest FILE --fixtures DIR --content POOL [--labelled N]
@@ -132,7 +132,11 @@ public static partial class CliCommands
         {
             ImmutableArray<RegretLabel> first = RegretSuite.ReadLines<RegretLabel>(Path.Combine(suiteDirectory, options.LabelsFile));
             var random = new DeterministicRandom(options.RepeatSeed);
-            HashSet<string> chosen = [.. first.Select(label => label.RootId).OrderBy(_ => random.NextUInt64()).Take(options.Repeat)];
+            // --roots FILE repeats the roots it lists (an earlier repeat's, to measure a new teacher's floor on the same roots).
+            HashSet<string> chosen = options.RootsFile is { } repeatRoots
+                ? [.. File.ReadLines(repeatRoots).Select(line => line.Trim()).Where(line => line.Length > 0)
+                    .Intersect(first.Select(label => label.RootId)).Take(options.Repeat)]
+                : [.. first.Select(label => label.RootId).OrderBy(_ => random.NextUInt64()).Take(options.Repeat)];
             ImmutableArray<RegretLabel> again = Label(suite, chosen, options with { Seed = options.RepeatSeed }, error);
             string repeated = Path.Combine(suiteDirectory, Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(options.LabelsFile)) + "-repeat.jsonl.gz");
             RegretSuite.WriteLines(repeated, again.OrderBy(label => label.RootId, StringComparer.Ordinal));
@@ -151,20 +155,24 @@ public static partial class CliCommands
         HashSet<string>? listed = options.RootsFile is { } file
             ? [.. File.ReadLines(file).Select(line => line.Trim()).Where(line => line.Length > 0)] : null;
         HashSet<string> wanted = [.. suite.Roots.Select(root => root.Id).Where(id => !labelled.Contains(id) && (listed is null || listed.Contains(id)))];
-        ImmutableArray<RegretLabel> labels = Label(suite, wanted, options, error);
+        // The file is rewritten at every progress line, so a stopped run resumes with --missing.
+        ImmutableArray<RegretLabel> labels = Label(suite, wanted, options, error, finished =>
+            RegretSuite.WriteLines(labelsPath, kept.Concat(finished).OrderBy(label => label.RootId, StringComparer.Ordinal)));
         RegretSuite.WriteLines(labelsPath, kept.Concat(labels).OrderBy(label => label.RootId, StringComparer.Ordinal));
         output.WriteLine(string.Create(CultureInfo.InvariantCulture,
             $"ai-regret label roots={labels.Length} unlabellable={wanted.Count - labels.Length} samples={options.Samples} horizon={(options.HorizonTurns == 0 ? "game" : options.HorizonTurns.ToString(CultureInfo.InvariantCulture))} lines={options.Lines} seconds={started.Elapsed.TotalSeconds:F0} file={options.LabelsFile}"));
         return 0;
     }
 
-    private static ImmutableArray<RegretLabel> Label(RegretSuite suite, HashSet<string> rootIds, RegretOptions options, TextWriter error)
+    private static ImmutableArray<RegretLabel> Label(RegretSuite suite, HashSet<string> rootIds, RegretOptions options, TextWriter error,
+        Action<IEnumerable<RegretLabel>>? save = null)
     {
         var settings = new TeacherSettings(options.Samples, options.Seed, options.HorizonTurns, options.Evaluation, Lines: options.Lines,
             ScreenTurns: options.ScreenTurns);
         var byGame = suite.Roots.Where(root => rootIds.Contains(root.Id)).GroupBy(root => root.GameId).ToDictionary(group => group.Key, group => group.ToList());
         RegretGame[] games = [.. suite.Games.Where(game => byGame.ContainsKey(game.Id))];
-        return [.. ForGames(games, options.Workers, error, "label", game => RegretLabels.Label(game, byGame[game.Id], settings)).SelectMany(found => found)];
+        return [.. ForGames(games, options.Workers, error, "label", game => RegretLabels.Label(game, byGame[game.Id], settings),
+            save is null ? null : finished => save(finished.SelectMany(found => found))).SelectMany(found => found)];
     }
 
     private static int RegretScoreCommand(string suiteDirectory, RegretOptions options, TextWriter output)
@@ -363,17 +371,26 @@ public static partial class CliCommands
         SavedDecision.Agent(definition, side, version, profile, diagnostics: true);
 
     /// <summary>Runs <paramref name="work"/> over the games on <paramref name="workers"/> threads, in the games' order, reporting progress.</summary>
-    private static T[] ForGames<T>(RegretGame[] games, int workers, TextWriter error, string what, Func<RegretGame, T> work)
+    /// <param name="save">Called with every finished game's result at each progress line, so a long run that is
+    /// stopped keeps what it finished.</param>
+    private static T[] ForGames<T>(RegretGame[] games, int workers, TextWriter error, string what, Func<RegretGame, T> work,
+        Action<IReadOnlyList<T>>? save = null)
     {
         var results = new T[games.Length];
+        var finishedResults = new System.Collections.Concurrent.ConcurrentQueue<T>();
         int done = 0;
         var started = System.Diagnostics.Stopwatch.StartNew();
         System.Threading.Tasks.Parallel.For(0, games.Length, new ParallelOptions { MaxDegreeOfParallelism = workers }, index =>
         {
             results[index] = work(games[index]);
+            finishedResults.Enqueue(results[index]);
             int finished = Interlocked.Increment(ref done);
             if (finished % 50 == 0 || finished == games.Length)
-                lock (error) error.WriteLine(string.Create(CultureInfo.InvariantCulture, $"ai-regret {what} {finished}/{games.Length} {started.Elapsed.TotalSeconds:F0}s"));
+                lock (error)
+                {
+                    save?.Invoke([.. finishedResults]);
+                    error.WriteLine(string.Create(CultureInfo.InvariantCulture, $"ai-regret {what} {finished}/{games.Length} {started.Elapsed.TotalSeconds:F0}s"));
+                }
         });
         return results;
     }
