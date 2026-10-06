@@ -157,6 +157,27 @@ public sealed class RegretSuiteTests
     }
 
     [Fact]
+    public void TheDiscordantViewComparesTwoVersionsWhereTheyChooseDifferently()
+    {
+        RegretChoice Choice(string root, string group, double regret) =>
+            new(root, PlayerSide.Corp, RegretRoots.TurnKind, "train", group, group, "", regret, regret == 0, regret < 0.05);
+        string[] ids = [.. Enumerable.Range(0, 10).Select(index => $"r{index}")];
+        // The two versions agree at seven roots and differ at three, where the first is 0.1 worse.
+        RegretChoice[] first = [.. ids.Select((id, index) => index < 3 ? Choice(id, "InstallCard|a", 0.1) : Choice(id, "DrawCard|c", 0))];
+        RegretChoice[] second = [.. ids.Select((id, index) => index < 3 ? Choice(id, "GainCredit|b", 0) : Choice(id, "DrawCard|c", 0))];
+        var labels = ids.ToDictionary(id => id, id => new RegretLabel(id, 32, 4, 4, 1,
+            [new RegretValue("GainCredit|b", 0.6, 0.02, 32), new RegretValue("InstallCard|a", 0.5, 0.02, 32), new RegretValue("DrawCard|c", 0.6, 0.02, 32)]));
+
+        RegretDiscordance discordance = RegretReport.Discordance("one", first, "two", second, new Dictionary<string, RegretRoot>(), labels);
+
+        Assert.Equal(["r0", "r1", "r2"], discordance.Discords.Select(discord => discord.RootId));
+        RegretDiscord discord = discordance.Discords[0];
+        Assert.Equal(("InstallCard|a", 0.5, "GainCredit|b", 0.6), (discord.FirstChosen, discord.FirstValue, discord.SecondChosen, discord.SecondValue));
+        Assert.Equal((3, 0.1), (discordance.Discordant.Roots, Math.Round(discordance.Discordant.MeanDifference, 9)));
+        Assert.Equal((10, 0.03), (discordance.All.Roots, Math.Round(discordance.All.MeanDifference, 9)));
+    }
+
+    [Fact]
     public void TheReportRanksVersionsOnTheSameRootsAndMeasuresItsNoise()
     {
         RegretChoice Choice(string root, double regret) =>

@@ -16,7 +16,7 @@ public static partial class CliCommands
     /// ai-regret label SUITE-DIR [--samples N] [--horizon game|TURNS] [--evaluation N] [--lines W] [--seed S] [--workers N]
     ///   [--labels FILE] [--repeat N --repeat-seed S] [--roots FILE] (with --repeat, the roots to repeat)
     /// ai-regret score SUITE-DIR --version V[,V...]|latest [--profile P] [--split all|held-out|train] [--labels FILE]
-    ///   [--blunders N] [--bootstrap N] [--workers N] [--json]
+    ///   [--blunders N] [--bootstrap N] [--workers N] [--json] [--discordant A,B] [--label-missing]
     /// ai-regret findings SUITE-DIR --manifest FILE --fixtures DIR --content POOL [--labelled N]
     /// ai-regret dedupe SUITE-DIR
     /// ai-regret extend SUITE-DIR [--labelled N] [--workers N] (every meaningful group at every root, S1.4)
@@ -50,7 +50,7 @@ public static partial class CliCommands
     private sealed record RegretOptions(string? Output, int TurnRoots, int RunRoots, int Labelled, ulong Seed, int Workers, int Samples,
         int HorizonTurns, int Evaluation, string LabelsFile, int Repeat, ulong RepeatSeed, string[] Versions, string Profile, string Split,
         int Blunders, int Bootstrap, bool Json, bool Missing = false, string? Manifest = null, string? Fixtures = null, string? Content = null,
-        bool LabelMissing = false, int Lines = 0, string? RootsFile = null, int ScreenTurns = 1)
+        bool LabelMissing = false, int Lines = 0, string? RootsFile = null, int ScreenTurns = 1, string[]? Discordant = null)
     {
         public static RegretOptions Parse(string[] args)
         {
@@ -93,6 +93,12 @@ public static partial class CliCommands
                     "--label-missing" => options with { LabelMissing = true },
                     "--lines" => options with { Lines = Int("--lines", 0, 16) },
                     "--screen-turns" => options with { ScreenTurns = Int("--screen-turns", 0, 100) },
+                    // Two versions of one side; they are scored if --version does not name them.
+                    "--discordant" => options with
+                    {
+                        Discordant = Next().Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) is { Length: 2 } pair
+                            ? pair : throw new ArgumentException("--discordant requires two versions, A,B."),
+                    },
                     "--roots" => options with { RootsFile = Next() },
                     "--manifest" => options with { Manifest = Next() },
                     "--fixtures" => options with { Fixtures = Next() },
@@ -177,6 +183,7 @@ public static partial class CliCommands
 
     private static int RegretScoreCommand(string suiteDirectory, RegretOptions options, TextWriter output)
     {
+        if (options.Discordant is { } pair) options = options with { Versions = [.. options.Versions.Union(pair, StringComparer.Ordinal)] };
         if (options.Versions.Length == 0) throw new ArgumentException("ai-regret score needs --version V[,V...].");
         RegretSuite suite = RegretSuite.Load(suiteDirectory);
         var labels = RegretSuite.ReadLines<RegretLabel>(Path.Combine(suiteDirectory, options.LabelsFile)).ToDictionary(label => label.RootId);
@@ -225,10 +232,18 @@ public static partial class CliCommands
                     }).ToArray(),
                 }).ToArray(),
         }).ToArray();
+        RegretDiscordance? discordance = null;
+        if (options.Discordant is [string first, string second])
+        {
+            var a = results.Single(result => result.Version == first);
+            var b = results.Single(result => result.Version == second);
+            if (a.Side != b.Side) throw new ArgumentException("--discordant needs two versions of one side.");
+            discordance = RegretReport.Discordance(first, a.Choices, second, b.Choices, rootsById, labels, options.Bootstrap, options.Seed);
+        }
         if (options.Json)
         {
-            output.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { schemaVersion = 1, kind = "ai-regret-score", split = options.Split, report, comparisons },
-                RegretSuite.Json));
+            output.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { schemaVersion = 1, kind = "ai-regret-score", split = options.Split, report, comparisons,
+                discordance }, RegretSuite.Json));
             return 0;
         }
         foreach (var entry in report)
@@ -249,8 +264,37 @@ public static partial class CliCommands
         foreach (RegretComparison comparison in comparisons)
             output.WriteLine(string.Create(CultureInfo.InvariantCulture,
                 $"compare {comparison.First} − {comparison.Second}: roots={comparison.Roots} regret difference={comparison.MeanDifference:F4} [{comparison.Lower:F4}, {comparison.Upper:F4}]{(comparison.Separated ? " separated" : "")}"));
+        if (discordance is not null) WriteDiscordance(discordance, options.LabelsFile, output);
         return 0;
     }
+
+    /// <summary>The discordant view: where two versions choose differently, what each chose and what the teacher made of it.</summary>
+    private static void WriteDiscordance(RegretDiscordance discordance, string labelsFile, TextWriter output)
+    {
+        static string KindOf(string group) => group[..group.IndexOf('|', StringComparison.Ordinal)];
+        static string Interval(RegretComparison comparison) => string.Create(CultureInfo.InvariantCulture,
+            $"roots={comparison.Roots} regret difference={comparison.MeanDifference:F4} [{comparison.Lower:F4}, {comparison.Upper:F4}]{(comparison.Separated ? " separated" : "")}");
+        ImmutableArray<RegretDiscord> discords = discordance.Discords;
+        output.WriteLine($"discordant {discordance.First} − {discordance.Second} (labels {labelsFile}): roots={discords.Length} " +
+            string.Join(" ", discords.GroupBy(discord => discord.Side + ":" + discord.Kind).OrderBy(group => group.Key, StringComparer.Ordinal)
+                .Select(group => $"{group.Key}={group.Count()}")));
+        output.WriteLine("  by chosen kinds: " + string.Join(" ", discords
+            .GroupBy(discord => $"{KindOf(discord.FirstChosen)}/{KindOf(discord.SecondChosen)}")
+            .OrderByDescending(group => group.Count()).ThenBy(group => group.Key, StringComparer.Ordinal)
+            .Select(group => string.Create(CultureInfo.InvariantCulture,
+                $"{group.Key}={group.Count()} ({group.Average(discord => discord.FirstRegret - discord.SecondRegret):+0.000;-0.000})"))));
+        foreach (var category in discords.SelectMany(discord => discord.Categories.Select(category => (category, discord)))
+            .GroupBy(entry => entry.category).OrderBy(group => group.Key, StringComparer.Ordinal))
+            output.WriteLine(string.Create(CultureInfo.InvariantCulture,
+                $"  category {category.Key}: roots={category.Count()} mean difference={category.Average(entry => entry.discord.FirstRegret - entry.discord.SecondRegret):F4}"));
+        output.WriteLine("  over the discordant roots: " + Interval(discordance.Discordant));
+        output.WriteLine("  over every root:           " + Interval(discordance.All));
+        foreach (RegretDiscord discord in discords)
+            output.WriteLine(string.Create(CultureInfo.InvariantCulture,
+                $"  {discord.RootId} {discord.Kind}: {discordance.First} {discord.FirstValue:F3} (regret {discord.FirstRegret:F3}) \"{Short(discord.FirstDescription)}\" | {discordance.Second} {discord.SecondValue:F3} (regret {discord.SecondRegret:F3}) \"{Short(discord.SecondDescription)}\""));
+    }
+
+    private static string Short(string description) => description.Length <= 90 ? description : description[..90] + "…";
 
     /// <summary>
     /// Adds the findings manifest's saved decisions to a suite as held-out roots, replacing any it added before. A finding
