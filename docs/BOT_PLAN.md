@@ -295,8 +295,10 @@ A fixed corpus of recorded decision roots with teacher labels, scored in minutes
     labelled when a comparison needs them and keep the labels they got. A paired comparison is valid root by root as
     long as both values at a root come from one teacher, so a suite with roots labelled by different teachers still
     compares versions; only absolute regret needs one teacher, and it is quoted on the core.
-  - **Adaptive samples.** A root is labelled at 8 samples, and the rest are spent only where the best two groups are
-    within two standard errors of each other. Most roots are decided early.
+  - **Adaptive samples.** A root gets 8 samples that decide how many more it needs, and the recorded values come only
+    from the samples drawn after that decision: 8 where the deciding samples showed a clear gap, more where they did
+    not. The deciding samples are never recorded, because a stop triggered by a gap that happened to look large would
+    otherwise preserve exactly that inflated gap in the labels the leaf is fitted to. Most roots are decided early.
   - **Scheduling.** The relabel and the ladders both want the box to themselves and there is no second box, so relabels
     run overnight and ladders by day; a step never waits on a relabel it could have scheduled the evening before.
 

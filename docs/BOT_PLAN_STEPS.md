@@ -269,15 +269,22 @@ two: a versioned teacher, a core plus targeted roots, adaptive samples, and rela
   deal so a held-out deal is wholly in or out, keeping the held-out share. The core's labels are the ones it already has:
   no run. Absolute regret, the noise floor and the drift are reported on the core; comparisons use every root both
   versions are labelled at, with `--discordant` beside them.
-- **Adaptive samples.** `ai-regret label --samples 8 --extend-to 32`: every group gets 8 samples; a root whose best two
-  groups are within two standard errors gets the rest, in steps of 8, until they separate or 32 is reached. The label
-  records the samples it used. Expected: about half the cost of 32 flat on the suite's roots, less on targeted roots,
-  where the two choices usually differ clearly.
+- **Adaptive samples.** `ai-regret label --decide 8 --record 8 --extend-to 32`: every group gets 8 *deciding* samples,
+  used only to choose how many *recording* samples the root gets: 8 when the deciding samples put the best two groups
+  more than two standard errors apart, otherwise steps of 8 until they separate on the recording samples or 32 is
+  reached. The recorded values, standard errors and gaps come from the recording samples alone; the deciding samples
+  are discarded. That is what keeps the labels free of optional-stopping bias: a root that stopped because its first
+  samples happened to show a large gap would otherwise carry that inflated gap into absolute regret and the S4 and S6
+  fitting targets. The label records both counts. Expected: 16 samples at a clearly decided root against 32 flat, so
+  about a third to a half off the suite's cost, more on targeted roots, where the two choices usually differ clearly.
 - **Schedule.** A core relabel (about 2,000 roots) or a targeted labelling runs overnight or while no ladder is due; the
   record names the date and the hours. A step that needs a relabel schedules it the evening before its gate.
 - **Gate:** the core's S1.3 table (Runner v24 against v25 and v26; the Corp pairs over the discordant roots) reads the
-  same as the whole suite's within the intervals; adaptive labelling of 200 roots agrees with their flat 32-sample
-  labels on the best group within the noise floor; the costs recorded.
+  same as the whole suite's within the intervals. Adaptive labelling of 200 roots against their flat 32-sample labels,
+  on the values and not only the chosen group: the mean signed difference of every group's value is within its
+  standard error of zero (no lift either way), the mean absolute difference is reported, and the paired regret
+  difference of one version pair computed on each labelling agrees within the intervals; the best group agrees within
+  the noise floor. The costs recorded.
 - **Record:** the core's size and seed, the adaptive labelling's cost and agreement, in `docs/BOT_VERSIONS.md`.
 
 
