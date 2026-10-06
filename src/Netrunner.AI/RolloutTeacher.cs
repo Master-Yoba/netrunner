@@ -18,15 +18,20 @@ namespace Netrunner.AI;
 /// <param name="ExtendTo">With <paramref name="Decide"/>: a root whose deciding samples left its best two candidates within
 /// two standard errors records <paramref name="ExtendStep"/> more samples at a time, until they separate on the recording
 /// samples or this many are recorded.</param>
+/// <param name="Prune">Bot plan S1.6, pruning: with <paramref name="Decide"/>, only the best this many candidates on the
+/// deciding samples (and any the caller requires) get the recording samples; the rest keep their deciding value, marked
+/// pruned. 0 records every candidate.</param>
 public sealed record TeacherSettings(int Samples, ulong Seed, int HorizonTurns = 0, int Evaluation = 4, int Cap = PlannerProbe.GameRolloutCap,
-    int Lines = 0, int ScreenTurns = 1, int Decide = 0, int ExtendTo = 0, int ExtendStep = 8);
+    int Lines = 0, int ScreenTurns = 1, int Decide = 0, int ExtendTo = 0, int ExtendStep = 8, int Prune = 0);
 
 /// <summary>
 /// A candidate's teacher value: the mean win probability over its play-outs and the standard error of that mean. Every
 /// candidate of one evaluation has the same play-outs; none (and a NaN mean) when no sample could play them all. With the
 /// turn-line search, <paramref name="Line"/> is the best line's rank path: the heuristic's choice at each later turn action.
 /// </summary>
-public sealed record TeacherValue(ActionId Action, double Mean, double StandardError, int PlayOuts, IReadOnlyList<int>? Line = null);
+/// A pruned candidate (S1.6) has only its deciding samples' value.
+public sealed record TeacherValue(ActionId Action, double Mean, double StandardError, int PlayOuts, IReadOnlyList<int>? Line = null,
+    bool Pruned = false);
 
 /// <summary>
 /// Bot plan S1.2: the teacher of the regret suite. It labels a decision by playing every candidate out on the same
@@ -36,8 +41,10 @@ public sealed record TeacherValue(ActionId Action, double Mean, double StandardE
 /// </summary>
 public static class RolloutTeacher
 {
+    /// <param name="required">Candidates (by index) that get the recording samples whatever the deciding ones say (S1.6:
+    /// the groups the compared versions chose at a targeted root).</param>
     public static IReadOnlyList<TeacherValue> Evaluate(OfflineAgent agent, Observation observation, IReadOnlyList<ActionId> candidates,
-        TeacherSettings settings)
+        TeacherSettings settings, IReadOnlySet<int>? required = null)
     {
         ArgumentNullException.ThrowIfNull(agent);
         ArgumentNullException.ThrowIfNull(observation);
@@ -70,11 +77,23 @@ public static class RolloutTeacher
             }
             return drawn;
         }
-        TeacherValue[] Value(List<GameState> samples) => samples.Count == 0 ? [.. candidates.Select(action => Summarize(action, []))]
-            : lines ? Lines(planner, candidates, settings, side, knowledge, determinizer, samples, memo, screens)
-            : [.. candidates.Select(action => Summarize(action, [.. samples.Select(sample => planner.PlayOut(sample, action, side, knowledge,
+        TeacherValue[] ValueOf(IReadOnlyList<ActionId> actions, List<GameState> samples) => samples.Count == 0 ? [.. actions.Select(action => Summarize(action, []))]
+            : lines ? Lines(planner, actions, settings, side, knowledge, determinizer, samples, memo, screens)
+            : [.. actions.Select(action => Summarize(action, [.. samples.Select(sample => planner.PlayOut(sample, action, side, knowledge,
                 determinizer, settings.HorizonTurns, settings.Evaluation, settings.Cap) ?? 0)]))];
+        TeacherValue[] Value(List<GameState> samples) => ValueOf(candidates, samples);
         if (settings.Decide <= 0) return Value(Draw(settings.Samples));
+        if (settings.Prune > 0)
+        {
+            // S1.6, pruning: the deciding samples value every candidate and pick which get the recording samples.
+            TeacherValue[] deciding = Value(Draw(settings.Decide));
+            HashSet<int> kept = [.. deciding.Select((value, index) => (value, index)).Where(entry => !double.IsNaN(entry.value.Mean))
+                .OrderByDescending(entry => entry.value.Mean).Take(settings.Prune).Select(entry => entry.index), .. required ?? new HashSet<int>()];
+            int[] order = [.. kept.Order()];
+            TeacherValue[] recorded = ValueOf([.. order.Select(index => candidates[index])], Draw(settings.Samples));
+            var byIndex = order.Select((index, position) => (index, position)).ToDictionary(entry => entry.index, entry => recorded[entry.position]);
+            return [.. candidates.Select((_, index) => byIndex.TryGetValue(index, out TeacherValue? value) ? value : deciding[index] with { Pruned = true })];
+        }
         // S1.7: the deciding samples choose how many to record and are discarded. Without an extension to decide (a group
         // labelled on demand) they are only drawn, so the recording samples are the root's.
         bool clear = settings.ExtendTo <= settings.Samples || !Close(Value(Draw(settings.Decide)));

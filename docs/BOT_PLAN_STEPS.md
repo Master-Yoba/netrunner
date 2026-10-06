@@ -245,9 +245,15 @@ S4.2 and S5.3 compare planners whose choices diverge from the heuristic's far mo
   (same profile) to choose at every turn-action and run-choice decision of their side, and keeps every decision where
   the chosen groups differ as a root in the suite's format, with `source: diverge A,B` and the two choices recorded.
   Roots are deduplicated by position and held out by deal, as the suite's are. The command labels nothing itself.
-- The new roots are labelled with the suite's current teacher, settings and seed (`ai-regret label`, with S1.7's
-  adaptive samples), a sample of them repeated for the noise floor, and merged with their provenance. A root that
-  already exists keeps its labels.
+- The new roots are labelled with the suite's current teacher, settings and seed, a sample of them repeated for the
+  noise floor, and merged with their provenance (`ai-regret merge`). A root that already exists keeps its labels.
+- **Pruning, measured here.** S1.7 found that adaptive samples by early stopping do not pay on the suite's roots (they
+  are drawn where the top two are close, so the rule almost always extends). S1.6 measures a pruning rule instead:
+  `ai-regret label --decide 8 --record 24 --prune 3` gives every group 8 deciding samples, then 24 recording samples to
+  the best three and to any group a scored version chose; a pruned group keeps its 8-sample value, marked, and is never
+  a root's best. It is checked on a sample of the targeted roots against their flat 32-sample labels (cost, and the
+  values and the pair's regret difference within noise). If it does not pay on targeted roots either, adaptive labelling
+  leaves the plan.
 - `--discordant` (S1.5's view) is the report for every version comparison from now on, beside the all-roots table.
 - **First run:** the 960 box games for Corp v29 against v30 and v28 against v29, so the Corp's gate is read at every
   root where it can be. Expected: a few hundred more Corp roots, mostly agenda installs and holds.

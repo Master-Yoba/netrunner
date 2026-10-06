@@ -30,7 +30,9 @@ public sealed record RegretRoot(string Id, string GameId, long Sequence, PlayerS
 /// A value labelled on demand into an existing label names its <paramref name="TeacherVersion"/> (S1.7), so a root never
 /// compares values from two teachers.
 /// </summary>
-public sealed record RegretValue(string Group, double Mean, double StandardError, int PlayOuts, int[]? Line = null, string? TeacherVersion = null);
+/// A <paramref name="Pruned"/> group (S1.6) kept only its deciding samples' value: it is never a root's best.
+public sealed record RegretValue(string Group, double Mean, double StandardError, int PlayOuts, int[]? Line = null, string? TeacherVersion = null,
+    bool Pruned = false);
 
 /// <summary>
 /// The teacher's labels for one root and how they were made; <paramref name="Lines"/> is the turn-line search's beam (0
@@ -41,7 +43,7 @@ public sealed record RegretValue(string Group, double Mean, double StandardError
 /// <paramref name="Decide"/> the deciding samples drawn before them and discarded.
 /// </summary>
 public sealed record RegretLabel(string RootId, int Samples, int HorizonTurns, int Evaluation, ulong Seed, ImmutableArray<RegretValue> Values,
-    int Lines = 0, int ScreenTurns = 0, string? Teacher = null, string? TeacherVersion = null, int Decide = 0)
+    int Lines = 0, int ScreenTurns = 0, string? Teacher = null, string? TeacherVersion = null, int Decide = 0, int Prune = 0)
 {
     /// <summary>The teacher's version: the recorded one, or the one these settings are (<see cref="RegretLabels.VersionOf"/>).</summary>
     [JsonIgnore]
@@ -60,7 +62,7 @@ public sealed record RegretLabel(string RootId, int Samples, int HorizonTurns, i
 
     /// <summary>The best labelled group, or null when no group has a value.</summary>
     [JsonIgnore]
-    public RegretValue? Best => Values.Where(value => !double.IsNaN(value.Mean))
+    public RegretValue? Best => Values.Where(value => !double.IsNaN(value.Mean) && !value.Pruned)
         .OrderByDescending(value => value.Mean).ThenBy(value => value.Group, StringComparer.Ordinal).FirstOrDefault();
 }
 

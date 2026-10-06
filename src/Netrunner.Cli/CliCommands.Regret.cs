@@ -16,6 +16,7 @@ public static partial class CliCommands
     /// ai-regret label SUITE-DIR [--samples N] [--horizon game|TURNS] [--evaluation N] [--lines W] [--seed S] [--workers N]
     ///   [--labels FILE] [--repeat N --repeat-seed S] [--roots FILE] (with --repeat, the roots to repeat)
     ///   [--decide N --record N --extend-to N] (adaptive samples, S1.7: N deciding samples, discarded, choose how many to record)
+    ///   [--decide N --record N --prune K] (pruning, S1.6: only the best K groups, and a targeted root's chosen ones, are recorded)
     ///   [--teacher hard-model|hard] (hard-model, the default, models the opponent by the live Standard version; hard by
     ///   the planner's pinned Runner v7 and Corp v8, as labels-v1 was made)
     /// ai-regret score SUITE-DIR --version V[,V...]|latest [--profile P] [--split all|held-out|train] [--labels FILE]
@@ -23,6 +24,9 @@ public static partial class CliCommands
     /// ai-regret findings SUITE-DIR --manifest FILE --fixtures DIR --content POOL [--labelled N]
     /// ai-regret dedupe SUITE-DIR
     /// ai-regret extend SUITE-DIR [--labelled N] [--workers N] (every meaningful group at every root, S1.4)
+    /// ai-regret diverge SUITE-DIR|GAMES-DIR --versions A,B --output SUITE-DIR [--profile P] [--workers N] (S1.6: the
+    ///   decisions where two versions choose differently, as roots of a new suite)
+    /// ai-regret merge SUITE-DIR --from SUITE-DIR [--labels FILE] (folds a suite's games, roots and labels into another)
     /// ai-regret tag SUITE-DIR [--labels FILE] (writes each label's teacher version into it, S1.7)
     /// ai-regret core SUITE-DIR [--roots N] [--seed S] (marks a core of about N roots by deal, S1.7; score --core reads it)
     /// ai-regret exposure SUITE-DIR|GAMES-DIR [--all-roots] [--version RUNNER] [--workers N] [--json] (every agenda, or every card, the Corp installed in
@@ -49,6 +53,8 @@ public static partial class CliCommands
                 "exposure" => RegretExposureCommand(args[2], options, output, error),
                 "core" => RegretCoreCommand(args[2], options, output),
                 "tag" => RegretTagCommand(args[2], options, output),
+                "diverge" => RegretDivergeCommand(args[2], options, output, error),
+                "merge" => RegretMergeCommand(args[2], options, output),
                 _ => throw new ArgumentException($"Unknown ai-regret command '{args[1]}'."),
             };
         }
@@ -64,7 +70,7 @@ public static partial class CliCommands
         int Blunders, int Bootstrap, bool Json, bool Missing = false, string? Manifest = null, string? Fixtures = null, string? Content = null,
         bool LabelMissing = false, int Lines = 0, string? RootsFile = null, int ScreenTurns = 1, string[]? Discordant = null,
         bool AllRoots = false, string TeacherEntrant = RegretLabels.DefaultTeacher, bool Core = false,
-        int CoreRoots = 2000, int Decide = 0, int ExtendTo = 0)
+        int CoreRoots = 2000, int Decide = 0, int ExtendTo = 0, string[]? Pair = null, string? From = null, int Prune = 0)
     {
         public static RegretOptions Parse(string[] args)
         {
@@ -107,10 +113,18 @@ public static partial class CliCommands
                     "--label-missing" => options with { LabelMissing = true },
                     "--all-roots" => options with { AllRoots = true },
                     "--core" => options with { Core = true },
+                    "--versions" => options with
+                    {
+                        Pair = Next().Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) is { Length: 2 } versions
+                            ? versions : throw new ArgumentException("--versions requires two versions, A,B."),
+                    },
+                    "--from" => options with { From = Next() },
                     // S1.7, adaptive samples: --decide 8 --record 8 --extend-to 32.
                     "--decide" => options with { Decide = Int("--decide", 1, 4096) },
                     "--record" => options with { Samples = Int("--record", 1, 4096) },
                     "--extend-to" => options with { ExtendTo = Int("--extend-to", 1, 4096) },
+                    // S1.6, pruning: --decide 8 --record 24 --prune 3.
+                    "--prune" => options with { Prune = Int("--prune", 1, 64) },
                     "--teacher" => options with
                     {
                         TeacherEntrant = Next() is var teacher && teacher is "hard" or "hard-model" ? teacher
@@ -202,7 +216,7 @@ public static partial class CliCommands
         Action<IEnumerable<RegretLabel>>? save = null)
     {
         var settings = new TeacherSettings(options.Samples, options.Seed, options.HorizonTurns, options.Evaluation, Lines: options.Lines,
-            ScreenTurns: options.ScreenTurns, Decide: options.Decide, ExtendTo: options.ExtendTo);
+            ScreenTurns: options.ScreenTurns, Decide: options.Decide, ExtendTo: options.ExtendTo, Prune: options.Prune);
         var byGame = suite.Roots.Where(root => rootIds.Contains(root.Id)).GroupBy(root => root.GameId).ToDictionary(group => group.Key, group => group.ToList());
         RegretGame[] games = [.. suite.Games.Where(game => byGame.ContainsKey(game.Id))];
         return [.. ForGames(games, options.Workers, error, "label", game => RegretLabels.Label(game, byGame[game.Id], settings, options.TeacherEntrant),
@@ -250,6 +264,7 @@ public static partial class CliCommands
             profile = options.Profile,
             seconds = Math.Round(result.Elapsed.TotalSeconds, 1),
             unlabelled = result.Choices.Count(choice => choice.Regret is null),
+            pruned = result.Choices.Count(choice => choice.Pruned),
             summaries = new[] { RegretReport.Summarize("all", result.Choices, options.Bootstrap, options.Seed) }
                 .Concat(result.Choices.GroupBy(choice => choice.Kind).OrderBy(group => group.Key, StringComparer.Ordinal)
                     .Select(group => RegretReport.Summarize("kind:" + group.Key, [.. group], options.Bootstrap, options.Seed)))
@@ -295,7 +310,7 @@ public static partial class CliCommands
         foreach (var entry in report)
         {
             output.WriteLine(string.Create(CultureInfo.InvariantCulture,
-                $"{entry.version} ({entry.side}, {entry.profile}) {entry.seconds}s unlabelled={entry.unlabelled} labels={options.LabelsFile} {teacher}{(options.Core ? " core" : "")}"));
+                $"{entry.version} ({entry.side}, {entry.profile}) {entry.seconds}s unlabelled={entry.unlabelled} pruned-choices={entry.pruned} labels={options.LabelsFile} {teacher}{(options.Core ? " core" : "")}"));
             foreach (RegretSummary summary in entry.summaries)
                 output.WriteLine(string.Create(CultureInfo.InvariantCulture,
                     $"  {summary.Slice,-16} roots={summary.Roots,5} labelled={summary.Labelled,5} regret={summary.MeanRegret:F4} [{summary.Lower:F4}, {summary.Upper:F4}] agree={summary.Agreement:F3} within-noise={summary.AgreementWithinNoise:F3}"));
@@ -368,6 +383,76 @@ public static partial class CliCommands
     /// Bot plan S1.7: writes into each label of a file the teacher version its settings name today, so a later policy bump
     /// (which renames what a setting means) does not rename labels made before it. A label already tagged keeps its tag.
     /// </summary>
+    /// <summary>
+    /// Bot plan S1.6: the decisions of the games where two versions of one side choose different groups, written as a new
+    /// suite's roots (deduplicated by position, held out by deal) to be labelled and merged. Labels nothing.
+    /// </summary>
+    private static int RegretDivergeCommand(string source, RegretOptions options, TextWriter output, TextWriter error)
+    {
+        if (options.Pair is not [string first, string second]) throw new ArgumentException("ai-regret diverge needs --versions A,B.");
+        string destination = options.Output ?? throw new ArgumentException("ai-regret diverge needs --output SUITE-DIR.");
+        if (Directory.Exists(destination) || File.Exists(destination)) throw new ArgumentException("--output must name a new directory.");
+        PlayerSide side = OfflinePolicies.IsSupported(PlayerSide.Corp, first) ? PlayerSide.Corp
+            : OfflinePolicies.IsSupported(PlayerSide.Runner, first) ? PlayerSide.Runner : throw new ArgumentException($"Unknown policy version '{first}'.");
+        if (!OfflinePolicies.IsSupported(side, second)) throw new ArgumentException("--versions needs two versions of one side.");
+        RegretGame[] games = File.Exists(Path.Combine(source, RegretSuite.GamesFile))
+            ? [.. RegretSuite.Load(source).Games]
+            : [.. LadderGameArchive.ReadAll(source, options.Workers).Select(entry => RegretGames.FromSaved(entry.Game, entry.Definition, "train", "ladder"))];
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        RegretRoot[] roots = [.. ForGames(games, options.Workers, error, "diverge",
+            game => RegretRoots.Diverge(game, first, second, side, (definition, seat, version) => Scored(definition, seat, options.Profile, version),
+                new RegretSampling(Seed: options.Seed))).SelectMany(found => found)];
+        HashSet<string> used = [.. roots.Select(root => root.GameId)];
+        RegretSuite suite = new RegretSuite([.. games.Where(game => used.Contains(game.Id))], [.. roots], []).Deduplicated();
+        suite.Save(destination);
+        output.WriteLine(string.Create(CultureInfo.InvariantCulture,
+            $"ai-regret diverge {first},{second} games={games.Length} roots={suite.Roots.Length} (before deduplication {roots.Length}) " +
+            $"turn={suite.Roots.Count(root => root.Kind == RegretRoots.TurnKind)} run={suite.Roots.Count(root => root.Kind == RegretRoots.RunKind)} " +
+            $"held-out={suite.Roots.Count(root => root.Split == "held-out")} groups={suite.Roots.Sum(root => root.Candidates.Length)} seconds={started.Elapsed.TotalSeconds:F0} output={destination}"));
+        return 0;
+    }
+
+    /// <summary>
+    /// Bot plan S1.6: folds another suite into this one with its provenance: its games and roots are added, and a root
+    /// already here keeps its labels and gains the other's groups and categories (a position two version pairs both
+    /// found); the other's labels of new roots join this suite's labels file.
+    /// </summary>
+    private static int RegretMergeCommand(string suiteDirectory, RegretOptions options, TextWriter output)
+    {
+        string from = options.From ?? throw new ArgumentException("ai-regret merge needs --from SUITE-DIR.");
+        RegretSuite suite = RegretSuite.Load(suiteDirectory), other = RegretSuite.Load(from);
+        var roots = suite.Roots.ToDictionary(root => root.Id, StringComparer.Ordinal);
+        int added = 0, joined = 0;
+        foreach (RegretRoot root in other.Roots)
+            if (roots.TryGetValue(root.Id, out RegretRoot? existing))
+            {
+                roots[root.Id] = existing with
+                {
+                    Candidates = [.. existing.Candidates, .. root.Candidates.Where(candidate => existing.Candidates.All(had => had.Group != candidate.Group))],
+                    Categories = [.. existing.Categories.Union(root.Categories, StringComparer.Ordinal)],
+                };
+                joined++;
+            }
+            else
+            {
+                roots[root.Id] = root;
+                added++;
+            }
+        HashSet<string> games = [.. suite.Games.Select(game => game.Id)];
+        new RegretSuite([.. suite.Games, .. other.Games.Where(game => !games.Contains(game.Id))], [.. roots.Values], []).Save(suiteDirectory);
+        string labelsPath = Path.Combine(suiteDirectory, options.LabelsFile), otherLabels = Path.Combine(from, options.LabelsFile);
+        int labelled = 0;
+        if (File.Exists(otherLabels))
+        {
+            var labels = (File.Exists(labelsPath) ? RegretSuite.ReadLines<RegretLabel>(labelsPath) : []).ToDictionary(label => label.RootId, StringComparer.Ordinal);
+            foreach (RegretLabel label in RegretSuite.ReadLines<RegretLabel>(otherLabels))
+                if (labels.TryAdd(label.RootId, label)) labelled++;
+            RegretSuite.WriteLines(labelsPath, labels.Values.OrderBy(label => label.RootId, StringComparer.Ordinal));
+        }
+        output.WriteLine($"ai-regret merge from={from} roots-added={added} roots-joined={joined} labels-added={labelled} file={options.LabelsFile}");
+        return 0;
+    }
+
     private static int RegretTagCommand(string suiteDirectory, RegretOptions options, TextWriter output)
     {
         string path = Path.Combine(suiteDirectory, options.LabelsFile);

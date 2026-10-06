@@ -69,15 +69,19 @@ public static class RegretLabels
             if (!bySequence.TryGetValue(position.Sequence, out RegretRoot? root)) return;
             Observation observation = ObservationBuilder.Build(position.State, root.Side, definition.Behavior, definition.Runtime);
             TeacherSettings rooted = settings with { Seed = settings.Seed ^ RegretRoots.StableHash(root.Id) };
+            // A targeted root's chosen groups are always recorded (S1.6).
+            IReadOnlySet<string> chosen = RegretRoots.DivergeChoices(root);
             IReadOnlyList<TeacherValue> values = RolloutTeacher.Evaluate(teachers[root.Side], observation,
-                [.. root.Candidates.Select(candidate => new ActionId(candidate.ActionIds[0]))], rooted);
+                [.. root.Candidates.Select(candidate => new ActionId(candidate.ActionIds[0]))], rooted,
+                root.Candidates.Select((candidate, index) => (candidate, index)).Where(entry => chosen.Contains(entry.candidate.Group))
+                    .Select(entry => entry.index).ToHashSet());
             // A root no sample could play every candidate on has no label: it is scored as unlabelled.
             if (values.Any(value => value.PlayOuts == 0)) return;
             // With adaptive samples the label records the recording samples the root used, and the deciding ones.
-            labels.Add(new RegretLabel(root.Id, settings.Decide > 0 ? values.Max(value => value.PlayOuts) : settings.Samples,
+            labels.Add(new RegretLabel(root.Id, settings.Decide > 0 ? values.Where(value => !value.Pruned).Max(value => value.PlayOuts) : settings.Samples,
                 settings.HorizonTurns, settings.Evaluation, rooted.Seed,
                 [.. root.Candidates.Zip(values, Value)], settings.Lines, settings.Lines > 1 ? settings.ScreenTurns : 0,
-                teacher == "hard" ? null : teacher, VersionOf(settings, teacher), settings.Decide));
+                teacher == "hard" ? null : teacher, VersionOf(settings, teacher), settings.Decide, settings.Decide > 0 ? settings.Prune : 0));
         });
         return labels.ToImmutable();
     }
@@ -120,7 +124,7 @@ public static class RegretLabels
     }
 
     private static RegretValue Value(RegretCandidate candidate, TeacherValue value) =>
-        new(candidate.Group, value.Mean, value.StandardError, value.PlayOuts, value.Line is { } line ? [.. line] : null);
+        new(candidate.Group, value.Mean, value.StandardError, value.PlayOuts, value.Line is { } line ? [.. line] : null, Pruned: value.Pruned);
 
     private static OfflineAgent Teacher(FullMatchDefinition definition, PlayerSide side, string teacher) =>
         RatingLadder.CreateAgent(teacher, side, definition) as OfflineAgent
@@ -134,7 +138,7 @@ public static class RegretLabels
 /// <param name="AgreesWithinNoise">Whether the chosen group is within the two standard errors' sum of the best.</param>
 /// <param name="Missing">The chosen group when it is not one of the labelled groups (S1.4: labelled on demand).</param>
 public sealed record RegretChoice(string RootId, PlayerSide Side, string Kind, string Split, string? Chosen, string ChosenDescription,
-    string Reason, double? Regret, bool? Agrees, bool? AgreesWithinNoise, RegretCandidate? Missing = null);
+    string Reason, double? Regret, bool? Agrees, bool? AgreesWithinNoise, RegretCandidate? Missing = null, bool Pruned = false);
 
 /// <summary>Asks a policy version to choose at every root of a game, through the production path (bot plan S1.3).</summary>
 public static class RegretScores
@@ -179,8 +183,9 @@ public static class RegretScores
         RegretValue? value = group is null ? null : label.Values.FirstOrDefault(entry => entry.Group == group.Group && !double.IsNaN(entry.Mean));
         if (best is null || value is null)
             return new RegretChoice(root.Id, root.Side, root.Kind, root.Split, group?.Group, description, reason, null, null, null);
-        double regret = best.Mean - value.Mean;
+        // A pruned group's value is its deciding samples' (S1.6); its regret is floored at zero and the choice marked.
+        double regret = value.Pruned ? Math.Max(0, best.Mean - value.Mean) : best.Mean - value.Mean;
         return new RegretChoice(root.Id, root.Side, root.Kind, root.Split, group!.Group, description, reason, regret,
-            value.Group == best.Group, regret <= best.StandardError + value.StandardError);
+            value.Group == best.Group, regret <= best.StandardError + value.StandardError, Pruned: value.Pruned);
     }
 }

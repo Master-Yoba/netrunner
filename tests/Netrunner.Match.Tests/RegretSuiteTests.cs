@@ -230,6 +230,56 @@ public sealed class RegretSuiteTests
         Assert.Equal((10, 0.03), (discordance.All.Roots, Math.Round(discordance.All.MeanDifference, 9)));
     }
 
+    /// <summary>
+    /// Bot plan S1.6, pruning: every group is valued on the deciding samples, only the best few and the required ones get
+    /// the recording samples, and a pruned group keeps its deciding value, marked, and is never the root's best.
+    /// </summary>
+    [Fact]
+    public void PruningRecordsTheBestGroupsAndTheRequiredOnes()
+    {
+        if (!Official) return;
+        (LadderSavedGame saved, FullMatchDefinition definition) = Saved();
+        RegretGame game = RegretGames.FromSaved(saved, definition, "held-out", "finding");
+        RegretRoot root = Assert.Single(RegretRoots.At(game, new HashSet<long> { CorpTurn }, new RegretSampling(), []));
+        Assert.True(root.Candidates.Length > 3);
+        // The last group is a version's choice at a targeted root: recorded whatever the deciding samples say.
+        string required = root.Candidates[^1].Group;
+        RegretRoot targeted = root with { Categories = [.. root.Categories, RegretRoots.DivergeCategory, $"{RegretRoots.DivergeCategory}:x={required}"] };
+
+        RegretLabel label = Assert.Single(RegretLabels.Label(game, [targeted],
+            new TeacherSettings(Samples: 4, Seed: 3, HorizonTurns: 1, Decide: 4, Prune: 2)));
+
+        RegretValue[] recorded = [.. label.Values.Where(value => !value.Pruned)];
+        Assert.InRange(recorded.Length, 2, 3);
+        Assert.Contains(recorded, value => value.Group == required);
+        Assert.All(recorded, value => Assert.Equal(label.Samples, value.PlayOuts));
+        Assert.Contains(label.Values, value => value.Pruned);
+        Assert.False(label.Best!.Pruned);
+        Assert.Equal((4, 2), (label.Decide, label.Prune));
+    }
+
+    /// <summary>Bot plan S1.6: a targeted root is a decision where the two versions chose different groups, and both are labelled.</summary>
+    [Fact]
+    public void ADivergentRootRecordsTwoDifferentChoices()
+    {
+        if (!Official) return;
+        RegretSuite suite = RegretSuite.Load(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "data", "ai", "regret",
+            "gateway-elevation"));
+        RegretGame game = suite.Games.First(entry => entry.Source == "ladder");
+        ImmutableArray<RegretRoot> roots = RegretRoots.Diverge(game, CorpHeuristicPolicy.V29, CorpHeuristicPolicy.V30, PlayerSide.Corp,
+            (definition, side, version) => SavedDecision.Agent(definition, side, version), new RegretSampling());
+
+        Assert.All(roots, root =>
+        {
+            IReadOnlySet<string> chosen = RegretRoots.DivergeChoices(root);
+            Assert.Equal(2, chosen.Count);
+            Assert.All(chosen, group => Assert.Contains(root.Candidates, candidate => candidate.Group == group));
+            Assert.Equal(PlayerSide.Corp, root.Side);
+        });
+        Assert.Equal(roots.Select(root => root.Id), RegretRoots.Diverge(game, CorpHeuristicPolicy.V29, CorpHeuristicPolicy.V30, PlayerSide.Corp,
+            (definition, side, version) => SavedDecision.Agent(definition, side, version), new RegretSampling()).Select(root => root.Id));
+    }
+
     /// <summary>Bot plan S1.7: a label names its teacher's version, and a root whose values come from two is refused.</summary>
     [Fact]
     public void ALabelNamesItsTeacherAndARootMixingTwoIsRefused()
