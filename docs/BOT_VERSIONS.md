@@ -439,3 +439,119 @@ intervals also widen past zero; the Runner's separation holds. The live v31 and 
 | Corp v28 | 0.0313 [0.0285, 0.0344] | 0.0295 |
 | Corp v29 | 0.0309 [0.0281, 0.0338] | 0.0291 |
 | Corp v30, v31 | 0.0297 [0.0268, 0.0327] | 0.0263 |
+
+### S1.5: the turn-line teacher (6 October 2026)
+
+**What the teacher values now.** At a turn-action root, a candidate is valued at its best line of the root side's turn,
+not at the candidate followed by the heuristic's play of the rest of the turn. A line is a rank path: the candidate,
+then the heuristic's k-th distinct choice (copies of one card are one choice) at each later turn action of that turn.
+Nested choices, the opponent and later turns are played as before. `TurnPlanner.BestLine` runs a beam of 5 over rank
+paths, screens every line with a one-turn play-out on a quarter of the samples, then plays the heuristic's own line and
+the best other line to the 4-turn horizon on every sample, and keeps the better. Elsewhere (run, rez and priority
+choices) a candidate is valued as before. Lines that leave the turn in the same state share one play-out
+(`EngineJson.SearchFingerprint`, an in-process fingerprint that also covers simulated states;
+`RegretSuiteTests.LinesThatLeaveTheTurnInOneStateHaveOnePlayOut` checks that equal fingerprints give equal play-outs).
+The shipped planner has the same search behind `plan-lines`, which no profile sets (Hard and every frozen digest are
+unchanged; the twin tests pass with it on).
+
+**Choosing the settings.** The spec's search, a beam of `plan-width` (3) with every line screened by a full play-out on
+a quarter of the samples and the better half played on the rest, did not remove the Petty Cash artifact, and cost more
+than the spec's estimate. At the worst root (`…leo-glacier~…topan-00202#358`, 128 samples, 4-turn horizon):
+
+| Search | Petty Cash first | Best group |
+|---|---:|---:|
+| One-step (S1.2) | 0.257 | 0.487 |
+| Beam 3, full play-out screen, better half | 0.388 | 0.509 |
+| Beam 4, the same | 0.489 | 0.564 |
+| Beam 5, the same | 0.615 | 0.657 |
+| Beam 8 (every distinct choice at this root) | 0.615 | 0.657 |
+| Beam 5, screened by the leaf at the turn's end, two finalists | 0.257 | 0.564 |
+| **Beam 5, one-turn screen on a quarter, two finalists** | **0.615** | **0.618** |
+
+The line Petty Cash needs takes the heuristic's 4th and 5th choices at the next two clicks, so a beam of 3 cannot find
+it; the heuristic orders a turn's later clicks poorly (S5.0 records what that means for Standard). The leaf at the
+turn's end cannot see why the line is good; a one-turn play-out can. Cost on a 120-root sample of the suite (32 samples,
+12 workers):
+
+| Labelling | Time | Against one-step |
+|---|---:|---:|
+| One-step | 212 s | 1.0× |
+| Beam 3, full play-out screen, better half | 1,187 s | 5.6× |
+| The same with the play-out memo (labels identical) | 981 s | 4.6× |
+| Beam 5, one-turn screen on every sample, two finalists | 1,304 s | 6.2× |
+| **Beam 5, one-turn screen on a quarter, two finalists** | **582 s** | **2.75×** |
+
+**Relabelling** the whole box suite (6,512 roots, all 57,197 meaningful groups, none unlabellable) took **7 h 9 min** on
+12 workers, at a peak of 1.1 GB. A first run was stopped by the machine's memory reaper at about half way, with nothing
+saved, while an unrelated build held 7 GB; `ai-regret label` now rewrites its file every 50 games, whole or not at all,
+and `--missing` resumes it. The S1.2 labels are kept as `labels-v1.jsonl.gz` (and `labels-v1-repeat*`); the line
+labels are the suite's `labels.jsonl.gz`.
+
+**The Petty Cash check** (the 24 roots of S2's finding, 128 samples, 4-turn horizon): Petty Cash first is within noise
+of the best group (the gap at most the two standard errors' sum) at **18 of 24** roots, against 13 for the one-step
+teacher; the mean gap falls from 0.026 to 0.010 and the largest from 0.230 to 0.060. The worst root's gap is 0.003.
+Of the 6 roots still behind (by 0.014 to 0.060), 5 keep Petty Cash's heuristic line as its best and their gap is the
+one-step gap: there Petty Cash is likely worse, not undervalued.
+
+**Recertification** of the 26 teacher-certified puzzles at 128 samples with the line teacher (the same rule: the best
+group passes, its standard error at most 0.04, every failing group 0.15 or more behind): **24 hold**. Two move to a
+`teacher-v1` split, which `ai-puzzles run` leaves out of the gate (`--split teacher-v1` runs them):
+`teacher-7a456081`, whose rejected install now reaches the best line too (0.656, lead 0.000), a continuation artifact
+of the one-step teacher; and `teacher-00152981`, whose rejected run's best line closes the lead to 0.142.
+
+**Drift** (the 32,977 groups both teachers label; the line teacher never values a group below the one-step teacher on
+the same samples, and 21,240 are unchanged):
+
+- The other line won at **35.6%** of those groups (40.4% at turn roots; 37.6% of all 57,197).
+- Mean gain **+0.0167** a group; past twice its standard error (unpaired, so conservative) at 4.0% of groups, by
+  +0.140 on average, which is **+0.0055** a group.
+- The best group changed at **22.6%** of roots, below the noise floor (next), so it says nothing on its own. The best
+  value rose by **+0.0108** on average, and by **+0.0023** counted only where the rise passes twice its standard
+  error.
+
+**The labels carry a lift.** Each group's value is the better of two play-outs on the same samples, which sits above
+the better line's true value by about half a standard error where the two are close, as these roots were drawn to be.
+Most of the mean rise above is that lift. Every group gets the same treatment, so paired regret between versions stays
+fair, but values are not comparable with `labels-v1`'s.
+
+**Noise floor** with the line teacher (the 145 roots of the S1.2 repeat, repeat seed 2): the two labellings pick
+different best groups at **57%** of roots (one-step on the same roots: 50%), median standard error 0.032; a flip costs
+0.024 on average (median 0.005, 90th percentile 0.068) against a mean spread of 0.121. The line labels have 8.8 groups
+a root against the one-step labels' 6 there, so more flips are expected.
+
+**Gate: S1.3's separation on the new labels.** Every choice of every version is labelled (no on-demand labels needed),
+which is S1.4's gate.
+
+| Comparison | S1.4 (one-step, every choice) | S1.5 (line teacher) |
+|---|---|---|
+| Runner v24 − v25 | +0.0030 [0.0023, 0.0038] | +0.0030 [0.0022, 0.0038] |
+| Runner v24 − v26 | +0.0029 [0.0021, 0.0039] | +0.0030 [0.0022, 0.0038] |
+| Runner v25 − v26 | −0.0001 [−0.0004, 0.0002] | 0.0000 [−0.0004, 0.0004] |
+| Corp v28 − v29 | +0.0005 [−0.0001, 0.0011] | +0.0005 [−0.0001, 0.0011] |
+| Corp v28 − v30 | +0.0016 [−0.0004, 0.0033] | +0.0008 [−0.0007, 0.0025] |
+| Corp v29 − v30 | +0.0011 [−0.0005, 0.0028] | +0.0003 [−0.0009, 0.0017] |
+| Runner v26 − v27, Corp v30 − v31 | 0.0000 [0.0000, 0.0000] | 0.0000 [0.0000, 0.0000] |
+
+The Runner passes: v24 separates from v25 and v26 as before. **The Corp does not**: no Corp pair separates, as at S1.4
+(where counting every choice already widened the Corp's intervals past zero), and the line teacher narrows the
+differences further. The Corp's versions differ in few turn-action choices (v28 and v29 regret the same 0.0406 at turn
+roots, v30 0.0402), and the line teacher rates more of a turn's orderings alike, which is what it is for. Separating
+the Corp's versions needs more Corp roots where they choose differently; no step of the plan adds them yet, so this
+gate is open for the Corp.
+
+| Version (Standard) | Regret, all | Turn | Run | Held out | Agreement |
+|---|---|---|---|---|---|
+| Runner v24 | 0.0477 [0.0458, 0.0496] | 0.0559 | 0.0110 | 0.0495 | 0.220 |
+| Runner v25 | 0.0447 [0.0427, 0.0463] | 0.0524 | 0.0108 | 0.0447 | 0.228 |
+| Runner v26, v27 | 0.0447 [0.0428, 0.0464] | 0.0523 | 0.0108 | 0.0448 | 0.227 |
+| Corp v28 | 0.0331 [0.0304, 0.0362] | 0.0406 | 0.0204 | 0.0338 | 0.293 |
+| Corp v29 | 0.0327 [0.0300, 0.0355] | 0.0406 | 0.0192 | 0.0334 | 0.298 |
+| Corp v30, v31 | 0.0324 [0.0297, 0.0354] | 0.0402 | 0.0192 | 0.0307 | 0.290 |
+
+Turn-root regret rises for every version (Runner v26 0.0442 → 0.0523, Corp v30 0.0360 → 0.0402): the line teacher finds
+better turns than the heuristic plays, and the lift adds to it. Run-root values are unchanged.
+
+**Known limits, for S5 and S6.** Only one line besides the heuristic's is played to the horizon; if the one-turn screen
+misranks, the best line is missed, and a blunder-list root that turns out to be a missed line is the sign to revisit
+it. Without the teacher's play-out, `plan-lines` takes the best of every screened line, which is more optimistic than
+the teacher and favours candidates whose turn has more later clicks (S5.1's gates check it).

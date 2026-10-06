@@ -171,6 +171,11 @@ would hide the planner's choices, which are expected to fall outside the heurist
 - **Gate:** the unlabelled count is zero for every version in the S1.3 table; the table is re-reported.
 - **Record:** the counts before and after in `docs/BOT_VERSIONS.md`.
 
+**Outcome (5 October; the record is in `docs/BOT_VERSIONS.md`).** The box suite's roots have every meaningful group
+(32,821 groups became 57,109) and the choices outside the old six were labelled on demand: no version in the S1.3 table
+has an unlabelled choice. Counting them raised every older version's regret, as the S1.3 record warned; the Runner's
+separation held and the Corp's intervals widened past zero.
+
 ### S1.5 The turn-line teacher (M)
 
 **During S3 (it edits `TurnPlanner`, S3 edits the heuristic files); its relabel runs between S3's gate ladders; before
@@ -198,6 +203,19 @@ horizon does not fix it. The fix is the turn-line search of plan 4.1, built once
     v29).
 - **Record:** the cost, the Petty Cash check, the drift, the recertification and the new S1.3 table in
   `docs/BOT_VERSIONS.md`.
+
+**Outcome (6 October; the record is in `docs/BOT_VERSIONS.md`).** The box suite is relabelled with the line teacher
+(7 h 9 min; the S1.2 labels are kept as `labels-v1`). The settings depart from the spec on evidence: a beam of 3 cannot
+find the Petty Cash line (it takes the heuristic's 4th and 5th choices), and screening every line by a full play-out
+cost 5 to 6 times a one-step labelling, so the teacher searches a **beam of 5**, screens lines with a **one-turn
+play-out on a quarter of the samples**, and plays the heuristic's line and the best other one to the horizon (2.75
+times one-step). Gate:
+  - the twin tests pass with `plan-lines` on (the live Hard bot; the live Runner's Standard does not plan);
+  - Petty Cash first is level with the best at 18 of 24 roots (13 one-step), the worst root's gap 0.230 → 0.003;
+  - drift recorded with the lift the labels carry; the best-group change (22.6%) is below the noise floor (57%);
+  - 24 of the 26 certified puzzles hold; 2 moved to `teacher-v1`;
+  - S1.3's separation: the Runner passes (v24 against v25 and v26); **the Corp does not**, as at S1.4, so that part
+    of the gate is open until the suite has more Corp roots where its versions choose differently.
 
 ## S2. Puzzle suite v2 (M)
 
@@ -333,6 +351,11 @@ rollout step gets cheaper, and S0.4's trace says the step is mostly simulated `A
   working state (`WorkingState.Build` and its constructor, about 8% of `ApplyCore`).
 - **Gate:** each change is exact: a 240-deal box ladder identical game by game to the run before it, the per-slice
   fuzz on every pool (an engine change), and the costs re-measured into `docs/BOT_VERSIONS.md`.
+- **S1.5 raised the stakes.** The heuristic orders a turn's later clicks poorly: the Petty Cash line needed its 4th and
+  5th choices, so the teacher searches a beam of 5 and a beam of 3 misses the line. Standard cannot afford a beam of 5
+  per click inside 50 ms at today's cost, so either simulated `Apply` gets much cheaper here or the shipped planner
+  searches a narrower beam than the teacher; S5.1's record says which, and what the narrower beam costs on the regret
+  suite against the teacher's.
 
 ### S5.1 Pipeline changes in `TurnPlanner`
 
@@ -344,7 +367,11 @@ rollout step gets cheaper, and S0.4's trace says the step is mostly simulated `A
   the heuristic orders candidates and breaks ties within `plan-tie` (start 0.005).
 - **Turn-line search on** (`plan-lines`, S1.5): Standard and Hard value a candidate at its best line of the turn. The
   budget below is lines × samples, so S5.0's gains decide the beam Standard can afford inside 50 ms; if a beam of 4 does
-  not fit after S5.0, Standard plans a beam of 3 or fewer samples and the record says which.
+  not fit after S5.0, Standard plans a beam of 3 or fewer samples and the record says which. Without the teacher's
+  play-out, `plan-lines` takes the best of every screened line, more lines than the teacher's two finalists, so its
+  values are more optimistic, and a candidate whose heuristic line ends the turn early has fewer lines and less of that
+  lift. The values only rank candidates, so S5.1's gates check this on the regret suite (a planner preferring
+  long-turn candidates for this reason shows as regret on short-turn roots).
 - **Rollout policy:** today's per-step `Choose` (S0.4) for nested choices, the opponent and later turns. Profile against
   S0.1 after S5.0 and, if a Standard decision still cannot fit 50 ms p95, implement the plan's 4.3 options (the heuristic
   at a reduced work budget, then the distilled table policy) and record each number. If the rollout policy changes here,
