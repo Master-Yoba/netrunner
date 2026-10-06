@@ -20,7 +20,8 @@ public static partial class CliCommands
     /// ai-regret findings SUITE-DIR --manifest FILE --fixtures DIR --content POOL [--labelled N]
     /// ai-regret dedupe SUITE-DIR
     /// ai-regret extend SUITE-DIR [--labelled N] [--workers N] (every meaningful group at every root, S1.4)
-    /// ai-regret exposure SUITE-DIR [--workers N] [--json] (every agenda the Corp installed in a remote in the suite's games)
+    /// ai-regret exposure SUITE-DIR [--all-roots] [--version RUNNER] [--workers N] [--json] (every agenda, or every card, the Corp installed in
+    ///   a remote in the suite's games; with --version, that Runner says at its next turn how it scores the run)
     /// ai-regret exposure SUITE-DIR --roots FILE [--samples N] [--horizon TURNS] [--workers N] [--json] (the teacher's
     ///   play-outs of the groups FILE lists, "ROOT-ID GROUP" a line)
     /// </summary>
@@ -54,7 +55,8 @@ public static partial class CliCommands
     private sealed record RegretOptions(string? Output, int TurnRoots, int RunRoots, int Labelled, ulong Seed, int Workers, int Samples,
         int HorizonTurns, int Evaluation, string LabelsFile, int Repeat, ulong RepeatSeed, string[] Versions, string Profile, string Split,
         int Blunders, int Bootstrap, bool Json, bool Missing = false, string? Manifest = null, string? Fixtures = null, string? Content = null,
-        bool LabelMissing = false, int Lines = 0, string? RootsFile = null, int ScreenTurns = 1, string[]? Discordant = null)
+        bool LabelMissing = false, int Lines = 0, string? RootsFile = null, int ScreenTurns = 1, string[]? Discordant = null,
+        bool AllRoots = false)
     {
         public static RegretOptions Parse(string[] args)
         {
@@ -95,6 +97,7 @@ public static partial class CliCommands
                     "--json" => options with { Json = true },
                     "--missing" => options with { Missing = true },
                     "--label-missing" => options with { LabelMissing = true },
+                    "--all-roots" => options with { AllRoots = true },
                     "--lines" => options with { Lines = Int("--lines", 0, 16) },
                     "--screen-turns" => options with { ScreenTurns = Int("--screen-turns", 0, 100) },
                     // Two versions of one side; they are scored if --version does not name them.
@@ -292,7 +295,7 @@ public static partial class CliCommands
     private static int RegretExposureCommand(string suiteDirectory, RegretOptions options, TextWriter output, TextWriter error)
     {
         RegretSuite suite = RegretSuite.Load(suiteDirectory);
-        AgendaFate[] fates;
+        RemoteFate[] fates;
         if (options.RootsFile is { } file)
         {
             var wanted = File.ReadLines(file).Select(line => line.Split(' ', StringSplitOptions.RemoveEmptyEntries)).Where(parts => parts.Length == 2)
@@ -301,9 +304,11 @@ public static partial class CliCommands
             var byGame = roots.GroupBy(root => root.GameId).ToDictionary(group => group.Key, group => group.ToList());
             var settings = new TeacherSettings(options.Samples, options.Seed, options.HorizonTurns, options.Evaluation);
             fates = [.. ForGames([.. suite.Games.Where(game => byGame.ContainsKey(game.Id))], options.Workers, error, "exposure",
-                game => byGame[game.Id].SelectMany(root => AgendaExposure.FromRoot(game, root, wanted[root.Id], settings)).ToArray()).SelectMany(found => found)];
+                game => byGame[game.Id].SelectMany(root => RemoteExposure.FromRoot(game, root, wanted[root.Id], settings)).ToArray()).SelectMany(found => found)];
         }
-        else fates = [.. ForGames([.. suite.Games], options.Workers, error, "exposure", AgendaExposure.FromGame).SelectMany(found => found)];
+        else fates = [.. ForGames([.. suite.Games], options.Workers, error, "exposure", game => RemoteExposure.FromGame(game, options.AllRoots,
+            options.Versions.FirstOrDefault()))
+            .SelectMany(found => found)];
         if (options.Json)
         {
             output.WriteLine(System.Text.Json.JsonSerializer.Serialize(fates, RegretSuite.Json));

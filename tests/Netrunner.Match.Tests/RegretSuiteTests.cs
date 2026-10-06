@@ -138,17 +138,17 @@ public sealed class RegretSuiteTests
         if (!Official) return;
         RegretSuite suite = RegretSuite.Load(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "data", "ai", "regret",
             "gateway-elevation"));
-        var fates = suite.Games.Where(game => game.Source == "ladder").Take(6).SelectMany(AgendaExposure.FromGame).ToList();
+        var fates = suite.Games.Where(game => game.Source == "ladder").Take(6).SelectMany(game => RemoteExposure.FromGame(game)).ToList();
 
         Assert.NotEmpty(fates);
-        Assert.All(fates, fate => Assert.Contains(fate.Outcome, new[] { AgendaExposure.Scored, AgendaExposure.Stolen, AgendaExposure.Trashed,
-            AgendaExposure.Installed, "installed-at-end" }));
+        Assert.All(fates, fate => Assert.Contains(fate.Outcome, new[] { RemoteExposure.Scored, RemoteExposure.Stolen, RemoteExposure.Trashed,
+            RemoteExposure.Installed, "installed-at-end" }));
         Assert.All(fates, fate => Assert.True(fate.Runs >= 0 && fate.Turns >= 0));
-        Assert.Contains(fates, fate => fate.Outcome == AgendaExposure.Scored);
+        Assert.Contains(fates, fate => fate.Outcome == RemoteExposure.Scored);
         // The run model is asked once, at the Runner's next turn, unless the agenda was gone by then.
-        Assert.All(fates.Where(fate => fate.Breakable is null), fate => Assert.True(fate.Outcome != AgendaExposure.Stolen || fate.Runs > 0));
+        Assert.All(fates.Where(fate => fate.Breakable is null), fate => Assert.True(fate.Outcome != RemoteExposure.Stolen || fate.Runs > 0));
         Assert.Equal(fates.Select(fate => (fate.Source, fate.Outcome, fate.Runs)),
-            suite.Games.Where(game => game.Source == "ladder").Take(6).SelectMany(AgendaExposure.FromGame).Select(fate => (fate.Source, fate.Outcome, fate.Runs)));
+            suite.Games.Where(game => game.Source == "ladder").Take(6).SelectMany(game => RemoteExposure.FromGame(game)).Select(fate => (fate.Source, fate.Outcome, fate.Runs)));
     }
 
     [Fact]

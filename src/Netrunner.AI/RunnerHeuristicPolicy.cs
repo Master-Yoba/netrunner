@@ -157,6 +157,11 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// Every earlier version is <see cref="LegacyRunnerPolicy"/>, frozen.
     /// </summary>
     public const string V27 = "runner-heuristic-v27";
+    /// <summary>
+    /// V27 with a face-down card in a remote valued by what it likely is (the S1.5 follow-up, 6 October): an agenda at the
+    /// chance its unseen root cards hold one, raised when the remote is protected by ICE, as the Corp protects agendas.
+    /// </summary>
+    public const string V28 = "runner-heuristic-v28";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
     /// V18 is V15 with only the reinstall fix (no install over its own copy or a second console), a fix that can only remove
@@ -169,35 +174,38 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// and at Hard it was level with V21 on the bot ladder. V23 (bot loop 1, 3 October) is the default while loop 1 plays
     /// against it: its fixes remove plays that flatline the Runner itself. V24 (loop 1's deferred fixes, 4 October) is the
     /// default loop 2 played against. V25 (bot loop 2, 4 October) was the default until V26. V27 (bot plan S3) is V26 as the
-    /// live policy, identical game by game.
+    /// live policy, identical game by game. V28 values a protected face-down remote card as the agenda it likely is.
     /// </remarks>
-    public const string PolicyVersion = V27;
+    public const string PolicyVersion = V28;
     /// <summary>
     /// The planner's model of the Runner. It stays V7, which Corp v9 was measured
     /// with, so the shipped Corp planner plays as it did.
     /// </summary>
     public const string LatestHeuristic = V7;
-    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25, V26, V27];
+    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25, V26, V27, V28];
 
     /// <summary>Whether the version's memory of a face-down root card survives installs in that root (v20).</summary>
-    public static bool KeepsRootMemoryThroughInstalls(string version) => version is V20 or V21 or V22 or V23 or V24 or V25 or V26 or V27;
+    public static bool KeepsRootMemoryThroughInstalls(string version) => version is V20 or V21 or V22 or V23 or V24 or V25 or V26 or V27 or V28;
 
     /// <summary>Whether the version keeps the A9a tracker of the Corp's hidden cards (v21).</summary>
-    public static bool UsesTracker(string version) => version is V21 or V22 or V23 or V24 or V25 or V26 or V27;
+    public static bool UsesTracker(string version) => version is V21 or V22 or V23 or V24 or V25 or V26 or V27 or V28;
 
     public RunnerHeuristicPolicy() : this(PolicyVersion) { }
 
     public RunnerHeuristicPolicy(string version)
     {
-        if (version != V27) throw new ArgumentException($"The live Runner policy is {V27}; '{version}' is {nameof(LegacyRunnerPolicy)}.", nameof(version));
+        if (version is not (V27 or V28))
+            throw new ArgumentException($"The live Runner policy is {V27} or {V28}; '{version}' is {nameof(LegacyRunnerPolicy)}.", nameof(version));
         Version = version;
+        _contextGeneration = version == V28 ? 23 : 22;
     }
 
     /// <summary>
-    /// The generation the shared helpers (<see cref="HeuristicContext"/>, RunnerValues, RunModel) still switch on: V26's. They
-    /// keep their switches for <see cref="LegacyRunnerPolicy"/>; the live policy has none of its own.
+    /// The generation the shared helpers (<see cref="HeuristicContext"/>, RunnerValues, RunModel) switch on: V26's (22) for
+    /// V27, and 23 for V28's remote valuation. They keep their switches for <see cref="LegacyRunnerPolicy"/>, and V27 stays
+    /// constructible so the regret suite can compare the two (<c>ai-regret score --discordant</c>).
     /// </summary>
-    private const int ContextGeneration = 22;
+    private readonly int _contextGeneration;
 
     public ImmutableArray<AgentCandidate> EvaluateDecision(AgentFeatures features, AgentKnowledge knowledge, AgentObjective? objective,
         OfflineAgentConfiguration configuration, ICardEvaluationCatalog catalog, AgentWorkBudget budget, PlanningContext? planning)
@@ -245,7 +253,7 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     {
         AgentAction[] preferred = IssuedRunPaymentPreference.Select(features.Actions, action => (action.Id, action.Kind, action.Parameters)).ToArray();
         var preferredIds = preferred.Select(action => action.Id).ToHashSet();
-        var context = new HeuristicContext(features with { Actions = preferred.ToImmutableArray() }, catalog, configuration, ContextGeneration)
+        var context = new HeuristicContext(features with { Actions = preferred.ToImmutableArray() }, catalog, configuration, _contextGeneration)
         {
             Knowledge = knowledge,
         };

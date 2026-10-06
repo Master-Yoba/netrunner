@@ -93,6 +93,54 @@ internal static class RunnerInference
     }
 
     /// <summary>
+    /// Runner v28: how much likelier a face-down card in a remote is to be an agenda when ICE protects the remote, and when
+    /// none does, as odds against the unseen root cards' agenda share. The Corp protects its agendas and leaves assets and
+    /// ambushes naked: in the Core Battle Box's saved games, an unadvanced face-down card behind ICE was an agenda 71% of
+    /// the time and one in a naked remote never was, against an agenda share of about 44% among the pool's root cards.
+    /// </summary>
+    public const double ProtectedAgendaOdds = 3.0;
+    public const double NakedAgendaOdds = 0.1;
+
+    /// <summary>
+    /// Runner v28: the chance a face-down card in a remote's root is an agenda, and an agenda's value there (500 and 180 a
+    /// point, as a known one). What the tracker believes of the slot counts as it stands; the rest is the unseen root cards'
+    /// agenda share, moved by whether ICE protects the remote.
+    /// </summary>
+    public static (double Chance, double Value) RootAgenda(HeuristicContext context, AgentServer server, int index)
+    {
+        static double Worth(CardEvaluationDescriptor card) => 500 + card.Agenda!.AgendaPoints * 180;
+        (double share, double unseenValue) = context.Memo("root-agendas", () =>
+        {
+            Dictionary<string, double> roots = TrackerPrior.Conditional(Prior(context), definition => TrackerPrior.Fits(context.Catalog, definition, "root"));
+            double agendas = 0, worth = 0;
+            foreach ((string definition, double weight) in roots)
+                if (context.Catalog.TryGet(new CardDefinitionId(definition), out CardEvaluationDescriptor card) && card.Agenda is not null)
+                {
+                    agendas += weight;
+                    worth += weight * Worth(card);
+                }
+            return (agendas, agendas > 0 ? worth / agendas : 0);
+        });
+        double odds = share >= 1 ? double.PositiveInfinity
+            : share / (1 - share) * (server.Ice.Length > 0 ? ProtectedAgendaOdds : NakedAgendaOdds);
+        double chance = double.IsPositiveInfinity(odds) ? 1 : odds / (1 + odds);
+        if (Tracker(context) is not { } tracker) return (chance, unseenValue);
+        double tracked = 0, trackedWorth = 0, believed = 0;
+        foreach ((string definition, double probability) in tracker.SlotBelief(server.Id, "root", index))
+        {
+            believed += probability;
+            if (context.Catalog.TryGet(new CardDefinitionId(definition), out CardEvaluationDescriptor card) && card.Agenda is not null)
+            {
+                tracked += probability;
+                trackedWorth += probability * Worth(card);
+            }
+        }
+        double residual = Math.Max(0, 1 - believed);
+        double total = tracked + residual * chance;
+        return total <= 0 ? (0, unseenValue) : (total, (trackedWorth + residual * chance * unseenValue) / total);
+    }
+
+    /// <summary>
     /// Runner v24 (bot loop 1): the chance an unadvanced face-down root card is an ambush the Corp can pay for whose damage
     /// exceeds the grip (Byte!'s 3 net damage against 2 cards): its share of the root cards the Corp may hold, and at least one
     /// in five once the Runner has seen this Corp's copy.
