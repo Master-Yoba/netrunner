@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# E6 Core-growth report (docs/ELEVATION_PLAN.md): builds the official CLI, dumps each registered card's engine
+# E6 Core-growth report (docs/history/ELEVATION_PLAN.md): builds the official CLI, dumps each registered card's engine
 # vocabulary, and runs scripts/core-growth.py with the given arguments. Usage:
 #   scripts/core-growth.sh --registry data/m4/batch-registry.json --range slice-4.7=ade5111^..fa99e86 [--json]
 #   scripts/core-growth.sh --registry data/m4/batch-registry.json --registry data/elevation/batch-registry.json \

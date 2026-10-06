@@ -8,7 +8,7 @@ namespace Netrunner.Cli;
 public static partial class CliCommands
 {
     /// <summary>
-    /// ai-runner-diagnosis &lt;games-directory&gt; [--workers 1..64] [--examples N]. Why the Runner loses (docs/BOT_IMPROVEMENT_PLAN.md):
+    /// ai-runner-diagnosis &lt;games-directory&gt; [--workers 1..64] [--examples N]. Why the Runner loses (docs/history/BOT_IMPROVEMENT_PLAN.md):
     /// replays games saved by <c>ai-ladder --save-games</c> and reports, per Runner entrant and per Runner deck, its win
     /// rate, its losses by reason (the Corp's agendas, a flatline the Corp dealt, a flatline from its own action, and the
     /// cards behind those), runs per turn and credits at its turn starts. Exit 0 on success, 2 for invalid arguments.

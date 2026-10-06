@@ -351,7 +351,7 @@ converted puzzle.
 - Wire `ai-regret score` (target pool, the suite's held-out split), `ai-puzzles`, and `ai-lint` counts on the latest
   saved run into `scripts/bot-check.sh` behind `BOT_CHECK_SUITES=1`, with a summary line each.
 - Update `AGENTS.md`'s "Testing Guidelines" bot paragraph to the plan's section 6 tiers, and
-  [BOT_LOOP_WORKFLOW.md](BOT_LOOP_WORKFLOW.md) section 7 to point there.
+  [BOT_LOOP_WORKFLOW.md](history/BOT_LOOP_WORKFLOW.md) section 7 to point there.
 
 ## S3. One live policy (M)
 

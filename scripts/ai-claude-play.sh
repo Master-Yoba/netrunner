@@ -5,7 +5,7 @@
 #     [--deals FILE] [--opponent ENTRANT] [--model claude-sonnet-5-5] [--parallel N] [--budget-usd 10]
 # --deals plays a fixed list instead of the Gateway pool's numbered deals: one line per game, "NNN corp~runner seat",
 # where seat is Claude's side (blank lines and # comments are skipped). A deal's shuffle comes from --seed and its
-# number, so the same number replays the same deal (docs/BOT_IMPROVEMENT_PLAN.md).
+# number, so the same number replays the same deal (docs/history/BOT_IMPROVEMENT_PLAN.md).
 # Each game is one `claude -p` session with only the game's MCP tools (no shell or file tools), from an empty workspace,
 # capped at --budget-usd. Games are saved like ai-ladder --save-games (game-NNN/game/), with Claude's usage beside them
 # (game-NNN/claude.json); a line per game and a summary go to stdout. Needs the claude CLI, logged in. It spends plan

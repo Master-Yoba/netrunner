@@ -62,7 +62,7 @@ official content is where fuzzing finds anything.
 ## U0: capture harness and `Main` split
 
 - `--capture-output` launch mode, `scripts/ui-capture.sh` and `make
-  ui-capture` ([usage](UI_CAPTURE.md)). The contract agent plays the local
+  ui-capture` ([usage](../UI_CAPTURE.md)). The contract agent plays the local
   seat; bursts start when card-table playback *renders* a chosen event kind.
   An earlier version triggered on coordinator publication and captured the
   wrong moment, because playback deliberately lags publication by about

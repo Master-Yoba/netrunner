@@ -1,6 +1,6 @@
 # Format snapshots
 
-Each file is one versioned format (C2, [Elevation plan](../../docs/ELEVATION_PLAN.md) D-EL-3): the packs whose cards
+Each file is one versioned format (C2, [Elevation plan](../../docs/history/ELEVATION_PLAN.md) D-EL-3): the packs whose cards
 are legal, the ban list, the deck rules and an effective date. `format.schema.json` is the schema;
 `Netrunner.Cards.CardFormatCatalog` embeds and validates every file (FORMAT-401), and `DeckValidator` takes a format.
 

@@ -5,7 +5,7 @@ frame bursts, plus a contact sheet per burst, whenever the client renders one
 of the chosen event kinds. It records what the player actually sees: bursts
 start when card-table playback renders the snapshot, not when the coordinator
 publishes it. It is the before/after evidence tool for UI work
-([UI/UX plan](UI_UX_REDESIGN_PLAN.md) phase U0).
+([UI/UX plan](history/UI_UX_REDESIGN_PLAN.md) phase U0).
 
 ```sh
 make ui-capture CAPTURE_ARGS='--capture-seed 42 --capture-side runner --capture-events agenda-scored,run-initiated'

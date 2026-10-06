@@ -668,9 +668,9 @@ is in the client, in three slices:
   so hit targets stay put. Reduced motion and Skip animation turn it off.
 
 Evidence (synthetic tutorial decks, no card art):
-[Runner seat](evidence/u5/runner-seat-chrome-neon.png),
-[Corp seat](evidence/u5/corp-seat-reversed-board.png),
-[opponent's played card](evidence/u5/opponent-play-reveal.png).
+[Runner seat](../evidence/u5/runner-seat-chrome-neon.png),
+[Corp seat](../evidence/u5/corp-seat-reversed-board.png),
+[opponent's played card](../evidence/u5/opponent-play-reveal.png).
 
 Still to do: the bypass preview and music (the run HUD, the connection
 through the ICE, derezzed ICE and counter shapes landed with U8, below).
@@ -725,10 +725,10 @@ still offers its bypass through the existing trigger controls), and a warning
 chip on the Runner's header for a Corp agenda that can fire during the run.
 
 Evidence (synthetic lab decks, no card art):
-[encounter](evidence/u8/run-hud-encounter.png),
-[after Break all](evidence/u8/run-hud-broken.png),
-[passed ICE derezzed](evidence/u8/run-hud-passed-ice.png),
-[Corp seat](evidence/u8/run-hud-corp.png).
+[encounter](../evidence/u8/run-hud-encounter.png),
+[after Break all](../evidence/u8/run-hud-broken.png),
+[passed ICE derezzed](../evidence/u8/run-hud-passed-ice.png),
+[Corp seat](../evidence/u8/run-hud-corp.png).
 
 ### Run HUD soak
 

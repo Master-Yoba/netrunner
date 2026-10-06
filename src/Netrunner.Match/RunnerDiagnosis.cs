@@ -2,7 +2,7 @@ using Netrunner.Core;
 
 namespace Netrunner.Match;
 
-/// <summary>One saved game, from the Runner's side (docs/BOT_IMPROVEMENT_PLAN.md, the diagnosis).</summary>
+/// <summary>One saved game, from the Runner's side (docs/history/BOT_IMPROVEMENT_PLAN.md, the diagnosis).</summary>
 public sealed record RunnerGameSample(
     string Entrant,
     string RunnerDeck,
