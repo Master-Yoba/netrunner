@@ -27,17 +27,37 @@ public sealed record RegretRoot(string Id, string GameId, long Sequence, PlayerS
 /// <summary>
 /// A labelled candidate group: the teacher's mean win probability for the acting side, and its standard error. With the
 /// turn-line search, <paramref name="Line"/> is its best line: the heuristic's choice at each later turn action (bot plan S1.5).
+/// A value labelled on demand into an existing label names its <paramref name="TeacherVersion"/> (S1.7), so a root never
+/// compares values from two teachers.
 /// </summary>
-public sealed record RegretValue(string Group, double Mean, double StandardError, int PlayOuts, int[]? Line = null);
+public sealed record RegretValue(string Group, double Mean, double StandardError, int PlayOuts, int[]? Line = null, string? TeacherVersion = null);
 
 /// <summary>
 /// The teacher's labels for one root and how they were made; <paramref name="Lines"/> is the turn-line search's beam (0
 /// without it) and <paramref name="ScreenTurns"/> its screen's horizon (<see cref="TeacherSettings.ScreenTurns"/>);
-/// <paramref name="Teacher"/> the ladder entrant that labelled it, null for Hard.
+/// <paramref name="Teacher"/> the ladder entrant that labelled it, null for Hard; <paramref name="TeacherVersion"/> the
+/// teacher's version (S1.7), derived from the settings for a label written before versions were (<see cref="TeacherName"/>).
+/// With adaptive samples (S1.7), <paramref name="Samples"/> is the recording samples the root used and
+/// <paramref name="Decide"/> the deciding samples drawn before them and discarded.
 /// </summary>
 public sealed record RegretLabel(string RootId, int Samples, int HorizonTurns, int Evaluation, ulong Seed, ImmutableArray<RegretValue> Values,
-    int Lines = 0, int ScreenTurns = 0, string? Teacher = null)
+    int Lines = 0, int ScreenTurns = 0, string? Teacher = null, string? TeacherVersion = null, int Decide = 0)
 {
+    /// <summary>The teacher's version: the recorded one, or the one these settings are (<see cref="RegretLabels.VersionOf"/>).</summary>
+    [JsonIgnore]
+    public string TeacherName => TeacherVersion ?? RegretLabels.VersionOf(Lines, ScreenTurns, HorizonTurns, Evaluation, Teacher ?? "hard");
+
+    /// <summary>
+    /// S1.7: a paired comparison is valid root by root under one teacher, so a label whose values come from two teachers
+    /// (a group labelled on demand by another) is refused, not compared.
+    /// </summary>
+    public void EnsureOneTeacher()
+    {
+        string[] teachers = [.. Values.Select(value => value.TeacherVersion ?? TeacherName).Distinct(StringComparer.Ordinal)];
+        if (teachers.Length > 1)
+            throw new InvalidDataException($"Root {RootId} has values from more than one teacher ({string.Join(", ", teachers)}).");
+    }
+
     /// <summary>The best labelled group, or null when no group has a value.</summary>
     [JsonIgnore]
     public RegretValue? Best => Values.Where(value => !double.IsNaN(value.Mean))
@@ -85,6 +105,42 @@ public sealed record RegretSuite(ImmutableArray<RegretGame> Games, ImmutableArra
         HashSet<string> kept = [.. roots.Select(root => root.Id)];
         return new RegretSuite([.. games.Values.OrderBy(game => game.Id, StringComparer.Ordinal)], roots.ToImmutable(),
             Labels.IsDefault ? [] : [.. Labels.Where(label => kept.Contains(label.RootId))]);
+    }
+
+    /// <summary>Bot plan S1.7: the category that marks a root of the suite's core.</summary>
+    public const string CoreCategory = "core";
+
+    /// <summary>
+    /// Bot plan S1.7: the suite with a core of about <paramref name="count"/> roots marked, drawn by deal (a finding is a
+    /// deal of its own) so a held-out deal is wholly in or out, and in the suite's held-out share. A marking, not a run: the
+    /// core keeps the labels it has. Any earlier marking is replaced.
+    /// </summary>
+    public RegretSuite WithCore(int count, ulong seed)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(count);
+        var games = Games.ToDictionary(game => game.Id, StringComparer.Ordinal);
+        string Deal(RegretRoot root) => games[root.GameId] is var game && game.Source == "finding" ? game.Id : $"{game.ContentId}|{game.GameSeed}";
+        var random = new DeterministicRandom(seed);
+        List<RegretRoot>[] deals = [.. Roots.GroupBy(Deal).OrderBy(group => group.Key, StringComparer.Ordinal)
+            .Select(group => (Roots: group.ToList(), Draw: random.NextUInt64())).OrderBy(deal => deal.Draw).Select(deal => deal.Roots)];
+        int heldOutWanted = (int)Math.Round(count * (Roots.Count(root => root.Split == "held-out") / (double)Math.Max(1, Roots.Length)));
+        int trainWanted = count - heldOutWanted, heldOut = 0, train = 0;
+        HashSet<string> core = new(StringComparer.Ordinal);
+        foreach (List<RegretRoot> deal in deals)
+        {
+            bool held = deal[0].Split == "held-out";
+            if (held ? heldOut >= heldOutWanted : train >= trainWanted) continue;
+            foreach (RegretRoot root in deal) core.Add(root.Id);
+            if (held) heldOut += deal.Count;
+            else train += deal.Count;
+        }
+        return this with
+        {
+            Roots = [.. Roots.Select(root => root with
+            {
+                Categories = [.. root.Categories.Where(category => category != CoreCategory), .. core.Contains(root.Id) ? [CoreCategory] : Array.Empty<string>()],
+            })],
+        };
     }
 
     public static RegretSuite Load(string directory)

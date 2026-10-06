@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Globalization;
 using Netrunner.AI;
 using Netrunner.Core;
 
@@ -17,6 +18,33 @@ public static class RegretLabels
     /// Corp v8), which no label meant to train an evaluation should learn from; labels name a teacher other than Hard.
     /// </summary>
     public const string DefaultTeacher = "hard-model";
+
+    /// <summary>
+    /// Bot plan S1.7: the teacher's version, frozen between milestones and named on every label and score. v1 is S1.2's
+    /// one-step teacher; v1-lines S1.5's line search with the pinned opponent (Runner v7, Corp v8); v2 the line search
+    /// (beam 5, a one-turn screen on a quarter of the samples, two finalists) with the live Standard opponent, a 4-turn
+    /// horizon and set 4 at the leaf. Any other settings are named by them. The teacher is the live Hard bot of each side and,
+    /// for hard-model, the live Standard of the other, so v2 is v2 only while those are Corp v31 and Runner v28: after a
+    /// policy bump the name carries the versions, and a label never claims a teacher it was not made by. Labels are tagged
+    /// with their version when written (<c>ai-regret tag</c> for files made before), so a bump never renames old labels.
+    /// </summary>
+    public static string VersionOf(int lines, int screenTurns, int horizonTurns, int evaluation, string teacher) =>
+        (lines, screenTurns, horizonTurns, evaluation, teacher) switch
+        {
+            ( <= 1, _, 4, 4, "hard") => "v1",
+            (5, 1, 4, 4, "hard") => "v1-lines",
+            (5, 1, 4, 4, "hard-model") when CorpHeuristicPolicy.PolicyVersion == CorpHeuristicPolicy.V31
+                && RunnerHeuristicPolicy.PolicyVersion == RunnerHeuristicPolicy.V28 => "v2",
+            _ => string.Create(CultureInfo.InvariantCulture,
+                $"{teacher}-lines{lines}-screen{screenTurns}-horizon{horizonTurns}-set{evaluation}-{CorpHeuristicPolicy.PolicyVersion}-{RunnerHeuristicPolicy.PolicyVersion}"),
+        };
+
+    /// <summary>The version the teacher's settings are, as <see cref="VersionOf"/> names it.</summary>
+    public static string VersionOf(TeacherSettings settings, string teacher)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        return VersionOf(settings.Lines, settings.Lines > 1 ? settings.ScreenTurns : 0, settings.HorizonTurns, settings.Evaluation, teacher);
+    }
 
     /// <param name="teacher">The ladder entrant that teaches: Hard, or <c>hard-model</c>, Hard modelling the opponent by the
     /// live Standard version instead of the planner's pinned model (Runner v7, Corp v8).</param>
@@ -45,9 +73,11 @@ public static class RegretLabels
                 [.. root.Candidates.Select(candidate => new ActionId(candidate.ActionIds[0]))], rooted);
             // A root no sample could play every candidate on has no label: it is scored as unlabelled.
             if (values.Any(value => value.PlayOuts == 0)) return;
-            labels.Add(new RegretLabel(root.Id, settings.Samples, settings.HorizonTurns, settings.Evaluation, rooted.Seed,
+            // With adaptive samples the label records the recording samples the root used, and the deciding ones.
+            labels.Add(new RegretLabel(root.Id, settings.Decide > 0 ? values.Max(value => value.PlayOuts) : settings.Samples,
+                settings.HorizonTurns, settings.Evaluation, rooted.Seed,
                 [.. root.Candidates.Zip(values, Value)], settings.Lines, settings.Lines > 1 ? settings.ScreenTurns : 0,
-                teacher == "hard" ? null : teacher));
+                teacher == "hard" ? null : teacher, VersionOf(settings, teacher), settings.Decide));
         });
         return labels.ToImmutable();
     }
@@ -76,12 +106,15 @@ public static class RegretLabels
         {
             foreach (OfflineAgent teacher in teachers.Values) AgentLifecycleHost.Observe(teacher, position.State, definition.Behavior);
             if (!bySequence.TryGetValue(position.Sequence, out var request)) return;
+            // The root's recording samples: its deciding ones are drawn and passed over first.
             var settings = new TeacherSettings(request.Label.Samples, request.Label.Seed, request.Label.HorizonTurns, request.Label.Evaluation,
-                Lines: request.Label.Lines, ScreenTurns: request.Label.ScreenTurns);
+                Lines: request.Label.Lines, ScreenTurns: request.Label.ScreenTurns, Decide: request.Label.Decide);
             IReadOnlyList<TeacherValue> found = RolloutTeacher.Evaluate(teachers[request.Root.Side],
                 ObservationBuilder.Build(position.State, request.Root.Side, definition.Behavior, definition.Runtime),
                 [.. request.Groups.Select(group => new ActionId(group.ActionIds[0]))], settings);
-            values[request.Root.Id] = [.. request.Groups.Zip(found, Value).Where(value => value.PlayOuts > 0)];
+            // A value added to a label names the teacher it came from, so score can refuse a root that mixes two.
+            values[request.Root.Id] = [.. request.Groups.Zip(found, Value).Where(value => value.PlayOuts > 0)
+                .Select(value => value with { TeacherVersion = VersionOf(settings, teacher) })];
         });
         return values;
     }

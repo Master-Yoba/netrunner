@@ -184,6 +184,31 @@ public sealed class RegretSuiteTests
             label => Assert.Null(label.Teacher));
     }
 
+    /// <summary>
+    /// Bot plan S1.7, adaptive samples: the deciding samples are discarded and the label records the recording samples it
+    /// used, between the first step and the cap, with every group played on all of them.
+    /// </summary>
+    [Fact]
+    public void AdaptiveSamplesRecordOnlyTheSamplesDrawnAfterTheDecision()
+    {
+        if (!Official) return;
+        (LadderSavedGame saved, FullMatchDefinition definition) = Saved();
+        RegretGame game = RegretGames.FromSaved(saved, definition, "held-out", "finding");
+        RegretRoot root = Assert.Single(RegretRoots.At(game, new HashSet<long> { CorpTurn }, new RegretSampling(), []));
+        var adaptive = new TeacherSettings(Samples: 4, Seed: 3, HorizonTurns: 1, Decide: 4, ExtendTo: 12, ExtendStep: 4);
+
+        RegretLabel label = Assert.Single(RegretLabels.Label(game, [root], adaptive));
+        RegretLabel again = Assert.Single(RegretLabels.Label(game, [root], adaptive));
+
+        Assert.Equal(4, label.Decide);
+        Assert.InRange(label.Samples, 1, 12);
+        Assert.All(label.Values, value => Assert.Equal(label.Samples, value.PlayOuts));
+        Assert.Equal(label.Values.Select(value => value.Mean), again.Values.Select(value => value.Mean));
+        // The deciding samples are not the recording ones: a flat labelling's first samples differ from the recorded.
+        RegretLabel flat = Assert.Single(RegretLabels.Label(game, [root], adaptive with { Decide = 0, ExtendTo = 0, Samples = label.Samples }));
+        Assert.NotEqual(flat.Values.Select(value => value.Mean), label.Values.Select(value => value.Mean));
+    }
+
     [Fact]
     public void TheDiscordantViewComparesTwoVersionsWhereTheyChooseDifferently()
     {
@@ -203,6 +228,48 @@ public sealed class RegretSuiteTests
         Assert.Equal(("InstallCard|a", 0.5, "GainCredit|b", 0.6), (discord.FirstChosen, discord.FirstValue, discord.SecondChosen, discord.SecondValue));
         Assert.Equal((3, 0.1), (discordance.Discordant.Roots, Math.Round(discordance.Discordant.MeanDifference, 9)));
         Assert.Equal((10, 0.03), (discordance.All.Roots, Math.Round(discordance.All.MeanDifference, 9)));
+    }
+
+    /// <summary>Bot plan S1.7: a label names its teacher's version, and a root whose values come from two is refused.</summary>
+    [Fact]
+    public void ALabelNamesItsTeacherAndARootMixingTwoIsRefused()
+    {
+        Assert.Equal("v1", RegretLabels.VersionOf(0, 0, 4, 4, "hard"));
+        Assert.Equal("v1-lines", RegretLabels.VersionOf(5, 1, 4, 4, "hard"));
+        Assert.Equal("v2", RegretLabels.VersionOf(5, 1, 4, 4, "hard-model"));
+        // Other settings are named by them and by the live policies the teacher plays.
+        Assert.Equal($"hard-model-lines5-screen1-horizon8-set4-{CorpHeuristicPolicy.PolicyVersion}-{RunnerHeuristicPolicy.PolicyVersion}",
+            RegretLabels.VersionOf(5, 1, 8, 4, "hard-model"));
+        var label = new RegretLabel("r#1", 32, 4, 4, 1, [new("a|1", 0.5, 0.02, 32), new("b|1", 0.4, 0.02, 32)], 5, 1, "hard-model");
+        Assert.Equal("v2", label.TeacherName);
+        label.EnsureOneTeacher();
+        (label with { Values = [.. label.Values, new("c|1", 0.3, 0.02, 32, TeacherVersion: "v2")] }).EnsureOneTeacher();
+        Assert.Throws<InvalidDataException>(() => (label with { Values = [.. label.Values, new("c|1", 0.3, 0.02, 32, TeacherVersion: "v1")] })
+            .EnsureOneTeacher());
+    }
+
+    /// <summary>Bot plan S1.7: the core is drawn by deal, in the suite's held-out share, and a new marking replaces the old.</summary>
+    [Fact]
+    public void TheCoreIsDrawnByDealInTheHeldOutShare()
+    {
+        RegretSuite suite = RegretSuite.Load(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "data", "ai", "regret",
+            "gateway-elevation"));
+        RegretSuite marked = suite.WithCore(2000, 7);
+        RegretRoot[] core = [.. marked.Roots.Where(root => root.Categories.Contains(RegretSuite.CoreCategory))];
+
+        // A deal's roots are wholly in or out; the largest deal bounds how far the count can overshoot.
+        var games = suite.Games.ToDictionary(game => game.Id);
+        var byDeal = marked.Roots.GroupBy(root => games[root.GameId] is var game && game.Source == "finding" ? game.Id : $"{game.ContentId}|{game.GameSeed}");
+        Assert.All(byDeal, deal => Assert.Single(deal.Select(root => root.Categories.Contains(RegretSuite.CoreCategory)).Distinct()));
+        int largest = byDeal.Max(deal => deal.Count());
+        Assert.InRange(core.Length, 2000, 2000 + 2 * largest);
+        double share = suite.Roots.Count(root => root.Split == "held-out") / (double)suite.Roots.Length;
+        Assert.InRange(core.Count(root => root.Split == "held-out") / (double)core.Length, share - 0.03, share + 0.03);
+        Assert.Equal(core.Select(root => root.Id), marked.WithCore(2000, 7).Roots.Where(root => root.Categories.Contains(RegretSuite.CoreCategory))
+            .Select(root => root.Id));
+        Assert.NotEqual(core.Select(root => root.Id), marked.WithCore(2000, 8).Roots.Where(root => root.Categories.Contains(RegretSuite.CoreCategory))
+            .Select(root => root.Id));
+        Assert.All(marked.WithCore(500, 7).Roots, root => Assert.True(root.Categories.Count(category => category == RegretSuite.CoreCategory) <= 1));
     }
 
     [Fact]

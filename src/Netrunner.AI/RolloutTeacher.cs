@@ -12,8 +12,14 @@ namespace Netrunner.AI;
 /// turn. 0 values it followed by the heuristic's play of the rest of the turn.</param>
 /// <param name="ScreenTurns">How far the turn-line search's screen plays a line: turns past the decision, as
 /// <paramref name="HorizonTurns"/> counts them; 0 scores it by the leaf where the root side's turn ends.</param>
+/// <param name="Decide">Bot plan S1.7, adaptive samples: samples drawn first only to decide how many to record, then
+/// discarded, so a stop that a large-looking gap triggered does not keep that gap in the label. 0 records
+/// <paramref name="Samples"/> flat.</param>
+/// <param name="ExtendTo">With <paramref name="Decide"/>: a root whose deciding samples left its best two candidates within
+/// two standard errors records <paramref name="ExtendStep"/> more samples at a time, until they separate on the recording
+/// samples or this many are recorded.</param>
 public sealed record TeacherSettings(int Samples, ulong Seed, int HorizonTurns = 0, int Evaluation = 4, int Cap = PlannerProbe.GameRolloutCap,
-    int Lines = 0, int ScreenTurns = 1);
+    int Lines = 0, int ScreenTurns = 1, int Decide = 0, int ExtendTo = 0, int ExtendStep = 8);
 
 /// <summary>
 /// A candidate's teacher value: the mean win probability over its play-outs and the standard error of that mean. Every
@@ -47,26 +53,42 @@ public static class RolloutTeacher
         var planning = new PlanningContext(determinizer, new DeterministicRandom(settings.Seed));
         OpponentCardPool pool = planner.PoolFor(side, knowledge, fromList: true);
         // The turn-line search is for a turn-action root; elsewhere a candidate's line is its heuristic continuation.
-        if (settings.Lines > 1 && observation.Decision?.Kind == DecisionKind.TurnAction) return Lines(planner, candidates, settings, side, knowledge, determinizer, planning, pool);
-        var values = candidates.Select(_ => new List<double>()).ToArray();
-        // Every candidate is played on the same samples. A sample where one candidate cannot be played (a choice naming a
+        bool lines = settings.Lines > 1 && observation.Decision?.Kind == DecisionKind.TurnAction;
+        // One memo for the root: lines of different candidates often leave the turn in the same state.
+        var memo = new Dictionary<string, double>(StringComparer.Ordinal);
+        var screens = new Dictionary<string, double>(StringComparer.Ordinal);
+        int dealt = 0;
+        // Every candidate is played on the same samples. A deal where one candidate cannot be played (a choice naming a
         // hidden card the deal replaced) is dropped for all, and another is dealt, up to twice the samples asked for.
-        double[] played = new double[candidates.Count];
-        for (int dealt = 0; dealt < 2 * settings.Samples && values[0].Count < settings.Samples; dealt++)
+        List<GameState> Draw(int count)
         {
-            GameState state = TurnPlanner.Deal(side, knowledge, pool, planning, pinned: true);
-            bool whole = true;
-            for (int index = 0; index < candidates.Count && whole; index++)
+            var drawn = new List<GameState>();
+            for (int limit = dealt + 2 * count; dealt < limit && drawn.Count < count; dealt++)
             {
-                double? value = planner.PlayOut(state, candidates[index], side, knowledge, determinizer, settings.HorizonTurns,
-                    settings.Evaluation, settings.Cap);
-                if (value is { } known) played[index] = known;
-                else whole = false;
+                GameState state = TurnPlanner.Deal(side, knowledge, pool, planning, pinned: true);
+                if (candidates.All(candidate => TurnPlanner.Playable(state, candidate, determinizer))) drawn.Add(state);
             }
-            if (whole)
-                for (int index = 0; index < candidates.Count; index++) values[index].Add(played[index]);
+            return drawn;
         }
-        return [.. candidates.Select((action, index) => Summarize(action, values[index]))];
+        TeacherValue[] Value(List<GameState> samples) => samples.Count == 0 ? [.. candidates.Select(action => Summarize(action, []))]
+            : lines ? Lines(planner, candidates, settings, side, knowledge, determinizer, samples, memo, screens)
+            : [.. candidates.Select(action => Summarize(action, [.. samples.Select(sample => planner.PlayOut(sample, action, side, knowledge,
+                determinizer, settings.HorizonTurns, settings.Evaluation, settings.Cap) ?? 0)]))];
+        if (settings.Decide <= 0) return Value(Draw(settings.Samples));
+        // S1.7: the deciding samples choose how many to record and are discarded. Without an extension to decide (a group
+        // labelled on demand) they are only drawn, so the recording samples are the root's.
+        bool clear = settings.ExtendTo <= settings.Samples || !Close(Value(Draw(settings.Decide)));
+        if (settings.ExtendTo <= settings.Samples) Draw(settings.Decide);
+        List<GameState> recording = Draw(settings.Samples);
+        TeacherValue[] values = Value(recording);
+        while (!clear && recording.Count < settings.ExtendTo && Close(values))
+        {
+            List<GameState> more = Draw(Math.Min(settings.ExtendStep, settings.ExtendTo - recording.Count));
+            if (more.Count == 0) break;
+            recording.AddRange(more);
+            values = Value(recording);
+        }
+        return values;
     }
 
     /// <summary>
@@ -101,22 +123,13 @@ public static class RolloutTeacher
 
     /// <summary>
     /// Bot plan S1.5: every candidate valued at its best line of the turn (<see cref="TurnPlanner.BestLine"/>) on the same
-    /// samples, dealt first: the lines are screened by the leaf where the turn ends, and the heuristic's own line and the
-    /// best other are played on. A sample where one candidate cannot be played is dropped for all, as above.
+    /// samples: the lines are screened by a short play-out (or the leaf where the turn ends), and the heuristic's own line
+    /// and the best other are played on. The memos are the root's, so a sample valued before costs nothing again.
     /// </summary>
     private static TeacherValue[] Lines(TurnPlanner planner, IReadOnlyList<ActionId> candidates, TeacherSettings settings, PlayerSide side,
-        AgentKnowledge knowledge, ObservationDeterminizer determinizer, PlanningContext planning, OpponentCardPool pool)
+        AgentKnowledge knowledge, ObservationDeterminizer determinizer, List<GameState> samples, Dictionary<string, double> memo,
+        Dictionary<string, double> screens)
     {
-        var samples = new List<GameState>();
-        for (int dealt = 0; dealt < 2 * settings.Samples && samples.Count < settings.Samples; dealt++)
-        {
-            GameState state = TurnPlanner.Deal(side, knowledge, pool, planning, pinned: true);
-            if (candidates.All(candidate => TurnPlanner.Playable(state, candidate, determinizer))) samples.Add(state);
-        }
-        if (samples.Count == 0) return [.. candidates.Select(action => Summarize(action, []))];
-        // One memo for the root: lines of different candidates often leave the turn in the same state.
-        var memo = new Dictionary<string, double>(StringComparer.Ordinal);
-        var screens = new Dictionary<string, double>(StringComparer.Ordinal);
         int screenTurns = settings.ScreenTurns == 0 ? settings.HorizonTurns : settings.ScreenTurns;
         return [.. candidates.Select(action =>
         {
@@ -128,6 +141,18 @@ public static class RolloutTeacher
                     settings.Evaluation, settings.Cap, out int reached, memo) ?? 0, reached));
             return Summarize(action, [.. values]) with { Line = ranks };
         })];
+    }
+
+    /// <summary>
+    /// S1.7: whether the best two candidates are within two standard errors of each other (the standard error of their
+    /// difference, taken as unpaired), so the root needs more samples to tell them apart.
+    /// </summary>
+    private static bool Close(TeacherValue[] values)
+    {
+        TeacherValue[] ranked = [.. values.Where(value => !double.IsNaN(value.Mean)).OrderByDescending(value => value.Mean)];
+        if (ranked.Length < 2) return false;
+        return ranked[0].Mean - ranked[1].Mean <= 2 * Math.Sqrt(ranked[0].StandardError * ranked[0].StandardError
+            + ranked[1].StandardError * ranked[1].StandardError);
     }
 
     private static TeacherValue Summarize(ActionId action, List<double> values)

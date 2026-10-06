@@ -728,3 +728,47 @@ Split by agenda installs (value of v30's choice − v29's, the 32-sample labels)
 The agenda roots move the right way and stay inside zero at 119 roots, as the probe said: the sample is too small, not
 the teacher wrong. That is S1.6's reason: targeted roots where Corp v29 and v30 choose differently. S1.3's gate for the
 Corp is closed by teacher v2 over the discordant roots; the agenda-hold rule's own reading waits for S1.6.
+
+### S1.7: labelling cost (7 October 2026)
+
+**The teacher's version.** Every label names its teacher (`teacherVersion`): **v1** (S1.2, one-step, `labels-v1`),
+**v1-lines** (S1.5, the line search with the pinned Runner v7 and Corp v8, `labels-v1-lines`), **v2** (the line search
+with the live opponent, `labels.jsonl.gz`); `ai-regret tag` wrote them into the committed files. The teacher plays the
+live Hard bot of each side and models the other by the live Standard, so a label is named v2 only while those are Corp
+v31 and Runner v28: after a policy bump a new label's name carries the versions instead, and the tagged files keep their
+names. `score` prints the labels and teacher beside every table and comparison (`teacher v2 (6512 roots)`), and refuses
+a root whose values come from two teachers (a group labelled on demand into a label names the teacher it came from).
+
+**The core** (`ai-regret core --roots 2000 --seed 1`, a marking, not a run): **2,050 roots** in 302 games, 466 held out
+(22.7%, the suite's share 22.2%), drawn by deal. `score --core` reads it. **Gate:** the core reads as the whole suite
+does within the intervals (teacher v2):
+
+| Comparison | Core | Whole suite |
+|---|---|---|
+| Runner v24 − v25 | +0.0033 [0.0021, 0.0045] | +0.0027 [0.0020, 0.0035] |
+| Runner v24 − v26 | +0.0038 [0.0025, 0.0049] | +0.0028 [0.0020, 0.0037] |
+| Runner v27 − v28 | +0.0011 [0.0003, 0.0021] | +0.0014 [0.0008, 0.0020] |
+| Corp v28 − v30, every root | +0.0022 [−0.0007, 0.0049] | +0.0022 [0.0005, 0.0040] |
+| Corp v28 − v30, discordant | +0.0193 [−0.0041, 0.0434] (95) | +0.0173 [0.0049, 0.0298] (324) |
+| Corp v29 − v30, discordant | +0.0188 [−0.0073, 0.0428] (78) | +0.0142 [0.0010, 0.0284] (272) |
+
+Every estimate falls within the other's interval. The Corp's separations need the whole suite's roots (the core has a
+third of them), as the plan expects: comparisons use every root both versions are labelled at.
+
+**Adaptive samples** (`ai-regret label --decide 8 --record 8 --extend-to 32`; the deciding samples are discarded, and a
+lines root reruns the v2 search on all its recording samples at each step, its memos making the samples already played
+free). Against their flat 32-sample v2 labels, on 200 core roots:
+
+- values: mean signed difference **−0.0000** (standard error 0.0008) over 1,695 groups, no lift either way; mean
+  absolute difference 0.0216;
+- the best group differs at 40.5% of roots, under the noise floor (61%);
+- Runner v24 − v28 on the 115 Runner roots: +0.0027 [−0.0001, 0.0063] adaptive, +0.0032 [0.0001, 0.0067] flat;
+- **cost: 1,480 s against about 860 s flat.** 181 of the 200 roots extended to 32 recording samples: the suite's roots
+  were drawn where the heuristic's top two are close, and with 8.8 groups a root's best two are almost never two
+  standard errors apart after 8 samples, so nearly every root pays the 8 deciding samples and the reruns on top of 32.
+
+The adaptive labels are sound but save nothing on the suite's roots, so the core is relabelled flat at 32. Adaptive
+samples are kept for S1.6's targeted roots, where the two versions' choices usually differ clearly, and their saving
+there is measured on S1.6's first run rather than assumed. One point of the design to watch there: an undecided root
+stops extending once its recording samples separate, which is optional stopping on the recorded samples; the signed
+difference above shows no lift from it on these roots.

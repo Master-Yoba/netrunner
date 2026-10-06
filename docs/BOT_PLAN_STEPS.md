@@ -294,6 +294,15 @@ two: a versioned teacher, a core plus targeted roots, adaptive samples, and rela
   the noise floor. The costs recorded.
 - **Record:** the core's size and seed, the adaptive labelling's cost and agreement, in `docs/BOT_VERSIONS.md`.
 
+**Outcome (7 October; the record is in `docs/BOT_VERSIONS.md`).** Every label names its teacher (v1, v1-lines, v2; the
+committed files are tagged) and `score` prints it and refuses a root mixing two. The core is 2,050 roots (seed 1) and
+reads as the whole suite does within the intervals. Adaptive samples are unbiased on the values (mean signed difference
+0.0000 over 1,695 groups) but **cost more than flat on the suite's roots** (1,480 s against about 860 s for 200 roots:
+181 of them extend to 32, since a root's best two of about nine groups are rarely apart after 8 samples), so a core
+relabel runs flat at 32 and adaptive samples wait for S1.6's targeted roots, where their saving is measured first. One
+finding for the freeze: the teacher plays the live Hard policies, so a version name is pinned to them (v2 is Corp v31
+and Runner v28); a policy bump makes new labels a new version by name.
+
 
 ## S2. Puzzle suite v2 (M)
 
