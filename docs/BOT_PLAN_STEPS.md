@@ -216,9 +216,9 @@ times one-step). Gate:
   - 24 of the 26 certified puzzles hold; 2 moved to `teacher-v1`;
   - S1.3's separation: the Runner passes (v24 against v25 and v26); **the Corp does not**, as at S1.4. The discordant
     view (`ai-regret score --discordant`) and the exposure count (`ai-regret exposure`) say why: v30 is ahead where no
-    agenda is involved and level on holding an agenda, at 4 turns and at 8, because the bot Runner, which plays the
-    ladder's games and the teacher's rollouts, runs fewer than half of the remotes it can get into. The Corp's gate
-    stays open until a Runner v28 values that remote and the suite is relabelled with it.
+    agenda is involved and level on holding an agenda, at 4 turns and at 8, because neither the ladder's Runner nor
+    the teacher's (its rollouts model the Runner as v7) punishes a remote it can get into. The Corp's gate stays open
+    until a Runner v28 values that remote and the suite is relabelled by a teacher that models the live Runner.
 
 ## S2. Puzzle suite v2 (M)
 

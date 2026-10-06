@@ -596,22 +596,25 @@ until it is scored, stolen or trashed, and asks the run model, at the Runner's n
 Where every ICE is known and the run model says the Runner gets in, it runs fewer than half of those remotes, and
 steals 107 of the 129 it runs. In the teacher's own play-outs of v29's install at the 119 agenda roots (128 samples, 4
 turns; 15,232 play-outs), the Runner runs the agenda's remote in **19%** of them, steals it in 14%, and the Corp scores
-it in 62%; when it runs, it steals 75%. The ladder's games and the teacher's rollouts share this Runner, so neither can
-see the cost of an exposed agenda: the agenda-hold rule is neutral in self-play because the bot Runner does not punish
-what it guards against (an outside player did, which is why v30 has the rule).
+it in 62%; when it runs, it steals 75%. Neither instrument's Runner punishes an exposed agenda: the ladder's is the live
+Standard (v26 and v27 here), and the teacher's rollouts model the Runner as v7, the planner's opponent model
+(`RunnerHeuristicPolicy.LatestHeuristic`, kept so the shipped Corp planner plays as it did; the Hard teacher sets no
+`plan-model`, and at Runner roots it models the Corp as v8 in the same way). So the agenda-hold rule is neutral in
+self-play: neither Runner punishes what it guards against (an outside player did, which is why v30 has the rule).
 
 **What closes the Corp gate.** Not a relabel at a longer horizon: a Runner that values a remote the Corp has just
-installed into and that it can get in to (Runner v28, a live-policy change gated as any other), after which the suite is
-relabelled (the teacher's rollouts use the live Runner) and the agenda roots are read again. S1.3's gate stays open for
+installed into and that it can get in to (Runner v28, a live-policy change gated as any other), and a teacher whose
+rollouts model the opponent by the live Standard version (`plan-model 1`), after which the suite is relabelled and the
+agenda roots are read again. S1.3's gate stays open for
 the Corp until then. S1.6, the targeted-roots sampler, is still worth building for S4.2 and S5.3, but it does not fix
 this.
 
 ### Runner v28: a face-down remote card is the agenda it may be (6 October 2026)
 
-**Why.** The S1.5 follow-up found that the bot Runner, which plays the ladder's games and the teacher's rollouts, rarely
-punishes an agenda in a remote, so neither instrument could see the Corp's exposure (an outside player could). The base
-rate, from the Core Battle Box suite's games (every card the Corp installed in a remote, unadvanced and face down at the
-Runner's next turn; `ai-regret exposure --all-roots`):
+**Why.** The S1.5 follow-up found that the bot Runners, the live one on the ladder and v7 in the teacher's rollouts,
+rarely punish an agenda in a remote, so neither instrument could see the Corp's exposure (an outside player could). The
+base rate, from the Core Battle Box suite's games (every card the Corp installed in a remote, unadvanced and face down at
+the Runner's next turn; `ai-regret exposure --all-roots`):
 
 | The remote's ICE | Cards | Agenda | Asset | Ambush | Upgrade | Runner v27 runs it at its next turn |
 |---|---:|---:|---:|---:|---:|---:|

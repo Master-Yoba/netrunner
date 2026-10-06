@@ -22,7 +22,7 @@ public sealed class RatingLadderTests
             var previous = (OfflineAgent)RatingLadder.CreateAgent("standard-prev", side, definition);
             Assert.Equal(live.Configuration.PolicySeed, previous.Configuration.PolicySeed);
             Assert.Equal(side == PlayerSide.Corp ? CorpHeuristicPolicy.V30 : RunnerHeuristicPolicy.V26, previous.Configuration.PolicyVersion);
-            Assert.Equal(side == PlayerSide.Corp ? CorpHeuristicPolicy.V31 : RunnerHeuristicPolicy.V27, live.Configuration.PolicyVersion);
+            Assert.Equal(side == PlayerSide.Corp ? CorpHeuristicPolicy.PolicyVersion : RunnerHeuristicPolicy.PolicyVersion, live.Configuration.PolicyVersion);
         }
     }
 
