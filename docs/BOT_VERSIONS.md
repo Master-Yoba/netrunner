@@ -605,3 +605,52 @@ installed into and that it can get in to (Runner v28, a live-policy change gated
 relabelled (the teacher's rollouts use the live Runner) and the agenda roots are read again. S1.3's gate stays open for
 the Corp until then. S1.6, the targeted-roots sampler, is still worth building for S4.2 and S5.3, but it does not fix
 this.
+
+### Runner v28: a face-down remote card is the agenda it may be (6 October 2026)
+
+**Why.** The S1.5 follow-up found that the bot Runner, which plays the ladder's games and the teacher's rollouts, rarely
+punishes an agenda in a remote, so neither instrument could see the Corp's exposure (an outside player could). The base
+rate, from the Core Battle Box suite's games (every card the Corp installed in a remote, unadvanced and face down at the
+Runner's next turn; `ai-regret exposure --all-roots`):
+
+| The remote's ICE | Cards | Agenda | Asset | Ambush | Upgrade | Runner v27 runs it at its next turn |
+|---|---:|---:|---:|---:|---:|---:|
+| None | 1,630 | 0% | 68% | 25% | 7% | 38% |
+| 1 | 741 | 71% | 15% | 2% | 13% | 10% |
+| 2 | 773 | 78% | 4% | 0% | 19% | 12% |
+| 3 or more | 298 | 59% | 0% | 0% | 41% | 11% |
+
+The agenda column counts Tomorrow's Headline, an agenda that is also an ambush (3% behind one or two ICE). The Corp
+protects agendas and leaves assets and ambushes naked; the Runner did the opposite. Asked at those decisions (`--version
+runner-heuristic-v27`), it scored a run on a protected agenda remote it could get into (every ICE known) at a median of
+−720 against 190 for a naked asset: every face-down card was worth a flat 190, which never pays for the ICE. (The
+exposure count asks the run model at the Runner's next turn only, not "that turn or the next", so the 43% the S1.5
+record quotes is the share of remotes run at all while the card stayed, from the next turn on.)
+
+**The change** (`RunnerValues.ServerV2` at generation 23, `RunnerInference.RootAgenda`). An unadvanced face-down card in
+a remote is worth 190 plus the chance it is an agenda times an agenda's value over that (500 and 180 a point, as a known
+one), weighted by the profile's inference scale. The chance is the tracker's belief of the slot where it has one, and
+otherwise the agenda share of the unseen root cards (the Corp's list for Hard, the pool for Standard) with the odds
+tripled behind ICE and cut to a tenth in a naked remote (the table's 71% against a pool share of about 44%). An advanced
+card, trap risk and every self-flatline check are as before. v27 stays constructible beside it (generation 22) so the
+regret suite can compare them; the legacy policies and frozen digests are unchanged.
+
+**Gates** (labels: the line teacher's, `labels.jsonl.gz`):
+
+- **Regret:** `--discordant runner-heuristic-v27,runner-heuristic-v28`: 398 discordant Runner roots, all turn roots (at
+  314 v28 runs where v27 took a credit, an ability, an install, a draw or a card, and at 82 both run, on different
+  servers), v27 − v28 **+0.0179 [0.0113, 0.0245]**; over all 3,960 Runner roots +0.0018 [0.0012, 0.0024]; both
+  separated. Regret all 0.0447 → 0.0429, held out 0.0448 → 0.0434. No choice needed an on-demand label.
+- **Puzzles:** level (box 34 of 47, NSG Core 5 of 5, both versions). The three run-targeting failures are R&D runs,
+  which this change does not touch.
+- **Ladders** against `standard-prev` (Corp v30, Runner v26 ≡ v27): Core Battle Box, 400 deals, Runner **+44 Elo [11,
+  81], separated** (score rate 0.28 → 0.34); Gateway, 240 deals, +11 [−26, 49], level. The Corp sides are identical.
+- **Self-flatlines** (`ai-runner-diagnosis`, the box ladder's 1,600 games): 8% against 7%, 0.6 standard errors apart.
+  Nearly all are Measured Response (54 against 48 in 800 games each), which needs a successful run the turn before, so
+  more runs bring more of them; v26's Measured Response guards hold. Wins 28% → 34%, agenda losses 43% → 36%.
+- **Lints** (`ai-lint`, the same games): the Runner lints are zero for both versions and the Corp's rates equal.
+- **Exposure in the new games:** v28 runs a protected remote at its next turn 53% of the time against v27's 10%, steals
+  28% of the agendas there against 10%, and the Corp scores 62% of them against 80%. Naked remotes: 45% against 38%.
+- **Per-slice fuzz** (`scripts/fuzz.sh <pool> --games-per-pairing 8 --verify-replays-every 8`): every pool ok, every
+  game finished: official 24 games, Gateway 288, Elevation 1,152, Gateway + Elevation 288, NSG Core 2,592; 543 replays
+  verified.

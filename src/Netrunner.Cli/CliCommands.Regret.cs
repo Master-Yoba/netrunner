@@ -20,7 +20,7 @@ public static partial class CliCommands
     /// ai-regret findings SUITE-DIR --manifest FILE --fixtures DIR --content POOL [--labelled N]
     /// ai-regret dedupe SUITE-DIR
     /// ai-regret extend SUITE-DIR [--labelled N] [--workers N] (every meaningful group at every root, S1.4)
-    /// ai-regret exposure SUITE-DIR [--all-roots] [--version RUNNER] [--workers N] [--json] (every agenda, or every card, the Corp installed in
+    /// ai-regret exposure SUITE-DIR|GAMES-DIR [--all-roots] [--version RUNNER] [--workers N] [--json] (every agenda, or every card, the Corp installed in
     ///   a remote in the suite's games; with --version, that Runner says at its next turn how it scores the run)
     /// ai-regret exposure SUITE-DIR --roots FILE [--samples N] [--horizon TURNS] [--workers N] [--json] (the teacher's
     ///   play-outs of the groups FILE lists, "ROOT-ID GROUP" a line)
@@ -294,7 +294,10 @@ public static partial class CliCommands
     /// </summary>
     private static int RegretExposureCommand(string suiteDirectory, RegretOptions options, TextWriter output, TextWriter error)
     {
-        RegretSuite suite = RegretSuite.Load(suiteDirectory);
+        // A directory of saved ladder games is read as a suite of games without roots (Runner v28's ladders).
+        RegretSuite suite = File.Exists(Path.Combine(suiteDirectory, RegretSuite.GamesFile)) ? RegretSuite.Load(suiteDirectory)
+            : new RegretSuite([.. LadderGameArchive.ReadAll(suiteDirectory, options.Workers)
+                .Select(entry => RegretGames.FromSaved(entry.Game, entry.Definition, "train", "ladder"))], [], []);
         RemoteFate[] fates;
         if (options.RootsFile is { } file)
         {
