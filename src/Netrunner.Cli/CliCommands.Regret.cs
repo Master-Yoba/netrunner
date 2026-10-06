@@ -15,6 +15,7 @@ public static partial class CliCommands
     /// ai-regret roots GAMES-DIR --output SUITE-DIR [--turn-roots N] [--run-roots N] [--labelled N] [--seed S] [--workers N]
     /// ai-regret label SUITE-DIR [--samples N] [--horizon game|TURNS] [--evaluation N] [--lines W] [--seed S] [--workers N]
     ///   [--labels FILE] [--repeat N --repeat-seed S] [--roots FILE] (with --repeat, the roots to repeat)
+    ///   [--teacher hard|hard-model] (hard-model's rollouts model the opponent by the live Standard version)
     /// ai-regret score SUITE-DIR --version V[,V...]|latest [--profile P] [--split all|held-out|train] [--labels FILE]
     ///   [--blunders N] [--bootstrap N] [--workers N] [--json] [--discordant A,B] [--label-missing]
     /// ai-regret findings SUITE-DIR --manifest FILE --fixtures DIR --content POOL [--labelled N]
@@ -56,7 +57,7 @@ public static partial class CliCommands
         int HorizonTurns, int Evaluation, string LabelsFile, int Repeat, ulong RepeatSeed, string[] Versions, string Profile, string Split,
         int Blunders, int Bootstrap, bool Json, bool Missing = false, string? Manifest = null, string? Fixtures = null, string? Content = null,
         bool LabelMissing = false, int Lines = 0, string? RootsFile = null, int ScreenTurns = 1, string[]? Discordant = null,
-        bool AllRoots = false)
+        bool AllRoots = false, string TeacherEntrant = "hard")
     {
         public static RegretOptions Parse(string[] args)
         {
@@ -98,6 +99,11 @@ public static partial class CliCommands
                     "--missing" => options with { Missing = true },
                     "--label-missing" => options with { LabelMissing = true },
                     "--all-roots" => options with { AllRoots = true },
+                    "--teacher" => options with
+                    {
+                        TeacherEntrant = Next() is var teacher && teacher is "hard" or "hard-model" ? teacher
+                            : throw new ArgumentException("--teacher requires hard or hard-model."),
+                    },
                     "--lines" => options with { Lines = Int("--lines", 0, 16) },
                     "--screen-turns" => options with { ScreenTurns = Int("--screen-turns", 0, 100) },
                     // Two versions of one side; they are scored if --version does not name them.
@@ -184,7 +190,7 @@ public static partial class CliCommands
             ScreenTurns: options.ScreenTurns);
         var byGame = suite.Roots.Where(root => rootIds.Contains(root.Id)).GroupBy(root => root.GameId).ToDictionary(group => group.Key, group => group.ToList());
         RegretGame[] games = [.. suite.Games.Where(game => byGame.ContainsKey(game.Id))];
-        return [.. ForGames(games, options.Workers, error, "label", game => RegretLabels.Label(game, byGame[game.Id], settings),
+        return [.. ForGames(games, options.Workers, error, "label", game => RegretLabels.Label(game, byGame[game.Id], settings, options.TeacherEntrant),
             save is null ? null : finished => save(finished.SelectMany(found => found))).SelectMany(found => found)];
     }
 

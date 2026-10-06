@@ -10,7 +10,10 @@ namespace Netrunner.Match.Regret;
 /// </summary>
 public static class RegretLabels
 {
-    public static ImmutableArray<RegretLabel> Label(RegretGame game, IReadOnlyList<RegretRoot> roots, TeacherSettings settings)
+    /// <param name="teacher">The ladder entrant that teaches: Hard, or <c>hard-model</c>, Hard modelling the opponent by the
+    /// live Standard version instead of the planner's pinned model (Runner v7, Corp v8).</param>
+    public static ImmutableArray<RegretLabel> Label(RegretGame game, IReadOnlyList<RegretRoot> roots, TeacherSettings settings,
+        string teacher = "hard")
     {
         ArgumentNullException.ThrowIfNull(game);
         ArgumentNullException.ThrowIfNull(roots);
@@ -20,8 +23,8 @@ public static class RegretLabels
         var bySequence = roots.ToDictionary(root => root.Sequence);
         var teachers = new Dictionary<PlayerSide, OfflineAgent>
         {
-            [PlayerSide.Corp] = Teacher(definition, PlayerSide.Corp),
-            [PlayerSide.Runner] = Teacher(definition, PlayerSide.Runner),
+            [PlayerSide.Corp] = Teacher(definition, PlayerSide.Corp, teacher),
+            [PlayerSide.Runner] = Teacher(definition, PlayerSide.Runner, teacher),
         };
         var labels = ImmutableArray.CreateBuilder<RegretLabel>(roots.Count);
         RegretGames.Replay(game, definition, position =>
@@ -35,7 +38,8 @@ public static class RegretLabels
             // A root no sample could play every candidate on has no label: it is scored as unlabelled.
             if (values.Any(value => value.PlayOuts == 0)) return;
             labels.Add(new RegretLabel(root.Id, settings.Samples, settings.HorizonTurns, settings.Evaluation, rooted.Seed,
-                [.. root.Candidates.Zip(values, Value)], settings.Lines, settings.Lines > 1 ? settings.ScreenTurns : 0));
+                [.. root.Candidates.Zip(values, Value)], settings.Lines, settings.Lines > 1 ? settings.ScreenTurns : 0,
+                teacher == "hard" ? null : teacher));
         });
         return labels.ToImmutable();
     }
@@ -53,10 +57,12 @@ public static class RegretLabels
         if (requests.Count == 0) return values;
         FullMatchDefinition definition = RegretGames.Definition(game);
         var bySequence = requests.ToDictionary(request => request.Root.Sequence);
+        // A game's labels share their teacher, so its first request names it.
+        string teacher = requests[0].Label.Teacher ?? "hard";
         var teachers = new Dictionary<PlayerSide, OfflineAgent>
         {
-            [PlayerSide.Corp] = Teacher(definition, PlayerSide.Corp),
-            [PlayerSide.Runner] = Teacher(definition, PlayerSide.Runner),
+            [PlayerSide.Corp] = Teacher(definition, PlayerSide.Corp, teacher),
+            [PlayerSide.Runner] = Teacher(definition, PlayerSide.Runner, teacher),
         };
         RegretGames.Replay(game, definition, position =>
         {
@@ -75,8 +81,8 @@ public static class RegretLabels
     private static RegretValue Value(RegretCandidate candidate, TeacherValue value) =>
         new(candidate.Group, value.Mean, value.StandardError, value.PlayOuts, value.Line is { } line ? [.. line] : null);
 
-    private static OfflineAgent Teacher(FullMatchDefinition definition, PlayerSide side) =>
-        RatingLadder.CreateAgent("hard", side, definition) as OfflineAgent
+    private static OfflineAgent Teacher(FullMatchDefinition definition, PlayerSide side, string teacher) =>
+        RatingLadder.CreateAgent(teacher, side, definition) as OfflineAgent
             ?? throw new InvalidOperationException("The Hard bot is not an offline agent.");
 }
 

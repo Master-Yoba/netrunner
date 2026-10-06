@@ -32,10 +32,11 @@ public sealed record RegretValue(string Group, double Mean, double StandardError
 
 /// <summary>
 /// The teacher's labels for one root and how they were made; <paramref name="Lines"/> is the turn-line search's beam (0
-/// without it) and <paramref name="ScreenTurns"/> its screen's horizon (<see cref="TeacherSettings.ScreenTurns"/>).
+/// without it) and <paramref name="ScreenTurns"/> its screen's horizon (<see cref="TeacherSettings.ScreenTurns"/>);
+/// <paramref name="Teacher"/> the ladder entrant that labelled it, null for Hard.
 /// </summary>
 public sealed record RegretLabel(string RootId, int Samples, int HorizonTurns, int Evaluation, ulong Seed, ImmutableArray<RegretValue> Values,
-    int Lines = 0, int ScreenTurns = 0)
+    int Lines = 0, int ScreenTurns = 0, string? Teacher = null)
 {
     /// <summary>The best labelled group, or null when no group has a value.</summary>
     [JsonIgnore]

@@ -177,6 +177,10 @@ public sealed class RegretSuiteTests
         Assert.InRange(playOuts, 0, 16);
         ImmutableArray<RegretLabel> labels = RegretLabels.Label(game, [root], new TeacherSettings(Samples: 16, Seed: 3, HorizonTurns: 1));
         Assert.Equal(playOuts == 0, labels.IsEmpty);
+        // A label names a teacher other than Hard: hard-model's rollouts model the live opponent, not the pinned one.
+        Assert.All(labels, label => Assert.Null(label.Teacher));
+        Assert.All(RegretLabels.Label(game, [root], new TeacherSettings(Samples: 4, Seed: 3, HorizonTurns: 1), "hard-model"),
+            label => Assert.Equal("hard-model", label.Teacher));
     }
 
     [Fact]
