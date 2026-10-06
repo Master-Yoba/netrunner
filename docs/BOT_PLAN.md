@@ -253,6 +253,11 @@ A fixed corpus of recorded decision roots with teacher labels, scored in minutes
   Every meaningful candidate group at a root is labelled, not only the heuristic's best few: a planner is expected to
   choose outside them, and a choice without a label drops out of regret, which would hide exactly the decisions the
   planner changes. Where a labelling has cut the groups, `score` labels an unlabelled choice on demand.
+  **Targeted roots** (S1.6): a paired comparison of two versions has power only at the roots where they choose
+  differently, and roots drawn at random hold few of those. `ai-regret diverge` replays the saved games with both
+  versions and keeps every decision where their chosen groups differ, so a comparison that matters (two Corp versions,
+  or a planner against the heuristic) is measured where it happens, not diluted over thousands of roots where nothing
+  changed.
   Each root keeps the acting side's observation, the checkpoint, the legal candidates and the deal, so any policy
   version can be asked to choose there (`BotLoop1Tests.ChooseAtAsync` already does this).
 - **Teacher:** the planner at an offline budget (start: 32 samples × every meaningful candidate) with common random

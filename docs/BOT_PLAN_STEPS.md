@@ -220,6 +220,42 @@ times one-step). Gate:
     the teacher's (its rollouts model the Runner as v7) punishes a remote it can get into. The Corp's gate stays open
     until a Runner v28 values that remote and the suite is relabelled by a teacher that models the live Runner.
 
+  Runner v28 shipped on its own gates (#107: regret +0.0179 [+0.0113, +0.0245] over 398 discordant roots, +44 Elo
+  [+11, +81] on the box, level on Gateway, self-flatlines within noise). The relabel with the hard-model teacher runs
+  on `feat/bot-plan-relabel-v28` into `labels-model`; its re-read of the 272 discordant Corp roots decides the Corp's
+  gate. A 30-minute probe at 128 samples moved the 119 agenda roots from −0.0021 to +0.0122 [−0.0160, +0.0401]: the right
+  direction, not clear of zero at 119 roots. That is the case for S1.6.
+
+### S1.6 Targeted roots (S)
+
+**After the hard-model relabel's re-read; before S4.2's gate. Independent of S4.1.** A paired comparison has power only
+at the roots where the two versions choose differently. The suite's roots were drawn where the *heuristic's* top two
+are close, which is the right place to find the heuristic's own mistakes but not where two particular versions differ:
+v29 and v30 differ at 272 of 2,552 Corp roots, and the 119 that hold an agenda cannot clear zero whatever the teacher.
+S4.2 and S5.3 compare planners whose choices diverge from the heuristic's far more often, and they need the same thing.
+
+- `ai-regret diverge <games-dir> --versions A,B --output <suite-dir>`: replays every saved game, asks both versions
+  (same profile) to choose at every turn-action and run-choice decision of their side, and keeps every decision where
+  the chosen groups differ as a root in the suite's format, with `source: diverge A,B` and the two choices recorded.
+  Roots are deduplicated by position and held out by deal, as the suite's are. The command labels nothing itself.
+- The new roots are labelled with the suite's current teacher, settings and seed (`ai-regret label`), a sample of them
+  repeated for the noise floor, and merged with their provenance. A root that already exists keeps its labels.
+- `--discordant` (S1.5's view) is the report for every version comparison from now on, beside the all-roots table.
+- **First run:** the 960 box games for Corp v29 against v30 and v28 against v29, so the Corp's gate is read at every
+  root where it can be. Expected: a few hundred more Corp roots, mostly agenda installs and holds.
+- **Gate:**
+  - Corp v30 against v29 and v28 separates over the discordant roots with the interval clear of zero and the right
+    sign, on the hard-model labels; if it does not, the Corp's gate stays open and the record says what the agenda roots
+    read at the new size;
+  - the Runner comparisons of S1.3 still separate;
+  - the labelling time and the roots added, per side and category, are recorded.
+- **Record:** the counts, the time, and the Corp table before and after, in `docs/BOT_VERSIONS.md`.
+
+**Later uses.** S4.2 runs `diverge` for the planner on set 5 against the planner on set 4 before its regret gate;
+S5.3 for the new Standard against `standard-prev`; S6 for each round's candidate against the current Standard. In each
+case the gate is read over the discordant roots, and the all-roots table is reported beside it.
+
+
 ## S2. Puzzle suite v2 (M)
 
 **Independent of S1 after S1.1's root format exists.**
@@ -430,9 +466,9 @@ the plan is the way to get them, on the user's ask).
 ## Timeline and order
 
 ```text
-S0 measure ──> S1 regret suite ──> S1.4 all groups, S1.5 line teacher ──> S4 set 5 ──> S5 planner Standard ──> S6 rounds
-           ──> S2 puzzles ──────────────────────────────────────────────┘
-           ──> S3 one live policy (alongside S1.4 and S1.5; before S4) ──┘
+S0 measure ──> S1 regret suite ──> S1.4 all groups, S1.5 line teacher, S1.6 targeted roots ──> S4 set 5 ──> S5 planner Standard ──> S6 rounds
+           ──> S2 puzzles ──────────────────────────────────────────────────────────────────┘
+           ──> S3 one live policy (alongside S1.4 to S1.6; before S4) ───────────────────────┘
 (S5.0, the engine cost of simulation, can run any time after S0 and must land before S5.1; S1.5 raises its stakes)
 ```
 
