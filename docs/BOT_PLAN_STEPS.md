@@ -226,6 +226,13 @@ times one-step). Gate:
   gate. A 30-minute probe at 128 samples moved the 119 agenda roots from −0.0021 to +0.0122 [−0.0160, +0.0401]: the right
   direction, not clear of zero at 119 roots. That is the case for S1.6.
 
+  **The relabel (6 October; teacher v2, the record is in `docs/BOT_VERSIONS.md`).** 7 h 48 min; the S1.5 gate repeated
+  for the new teacher: noise floor 61%; drift at the floor (the Corp's values fall by 0.126, the live Runner punishing
+  what v7 did not); 14 of the 26 certified puzzles hold and 10 move to `teacher-v2`; the Runner's ordering is
+  unchanged. **The Corp separates**: v30 over v28 on every root, and v30 over v29 over the 272 discordant roots
+  (+0.0142 [0.0010, 0.0284]). The 119 agenda roots read +0.0185 [−0.0099, 0.0463]: the right way, inside zero, so the
+  agenda rule's own reading waits for S1.6. Labels: `labels.jsonl.gz` is teacher v2, `labels-v1-lines` the S1.5 one.
+
 ### S1.6 Targeted roots (S)
 
 **After the hard-model relabel's re-read; before S4.2's gate. Independent of S4.1.** A paired comparison has power only

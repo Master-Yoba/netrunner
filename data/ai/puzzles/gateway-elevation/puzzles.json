@@ -552,7 +552,7 @@
     "title": "The teacher's startRun at ation-box-muslihat-00218 #313",
     "category": "run-targeting",
     "kind": "decision",
-    "split": "tuning",
+    "split": "teacher-v2",
     "gameId": "standard-c29-vs-standard-c29-elevation-box-nebula-fast-advance~elevation-box-muslihat-00218",
     "sequence": 313,
     "side": "runner",
@@ -565,14 +565,14 @@
     },
     "negativeControl": true,
     "source": "regret suite, teacher 128 samples, 4-turn horizon",
-    "note": "best 0.613\u00b10.022, next 0.427"
+    "note": "best 0.613\u00b10.022, next 0.427; teacher v2 (live opponent): the lead falls to 0.063"
   },
   {
     "id": "teacher-b39f5b92",
     "title": "The teacher's continueRun at levation-box-topan-00103 #271",
     "category": "run-targeting",
     "kind": "decision",
-    "split": "held-out",
+    "split": "teacher-v2",
     "gameId": "standard-vs-standard-c29-elevation-box-zwicky-supermodernism~elevation-box-topan-00103",
     "sequence": 271,
     "side": "runner",
@@ -585,7 +585,7 @@
     },
     "negativeControl": false,
     "source": "regret suite, teacher 128 samples, 4-turn horizon",
-    "note": "best 0.318\u00b10.028, next 0.143"
+    "note": "best 0.318\u00b10.028, next 0.143; teacher v2 (live opponent): the lead falls to 0.112"
   },
   {
     "id": "teacher-cb2c69f6",
@@ -652,7 +652,7 @@
     "title": "The teacher's rezCard at levation-box-topan-00130 #471",
     "category": "rez-timing",
     "kind": "decision",
-    "split": "tuning",
+    "split": "teacher-v2",
     "gameId": "standard-vs-standard-elevation-box-leo-glacier~elevation-box-topan-00130",
     "sequence": 471,
     "side": "corp",
@@ -665,7 +665,7 @@
     },
     "negativeControl": true,
     "source": "regret suite, teacher 128 samples, 4-turn horizon",
-    "note": "best 0.768\u00b10.029, next 0.549"
+    "note": "best 0.768\u00b10.029, next 0.549; teacher v2 (live opponent): the lead falls to 0.073"
   },
   {
     "id": "teacher-e5d97a1a",
@@ -692,7 +692,7 @@
     "title": "The teacher's passPriority at ation-box-muslihat-00131 #184",
     "category": "rez-timing",
     "kind": "decision",
-    "split": "tuning",
+    "split": "teacher-v2",
     "gameId": "standard-vs-standard-c29-elevation-box-leo-glacier~elevation-box-muslihat-00131",
     "sequence": 184,
     "side": "corp",
@@ -708,7 +708,7 @@
     },
     "negativeControl": true,
     "source": "regret suite, teacher 128 samples, 4-turn horizon",
-    "note": "best 0.673\u00b10.011, next 0.425"
+    "note": "best 0.673\u00b10.011, next 0.425; teacher v2 (live opponent): the accepted action is no longer the best"
   },
   {
     "id": "teacher-bfad8833",
@@ -781,7 +781,7 @@
     "title": "The teacher's rezCard at tion-box-magdalene-00192 #436",
     "category": "rez-timing",
     "kind": "decision",
-    "split": "held-out",
+    "split": "teacher-v2",
     "gameId": "standard-c29-vs-standard-elevation-box-leo-glacier~elevation-box-magdalene-00192",
     "sequence": 436,
     "side": "corp",
@@ -797,7 +797,7 @@
     },
     "negativeControl": false,
     "source": "regret suite, teacher 128 samples, 4-turn horizon",
-    "note": "best 0.443\u00b10.009, next 0.243"
+    "note": "best 0.443\u00b10.009, next 0.243; teacher v2 (live opponent): the accepted action is no longer the best"
   },
   {
     "id": "teacher-9becf188",
@@ -827,7 +827,7 @@
     "title": "The teacher's playCard at ation-box-muslihat-00080 #773",
     "category": "economy",
     "kind": "decision",
-    "split": "held-out",
+    "split": "teacher-v2",
     "gameId": "standard-vs-standard-elevation-box-zwicky-supermodernism~elevation-box-muslihat-00080",
     "sequence": 773,
     "side": "corp",
@@ -845,14 +845,14 @@
     },
     "negativeControl": true,
     "source": "regret suite, teacher 128 samples, 4-turn horizon",
-    "note": "best 1.000\u00b10.000, next 0.804"
+    "note": "best 1.000\u00b10.000, next 0.804; teacher v2 (live opponent): its best group's standard error is over 0.04"
   },
   {
     "id": "teacher-8b1c9af3",
     "title": "The teacher's useAbility at levation-box-topan-00022 #520",
     "category": "economy",
     "kind": "decision",
-    "split": "tuning",
+    "split": "teacher-v2",
     "gameId": "standard-c29-vs-standard-c29-elevation-box-leo-glacier~elevation-box-topan-00022",
     "sequence": 520,
     "side": "corp",
@@ -865,7 +865,7 @@
     },
     "negativeControl": true,
     "source": "regret suite, teacher 128 samples, 4-turn horizon",
-    "note": "best 0.999\u00b10.001, next 0.618"
+    "note": "best 0.999\u00b10.001, next 0.618; teacher v2 (live opponent): the lead falls to 0.034"
   },
   {
     "id": "teacher-e0d88291",
@@ -944,7 +944,7 @@
     "title": "The teacher's installCard at levation-box-topan-00085 #444",
     "category": "agenda-exposure",
     "kind": "decision",
-    "split": "tuning",
+    "split": "teacher-v2",
     "gameId": "standard-c29-vs-standard-elevation-box-nebula-fast-advance~elevation-box-topan-00085",
     "sequence": 444,
     "side": "corp",
@@ -962,14 +962,14 @@
     },
     "negativeControl": true,
     "source": "regret suite, teacher 128 samples, 4-turn horizon",
-    "note": "best 1.000\u00b10.000, next 0.610"
+    "note": "best 1.000\u00b10.000, next 0.610; teacher v2 (live opponent): the lead falls to 0.087"
   },
   {
     "id": "teacher-93609fc4",
     "title": "The teacher's installCard at ation-box-muslihat-00086 #707",
     "category": "agenda-exposure",
     "kind": "decision",
-    "split": "tuning",
+    "split": "teacher-v2",
     "gameId": "standard-c29-vs-standard-c29-elevation-box-nebula-fast-advance~elevation-box-muslihat-00086",
     "sequence": 707,
     "side": "corp",
@@ -988,7 +988,7 @@
     },
     "negativeControl": false,
     "source": "regret suite, teacher 128 samples, 4-turn horizon",
-    "note": "best 0.891\u00b10.022, next 0.730"
+    "note": "best 0.891\u00b10.022, next 0.730; teacher v2 (live opponent): the accepted action is no longer the best"
   },
   {
     "id": "teacher-9316ce82",
@@ -1045,7 +1045,7 @@
     "title": "The teacher's noAccessAction at ation-box-muslihat-00002 #664",
     "category": "access-and-trash",
     "kind": "decision",
-    "split": "held-out",
+    "split": "teacher-v2",
     "gameId": "standard-vs-standard-c29-elevation-box-nebula-fast-advance~elevation-box-muslihat-00002",
     "sequence": 664,
     "side": "runner",
@@ -1058,6 +1058,6 @@
     },
     "negativeControl": false,
     "source": "regret suite, teacher 128 samples, 4-turn horizon",
-    "note": "best 0.290\u00b10.020, next 0.132"
+    "note": "best 0.290\u00b10.020, next 0.132; teacher v2 (live opponent): the lead falls to 0.021"
   }
 ]

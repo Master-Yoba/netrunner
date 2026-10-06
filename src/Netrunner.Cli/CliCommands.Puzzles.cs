@@ -13,7 +13,7 @@ public static partial class CliCommands
 {
     /// <summary>
     /// Bot plan S2, the puzzle suite:
-    /// ai-puzzles run SET-DIR [--corp V] [--runner V] [--profile P] [--split all|tuning|held-out|teacher-v1] [--workers N] [--json]
+    /// ai-puzzles run SET-DIR [--corp V] [--runner V] [--profile P] [--split all|tuning|held-out|teacher-v1|teacher-v2] [--workers N] [--json]
     ///   (all is the gate: tuning and held-out)
     /// ai-puzzles import SET-DIR SAVED-GAME-FILE --id ID [--source TEXT]
     /// ai-puzzles show SET-DIR --game ID --sequence N [--play I,J,...] [--teacher SAMPLES] [--horizon game|TURNS] [--lines W] [--json]
@@ -60,11 +60,11 @@ public static partial class CliCommands
         string corp = options.GetValueOrDefault("--corp", CorpHeuristicPolicy.PolicyVersion);
         string runner = options.GetValueOrDefault("--runner", RunnerHeuristicPolicy.PolicyVersion);
         string split = options.GetValueOrDefault("--split", "all");
-        if (split is not ("all" or "tuning" or "held-out" or Puzzle.RetiredSplit))
+        if (split is not ("all" or "tuning" or "held-out") && !Puzzle.Retired(split))
             throw new ArgumentException("--split requires all, tuning, held-out or teacher-v1.");
         int workers = options.TryGetValue("--workers", out string? count) ? ProfileInt(count, "--workers", 1, 64) : 1;
         var games = set.Games.ToDictionary(game => game.Id);
-        Puzzle[] puzzles = [.. set.Puzzles.Where(puzzle => split == "all" ? puzzle.Split != Puzzle.RetiredSplit : puzzle.Split == split)];
+        Puzzle[] puzzles = [.. set.Puzzles.Where(puzzle => split == "all" ? !Puzzle.Retired(puzzle.Split) : puzzle.Split == split)];
         var results = new PuzzleResult[puzzles.Length];
         var started = System.Diagnostics.Stopwatch.StartNew();
         System.Threading.Tasks.Parallel.For(0, puzzles.Length, new ParallelOptions { MaxDegreeOfParallelism = workers }, index =>

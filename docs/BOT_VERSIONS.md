@@ -613,8 +613,8 @@ this.
 
 **Why.** The S1.5 follow-up found that the bot Runners, the live one on the ladder and v7 in the teacher's rollouts,
 rarely punish an agenda in a remote, so neither instrument could see the Corp's exposure (an outside player could). The
-base rate, from the Core Battle Box suite's games (every card the Corp installed in a remote, unadvanced and face down at
-the Runner's next turn; `ai-regret exposure --all-roots`):
+base rate, from the Core Battle Box suite's games (every card the Corp installed in a remote, unadvanced and face down
+at the Runner's next turn; `ai-regret exposure --all-roots`):
 
 | The remote's ICE | Cards | Agenda | Asset | Ambush | Upgrade | Runner v27 runs it at its next turn |
 |---|---:|---:|---:|---:|---:|---:|
@@ -657,3 +657,74 @@ regret suite can compare them; the legacy policies and frozen digests are unchan
 - **Per-slice fuzz** (`scripts/fuzz.sh <pool> --games-per-pairing 8 --verify-replays-every 8`): every pool ok, every
   game finished: official 24 games, Gateway 288, Elevation 1,152, Gateway + Elevation 288, NSG Core 2,592; 543 replays
   verified.
+
+### Teacher v2: the suite relabelled with the live opponent (6 October 2026)
+
+**The teacher.** The S1.5 line search (beam 5, a one-turn screen on a quarter of the samples, two finalists, a 4-turn
+horizon, set 4 at the leaf, 32 samples), with the rollouts modelling the opponent by the live Standard heuristic
+(`hard-model`, `plan-model 1`): Runner v28 at Corp roots and Corp v31 at Runner roots, where the S1.5 labels
+(`labels-v1-lines`, teacher v1-lines) modelled the pinned Runner v7 and Corp v8. Relabelling the box suite (6,512 roots,
+57,197 groups, none unlabellable) took **7 h 48 min** on 12 workers. The labels are the suite's `labels.jsonl.gz`;
+regret below is on them unless named.
+
+**Noise floor** (the 145 roots of the S1.2 repeat, repeat seed 2): **61%** best-group disagreement (v1-lines 57%),
+median standard error 0.032.
+
+**Drift from v1-lines** (every group both label; both teachers take the better of two lines, so the lift that carries is
+the same in both and the drift is the opponent's):
+
+| Roots | Mean value change | Past 2 SE up / down | Best group changed |
+|---|---:|---|---:|
+| Corp turn (1,604) | −0.126 | 1.3% / 60.4% | 71% |
+| Corp run (944) | −0.122 | 1.0% / 56.4% | 37% |
+| Runner turn (3,229) | −0.023 | 3.5% / 10.8% | 69% |
+| Runner run (726) | −0.029 | 4.4% / 13.7% | 30% |
+
+The best group changed at 60.6% of roots, at the noise floor. The Corp's values fell by an eighth of a game: the live
+Runner punishes what v7 did not. The Runner's fell a little: Corp v31 is a stronger opponent than v8.
+
+**Recertification** of the 26 teacher-certified puzzles at 128 samples with teacher v2 (the same rule): **14 hold**. Ten
+more fail and move to a `teacher-v2` split, out of the gate (`ai-puzzles run --split teacher-v2`): three because the
+accepted action is no longer the best (`teacher-44d22315` and `teacher-4da9c5de`, rez choices; `teacher-93609fc4`, an
+install), one because its best group's standard error is over 0.04 (`teacher-d907ce15`), and six because the lead falls
+under 0.15 as values shrink against the live opponents (`teacher-2920124f`, `-b39f5b92`, `-20e668e7`, `-8b1c9af3`,
+`-9570ba07`, `-dc91ae5e`). The two `teacher-v1` puzzles fail again. The gated box set is now 37 puzzles.
+
+**S1.3's table on teacher v2** (labels: `labels.jsonl.gz`, teacher v2; every choice labelled, none on demand):
+
+| Comparison | Every root | The discordant roots |
+|---|---|---|
+| Runner v24 − v25 | +0.0027 [0.0020, 0.0035] | |
+| Runner v24 − v26 | +0.0028 [0.0020, 0.0037] | |
+| Runner v25 − v26 | +0.0001 [−0.0003, 0.0004] | |
+| Runner v27 − v28 | +0.0014 [0.0008, 0.0020] | |
+| Corp v28 − v29 | +0.0007 [−0.0001, 0.0014] | |
+| Corp v28 − v30 | **+0.0022 [0.0005, 0.0040]** | **+0.0173 [0.0049, 0.0298]** (324 roots) |
+| Corp v29 − v30 | +0.0015 [−0.0001, 0.0033] | **+0.0142 [0.0010, 0.0284]** (272 roots) |
+| Runner v26 − v27, Corp v30 − v31 | 0.0000 | |
+
+| Version (Standard) | Regret, all | Turn | Run | Held out |
+|---|---|---|---|---|
+| Runner v24 | 0.0429 [0.0413, 0.0447] | 0.0505 | 0.0094 | 0.0425 |
+| Runner v25 | 0.0402 [0.0386, 0.0419] | 0.0472 | 0.0092 | 0.0387 |
+| Runner v26, v27 | 0.0401 [0.0385, 0.0420] | 0.0471 | 0.0092 | 0.0384 |
+| Runner v28 | 0.0387 [0.0374, 0.0406] | 0.0454 | 0.0092 | 0.0369 |
+| Corp v28 | 0.0449 [0.0419, 0.0476] | 0.0579 | 0.0228 | 0.0476 |
+| Corp v29 | 0.0442 [0.0412, 0.0470] | 0.0579 | 0.0210 | 0.0469 |
+| Corp v30, v31 | 0.0427 [0.0395, 0.0460] | 0.0555 | 0.0210 | 0.0452 |
+
+**The Runner:** the ordering is unchanged (v24 separates from v25 and v26 by the same margins as on v1-lines), and v28
+is ahead of v27 on the new teacher too. The opponent model did not reorder the Runner.
+
+**The Corp:** for the first time the suite agrees with the ladder. v30 separates from v28 over every root and over the
+discordant roots, and from v29 over the 272 roots where they choose differently (over every root it falls just short).
+Split by agenda installs (value of v30's choice − v29's, the 32-sample labels):
+
+| Discordant roots | Roots | v1-lines | Teacher v2 |
+|---|---:|---|---|
+| v29 installs an agenda in a remote, v30 holds it | 119 | +0.0007 [−0.0239, 0.0289] | +0.0185 [−0.0099, 0.0463] (v30 better at 58, v29 at 49) |
+| No agenda install | 144 | +0.0064 [+0.0001, 0.0129] | +0.0150 [+0.0061, 0.0245] |
+
+The agenda roots move the right way and stay inside zero at 119 roots, as the probe said: the sample is too small, not
+the teacher wrong. That is S1.6's reason: targeted roots where Corp v29 and v30 choose differently. S1.3's gate for the
+Corp is closed by teacher v2 over the discordant roots; the agenda-hold rule's own reading waits for S1.6.
