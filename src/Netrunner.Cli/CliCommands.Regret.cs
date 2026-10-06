@@ -249,8 +249,17 @@ public static partial class CliCommands
             // Regret is comparable only within one labelling, so the report names its labels and their teacher.
             string teacher = labels.Values.FirstOrDefault(label => label.Lines > 1) is { } lined
                 ? $"line teacher, beam {lined.Lines}, {lined.ScreenTurns}-turn screen" : "one-step teacher";
-            output.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { schemaVersion = 1, kind = "ai-regret-score", split = options.Split,
-                labels = options.LabelsFile, teacher, report, comparisons, discordance }, RegretSuite.Json));
+            output.WriteLine(System.Text.Json.JsonSerializer.Serialize(new
+            {
+                schemaVersion = 1,
+                kind = "ai-regret-score",
+                split = options.Split,
+                labels = options.LabelsFile,
+                teacher,
+                report,
+                comparisons,
+                discordance
+            }, RegretSuite.Json));
             return 0;
         }
         foreach (var entry in report)

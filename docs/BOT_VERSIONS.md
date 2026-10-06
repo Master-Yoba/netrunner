@@ -581,8 +581,8 @@ v30 is ahead where no agenda is involved and level on the agenda hold. The agend
 exclude +0.02 a decision, about what a 50 Elo gain spread over a few decisions a game would be), so "level" is a weak
 reading. **The horizon is closed as a suspect:** at 8 turns neither mean moves.
 
-**The rollout's Runner is the blind spot.** `ai-regret exposure` follows every agenda the Corp installs in a remote until
-it is scored, stolen or trashed, and asks the run model, at the Runner's next turn, whether the Runner can get in
+**The rollout's Runner is the blind spot.** `ai-regret exposure` follows every agenda the Corp installs in a remote
+until it is scored, stolen or trashed, and asks the run model, at the Runner's next turn, whether the Runner can get in
 (unrezzed ICE is counted, not priced). Over the suite's games (3,779 agendas):
 
 | Agendas in a remote | Count | Run at least once | Stolen | Scored |
