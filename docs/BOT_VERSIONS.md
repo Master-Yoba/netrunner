@@ -497,7 +497,8 @@ one-step gap: there Petty Cash is likely worse, not undervalued.
 group passes, its standard error at most 0.04, every failing group 0.15 or more behind): **24 hold**. Two move to a
 `teacher-v1` split, which `ai-puzzles run` leaves out of the gate (`--split teacher-v1` runs them):
 `teacher-7a456081`, whose rejected install now reaches the best line too (0.656, lead 0.000), a continuation artifact
-of the one-step teacher; and `teacher-00152981`, whose rejected run's best line closes the lead to 0.142.
+of the one-step teacher; and `teacher-00152981`, whose rejected run's best line closes the lead to 0.142. The
+defaults failed both, so they pass 34 of the gate's 47 box puzzles (34 of 49 before).
 
 **Drift** (the 32,977 groups both teachers label; the line teacher never values a group below the one-step teacher on
 the same samples, and 21,240 are unchanged):
