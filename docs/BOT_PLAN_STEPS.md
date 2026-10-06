@@ -389,7 +389,12 @@ rollout step gets cheaper, and S0.4's trace says the step is mostly simulated `A
   Easy: heuristic, forgetful tracker (unchanged). Personalities keep shifting named terms of set 5.
 - `PolicyPerformanceTests` on the reference box: Standard within 50 ms / 200 ms p95; Hard within the same, or with a
   documented larger budget for turn-start decisions only.
-- Both sides' versions bump (`corp-heuristic-v32`, `runner-heuristic-v28`) because the default profile's decider changed.
+- Both sides' versions bump (`corp-heuristic-v32`, `runner-heuristic-v29`; v28 is the remote valuation of the S1.5
+  follow-up) because the default profile's decider changed.
+- **Hard's opponent model is an open decision.** Hard today models the opponent by the pinned versions (Runner v7, Corp
+  v8); Wave 5 found that modelling the live Runner gained Hard nothing (`hard-model` level on the ladder), but that was
+  with the one-step planner. S5 re-tests it with the line search, and Standard and Hard model the live Standard
+  heuristic unless the ladder says otherwise, rather than carrying the pinned versions forward by default.
 
 ### S5.3 Gates
 

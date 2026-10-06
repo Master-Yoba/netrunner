@@ -6,14 +6,22 @@ namespace Netrunner.Match.Regret;
 
 /// <summary>
 /// Labels a game's roots with the teacher (bot plan S1.2). The teacher is the latest Hard bot of the acting side, which
-/// has watched the game to the root: it knows the opponent's list and its tracker's beliefs, and deals from both.
+/// has watched the game to the root: it knows the opponent's list and its tracker's beliefs, and deals from both. Its
+/// rollouts model the opponent by the live Standard version (<see cref="DefaultTeacher"/>).
 /// </summary>
 public static class RegretLabels
 {
+    /// <summary>
+    /// The teacher every labelling uses unless told otherwise (S1.5 follow-up, 6 October): Hard modelling the opponent by
+    /// the live Standard version (<c>plan-model 1</c>). Plain Hard models it by the planner's pinned versions (Runner v7,
+    /// Corp v8), which no label meant to train an evaluation should learn from; labels name a teacher other than Hard.
+    /// </summary>
+    public const string DefaultTeacher = "hard-model";
+
     /// <param name="teacher">The ladder entrant that teaches: Hard, or <c>hard-model</c>, Hard modelling the opponent by the
     /// live Standard version instead of the planner's pinned model (Runner v7, Corp v8).</param>
     public static ImmutableArray<RegretLabel> Label(RegretGame game, IReadOnlyList<RegretRoot> roots, TeacherSettings settings,
-        string teacher = "hard")
+        string teacher = DefaultTeacher)
     {
         ArgumentNullException.ThrowIfNull(game);
         ArgumentNullException.ThrowIfNull(roots);

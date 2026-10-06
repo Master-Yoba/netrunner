@@ -160,6 +160,10 @@ observation ──> heuristic (candidate generator: top-K actions with priority 
   `TurnPlanner.AppliesToRun` does now, once the leaf is replaced.
 - **Hidden cards** are dealt from the tracker (pins at their belief weight) and the pool, or the decklist for Hard, as
   `TurnPlanner.Pins` does. One shared set of samples serves every candidate at a root (common random numbers).
+- **The opponent in the rollouts is the live Standard heuristic** (`plan-model 1`), for the teacher now and for S5's
+  Standard when it ships. The planner's pinned model (Runner v7, Corp v8, kept so the shipped Corp planner plays as it
+  did) is not a defensible opponent for labels meant to train set 5: the S1.5 follow-up found the teacher could not see
+  the cost of an exposed agenda because its v7 Runner, like the live one before Runner v28, did not run the remote.
 
 ### 4.2 Evaluation set 5: a leaf trained by search
 
@@ -252,12 +256,13 @@ A fixed corpus of recorded decision roots with teacher labels, scored in minutes
   Each root keeps the acting side's observation, the checkpoint, the legal candidates and the deal, so any policy
   version can be asked to choose there (`BotLoop1Tests.ChooseAtAsync` already does this).
 - **Teacher:** the planner at an offline budget (start: 32 samples × every meaningful candidate) with common random
-  numbers across candidates. It searches the root side's own turn as lines (4.1), so a candidate is valued at its best
-  follow-up rather than the heuristic's; a label made with the heuristic's continuation (the first labelling) is
-  marked as such and replaced. Its rollouts go **deeper than the leaf's horizon**: to the game's end with the rollout
-  policy where S0.1's costs allow it, otherwise a fixed number of turns (start 4) and then the leaf. A label is then
-  mostly the result of play, not a reading of set 4, so fitting set 5 to it does not inherit set 4's bias. It writes each
-  candidate's value, its standard error over the samples, and the horizon it used.
+  numbers across candidates, its rollouts modelling the opponent by the live Standard heuristic (4.1; `ai-regret label`
+  defaults to it, and a label names its teacher). It searches the root side's own turn as lines (4.1), so a candidate is
+  valued at its best follow-up rather than the heuristic's; a label made with the heuristic's continuation (the first
+  labelling) is marked as such and replaced. Its rollouts go **deeper than the leaf's horizon**: to the game's end with
+  the rollout policy where S0.1's costs allow it, otherwise a fixed number of turns (start 4) and then the leaf. A label
+  is then mostly the result of play, not a reading of set 4, so fitting set 5 to it does not inherit set 4's bias. It
+  writes each candidate's value, its standard error over the samples, and the horizon it used.
 - **Label noise.** A rollout to the game's end returns a win or a loss, so 32 samples give a candidate's value to about
   ±0.09, and common random numbers help less as the rollouts diverge over several turns, while candidates often differ
   by a few points. Regret *differences* between versions stay unbiased under that noise; agreement and "the best

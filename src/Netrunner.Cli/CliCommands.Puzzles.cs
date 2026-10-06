@@ -236,10 +236,10 @@ public static partial class CliCommands
         return 0;
     }
 
-    /// <summary>The latest Hard bot of a side, having watched a game to (and including) a decision.</summary>
+    /// <summary>The teacher of a side (<see cref="RegretLabels.DefaultTeacher"/>), having watched a game to (and including) a decision.</summary>
     private static OfflineAgent Watched(RegretGame game, FullMatchDefinition definition, PlayerSide side, long sequence)
     {
-        OfflineAgent teacher = RatingLadder.CreateAgent("hard", side, definition) as OfflineAgent
+        OfflineAgent teacher = RatingLadder.CreateAgent(RegretLabels.DefaultTeacher, side, definition) as OfflineAgent
             ?? throw new InvalidOperationException("The Hard bot is not an offline agent.");
         foreach (RegretPosition position in RegretGames.Positions(game, definition).TakeWhile(position => position.Sequence <= sequence))
             AgentLifecycleHost.Observe(teacher, position.State, definition.Behavior);

@@ -15,7 +15,8 @@ public static partial class CliCommands
     /// ai-regret roots GAMES-DIR --output SUITE-DIR [--turn-roots N] [--run-roots N] [--labelled N] [--seed S] [--workers N]
     /// ai-regret label SUITE-DIR [--samples N] [--horizon game|TURNS] [--evaluation N] [--lines W] [--seed S] [--workers N]
     ///   [--labels FILE] [--repeat N --repeat-seed S] [--roots FILE] (with --repeat, the roots to repeat)
-    ///   [--teacher hard|hard-model] (hard-model's rollouts model the opponent by the live Standard version)
+    ///   [--teacher hard-model|hard] (hard-model, the default, models the opponent by the live Standard version; hard by
+    ///   the planner's pinned Runner v7 and Corp v8, as labels-v1 was made)
     /// ai-regret score SUITE-DIR --version V[,V...]|latest [--profile P] [--split all|held-out|train] [--labels FILE]
     ///   [--blunders N] [--bootstrap N] [--workers N] [--json] [--discordant A,B] [--label-missing]
     /// ai-regret findings SUITE-DIR --manifest FILE --fixtures DIR --content POOL [--labelled N]
@@ -57,7 +58,7 @@ public static partial class CliCommands
         int HorizonTurns, int Evaluation, string LabelsFile, int Repeat, ulong RepeatSeed, string[] Versions, string Profile, string Split,
         int Blunders, int Bootstrap, bool Json, bool Missing = false, string? Manifest = null, string? Fixtures = null, string? Content = null,
         bool LabelMissing = false, int Lines = 0, string? RootsFile = null, int ScreenTurns = 1, string[]? Discordant = null,
-        bool AllRoots = false, string TeacherEntrant = "hard")
+        bool AllRoots = false, string TeacherEntrant = RegretLabels.DefaultTeacher)
     {
         public static RegretOptions Parse(string[] args)
         {

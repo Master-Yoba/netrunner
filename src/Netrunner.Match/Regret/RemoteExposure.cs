@@ -187,7 +187,7 @@ public static class RemoteExposure
         ArgumentNullException.ThrowIfNull(root);
         ArgumentNullException.ThrowIfNull(settings);
         FullMatchDefinition definition = RegretGames.Definition(game);
-        var teacher = RatingLadder.CreateAgent("hard", root.Side, definition) as OfflineAgent
+        var teacher = RatingLadder.CreateAgent(RegretLabels.DefaultTeacher, root.Side, definition) as OfflineAgent
             ?? throw new InvalidOperationException("The Hard bot is not an offline agent.");
         var catalog = new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior);
         var fates = new List<RemoteFate>();
