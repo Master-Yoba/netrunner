@@ -37,6 +37,37 @@ public sealed class AiRegretCommandTests
     }
 
     [Fact]
+    public void AChoiceOutsideTheLabelledGroupsIsLabelledOnDemand()
+    {
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
+        string suite = Path.Combine(Path.GetTempPath(), $"netrunner-regret-{Guid.NewGuid():N}");
+        string games = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Netrunner.Match.Tests", "Fixtures", "saved-games",
+            "strategy1-petty-cash");
+        try
+        {
+            using var output = new StringWriter();
+            using var error = new StringWriter();
+            // One labelled group a root: the versions' other choices are unlabelled until labelled on demand (S1.4).
+            Assert.Equal(0, CliCommands.Run(["ai-regret", "roots", games, "--output", suite, "--turn-roots", "3", "--run-roots", "0",
+                "--labelled", "1"], output, error));
+            Assert.Equal(0, CliCommands.Run(["ai-regret", "label", suite, "--samples", "1", "--horizon", "1"], output, error));
+            using var scored = new StringWriter();
+            Assert.Equal(0, CliCommands.Run(["ai-regret", "score", suite, "--version", "corp-heuristic-v29,corp-heuristic-v31", "--bootstrap", "0",
+                "--label-missing"], scored, error));
+
+            string text = scored.ToString();
+            Assert.Contains("ai-regret label-missing", text, StringComparison.Ordinal);
+            Assert.Contains("corp-heuristic-v29 (Corp, standard)", text, StringComparison.Ordinal);
+            Assert.DoesNotMatch(@"unlabelled=[1-9]", text);
+            Assert.Contains(RegretSuite.Load(suite).Roots, root => root.Candidates.Length > 1);
+        }
+        finally
+        {
+            if (Directory.Exists(suite)) Directory.Delete(suite, recursive: true);
+        }
+    }
+
+    [Fact]
     public void RerunningFindingsReplacesThemAndTheirLabels()
     {
         if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;

@@ -32,18 +32,18 @@ public sealed partial class RunnerHeuristicPolicy
         int value = choice.CardIds.Sum(id => (trash ? -1 : 1) * RunnerValues.Card(context, context.Card(id)));
         // v17 (batch 4's reviews, 1 October): an effect that installs a card (Pantograph, Mutual Favor) doesn't pick one that
         // would replace its own installed copy or a second console.
-        if (context.Generation >= 13 && plan.Consumers.Any(instruction => instruction.Kind == BehaviorInstructionKind.InstallCard))
+        if (plan.Consumers.Any(instruction => instruction.Kind == BehaviorInstructionKind.InstallCard))
             value -= choice.CardIds.Count(id => ReplacesItsOwn(context, context.Card(id))) * 500;
         // v20 (Wave 5 playtest, 2 October): a breaker a tutor finds is worth what it would break, as installing it is; Mutual
         // Favor took Carmen over Marjanah with two barriers on the board and no sentry, and R&D's barrier was never broken.
         // Measured against an ordinary new breaker, so a breaker keeps its rank against other kinds of cards.
-        if (context.Generation >= 16 && !trash)
+        if (!trash)
             value += choice.CardIds.Sum(id => context.Definition(context.Card(id))?.Icebreaker is { } breaker
                 ? BreakerCoverage(context, breaker) - 730 : 0);
         // v25 (bot loop 2): a card that only goes to the grip is a free draw at least, whatever installing it would add; MuslihaT's
         // free Marjanah was declined as a second copy, and the Runner spent a click drawing it.
         BehaviorInstruction[] uses = [.. plan.Consumers.Where(instruction => instruction.Target?.Selector == choice.ChoiceKey)];
-        if (context.Generation >= 21 && !trash && choice.CardIds.Count > 0 && uses.Length > 0
+        if (!trash && choice.CardIds.Count > 0 && uses.Length > 0
             && uses.All(instruction => instruction.Kind is BehaviorInstructionKind.AddToHand or BehaviorInstructionKind.Reveal))
             value = Math.Max(value, choice.CardIds.Count * context.DrawValue);
         return Value(value + (choice.FinalizeSelection ? 1 : 0), "choice/target-value-and-confirmation", true);

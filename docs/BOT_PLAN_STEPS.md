@@ -171,6 +171,11 @@ would hide the planner's choices, which are expected to fall outside the heurist
 - **Gate:** the unlabelled count is zero for every version in the S1.3 table; the table is re-reported.
 - **Record:** the counts before and after in `docs/BOT_VERSIONS.md`.
 
+**Outcome (5 October; the record is in `docs/BOT_VERSIONS.md`).** The box suite's roots have every meaningful group
+(32,821 groups became 57,109) and the choices outside the old six were labelled on demand: no version in the S1.3 table
+has an unlabelled choice. Counting them raised every older version's regret, as the S1.3 record warned; the Runner's
+separation held and the Corp's intervals widened past zero.
+
 ### S1.5 The turn-line teacher (M)
 
 **During S3 (it edits `TurnPlanner`, S3 edits the heuristic files); its relabel runs between S3's gate ladders; before
@@ -198,6 +203,106 @@ horizon does not fix it. The fix is the turn-line search of plan 4.1, built once
     v29).
 - **Record:** the cost, the Petty Cash check, the drift, the recertification and the new S1.3 table in
   `docs/BOT_VERSIONS.md`.
+
+**Outcome (6 October; the record is in `docs/BOT_VERSIONS.md`).** The box suite is relabelled with the line teacher
+(7 h 9 min; the S1.2 labels are kept as `labels-v1`). The settings depart from the spec on evidence: a beam of 3 cannot
+find the Petty Cash line (it takes the heuristic's 4th and 5th choices), and screening every line by a full play-out
+cost 5 to 6 times a one-step labelling, so the teacher searches a **beam of 5**, screens lines with a **one-turn
+play-out on a quarter of the samples**, and plays the heuristic's line and the best other one to the horizon (2.75
+times one-step). Gate:
+  - the twin tests pass with `plan-lines` on (the live Hard bot; the live Runner's Standard does not plan);
+  - Petty Cash first is level with the best at 18 of 24 roots (13 one-step), the worst root's gap 0.230 → 0.003;
+  - drift recorded with the lift the labels carry; the best-group change (22.6%) is below the noise floor (57%);
+  - 24 of the 26 certified puzzles hold; 2 moved to `teacher-v1`;
+  - S1.3's separation: the Runner passes (v24 against v25 and v26); **the Corp does not**, as at S1.4. The discordant
+    view (`ai-regret score --discordant`) and the exposure count (`ai-regret exposure`) say why: v30 is ahead where no
+    agenda is involved and level on holding an agenda, at 4 turns and at 8, because neither the ladder's Runner nor
+    the teacher's (its rollouts model the Runner as v7) punishes a remote it can get into. The Corp's gate stays open
+    until a Runner v28 values that remote and the suite is relabelled by a teacher that models the live Runner.
+
+  Runner v28 shipped on its own gates (#107: regret +0.0179 [+0.0113, +0.0245] over 398 discordant roots, +44 Elo
+  [+11, +81] on the box, level on Gateway, self-flatlines within noise). The relabel with the hard-model teacher runs
+  on `feat/bot-plan-relabel-v28` into `labels-model`; its re-read of the 272 discordant Corp roots decides the Corp's
+  gate. A 30-minute probe at 128 samples moved the 119 agenda roots from −0.0021 to +0.0122 [−0.0160, +0.0401]: the right
+  direction, not clear of zero at 119 roots. That is the case for S1.6.
+
+  **The relabel (6 October; teacher v2, the record is in `docs/BOT_VERSIONS.md`).** 7 h 48 min; the S1.5 gate repeated
+  for the new teacher: noise floor 61%; drift at the floor (the Corp's values fall by 0.126, the live Runner punishing
+  what v7 did not); 14 of the 26 certified puzzles hold and 10 move to `teacher-v2`; the Runner's ordering is
+  unchanged. **The Corp separates**: v30 over v28 on every root, and v30 over v29 over the 272 discordant roots
+  (+0.0142 [0.0010, 0.0284]). The 119 agenda roots read +0.0185 [−0.0099, 0.0463]: the right way, inside zero, so the
+  agenda rule's own reading waits for S1.6. Labels: `labels.jsonl.gz` is teacher v2, `labels-v1-lines` the S1.5 one.
+
+### S1.6 Targeted roots (S)
+
+**After the hard-model relabel's re-read; before S4.2's gate. Independent of S4.1.** A paired comparison has power only
+at the roots where the two versions choose differently. The suite's roots were drawn where the *heuristic's* top two
+are close, which is the right place to find the heuristic's own mistakes but not where two particular versions differ:
+v29 and v30 differ at 272 of 2,552 Corp roots, and the 119 that hold an agenda cannot clear zero whatever the teacher.
+S4.2 and S5.3 compare planners whose choices diverge from the heuristic's far more often, and they need the same thing.
+
+- `ai-regret diverge <games-dir> --versions A,B --output <suite-dir>`: replays every saved game, asks both versions
+  (same profile) to choose at every turn-action and run-choice decision of their side, and keeps every decision where
+  the chosen groups differ as a root in the suite's format, with `source: diverge A,B` and the two choices recorded.
+  Roots are deduplicated by position and held out by deal, as the suite's are. The command labels nothing itself.
+- The new roots are labelled with the suite's current teacher, settings and seed (`ai-regret label`, with S1.7's
+  adaptive samples), a sample of them repeated for the noise floor, and merged with their provenance. A root that
+  already exists keeps its labels.
+- `--discordant` (S1.5's view) is the report for every version comparison from now on, beside the all-roots table.
+- **First run:** the 960 box games for Corp v29 against v30 and v28 against v29, so the Corp's gate is read at every
+  root where it can be. Expected: a few hundred more Corp roots, mostly agenda installs and holds.
+- **Gate:**
+  - Corp v30 against v29 and v28 separates over the discordant roots with the interval clear of zero and the right
+    sign, on the hard-model labels; if it does not, the Corp's gate stays open and the record says what the agenda roots
+    read at the new size;
+  - the Runner comparisons of S1.3 still separate;
+  - the labelling time and the roots added, per side and category, are recorded.
+- **Record:** the counts, the time, and the Corp table before and after, in `docs/BOT_VERSIONS.md`.
+
+**Later uses.** S4.2 runs `diverge` for the planner on set 5 against the planner on set 4 before its regret gate;
+S5.3 for the new Standard against `standard-prev`; S6 for each round's candidate against the current Standard. In each
+case the gate is read over the discordant roots, and the all-roots table is reported beside it.
+
+### S1.7 Labelling cost (S)
+
+**After the hard-model relabel; before S1.6's labelling run.** The plan's 5.1 sizes the suite so a relabel is an hour or
+two: a versioned teacher, a core plus targeted roots, adaptive samples, and relabels scheduled overnight. The pieces:
+
+- **Teacher version.** The hard-model labels (`labels-model`) are teacher v2: the line search (beam 5, one-turn screen on
+  a quarter of the samples, two finalists), the live Standard opponent (`plan-model 1`), a 4-turn horizon, 32 samples.
+  `ai-regret label` writes `teacher: v2` into every label; `score` refuses to compare two values at one root from
+  different teachers, and prints the teacher beside every table. Nothing about teacher v2 changes before S4 fits.
+- **The core.** `ai-regret core <suite-dir> --roots 2000 --seed S` marks a random subset of the suite's roots, drawn by
+  deal so a held-out deal is wholly in or out, keeping the held-out share. The core's labels are the ones it already has:
+  no run. Absolute regret, the noise floor and the drift are reported on the core; comparisons use every root both
+  versions are labelled at, with `--discordant` beside them.
+- **Adaptive samples.** `ai-regret label --decide 8 --record 8 --extend-to 32`: every group gets 8 *deciding* samples,
+  used only to choose how many *recording* samples the root gets: 8 when the deciding samples put the best two groups
+  more than two standard errors apart, otherwise steps of 8 until they separate on the recording samples or 32 is
+  reached. The recorded values, standard errors and gaps come from the recording samples alone; the deciding samples
+  are discarded. That is what keeps the labels free of optional-stopping bias: a root that stopped because its first
+  samples happened to show a large gap would otherwise carry that inflated gap into absolute regret and the S4 and S6
+  fitting targets. The label records both counts. Expected: 16 samples at a clearly decided root against 32 flat, so
+  about a third to a half off the suite's cost, more on targeted roots, where the two choices usually differ clearly.
+- **Schedule.** A core relabel (about 2,000 roots) or a targeted labelling runs overnight or while no ladder is due; the
+  record names the date and the hours. A step that needs a relabel schedules it the evening before its gate.
+- **Gate:** the core's S1.3 table (Runner v24 against v25 and v26; the Corp pairs over the discordant roots) reads the
+  same as the whole suite's within the intervals. Adaptive labelling of 200 roots against their flat 32-sample labels,
+  on the values and not only the chosen group: the mean signed difference of every group's value is within its
+  standard error of zero (no lift either way), the mean absolute difference is reported, and the paired regret
+  difference of one version pair computed on each labelling agrees within the intervals; the best group agrees within
+  the noise floor. The costs recorded.
+- **Record:** the core's size and seed, the adaptive labelling's cost and agreement, in `docs/BOT_VERSIONS.md`.
+
+**Outcome (7 October; the record is in `docs/BOT_VERSIONS.md`).** Every label names its teacher (v1, v1-lines, v2; the
+committed files are tagged) and `score` prints it and refuses a root mixing two. The core is 2,050 roots (seed 1) and
+reads as the whole suite does within the intervals. Adaptive samples are unbiased on the values (mean signed difference
+0.0000 over 1,695 groups) but **cost more than flat on the suite's roots** (1,480 s against about 860 s for 200 roots:
+181 of them extend to 32, since a root's best two of about nine groups are rarely apart after 8 samples), so a core
+relabel runs flat at 32 and adaptive samples wait for S1.6's targeted roots, where their saving is measured first. One
+finding for the freeze: the teacher plays the live Hard policies, so a version name is pinned to them (v2 is Corp v31
+and Runner v28); a policy bump makes new labels a new version by name.
+
 
 ## S2. Puzzle suite v2 (M)
 
@@ -252,6 +357,14 @@ converted puzzle.
 
 **Independent of S1 and S2. Do it before S4 changes the heuristic's features.**
 
+**Outcome (5 October; the record is in `docs/BOT_VERSIONS.md`).** Corp v31 and Runner v27 are live, without a version
+check of their own (135 `Generation` references to 4); `Legacy/` holds the 94a7404 policy files, pinned by hash. The
+gate's ladders (box and Gateway, 240 deals each) are identical game by game. The shared helpers (`HeuristicContext`,
+`RunnerValues`, `RunModel`) keep their generation switches, since freezing them would split shared types; a helper change
+in S4 or S5 must leave the older generations alone or move the helper into `Legacy/` first. `standard-prev` is v30 and
+v26 from the legacy files until S5; the frozen-build anchor under `.tools/ladder-anchors/` is built when S5 first needs a
+previous live version that is not legacy code.
+
 - Copy `CorpHeuristicPolicy*.cs` and `RunnerHeuristicPolicy*.cs` to `src/Netrunner.AI/Legacy/` as `LegacyCorpPolicy`
   and `LegacyRunnerPolicy` serving every version through v30 and v26. `OfflinePolicies.Create` routes those versions
   there. `CorpPolicyProfiles` and `RunnerPolicyProfiles` keep constructing their profiles.
@@ -292,16 +405,17 @@ converted puzzle.
 ### S4.2 Fitting to the teacher
 
 - `ai-fit-evaluation --target teacher --suite <suite-dir> --feature-set 5 --outcome-weight 0.2 --output <doc>`: fits
-  one model per side to the teacher's root value (primary) and the game's outcome (auxiliary), on the suite's training
-  games, reports held-out log loss and mean absolute error against the teacher's value, and compares to set 4 scored the
-  same way. The model is `LogisticSideModel` or, if the held-out error asks for it, a two-layer additive model over the
+  one model per side to the teacher's root value (primary) and the game's outcome (auxiliary), on the core's training
+  deals (one teacher throughout, S1.7), reports held-out log loss and mean absolute error against the teacher's value,
+  and compares to set 4 scored the same way. The model is `LogisticSideModel` or, if the held-out error asks for it, a two-layer additive model over the
   same named features; either is stored in `data/ai/evaluation-v5.json` with provenance.
 - Fit **three** models, so the gain is attributed: set 4 with its shipped weights (set 2's, never fitted to set 4's own
   features), set 4 refitted to the teacher (new target, old features), and set 5 fitted to the teacher (new target, new
   features).
 - **Gate:** set 5 beats both set 4 arms on held-out teacher values in both seats, and the planner (Hard settings)
-  scoring with set 5 beats the same planner on each set 4 arm on the regret suite's held-out roots. If the refitted set
-  4 captures most of the gain, the features are not the lever and S4.1's terms are reconsidered before S4.3.
+  scoring with set 5 beats the same planner on each set 4 arm on the regret suite: over the discordant roots of each
+  pair (`diverge`, labelled adaptively, S1.6 and S1.7) with the core's held-out roots reported beside. If the refitted
+  set 4 captures most of the gain, the features are not the lever and S4.1's terms are reconsidered before S4.3.
 - **Record:** the three fit reports and the regret comparison.
 
 ### S4.3 Budget scaling on set 5
@@ -325,6 +439,11 @@ rollout step gets cheaper, and S0.4's trace says the step is mostly simulated `A
   working state (`WorkingState.Build` and its constructor, about 8% of `ApplyCore`).
 - **Gate:** each change is exact: a 240-deal box ladder identical game by game to the run before it, the per-slice
   fuzz on every pool (an engine change), and the costs re-measured into `docs/BOT_VERSIONS.md`.
+- **S1.5 raised the stakes.** The heuristic orders a turn's later clicks poorly: the Petty Cash line needed its 4th and
+  5th choices, so the teacher searches a beam of 5 and a beam of 3 misses the line. Standard cannot afford a beam of 5
+  per click inside 50 ms at today's cost, so either simulated `Apply` gets much cheaper here or the shipped planner
+  searches a narrower beam than the teacher; S5.1's record says which, and what the narrower beam costs on the regret
+  suite against the teacher's.
 
 ### S5.1 Pipeline changes in `TurnPlanner`
 
@@ -336,7 +455,11 @@ rollout step gets cheaper, and S0.4's trace says the step is mostly simulated `A
   the heuristic orders candidates and breaks ties within `plan-tie` (start 0.005).
 - **Turn-line search on** (`plan-lines`, S1.5): Standard and Hard value a candidate at its best line of the turn. The
   budget below is lines × samples, so S5.0's gains decide the beam Standard can afford inside 50 ms; if a beam of 4 does
-  not fit after S5.0, Standard plans a beam of 3 or fewer samples and the record says which.
+  not fit after S5.0, Standard plans a beam of 3 or fewer samples and the record says which. Without the teacher's
+  play-out, `plan-lines` takes the best of every screened line, more lines than the teacher's two finalists, so its
+  values are more optimistic, and a candidate whose heuristic line ends the turn early has fewer lines and less of that
+  lift. The values only rank candidates, so S5.1's gates check this on the regret suite (a planner preferring
+  long-turn candidates for this reason shows as regret on short-turn roots).
 - **Rollout policy:** today's per-step `Choose` (S0.4) for nested choices, the opponent and later turns. Profile against
   S0.1 after S5.0 and, if a Standard decision still cannot fit 50 ms p95, implement the plan's 4.3 options (the heuristic
   at a reduced work budget, then the distilled table policy) and record each number. If the rollout policy changes here,
@@ -351,7 +474,12 @@ rollout step gets cheaper, and S0.4's trace says the step is mostly simulated `A
   Easy: heuristic, forgetful tracker (unchanged). Personalities keep shifting named terms of set 5.
 - `PolicyPerformanceTests` on the reference box: Standard within 50 ms / 200 ms p95; Hard within the same, or with a
   documented larger budget for turn-start decisions only.
-- Both sides' versions bump (`corp-heuristic-v32`, `runner-heuristic-v28`) because the default profile's decider changed.
+- Both sides' versions bump (`corp-heuristic-v32`, `runner-heuristic-v29`; v28 is the remote valuation of the S1.5
+  follow-up) because the default profile's decider changed.
+- **Hard's opponent model is an open decision.** Hard today models the opponent by the pinned versions (Runner v7, Corp
+  v8); Wave 5 found that modelling the live Runner gained Hard nothing (`hard-model` level on the ladder), but that was
+  with the one-step planner. S5 re-tests it with the line search, and Standard and Hard model the live Standard
+  heuristic unless the ladder says otherwise, rather than carrying the pinned versions forward by default.
 
 ### S5.3 Gates
 
@@ -369,10 +497,12 @@ rollout step gets cheaper, and S0.4's trace says the step is mostly simulated `A
 
 A round is one version. It runs when the previous round's gates are met.
 
-1. Play 960 box games of the current Standard against itself with `--save-games`; add roots from them (S1.1), holding
-   out by game.
-2. Re-label the whole suite with the teacher at the current Standard's leaf and 4× its budget. Report teacher drift:
-   the share of roots whose best candidate changed. Over 15% stops the round for inspection of the top changes.
+1. Play 960 box games of the current Standard against itself with `--save-games`; refresh a fifth of the core from
+   them (S1.1, held out by deal) and add the candidate's discordant roots against the current Standard (`diverge`).
+2. Re-label the **core and the discordant roots** with the teacher at the current Standard's leaf (a new teacher
+   version, S1.7), adaptively, overnight: about two hours, not seven. Report teacher drift on the core: the share of
+   roots whose best candidate changed, against the noise floor. Over 15% above the floor stops the round for inspection
+   of the top changes. The rest of the suite keeps its older labels; a whole-suite relabel is a milestone event.
 3. Refit set 5's weights (a new document version, `evaluation-v5.<round>.json`).
 4. Score the candidate (Standard with the new weights) by S5.3's gates, with box ladders (about 400 deals) only when
    the regret suite and puzzles improved.
@@ -387,9 +517,9 @@ the plan is the way to get them, on the user's ask).
 ## Timeline and order
 
 ```text
-S0 measure ──> S1 regret suite ──> S1.4 all groups, S1.5 line teacher ──> S4 set 5 ──> S5 planner Standard ──> S6 rounds
-           ──> S2 puzzles ──────────────────────────────────────────────┘
-           ──> S3 one live policy (alongside S1.4 and S1.5; before S4) ──┘
+S0 measure ──> S1 regret suite ──> S1.4 all groups, S1.5 line teacher, S1.6 targeted roots ──> S4 set 5 ──> S5 planner Standard ──> S6 rounds
+           ──> S2 puzzles ──────────────────────────────────────────────────────────────────┘
+           ──> S3 one live policy (alongside S1.4 to S1.6; before S4) ───────────────────────┘
 (S5.0, the engine cost of simulation, can run any time after S0 and must land before S5.1; S1.5 raises its stakes)
 ```
 

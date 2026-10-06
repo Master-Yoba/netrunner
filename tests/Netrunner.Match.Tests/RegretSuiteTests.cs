@@ -44,8 +44,10 @@ public sealed class RegretSuiteTests
         }
     }
 
-    [Fact]
-    public void TheTeacherGivesHiddenStateTwinsTheSameLabelsAndRepeatsItself()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(3)]
+    public void TheTeacherGivesHiddenStateTwinsTheSameLabelsAndRepeatsItself(int lines)
     {
         if (!Official) return;
         (LadderSavedGame saved, FullMatchDefinition definition) = Saved();
@@ -60,7 +62,7 @@ public sealed class RegretSuiteTests
         GameState twin = TurnPlannerTests.SwapTwoHiddenCards(state, PlayerSide.Runner)
             ?? throw new InvalidOperationException("The fixture's Runner has no two different hidden cards.");
         ActionId[] candidates = [.. state.PendingDecision!.LegalActions.Take(3).Select(action => action.Id)];
-        var settings = new TeacherSettings(Samples: 2, Seed: 7, HorizonTurns: 1);
+        var settings = new TeacherSettings(Samples: lines > 0 ? 4 : 2, Seed: 7, HorizonTurns: 1, Lines: lines);
 
         IReadOnlyList<TeacherValue> real = RolloutTeacher.Evaluate(teacher,
             ObservationBuilder.Build(state, PlayerSide.Corp, definition.Behavior, definition.Runtime), candidates, settings);
@@ -69,10 +71,84 @@ public sealed class RegretSuiteTests
         IReadOnlyList<TeacherValue> again = RolloutTeacher.Evaluate(teacher,
             ObservationBuilder.Build(state, PlayerSide.Corp, definition.Behavior, definition.Runtime), candidates, settings);
 
-        Assert.Equal(real, twinned);
-        Assert.Equal(real, again);
-        Assert.All(real, value => Assert.Equal(2, value.PlayOuts));
+        // A line is a list, so the values are compared by their contents.
+        static string Key(TeacherValue value) =>
+            $"{value.Action.Value} {value.Mean:R} {value.StandardError:R} {value.PlayOuts} {string.Join(',', value.Line ?? [])}";
+        Assert.Equal(real.Select(Key), twinned.Select(Key));
+        Assert.Equal(real.Select(Key), again.Select(Key));
+        Assert.All(real, value => Assert.Equal(settings.Samples, value.PlayOuts));
         Assert.All(real, value => Assert.InRange(value.Mean, 0, 1));
+        Assert.All(real, value => Assert.Equal(lines > 0, value.Line is not null));
+    }
+
+    /// <summary>
+    /// Bot plan S1.5: lines that leave the turn in states with equal fingerprints share one play-out in the teacher's memo,
+    /// which is exact only if those play-outs are equal. This plays lines without sharing and checks it, so a state field
+    /// left out of the fingerprint that changes play fails here.
+    /// </summary>
+    [Fact]
+    public void LinesThatLeaveTheTurnInOneStateHaveOnePlayOut()
+    {
+        if (!Official) return;
+        (LadderSavedGame saved, FullMatchDefinition definition) = Saved();
+        OfflineAgent teacher = (OfflineAgent)RatingLadder.CreateAgent("hard", PlayerSide.Corp, definition);
+        GameState? root = null;
+        foreach (RegretPosition position in SavedDecision.Positions(saved.Replay, definition))
+        {
+            AgentLifecycleHost.Observe(teacher, position.State, definition.Behavior);
+            if (position.Sequence == CorpTurn) { root = position.State; break; }
+        }
+        GameState state = root ?? throw new InvalidOperationException("The fixture has no root.");
+        ObservationDeterminizer determinizer = ObservationBuilder.Build(state, PlayerSide.Corp, definition.Behavior, definition.Runtime).Determinizer!;
+        var planner = new TurnPlanner(teacher.Policy, teacher.Configuration, teacher.Catalog);
+        AgentKnowledge knowledge = teacher.Checkpoint.Knowledge;
+        GameState sample = TurnPlanner.Deal(PlayerSide.Corp, knowledge, planner.PoolFor(PlayerSide.Corp, knowledge, fromList: true),
+            new PlanningContext(determinizer, new DeterministicRandom(11)), pinned: true);
+        int[][] lines = [[], [1], [2], [0, 1], [1, 0], [1, 1], [0, 2], [2, 0], [1, 2], [2, 1]];
+
+        var ends = new Dictionary<string, double>(StringComparer.Ordinal);
+        int shared = 0;
+        foreach (LegalAction first in state.PendingDecision!.LegalActions.Take(8))
+            foreach (int[] ranks in lines)
+            {
+                // A memo of its own, so the line is played out whole and the memo only records where it left the turn.
+                var memo = new Dictionary<string, double>(StringComparer.Ordinal);
+                double? value = planner.PlayLine(sample, first.Id, ranks, PlayerSide.Corp, knowledge, determinizer, 1, 4,
+                    PlannerProbe.GameRolloutCap, out _, memo);
+                if (value is not { } played || memo.Count == 0) continue;
+                (string end, double recorded) = Assert.Single(memo);
+                Assert.Equal(played, recorded);
+                if (ends.TryGetValue(end, out double earlier))
+                {
+                    shared++;
+                    Assert.Equal(earlier, played);
+                }
+                else ends[end] = played;
+            }
+        Assert.True(shared > 0, "No two lines left the turn in one state, so nothing was checked.");
+    }
+
+    /// <summary>
+    /// The S1.5 follow-up's exposure count: every agenda the Corp installs in a remote is followed to where it went, and
+    /// one the Runner stole ends in its score area while one the Corp scored ends in the Corp's.
+    /// </summary>
+    [Fact]
+    public void AnAgendaInstalledInARemoteIsFollowedToWhereItWent()
+    {
+        if (!Official) return;
+        RegretSuite suite = RegretSuite.Load(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "data", "ai", "regret",
+            "gateway-elevation"));
+        var fates = suite.Games.Where(game => game.Source == "ladder").Take(6).SelectMany(game => RemoteExposure.FromGame(game)).ToList();
+
+        Assert.NotEmpty(fates);
+        Assert.All(fates, fate => Assert.Contains(fate.Outcome, new[] { RemoteExposure.Scored, RemoteExposure.Stolen, RemoteExposure.Trashed,
+            RemoteExposure.Installed, "installed-at-end" }));
+        Assert.All(fates, fate => Assert.True(fate.Runs >= 0 && fate.Turns >= 0));
+        Assert.Contains(fates, fate => fate.Outcome == RemoteExposure.Scored);
+        // The run model is asked once, at the Runner's next turn, unless the agenda was gone by then.
+        Assert.All(fates.Where(fate => fate.Breakable is null), fate => Assert.True(fate.Outcome != RemoteExposure.Stolen || fate.Runs > 0));
+        Assert.Equal(fates.Select(fate => (fate.Source, fate.Outcome, fate.Runs)),
+            suite.Games.Where(game => game.Source == "ladder").Take(6).SelectMany(game => RemoteExposure.FromGame(game)).Select(fate => (fate.Source, fate.Outcome, fate.Runs)));
     }
 
     [Fact]
@@ -101,6 +177,99 @@ public sealed class RegretSuiteTests
         Assert.InRange(playOuts, 0, 16);
         ImmutableArray<RegretLabel> labels = RegretLabels.Label(game, [root], new TeacherSettings(Samples: 16, Seed: 3, HorizonTurns: 1));
         Assert.Equal(playOuts == 0, labels.IsEmpty);
+        // The default teacher is hard-model (its rollouts model the live opponent, not the pinned one) and labels name it;
+        // plain Hard, as labels-v1 was made, is recorded as no name.
+        Assert.All(labels, label => Assert.Equal(RegretLabels.DefaultTeacher, label.Teacher));
+        Assert.All(RegretLabels.Label(game, [root], new TeacherSettings(Samples: 4, Seed: 3, HorizonTurns: 1), "hard"),
+            label => Assert.Null(label.Teacher));
+    }
+
+    /// <summary>
+    /// Bot plan S1.7, adaptive samples: the deciding samples are discarded and the label records the recording samples it
+    /// used, between the first step and the cap, with every group played on all of them.
+    /// </summary>
+    [Fact]
+    public void AdaptiveSamplesRecordOnlyTheSamplesDrawnAfterTheDecision()
+    {
+        if (!Official) return;
+        (LadderSavedGame saved, FullMatchDefinition definition) = Saved();
+        RegretGame game = RegretGames.FromSaved(saved, definition, "held-out", "finding");
+        RegretRoot root = Assert.Single(RegretRoots.At(game, new HashSet<long> { CorpTurn }, new RegretSampling(), []));
+        var adaptive = new TeacherSettings(Samples: 4, Seed: 3, HorizonTurns: 1, Decide: 4, ExtendTo: 12, ExtendStep: 4);
+
+        RegretLabel label = Assert.Single(RegretLabels.Label(game, [root], adaptive));
+        RegretLabel again = Assert.Single(RegretLabels.Label(game, [root], adaptive));
+
+        Assert.Equal(4, label.Decide);
+        Assert.InRange(label.Samples, 1, 12);
+        Assert.All(label.Values, value => Assert.Equal(label.Samples, value.PlayOuts));
+        Assert.Equal(label.Values.Select(value => value.Mean), again.Values.Select(value => value.Mean));
+        // The deciding samples are not the recording ones: a flat labelling's first samples differ from the recorded.
+        RegretLabel flat = Assert.Single(RegretLabels.Label(game, [root], adaptive with { Decide = 0, ExtendTo = 0, Samples = label.Samples }));
+        Assert.NotEqual(flat.Values.Select(value => value.Mean), label.Values.Select(value => value.Mean));
+    }
+
+    [Fact]
+    public void TheDiscordantViewComparesTwoVersionsWhereTheyChooseDifferently()
+    {
+        RegretChoice Choice(string root, string group, double regret) =>
+            new(root, PlayerSide.Corp, RegretRoots.TurnKind, "train", group, group, "", regret, regret == 0, regret < 0.05);
+        string[] ids = [.. Enumerable.Range(0, 10).Select(index => $"r{index}")];
+        // The two versions agree at seven roots and differ at three, where the first is 0.1 worse.
+        RegretChoice[] first = [.. ids.Select((id, index) => index < 3 ? Choice(id, "InstallCard|a", 0.1) : Choice(id, "DrawCard|c", 0))];
+        RegretChoice[] second = [.. ids.Select((id, index) => index < 3 ? Choice(id, "GainCredit|b", 0) : Choice(id, "DrawCard|c", 0))];
+        var labels = ids.ToDictionary(id => id, id => new RegretLabel(id, 32, 4, 4, 1,
+            [new RegretValue("GainCredit|b", 0.6, 0.02, 32), new RegretValue("InstallCard|a", 0.5, 0.02, 32), new RegretValue("DrawCard|c", 0.6, 0.02, 32)]));
+
+        RegretDiscordance discordance = RegretReport.Discordance("one", first, "two", second, new Dictionary<string, RegretRoot>(), labels);
+
+        Assert.Equal(["r0", "r1", "r2"], discordance.Discords.Select(discord => discord.RootId));
+        RegretDiscord discord = discordance.Discords[0];
+        Assert.Equal(("InstallCard|a", 0.5, "GainCredit|b", 0.6), (discord.FirstChosen, discord.FirstValue, discord.SecondChosen, discord.SecondValue));
+        Assert.Equal((3, 0.1), (discordance.Discordant.Roots, Math.Round(discordance.Discordant.MeanDifference, 9)));
+        Assert.Equal((10, 0.03), (discordance.All.Roots, Math.Round(discordance.All.MeanDifference, 9)));
+    }
+
+    /// <summary>Bot plan S1.7: a label names its teacher's version, and a root whose values come from two is refused.</summary>
+    [Fact]
+    public void ALabelNamesItsTeacherAndARootMixingTwoIsRefused()
+    {
+        Assert.Equal("v1", RegretLabels.VersionOf(0, 0, 4, 4, "hard"));
+        Assert.Equal("v1-lines", RegretLabels.VersionOf(5, 1, 4, 4, "hard"));
+        Assert.Equal("v2", RegretLabels.VersionOf(5, 1, 4, 4, "hard-model"));
+        // Other settings are named by them and by the live policies the teacher plays.
+        Assert.Equal($"hard-model-lines5-screen1-horizon8-set4-{CorpHeuristicPolicy.PolicyVersion}-{RunnerHeuristicPolicy.PolicyVersion}",
+            RegretLabels.VersionOf(5, 1, 8, 4, "hard-model"));
+        var label = new RegretLabel("r#1", 32, 4, 4, 1, [new("a|1", 0.5, 0.02, 32), new("b|1", 0.4, 0.02, 32)], 5, 1, "hard-model");
+        Assert.Equal("v2", label.TeacherName);
+        label.EnsureOneTeacher();
+        (label with { Values = [.. label.Values, new("c|1", 0.3, 0.02, 32, TeacherVersion: "v2")] }).EnsureOneTeacher();
+        Assert.Throws<InvalidDataException>(() => (label with { Values = [.. label.Values, new("c|1", 0.3, 0.02, 32, TeacherVersion: "v1")] })
+            .EnsureOneTeacher());
+    }
+
+    /// <summary>Bot plan S1.7: the core is drawn by deal, in the suite's held-out share, and a new marking replaces the old.</summary>
+    [Fact]
+    public void TheCoreIsDrawnByDealInTheHeldOutShare()
+    {
+        RegretSuite suite = RegretSuite.Load(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "data", "ai", "regret",
+            "gateway-elevation"));
+        RegretSuite marked = suite.WithCore(2000, 7);
+        RegretRoot[] core = [.. marked.Roots.Where(root => root.Categories.Contains(RegretSuite.CoreCategory))];
+
+        // A deal's roots are wholly in or out; the largest deal bounds how far the count can overshoot.
+        var games = suite.Games.ToDictionary(game => game.Id);
+        var byDeal = marked.Roots.GroupBy(root => games[root.GameId] is var game && game.Source == "finding" ? game.Id : $"{game.ContentId}|{game.GameSeed}");
+        Assert.All(byDeal, deal => Assert.Single(deal.Select(root => root.Categories.Contains(RegretSuite.CoreCategory)).Distinct()));
+        int largest = byDeal.Max(deal => deal.Count());
+        Assert.InRange(core.Length, 2000, 2000 + 2 * largest);
+        double share = suite.Roots.Count(root => root.Split == "held-out") / (double)suite.Roots.Length;
+        Assert.InRange(core.Count(root => root.Split == "held-out") / (double)core.Length, share - 0.03, share + 0.03);
+        Assert.Equal(core.Select(root => root.Id), marked.WithCore(2000, 7).Roots.Where(root => root.Categories.Contains(RegretSuite.CoreCategory))
+            .Select(root => root.Id));
+        Assert.NotEqual(core.Select(root => root.Id), marked.WithCore(2000, 8).Roots.Where(root => root.Categories.Contains(RegretSuite.CoreCategory))
+            .Select(root => root.Id));
+        Assert.All(marked.WithCore(500, 7).Roots, root => Assert.True(root.Categories.Count(category => category == RegretSuite.CoreCategory) <= 1));
     }
 
     [Fact]
@@ -140,12 +309,16 @@ public sealed class RegretSuiteTests
         Assert.Equal(suite.Games.Length, games.Count);
         Assert.Equal(suite.Roots.Length, roots.Count);
         Assert.All(suite.Roots, root => Assert.Contains(root.GameId, games));
-        Assert.All(suite.Roots, root => Assert.InRange(root.Candidates.Length, 2, 6));
+        Assert.All(suite.Roots, root => Assert.True(root.Candidates.Length >= 1));
+        Assert.All(suite.Roots, root => Assert.Equal(root.Candidates.Length, root.Candidates.Select(candidate => candidate.Group).Distinct().Count()));
         // A root no sample could play every candidate on is left unlabelled; there are few.
         Assert.Subset(roots, suite.Labels.Select(label => label.RootId).ToHashSet());
         Assert.True(suite.Labels.Length >= suite.Roots.Length * 0.99);
         var byId = suite.Roots.ToDictionary(root => root.Id);
-        Assert.All(suite.Labels, label => Assert.Equal(byId[label.RootId].Candidates.Length, label.Values.Length));
+        // S1.4 extended the roots to every meaningful group; a label holds the groups labelled so far, each once.
+        Assert.All(suite.Labels, label => Assert.Subset(byId[label.RootId].Candidates.Select(candidate => candidate.Group).ToHashSet(),
+            label.Values.Select(value => value.Group).ToHashSet()));
+        Assert.All(suite.Labels, label => Assert.Equal(label.Values.Length, label.Values.Select(value => value.Group).Distinct().Count()));
         Assert.Contains(suite.Roots, root => root.Categories.Contains("finding"));
     }
 

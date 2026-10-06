@@ -71,6 +71,17 @@ public sealed record Puzzle(string Id, string Title, string Category, string Kin
     public const string LineKind = "line";
     public const string NestedKind = "nested";
 
+    /// <summary>
+    /// Bot plan S1.5 and its follow-up: teacher-certified puzzles a later teacher no longer certifies, kept out of the gate
+    /// (<c>ai-puzzles run --split teacher-v1</c> runs them). <c>teacher-v1</c> failed the line teacher (v1-lines);
+    /// <c>teacher-v2</c> failed teacher v2, the line teacher with the live opponent.
+    /// </summary>
+    public const string RetiredSplit = "teacher-v1";
+    public const string RetiredSplitV2 = "teacher-v2";
+
+    /// <summary>Whether a split is out of the gate.</summary>
+    public static bool Retired(string split) => split is RetiredSplit or RetiredSplitV2;
+
     /// <summary>The ten categories of the plan's 5.3.</summary>
     public static IReadOnlyList<string> Categories { get; } =
         ["sequencing", "agenda-exposure", "punisher-risk", "run-targeting", "economy", "access-and-trash", "ice-placement", "rez-timing",
@@ -139,7 +150,7 @@ public sealed record PuzzleSet(ImmutableArray<RegretGame> Games, ImmutableArray<
             string problem = !ids.Add(puzzle.Id) ? "a duplicate id"
                 : puzzle.Kind is not (Puzzle.DecisionKind or Puzzle.LineKind or Puzzle.NestedKind) ? $"an unknown kind '{puzzle.Kind}'"
                 : !Puzzle.Categories.Contains(puzzle.Category) ? $"an unknown category '{puzzle.Category}'"
-                : puzzle.Split is not ("tuning" or "held-out") ? $"an unknown split '{puzzle.Split}'"
+                : puzzle.Split is not ("tuning" or "held-out") && !Puzzle.Retired(puzzle.Split) ? $"an unknown split '{puzzle.Split}'"
                 : !games.Contains(puzzle.GameId) ? $"no game '{puzzle.GameId}'"
                 : puzzle.Kind == Puzzle.LineKind && puzzle.Acceptance.Line.IsDefaultOrEmpty ? "a line puzzle without predicates"
                 : puzzle.Kind != Puzzle.LineKind && puzzle.Acceptance.Accept.IsDefaultOrEmpty && puzzle.Acceptance.Reject.IsDefaultOrEmpty

@@ -8,21 +8,23 @@ namespace Netrunner.Match.Tests;
 public sealed class TurnPlannerTests
 {
     [Theory]
-    [InlineData(PlayerSide.Runner)]
-    [InlineData(PlayerSide.Corp)]
-    public async Task HiddenStateTwinsGetTheSamePlan(PlayerSide planner)
+    [InlineData(PlayerSide.Runner, false)]
+    [InlineData(PlayerSide.Corp, false)]
+    [InlineData(PlayerSide.Runner, true)]
+    [InlineData(PlayerSide.Corp, true)]
+    public async Task HiddenStateTwinsGetTheSamePlan(PlayerSide planner, bool lines)
     {
         int twins = 0;
         foreach ((FullMatchDefinition definition, GameState state) in await PositionsAsync(planner))
         {
             GameState? twin = SwapTwoHiddenCards(state, planner == PlayerSide.Corp ? PlayerSide.Runner : PlayerSide.Corp);
             if (twin is null) continue;
-            (ActionId left, bool planned) = await ChooseAsync(definition, state, planner);
-            (ActionId right, _) = await ChooseAsync(definition, twin, planner);
+            (ActionId left, bool planned) = await ChooseAsync(definition, state, planner, lines);
+            (ActionId right, _) = await ChooseAsync(definition, twin, planner, lines);
             Assert.True(planned, "The planner didn't run on a turn action with a click left.");
             Assert.Equal(left, right);
             // Planning is deterministic from the same checkpoint.
-            Assert.Equal(left, (await ChooseAsync(definition, state, planner)).Action);
+            Assert.Equal(left, (await ChooseAsync(definition, state, planner, lines)).Action);
             if (++twins >= 4) break;
         }
         Assert.True(twins > 0, "No twin positions with a planned turn action.");
@@ -56,23 +58,38 @@ public sealed class TurnPlannerTests
 
     private static string Planning(PlayerSide side) => side == PlayerSide.Corp ? CorpHeuristicPolicy.V5 : RunnerHeuristicPolicy.V3;
 
+    private static string Live(PlayerSide side) =>
+        side == PlayerSide.Corp ? CorpHeuristicPolicy.PolicyVersion : RunnerHeuristicPolicy.PolicyVersion;
+
+    private static OfflineAgentConfiguration WithLines(OfflineAgentConfiguration current) => OfflineAgentConfiguration.Create(current.Side,
+        current.PolicyVersion, current.ProfileId, current.PolicySeed, current.WorkBudget, current.NearTieTolerance,
+        [.. current.Parameters, new KeyValuePair<string, int>("plan-lines", 1)], current.FeatureVersion);
+
     private static bool Official => CardDataResource.EmbeddedMode == CardDataResource.OfficialMode;
 
-    private static async Task<(ActionId Action, bool Planned)> ChooseAsync(FullMatchDefinition definition, GameState state, PlayerSide side)
+    private static async Task<(ActionId Action, bool Planned)> ChooseAsync(FullMatchDefinition definition, GameState state, PlayerSide side,
+        bool lines = false)
     {
-        OfflineAgent agent = AgentAt(definition, state, side);
+        OfflineAgent agent = AgentAt(definition, state, side, lines);
         ActionId action = await agent.ChooseActionAsync(ObservationBuilder.Build(state, side, definition.Behavior, definition.Runtime));
         return (action, agent.LastEvaluation!.Candidates.Any(candidate => candidate.Utility.Priority >= TurnPlannerPriority / 2));
     }
 
-    /// <summary>A fresh Standard agent that has observed <paramref name="state"/> as its first position.</summary>
-    private static OfflineAgent AgentAt(FullMatchDefinition definition, GameState state, PlayerSide side)
+    /// <summary>
+    /// A fresh Standard agent that has observed <paramref name="state"/> as its first position; with <paramref name="lines"/>,
+    /// the live Hard bot searching lines of the turn (plan-lines, bot plan S1.5; the live Runner's Standard does not plan).
+    /// </summary>
+    private static OfflineAgent AgentAt(FullMatchDefinition definition, GameState state, PlayerSide side, bool lines = false)
     {
         OfflineAgent fresh = OfflineMatchFactory.CreateOpponent(definition, side == PlayerSide.Corp ? PlayerSide.Runner : PlayerSide.Corp,
-            "standard", Planning(side));
-        OfflineAgentCheckpoint checkpoint = state.ActionSequence == 0 ? fresh.Checkpoint
-            : fresh.Checkpoint with { ObservationCursor = state.ActionSequence - 1, ObservationDigest = "position" };
-        var agent = new OfflineAgent(fresh.Configuration, OfflinePolicies.Create(fresh.Configuration),
+            lines ? "hard" : "standard", lines ? Live(side) : Planning(side));
+        OfflineAgentConfiguration configuration = lines ? WithLines(fresh.Configuration) : fresh.Configuration;
+        // A checkpoint belongs to its configuration, so the switched-on agent starts from its own.
+        OfflineAgentCheckpoint start = lines ? new OfflineAgent(configuration, OfflinePolicies.Create(configuration),
+            new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior)).Checkpoint : fresh.Checkpoint;
+        OfflineAgentCheckpoint checkpoint = state.ActionSequence == 0 ? start
+            : start with { ObservationCursor = state.ActionSequence - 1, ObservationDigest = "position" };
+        var agent = new OfflineAgent(configuration, OfflinePolicies.Create(configuration),
             new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior), checkpoint, captureDiagnostics: true);
         AgentLifecycleHost.Observe(agent, state, definition.Behavior);
         return agent;

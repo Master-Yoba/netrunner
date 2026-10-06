@@ -43,6 +43,16 @@ internal static class RunnerValues
     }
 
     /// <summary>
+    /// Runner v28: an unadvanced face-down card in a remote, worth 190 (what any unknown card was) plus the chance it is an
+    /// agenda times what an agenda is worth over that, weighted by the profile's inference scale.
+    /// </summary>
+    private static int UnknownRemoteRoot(HeuristicContext context, AgentServer server, int index, double inference)
+    {
+        (double chance, double value) = RunnerInference.RootAgenda(context, server, index);
+        return 190 + (int)(inference * chance * Math.Max(0, value - 190));
+    }
+
+    /// <summary>
     /// A2 server value. A face-down root card gains value from its public
     /// advancement counters (an advanced card is usually an agenda). HQ and
     /// R&D scale with the estimated agenda density of unseen Corp cards. Both
@@ -61,7 +71,10 @@ internal static class RunnerValues
             card ??= context.RememberedRoot(server, index);
             // v21 (A9b): or one it's confident of from what it saw (an upgrade it left in HQ).
             if (context.Generation >= 17) card ??= RunnerInference.Believed(context, server, "root", index);
-            root += card is null
+            // v28: an unadvanced face-down card in a remote is worth the agenda it may be (the Corp protects its agendas).
+            root += card is null && advancement == 0 && server.Kind == ServerKind.Remote && context.Generation >= 23
+                ? UnknownRemoteRoot(context, server, index, inference)
+                : card is null
                 ? 190 + (int)(inference * advancement * 200)
                 : context.Definition(card)?.Agenda is { } agenda ? 500 + agenda.AgendaPoints * 180
                 : context.Generation >= 9 ? AffordableTrash(context, card) : Trash(context, card);

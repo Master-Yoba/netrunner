@@ -49,21 +49,21 @@ public sealed partial class RunnerHeuristicPolicy
         }
         if (definition is null) return Value(-100, "install/unknown-metadata", true, true);
         // v16 (reviews of the losses to Codex, 1 October): a unique card over its own copy pays for the same ability again.
-        if (context.Generation >= 12 && definition.Printed.Unique
+        if (definition.Printed.Unique
             && context.Features.Board.RunnerRig.Any(installed => installed.DefinitionId == card!.DefinitionId))
             return Value(-500, "rig/unique-already-installed", true);
         // v17 (batch 4's reviews, 1 October): an install that replaces an installed copy of the same card pays for what the
         // rig already has (Verbal Plasticity, Pantograph, a unique program); one that replaces another card is judged below by
         // what it gains over what it trashes.
-        if (context.Generation >= 13 && install.RequiredReplacementCardIds.Concat(install.SelectedReplacementCardIds)
+        if (install.RequiredReplacementCardIds.Concat(install.SelectedReplacementCardIds)
                 .Any(id => context.Card(id)?.DefinitionId == card!.DefinitionId))
             return Value(-500, "rig/replaces-its-own-copy", true);
         // v24 (bot loop 1): a second copy of an installed breaker breaks nothing the first doesn't, for its memory and credits
         // (a second Marjanah, installed with the last click and credit).
-        if (context.Generation >= 20 && definition.Icebreaker is not null
+        if (definition.Icebreaker is not null
             && context.Features.Board.RunnerRig.Any(installed => installed.DefinitionId == card!.DefinitionId))
             return Value(-500, "rig/breaker-already-installed", true);
-        if (context.Generation >= 13 && definition.Printed.Console
+        if (definition.Printed.Console
             && context.Features.Board.RunnerRig.Any(installed => context.Definition(installed)?.Printed.Console == true))
             return Value(-500, "rig/console-already-installed", true);
         int value;
@@ -81,26 +81,19 @@ public sealed partial class RunnerHeuristicPolicy
                 .Where(instruction => instruction.Kind == BehaviorInstructionKind.LoadHostedCredits).Sum(instruction => instruction.Amount) ?? 0;
             // v15 (reviews of the losses to Codex, 1 October): a card whose counters grow each turn and cash out for credits
             // (Fermenter) is income too, about two turns' worth; it was worth less than a click for a credit and never installed.
-            if (context.Generation >= 11) income += GrowingIncome(definition);
+            income += GrowingIncome(definition);
             value = 180 + income * 45;
             // v6: a better basic draw pays off over the coming turns (Verbal Plasticity).
-            if (context.Generation >= 5)
-                value += (definition.Behavior?.FirstBasicDrawReplacements ?? []).Sum(replacement => (replacement.DrawCount - 1) * context.DrawValue * 3);
+            value += (definition.Behavior?.FirstBasicDrawReplacements ?? []).Sum(replacement => (replacement.DrawCount - 1) * context.DrawValue * 3);
             if (definition.Printed.Console) value += 180;
-            // v16: an extra access on each HQ breach (Docklands Pass) is pressure the Runner kept in its grip.
-            // Only v16 and v17: both lost to Codex where v15 won, and v18 leaves it out.
-            if (context.Generation is 12 or 13) value += (definition.Behavior?.FirstHqBreachAccessModifiers ?? []).Sum(modifier => modifier.Delta * 250);
             if (context.Self.UsedMemory >= context.Self.MemoryLimit && definition.Printed.CardClass == RuntimeCardClass.Hardware) value += 170;
         }
-        if (context.Generation >= 8)
-        {
-            // v11: a setup deck builds its rig first; a virus deck values every virus.
-            RunnerArchetypeProfile profile = context.RunnerProfile;
-            bool rigPiece = definition.Icebreaker is not null || definition.Printed.CardClass is RuntimeCardClass.Hardware or RuntimeCardClass.Resource;
-            if (rigPiece && !context.RigComplete) value += (int)(profile.SetupWeight * 150);
-            if (definition.Printed.Subtypes.Any(subtype => string.Equals(subtype, "virus", StringComparison.OrdinalIgnoreCase)))
-                value += (int)(profile.VirusWeight * 180);
-        }
+        // v11: a setup deck builds its rig first; a virus deck values every virus.
+        RunnerArchetypeProfile profile = context.RunnerProfile;
+        bool rigPiece = definition.Icebreaker is not null || definition.Printed.CardClass is RuntimeCardClass.Hardware or RuntimeCardClass.Resource;
+        if (rigPiece && !context.RigComplete) value += (int)(profile.SetupWeight * 150);
+        if (definition.Printed.Subtypes.Any(subtype => string.Equals(subtype, "virus", StringComparison.OrdinalIgnoreCase)))
+            value += (int)(profile.VirusWeight * 180);
         int replacement = install.RequiredReplacementCardIds.Sum(id => RunnerValues.Card(context, context.Card(id)));
         return new(0, value - install.CreditCost * context.CreditValue - replacement, "rig/coverage-minus-issued-cost-and-replacement", true,
             new("install", null, null, install.CardId.Value));
@@ -112,10 +105,10 @@ public sealed partial class RunnerHeuristicPolicy
         int cost = context.Definition(card)?.Printed.TrashCost ?? context.Self.Credits;
         int personal = Math.Max(0, cost - payment.RunCredits);
         int impact = RunnerValues.Trash(context, card);
-        if (context.Generation >= 8) impact = (int)(impact * context.RunnerProfile.TrashWeight);
+        impact = (int)(impact * context.RunnerProfile.TrashWeight);
         // v24 (bot loop 1): a known operation the Corp could play next turn to flatline the Runner is worth its trash cost
         // (Measured Response's 4 meat damage, left in HQ while the Runner had 2 cards and 4 credits).
-        if (context.Generation >= 20 && KillCard(context, card)) impact = Math.Max(impact, 1500);
+        if (KillCard(context, card)) impact = Math.Max(impact, 1500);
         int value = impact - personal * context.CreditValue - payment.RunCredits * 15;
         return Value(value, "access/trash-value-and-reserve", true);
     }

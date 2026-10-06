@@ -74,6 +74,51 @@ public sealed class RunnerHeuristicPolicyTests
         Assert.Equal(new ActionId(expected), await agent.ChooseActionAsync(observation));
     }
 
+    /// <summary>
+    /// Runner v28: a face-down card in a remote is worth the agenda it may be, likelier behind ICE (the Corp protects its
+    /// agendas and leaves assets and ambushes naked). v27 values both at the flat 190 and runs neither for it.
+    /// </summary>
+    [Fact]
+    public async Task V28ValuesAProtectedFaceDownRemoteCardAsTheAgendaItMayBe()
+    {
+        CardDefinitionId iceId = new("test:taxing-ice"), agendaId = new("test:agenda"), assetId = new("test:asset");
+        var catalog = new ScenarioCatalog(
+            new(new(iceId, PlayerSide.Corp, RuntimeCardClass.Ice, rezCost: 1), null,
+                new(iceId, 0, IceType.CodeGate, 1, [new LoseCreditsSubroutineSpec(PlayerSide.Runner, 1)], []), null, null, null, null, [], false),
+            new(new(agendaId, PlayerSide.Corp, RuntimeCardClass.Agenda, agendaPoints: 2, advancementRequirement: 3), null,
+                null, null, null, null, new(agendaId, 2), [], false),
+            new(new(assetId, PlayerSide.Corp, RuntimeCardClass.Asset, rezCost: 1, trashCost: 2), null, null, null, null, null, null, [], false));
+        Observation observation = Decision(
+            new LegalAction(new("action:credit"), ActionKind.GainCredit, "ignored", new NoActionParameters()),
+            new LegalAction(new("action:protected"), ActionKind.StartRun, "ignored", new RunServerParameters(new("server:protected"))),
+            new LegalAction(new("action:naked"), ActionKind.StartRun, "ignored", new RunServerParameters(new("server:naked"))));
+        AgentBoard baseline = ObservationReader.Read(observation).Board;
+        AgentBoard board = baseline with
+        {
+            Servers = [
+                new("server:protected", ServerKind.Remote, [new AgentCard { Id = "card:ice", DefinitionId = iceId.Value, Rezzed = true }], [null]),
+                new("server:naked", ServerKind.Remote, [], [null])],
+            Players = baseline.Players with { Runner = baseline.Players.Runner with { Credits = 5 } },
+        };
+        observation = observation with { PublicState = EngineJson.Deserialize<Dictionary<string, object?>>(EngineJson.Serialize(board)) };
+        async Task<(int Protected, int Naked)> Scores(string version)
+        {
+            var agent = new OfflineAgent(RunnerPolicyProfiles.Create("standard", 54, version), new RunnerHeuristicPolicy(version), catalog,
+                captureDiagnostics: true);
+            agent.Observe(observation, 0);
+            await agent.ChooseActionAsync(observation);
+            int Score(string action) => agent.LastEvaluation!.Candidates.Single(candidate => candidate.ActionId.Value == action).Utility.Score;
+            return (Score("action:protected"), Score("action:naked"));
+        }
+
+        (int protectedBefore, int nakedBefore) = await Scores(RunnerHeuristicPolicy.V27);
+        (int protectedAfter, int nakedAfter) = await Scores(RunnerHeuristicPolicy.V28);
+
+        // Half the pool's root cards are agendas; behind ICE that is three in four, in a naked remote about one in eleven.
+        Assert.InRange(protectedAfter - protectedBefore, 400, 600);
+        Assert.InRange(nakedAfter - nakedBefore, 0, 100);
+    }
+
     private static Observation Decision(params LegalAction[] actions)
     {
         GameState state = GameState.CreateNew(54);

@@ -368,3 +368,407 @@ what the planner (S5) is expected to move.
 install root held the teacher's lead at 128 samples, and inference needs a position where the right choice depends on a
 card the bot can only infer), and 10 of 54 held out against a third (the converted tests cannot be held out). The NSG
 Core set has only the 5 converted tests; certified puzzles for it need an NSG regret suite.
+
+## Policy versions
+
+### S3: one live policy (5 October 2026)
+
+**Corp v31 and Runner v27** are the live policies: v30's and v26's behaviour with every version check resolved and the
+dead branches deleted. Every earlier version is `LegacyCorpPolicy` or `LegacyRunnerPolicy` under
+`src/Netrunner.AI/Legacy/`: the policy files of 94a7404, changed only by the class's name, which
+`PolicyVersionTests.TheLegacyFilesAreThePoliciesFrozenAtS3` pins by hash. `OfflinePolicies.Create` routes by version;
+the profiles give v31 and v27 v30's and v26's settings; the ladder's `standard-prev` entrant is v30 and v26.
+
+| Policy files | Lines | `Generation` references |
+|---|---:|---:|
+| Before (9 files, every version) | 2,760 | 135 |
+| Live after (Corp v31, Runner v27) | 2,583 | 4 (the context's generation, pinned) |
+| Legacy (frozen copies) | 2,760 | 135 |
+
+Besides the resolved checks, the Runner's run code lost its first estimate (`Protection`) and its approach-toll
+fallback, which the whole-run model replaced in every live game, and its v16 rules for Creative Commission and Docklands
+Pass; the Corp lost v24's end-the-run subroutine value. Those versions were never defaults.
+
+**What stays versioned: the shared helpers.** `HeuristicContext`, `RunnerValues` and `RunModel` still switch on the
+generation (about 20 checks), because every helper of the heuristic stack takes a `HeuristicContext` and freezing them
+would split shared types (`CardTracker`, the run model) across a type boundary. The live policies pass v30's and v26's
+generation (25 and 22). A later change to a helper must leave the older generations' behaviour alone, which the frozen
+benchmark digests and the identity ladder below check, or move that helper into `Legacy/` first.
+
+**Gate: identical game by game.** `--entrants standard-prev,standard --deals 240 --verify-replays-every 8`: each deal's
+four games (v31 or v30 against v27 or v26) must end in the same state.
+
+| Pool | Deals | Games | Deals whose four games are identical | Errors |
+|---|---:|---:|---:|---:|
+| Core Battle Box | 240 | 960 | 240 | 0 |
+| Gateway | 240 | 960 | 240 | 0 |
+
+The seat-swap pairs are identical because an agent's random stream is seeded from the match seed and its side only;
+`RatingLadderTests.TheLiveAndThePreviousVersionShareTheirSeeds` asserts it, so a change that seeds from the version
+fails there instead of voiding this gate. `make bot-check` passes (AI 136, Match 1,107, CLI 185), the quick M5 cases
+unchanged.
+
+### S1.4: every meaningful group (5 October 2026)
+
+`ai-regret extend` gave every root of the box suite its meaningful groups (those whose priority band is within one of
+the best group's, a planned candidate read through the planner's offset): 32,821 groups became 57,109 (5.0 to 8.8 a
+root), in 2 min 49 s. The new groups have no labels yet; S1.5 labels them all. `ai-regret score --label-missing`
+labelled, on demand, every group the S1.3 versions chose that had no value (68 Runner, 88 Corp, each with its root's
+settings and seed), so the table below counts every choice:
+
+| Comparison | S1.3 (choices outside the top six dropped) | S1.4 (every choice labelled) |
+|---|---|---|
+| Runner v24 − v25 | +0.0025 [0.0019, 0.0033] | +0.0030 [0.0023, 0.0038] |
+| Runner v24 − v26 | +0.0024 [0.0017, 0.0033] | +0.0029 [0.0021, 0.0039] |
+| Runner v25 − v26 | −0.0001 [−0.0002, 0.0002] | −0.0001 [−0.0004, 0.0002] |
+| Corp v28 − v29 | +0.0005 [−0.0002, 0.0012] | +0.0005 [−0.0001, 0.0011] |
+| Corp v28 − v30 | +0.0013 [0.0004, 0.0024] | +0.0016 [−0.0004, 0.0033] |
+| Corp v29 − v30 | +0.0008 [0.0001, 0.0017] | +0.0011 [−0.0005, 0.0028] |
+| Runner v26 − v27, Corp v30 − v31 | | 0.0000 [0.0000, 0.0000] |
+
+**Gate:** no version has an unlabelled choice. The bias the S1.3 record named is confirmed: counting the older versions'
+choices outside the heuristic's best six raises every difference. Those choices are rare and costly, so the Corp's
+intervals also widen past zero; the Runner's separation holds. The live v31 and v27 choose as v30 and v26 at every root
+(S3's agreement check).
+
+| Version (Standard) | Regret, all | Held out |
+|---|---|---|
+| Runner v24 | 0.0410 [0.0393, 0.0430] | 0.0399 |
+| Runner v25 | 0.0380 [0.0364, 0.0397] | 0.0354 |
+| Runner v26, v27 | 0.0381 [0.0365, 0.0399] | 0.0359 |
+| Corp v28 | 0.0313 [0.0285, 0.0344] | 0.0295 |
+| Corp v29 | 0.0309 [0.0281, 0.0338] | 0.0291 |
+| Corp v30, v31 | 0.0297 [0.0268, 0.0327] | 0.0263 |
+
+### S1.5: the turn-line teacher (6 October 2026)
+
+**What the teacher values now.** At a turn-action root, a candidate is valued at its best line of the root side's turn,
+not at the candidate followed by the heuristic's play of the rest of the turn. A line is a rank path: the candidate,
+then the heuristic's k-th distinct choice (copies of one card are one choice) at each later turn action of that turn.
+Nested choices, the opponent and later turns are played as before. `TurnPlanner.BestLine` runs a beam of 5 over rank
+paths, screens every line with a one-turn play-out on a quarter of the samples, then plays the heuristic's own line and
+the best other line to the 4-turn horizon on every sample, and keeps the better. Elsewhere (run, rez and priority
+choices) a candidate is valued as before. Lines that leave the turn in the same state share one play-out
+(`EngineJson.SearchFingerprint`, an in-process fingerprint that also covers simulated states;
+`RegretSuiteTests.LinesThatLeaveTheTurnInOneStateHaveOnePlayOut` checks that equal fingerprints give equal play-outs).
+The shipped planner has the same search behind `plan-lines`, which no profile sets (Hard and every frozen digest are
+unchanged; the twin tests pass with it on).
+
+**Choosing the settings.** The spec's search, a beam of `plan-width` (3) with every line screened by a full play-out on
+a quarter of the samples and the better half played on the rest, did not remove the Petty Cash artifact, and cost more
+than the spec's estimate. At the worst root (`…leo-glacier~…topan-00202#358`, 128 samples, 4-turn horizon):
+
+| Search | Petty Cash first | Best group |
+|---|---:|---:|
+| One-step (S1.2) | 0.257 | 0.487 |
+| Beam 3, full play-out screen, better half | 0.388 | 0.509 |
+| Beam 4, the same | 0.489 | 0.564 |
+| Beam 5, the same | 0.615 | 0.657 |
+| Beam 8 (every distinct choice at this root) | 0.615 | 0.657 |
+| Beam 5, screened by the leaf at the turn's end, two finalists | 0.257 | 0.564 |
+| **Beam 5, one-turn screen on a quarter, two finalists** | **0.615** | **0.618** |
+
+The line Petty Cash needs takes the heuristic's 4th and 5th choices at the next two clicks, so a beam of 3 cannot find
+it; the heuristic orders a turn's later clicks poorly (S5.0 records what that means for Standard). The leaf at the
+turn's end cannot see why the line is good; a one-turn play-out can. Cost on a 120-root sample of the suite (32 samples,
+12 workers):
+
+| Labelling | Time | Against one-step |
+|---|---:|---:|
+| One-step | 212 s | 1.0× |
+| Beam 3, full play-out screen, better half | 1,187 s | 5.6× |
+| The same with the play-out memo (labels identical) | 981 s | 4.6× |
+| Beam 5, one-turn screen on every sample, two finalists | 1,304 s | 6.2× |
+| **Beam 5, one-turn screen on a quarter, two finalists** | **582 s** | **2.75×** |
+
+**Relabelling** the whole box suite (6,512 roots, all 57,197 meaningful groups, none unlabellable) took **7 h 9 min** on
+12 workers, at a peak of 1.1 GB. A first run was stopped by the machine's memory reaper at about half way, with nothing
+saved, while an unrelated build held 7 GB; `ai-regret label` now rewrites its file every 50 games, whole or not at all,
+and `--missing` resumes it. The S1.2 labels are kept as `labels-v1.jsonl.gz` (and `labels-v1-repeat*`); the line
+labels are the suite's `labels.jsonl.gz`.
+
+**The Petty Cash check** (the 24 roots of S2's finding, 128 samples, 4-turn horizon): Petty Cash first is within noise
+of the best group (the gap at most the two standard errors' sum) at **18 of 24** roots, against 13 for the one-step
+teacher; the mean gap falls from 0.026 to 0.010 and the largest from 0.230 to 0.060. The worst root's gap is 0.003.
+Of the 6 roots still behind (by 0.014 to 0.060), 5 keep Petty Cash's heuristic line as its best and their gap is the
+one-step gap: there Petty Cash is likely worse, not undervalued.
+
+**Recertification** of the 26 teacher-certified puzzles at 128 samples with the line teacher (the same rule: the best
+group passes, its standard error at most 0.04, every failing group 0.15 or more behind): **24 hold**. Two move to a
+`teacher-v1` split, which `ai-puzzles run` leaves out of the gate (`--split teacher-v1` runs them):
+`teacher-7a456081`, whose rejected install now reaches the best line too (0.656, lead 0.000), a continuation artifact
+of the one-step teacher; and `teacher-00152981`, whose rejected run's best line closes the lead to 0.142. The
+defaults failed both, so they pass 34 of the gate's 47 box puzzles (34 of 49 before).
+
+**Drift** (the 32,977 groups both teachers label; the line teacher never values a group below the one-step teacher on
+the same samples, and 21,240 are unchanged):
+
+- The other line won at **35.6%** of those groups (40.4% at turn roots; 37.6% of all 57,197).
+- Mean gain **+0.0167** a group; past twice its standard error (unpaired, so conservative) at 4.0% of groups, by
+  +0.140 on average, which is **+0.0055** a group.
+- The best group changed at **22.6%** of roots, below the noise floor (next), so it says nothing on its own. The best
+  value rose by **+0.0108** on average, and by **+0.0023** counted only where the rise passes twice its standard
+  error.
+
+**The labels carry a lift.** Each group's value is the better of two play-outs on the same samples, which sits above
+the better line's true value by about half a standard error where the two are close, as these roots were drawn to be.
+Most of the mean rise above is that lift. Every group gets the same treatment, so paired regret between versions stays
+fair, but values are not comparable with `labels-v1`'s.
+
+**Noise floor** with the line teacher (the 145 roots of the S1.2 repeat, repeat seed 2): the two labellings pick
+different best groups at **57%** of roots (one-step on the same roots: 50%), median standard error 0.032; a flip costs
+0.024 on average (median 0.005, 90th percentile 0.068) against a mean spread of 0.121. The line labels have 8.8 groups
+a root against the one-step labels' 6 there, so more flips are expected.
+
+**Gate: S1.3's separation on the new labels.** Every choice of every version is labelled (no on-demand labels needed),
+which is S1.4's gate.
+
+| Comparison | S1.4 (one-step, every choice) | S1.5 (line teacher) |
+|---|---|---|
+| Runner v24 − v25 | +0.0030 [0.0023, 0.0038] | +0.0030 [0.0022, 0.0038] |
+| Runner v24 − v26 | +0.0029 [0.0021, 0.0039] | +0.0030 [0.0022, 0.0038] |
+| Runner v25 − v26 | −0.0001 [−0.0004, 0.0002] | 0.0000 [−0.0004, 0.0004] |
+| Corp v28 − v29 | +0.0005 [−0.0001, 0.0011] | +0.0005 [−0.0001, 0.0011] |
+| Corp v28 − v30 | +0.0016 [−0.0004, 0.0033] | +0.0008 [−0.0007, 0.0025] |
+| Corp v29 − v30 | +0.0011 [−0.0005, 0.0028] | +0.0003 [−0.0009, 0.0017] |
+| Runner v26 − v27, Corp v30 − v31 | 0.0000 [0.0000, 0.0000] | 0.0000 [0.0000, 0.0000] |
+
+The Runner passes: v24 separates from v25 and v26 as before. **The Corp does not**: no Corp pair separates, as at S1.4
+(where counting every choice already widened the Corp's intervals past zero), and the line teacher narrows the
+differences further. The Corp's versions differ in few turn-action choices (v28 and v29 regret the same 0.0406 at turn
+roots, v30 0.0402), and the line teacher rates more of a turn's orderings alike, which is what it is for. Separating
+the Corp's versions needs more Corp roots where they choose differently; no step of the plan adds them yet, so this
+gate is open for the Corp.
+
+| Version (Standard) | Regret, all | Turn | Run | Held out | Agreement |
+|---|---|---|---|---|---|
+| Runner v24 | 0.0477 [0.0458, 0.0496] | 0.0559 | 0.0110 | 0.0495 | 0.220 |
+| Runner v25 | 0.0447 [0.0427, 0.0463] | 0.0524 | 0.0108 | 0.0447 | 0.228 |
+| Runner v26, v27 | 0.0447 [0.0428, 0.0464] | 0.0523 | 0.0108 | 0.0448 | 0.227 |
+| Corp v28 | 0.0331 [0.0304, 0.0362] | 0.0406 | 0.0204 | 0.0338 | 0.293 |
+| Corp v29 | 0.0327 [0.0300, 0.0355] | 0.0406 | 0.0192 | 0.0334 | 0.298 |
+| Corp v30, v31 | 0.0324 [0.0297, 0.0354] | 0.0402 | 0.0192 | 0.0307 | 0.290 |
+
+Turn-root regret rises for every version (Runner v26 0.0442 → 0.0523, Corp v30 0.0360 → 0.0402): the line teacher finds
+better turns than the heuristic plays, and the lift adds to it. Run-root values are unchanged.
+
+**Known limits, for S5 and S6.** Only one line besides the heuristic's is played to the horizon; if the one-turn screen
+misranks, the best line is missed, and a blunder-list root that turns out to be a missed line is the sign to revisit
+it. Without the teacher's play-out, `plan-lines` takes the best of every screened line, which is more optimistic than
+the teacher and favours candidates whose turn has more later clicks (S5.1's gates check it).
+
+**The Corp's separation: why it fails (6 October 2026).** Regret below is on the line teacher's labels unless named.
+`ai-regret score --discordant A,B` lists the roots where two versions chose different groups:
+
+| Pair (Standard, all roots) | Discordant roots | Over the discordant roots | Over every root |
+|---|---|---|---|
+| Corp v29 − v30 | 272 (all turn roots) | +0.0029 [−0.0087, 0.0149] | +0.0003 [−0.0009, 0.0017] |
+| Corp v28 − v30 | 324 (272 turn, 52 run) | +0.0060 [−0.0070, 0.0198] | +0.0008 [−0.0007, 0.0025] |
+| Corp v29 − v30, `labels-v1` | 272 | +0.0108 [−0.0017, 0.0245] | +0.0011 [−0.0005, 0.0028] |
+
+272 discordant roots are enough to read, so this is not dilution: v30 is level where it chooses differently, and the
+one-step teacher did not separate the pair either. v30's change from v29 was four rules (Petty Cash first, IP
+Enforcement, Mercia's free install, an agenda held in HQ); the ladder's +50 Elo was for the four together, never
+attributed. Split by agenda installs (value of v30's choice − v29's, two groups relabelled at 128 samples):
+
+| Discordant roots | Roots | 4 turns | 8 turns |
+|---|---:|---|---|
+| v29 installs an agenda in a remote, v30 holds it | 119 | −0.0021 [−0.0280, 0.0285] | −0.0005 [−0.0279, 0.0299] |
+| No agenda install | 144 | +0.0056 [+0.0001, 0.0116] | +0.0059 [−0.0003, 0.0127] |
+| Both install an agenda | 8 | −0.0089 | +0.0032 |
+
+v30 is ahead where no agenda is involved and level on the agenda hold. The agenda roots' interval is wide (it cannot
+exclude +0.02 a decision, about what a 50 Elo gain spread over a few decisions a game would be), so "level" is a weak
+reading. **The horizon is closed as a suspect:** at 8 turns neither mean moves.
+
+**The rollout's Runner is the blind spot.** `ai-regret exposure` follows every agenda the Corp installs in a remote
+until it is scored, stolen or trashed, and asks the run model, at the Runner's next turn, whether the Runner can get in
+(unrezzed ICE is counted, not priced). Over the suite's games (3,779 agendas):
+
+| Agendas in a remote | Count | Run at least once | Stolen | Scored |
+|---|---:|---:|---:|---:|
+| The Runner can get in, every ICE known | 299 | 43% | 36% | 60% |
+| The Runner can get in, 1 unrezzed ICE | 1,337 | 29% | 17% | 78% |
+| The Runner can get in, 2 or more unrezzed | 1,136 | 44% | 16% | 76% |
+| The Runner cannot get in | 485 | 9% | 5% | 87% |
+| Scored before the Runner's turn | 522 | 0% | 0% | 99% |
+
+Where every ICE is known and the run model says the Runner gets in, it runs fewer than half of those remotes, and
+steals 107 of the 129 it runs. In the teacher's own play-outs of v29's install at the 119 agenda roots (128 samples, 4
+turns; 15,232 play-outs), the Runner runs the agenda's remote in **19%** of them, steals it in 14%, and the Corp scores
+it in 62%; when it runs, it steals 75%. Neither instrument's Runner punishes an exposed agenda: the ladder's is the live
+Standard (v26 and v27 here), and the teacher's rollouts model the Runner as v7, the planner's opponent model
+(`RunnerHeuristicPolicy.LatestHeuristic`, kept so the shipped Corp planner plays as it did; the Hard teacher sets no
+`plan-model`, and at Runner roots it models the Corp as v8 in the same way). So the agenda-hold rule is neutral in
+self-play: neither Runner punishes what it guards against (an outside player did, which is why v30 has the rule).
+
+**What closes the Corp gate.** Not a relabel at a longer horizon: a Runner that values a remote the Corp has just
+installed into and that it can get in to (Runner v28, a live-policy change gated as any other), and a teacher whose
+rollouts model the opponent by the live Standard version (`plan-model 1`), after which the suite is relabelled and the
+agenda roots are read again. S1.3's gate stays open for
+the Corp until then. S1.6, the targeted-roots sampler, is still worth building for S4.2 and S5.3, but it does not fix
+this.
+
+### Runner v28: a face-down remote card is the agenda it may be (6 October 2026)
+
+**Why.** The S1.5 follow-up found that the bot Runners, the live one on the ladder and v7 in the teacher's rollouts,
+rarely punish an agenda in a remote, so neither instrument could see the Corp's exposure (an outside player could). The
+base rate, from the Core Battle Box suite's games (every card the Corp installed in a remote, unadvanced and face down
+at the Runner's next turn; `ai-regret exposure --all-roots`):
+
+| The remote's ICE | Cards | Agenda | Asset | Ambush | Upgrade | Runner v27 runs it at its next turn |
+|---|---:|---:|---:|---:|---:|---:|
+| None | 1,630 | 0% | 68% | 25% | 7% | 38% |
+| 1 | 741 | 71% | 15% | 2% | 13% | 10% |
+| 2 | 773 | 78% | 4% | 0% | 19% | 12% |
+| 3 or more | 298 | 59% | 0% | 0% | 41% | 11% |
+
+The agenda column counts Tomorrow's Headline, an agenda that is also an ambush (3% behind one or two ICE). The Corp
+protects agendas and leaves assets and ambushes naked; the Runner did the opposite. Asked at those decisions (`--version
+runner-heuristic-v27`), it scored a run on a protected agenda remote it could get into (every ICE known) at a median of
+−720 against 190 for a naked asset: every face-down card was worth a flat 190, which never pays for the ICE. (The
+exposure count asks the run model at the Runner's next turn only, not "that turn or the next", so the 43% the S1.5
+record quotes is the share of remotes run at all while the card stayed, from the next turn on.)
+
+**The change** (`RunnerValues.ServerV2` at generation 23, `RunnerInference.RootAgenda`). An unadvanced face-down card in
+a remote is worth 190 plus the chance it is an agenda times an agenda's value over that (500 and 180 a point, as a known
+one), weighted by the profile's inference scale. The chance is the tracker's belief of the slot where it has one, and
+otherwise the agenda share of the unseen root cards (the Corp's list for Hard, the pool for Standard) with the odds
+tripled behind ICE and cut to a tenth in a naked remote (the table's 71% against a pool share of about 44%). An advanced
+card, trap risk and every self-flatline check are as before. v27 stays constructible beside it (generation 22) so the
+regret suite can compare them; the legacy policies and frozen digests are unchanged.
+
+**Gates** (labels: the line teacher's, `labels.jsonl.gz`):
+
+- **Regret:** `--discordant runner-heuristic-v27,runner-heuristic-v28`: 398 discordant Runner roots, all turn roots (at
+  314 v28 runs where v27 took a credit, an ability, an install, a draw or a card, and at 82 both run, on different
+  servers), v27 − v28 **+0.0179 [0.0113, 0.0245]**; over all 3,960 Runner roots +0.0018 [0.0012, 0.0024]; both
+  separated. Regret all 0.0447 → 0.0429, held out 0.0448 → 0.0434. No choice needed an on-demand label.
+- **Puzzles:** level (box 34 of 47, NSG Core 5 of 5, both versions). The three run-targeting failures are R&D runs,
+  which this change does not touch.
+- **Ladders** against `standard-prev` (Corp v30, Runner v26 ≡ v27): Core Battle Box, 400 deals, Runner **+44 Elo [11,
+  81], separated** (score rate 0.28 → 0.34); Gateway, 240 deals, +11 [−26, 49], level. The Corp sides are identical.
+- **Self-flatlines** (`ai-runner-diagnosis`, the box ladder's 1,600 games): 8% against 7%, 0.6 standard errors apart.
+  Nearly all are Measured Response (54 against 48 in 800 games each), which needs a successful run the turn before, so
+  more runs bring more of them; v26's Measured Response guards hold. Wins 28% → 34%, agenda losses 43% → 36%.
+- **Lints** (`ai-lint`, the same games): the Runner lints are zero for both versions and the Corp's rates equal.
+- **Exposure in the new games:** v28 runs a protected remote at its next turn 53% of the time against v27's 10%, steals
+  28% of the agendas there against 10%, and the Corp scores 62% of them against 80%. Naked remotes: 45% against 38%.
+- **Per-slice fuzz** (`scripts/fuzz.sh <pool> --games-per-pairing 8 --verify-replays-every 8`): every pool ok, every
+  game finished: official 24 games, Gateway 288, Elevation 1,152, Gateway + Elevation 288, NSG Core 2,592; 543 replays
+  verified.
+
+### Teacher v2: the suite relabelled with the live opponent (6 October 2026)
+
+**The teacher.** The S1.5 line search (beam 5, a one-turn screen on a quarter of the samples, two finalists, a 4-turn
+horizon, set 4 at the leaf, 32 samples), with the rollouts modelling the opponent by the live Standard heuristic
+(`hard-model`, `plan-model 1`): Runner v28 at Corp roots and Corp v31 at Runner roots, where the S1.5 labels
+(`labels-v1-lines`, teacher v1-lines) modelled the pinned Runner v7 and Corp v8. Relabelling the box suite (6,512 roots,
+57,197 groups, none unlabellable) took **7 h 48 min** on 12 workers. The labels are the suite's `labels.jsonl.gz`;
+regret below is on them unless named.
+
+**Noise floor** (the 145 roots of the S1.2 repeat, repeat seed 2): **61%** best-group disagreement (v1-lines 57%),
+median standard error 0.032.
+
+**Drift from v1-lines** (every group both label; both teachers take the better of two lines, so the lift that carries is
+the same in both and the drift is the opponent's):
+
+| Roots | Mean value change | Past 2 SE up / down | Best group changed |
+|---|---:|---|---:|
+| Corp turn (1,604) | −0.126 | 1.3% / 60.4% | 71% |
+| Corp run (944) | −0.122 | 1.0% / 56.4% | 37% |
+| Runner turn (3,229) | −0.023 | 3.5% / 10.8% | 69% |
+| Runner run (726) | −0.029 | 4.4% / 13.7% | 30% |
+
+The best group changed at 60.6% of roots, at the noise floor. The Corp's values fell by an eighth of a game: the live
+Runner punishes what v7 did not. The Runner's fell a little: Corp v31 is a stronger opponent than v8.
+
+**Recertification** of the 26 teacher-certified puzzles at 128 samples with teacher v2 (the same rule): **14 hold**. Ten
+more fail and move to a `teacher-v2` split, out of the gate (`ai-puzzles run --split teacher-v2`): three because the
+accepted action is no longer the best (`teacher-44d22315` and `teacher-4da9c5de`, rez choices; `teacher-93609fc4`, an
+install), one because its best group's standard error is over 0.04 (`teacher-d907ce15`), and six because the lead falls
+under 0.15 as values shrink against the live opponents (`teacher-2920124f`, `-b39f5b92`, `-20e668e7`, `-8b1c9af3`,
+`-9570ba07`, `-dc91ae5e`). The two `teacher-v1` puzzles fail again. The gated box set is now 37 puzzles.
+
+**S1.3's table on teacher v2** (labels: `labels.jsonl.gz`, teacher v2; every choice labelled, none on demand):
+
+| Comparison | Every root | The discordant roots |
+|---|---|---|
+| Runner v24 − v25 | +0.0027 [0.0020, 0.0035] | |
+| Runner v24 − v26 | +0.0028 [0.0020, 0.0037] | |
+| Runner v25 − v26 | +0.0001 [−0.0003, 0.0004] | |
+| Runner v27 − v28 | +0.0014 [0.0008, 0.0020] | |
+| Corp v28 − v29 | +0.0007 [−0.0001, 0.0014] | |
+| Corp v28 − v30 | **+0.0022 [0.0005, 0.0040]** | **+0.0173 [0.0049, 0.0298]** (324 roots) |
+| Corp v29 − v30 | +0.0015 [−0.0001, 0.0033] | **+0.0142 [0.0010, 0.0284]** (272 roots) |
+| Runner v26 − v27, Corp v30 − v31 | 0.0000 | |
+
+| Version (Standard) | Regret, all | Turn | Run | Held out |
+|---|---|---|---|---|
+| Runner v24 | 0.0429 [0.0413, 0.0447] | 0.0505 | 0.0094 | 0.0425 |
+| Runner v25 | 0.0402 [0.0386, 0.0419] | 0.0472 | 0.0092 | 0.0387 |
+| Runner v26, v27 | 0.0401 [0.0385, 0.0420] | 0.0471 | 0.0092 | 0.0384 |
+| Runner v28 | 0.0387 [0.0374, 0.0406] | 0.0454 | 0.0092 | 0.0369 |
+| Corp v28 | 0.0449 [0.0419, 0.0476] | 0.0579 | 0.0228 | 0.0476 |
+| Corp v29 | 0.0442 [0.0412, 0.0470] | 0.0579 | 0.0210 | 0.0469 |
+| Corp v30, v31 | 0.0427 [0.0395, 0.0460] | 0.0555 | 0.0210 | 0.0452 |
+
+**The Runner:** the ordering is unchanged (v24 separates from v25 and v26 by the same margins as on v1-lines), and v28
+is ahead of v27 on the new teacher too. The opponent model did not reorder the Runner.
+
+**The Corp:** for the first time the suite agrees with the ladder. v30 separates from v28 over every root and over the
+discordant roots, and from v29 over the 272 roots where they choose differently (over every root it falls just short).
+Split by agenda installs (value of v30's choice − v29's, the 32-sample labels):
+
+| Discordant roots | Roots | v1-lines | Teacher v2 |
+|---|---:|---|---|
+| v29 installs an agenda in a remote, v30 holds it | 119 | +0.0007 [−0.0239, 0.0289] | +0.0185 [−0.0099, 0.0463] (v30 better at 58, v29 at 49) |
+| No agenda install | 144 | +0.0064 [+0.0001, 0.0129] | +0.0150 [+0.0061, 0.0245] |
+
+The agenda roots move the right way and stay inside zero at 119 roots, as the probe said: the sample is too small, not
+the teacher wrong. That is S1.6's reason: targeted roots where Corp v29 and v30 choose differently. S1.3's gate for the
+Corp is closed by teacher v2 over the discordant roots; the agenda-hold rule's own reading waits for S1.6.
+
+### S1.7: labelling cost (7 October 2026)
+
+**The teacher's version.** Every label names its teacher (`teacherVersion`): **v1** (S1.2, one-step, `labels-v1`),
+**v1-lines** (S1.5, the line search with the pinned Runner v7 and Corp v8, `labels-v1-lines`), **v2** (the line search
+with the live opponent, `labels.jsonl.gz`); `ai-regret tag` wrote them into the committed files. The teacher plays the
+live Hard bot of each side and models the other by the live Standard, so a label is named v2 only while those are Corp
+v31 and Runner v28: after a policy bump a new label's name carries the versions instead, and the tagged files keep their
+names. `score` prints the labels and teacher beside every table and comparison (`teacher v2 (6512 roots)`), and refuses
+a root whose values come from two teachers (a group labelled on demand into a label names the teacher it came from).
+
+**The core** (`ai-regret core --roots 2000 --seed 1`, a marking, not a run): **2,050 roots** in 302 games, 466 held out
+(22.7%, the suite's share 22.2%), drawn by deal. `score --core` reads it. **Gate:** the core reads as the whole suite
+does within the intervals (teacher v2):
+
+| Comparison | Core | Whole suite |
+|---|---|---|
+| Runner v24 − v25 | +0.0033 [0.0021, 0.0045] | +0.0027 [0.0020, 0.0035] |
+| Runner v24 − v26 | +0.0038 [0.0025, 0.0049] | +0.0028 [0.0020, 0.0037] |
+| Runner v27 − v28 | +0.0011 [0.0003, 0.0021] | +0.0014 [0.0008, 0.0020] |
+| Corp v28 − v30, every root | +0.0022 [−0.0007, 0.0049] | +0.0022 [0.0005, 0.0040] |
+| Corp v28 − v30, discordant | +0.0193 [−0.0041, 0.0434] (95) | +0.0173 [0.0049, 0.0298] (324) |
+| Corp v29 − v30, discordant | +0.0188 [−0.0073, 0.0428] (78) | +0.0142 [0.0010, 0.0284] (272) |
+
+Every estimate falls within the other's interval. The Corp's separations need the whole suite's roots (the core has a
+third of them), as the plan expects: comparisons use every root both versions are labelled at.
+
+**Adaptive samples** (`ai-regret label --decide 8 --record 8 --extend-to 32`; the deciding samples are discarded, and a
+lines root reruns the v2 search on all its recording samples at each step, its memos making the samples already played
+free). Against their flat 32-sample v2 labels, on 200 core roots:
+
+- values: mean signed difference **−0.0000** (standard error 0.0008) over 1,695 groups, no lift either way; mean
+  absolute difference 0.0216;
+- the best group differs at 40.5% of roots, under the noise floor (61%);
+- Runner v24 − v28 on the 115 Runner roots: +0.0027 [−0.0001, 0.0063] adaptive, +0.0032 [0.0001, 0.0067] flat;
+- **cost: 1,480 s against about 860 s flat.** 181 of the 200 roots extended to 32 recording samples: the suite's roots
+  were drawn where the heuristic's top two are close, and with 8.8 groups a root's best two are almost never two
+  standard errors apart after 8 samples, so nearly every root pays the 8 deciding samples and the reruns on top of 32.
+
+The adaptive labels are sound but save nothing on the suite's roots, so the core is relabelled flat at 32. Adaptive
+samples are kept for S1.6's targeted roots, where the two versions' choices usually differ clearly, and their saving
+there is measured on S1.6's first run rather than assumed. One point of the design to watch there: an undecided root
+stops extending once its recording samples separate, which is optional stopping on the recorded samples; the signed
+difference above shows no lift from it on these roots.

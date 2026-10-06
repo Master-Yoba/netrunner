@@ -152,6 +152,16 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// trap; and a breaker trashed at the run's end (Mayfly) is priced as spent by the run.
     /// </summary>
     public const string V26 = "runner-heuristic-v26";
+    /// <summary>
+    /// V26's behaviour as the one live policy (bot plan S3): the version checks resolved to V26's and the dead branches gone.
+    /// Every earlier version is <see cref="LegacyRunnerPolicy"/>, frozen.
+    /// </summary>
+    public const string V27 = "runner-heuristic-v27";
+    /// <summary>
+    /// V27 with a face-down card in a remote valued by what it likely is (the S1.5 follow-up, 6 October): an agenda at the
+    /// chance its unseen root cards hold one, raised when the remote is protected by ICE, as the Corp protects agendas.
+    /// </summary>
+    public const string V28 = "runner-heuristic-v28";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
     /// V18 is V15 with only the reinstall fix (no install over its own copy or a second console), a fix that can only remove
@@ -163,50 +173,50 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// where V20 won 6. V22 (A9c, 2 October) is: at Standard and Easy it plays as V21 (its counting needs the Corp's list),
     /// and at Hard it was level with V21 on the bot ladder. V23 (bot loop 1, 3 October) is the default while loop 1 plays
     /// against it: its fixes remove plays that flatline the Runner itself. V24 (loop 1's deferred fixes, 4 October) is the
-    /// default loop 2 played against. V25 (bot loop 2, 4 October) was the default until V26.
+    /// default loop 2 played against. V25 (bot loop 2, 4 October) was the default until V26. V27 (bot plan S3) is V26 as the
+    /// live policy, identical game by game. V28 values a protected face-down remote card as the agenda it likely is.
     /// </remarks>
-    public const string PolicyVersion = V26;
+    public const string PolicyVersion = V28;
     /// <summary>
     /// The planner's model of the Runner. It stays V7, which Corp v9 was measured
     /// with, so the shipped Corp planner plays as it did.
     /// </summary>
     public const string LatestHeuristic = V7;
-    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25, V26];
+    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25, V26, V27, V28];
 
     /// <summary>Whether the version's memory of a face-down root card survives installs in that root (v20).</summary>
-    public static bool KeepsRootMemoryThroughInstalls(string version) => version is V20 or V21 or V22 or V23 or V24 or V25 or V26;
+    public static bool KeepsRootMemoryThroughInstalls(string version) => version is V20 or V21 or V22 or V23 or V24 or V25 or V26 or V27 or V28;
 
     /// <summary>Whether the version keeps the A9a tracker of the Corp's hidden cards (v21).</summary>
-    public static bool UsesTracker(string version) => version is V21 or V22 or V23 or V24 or V25 or V26;
+    public static bool UsesTracker(string version) => version is V21 or V22 or V23 or V24 or V25 or V26 or V27 or V28;
 
     public RunnerHeuristicPolicy() : this(PolicyVersion) { }
 
     public RunnerHeuristicPolicy(string version)
     {
-        if (!Versions.Contains(version)) throw new ArgumentException($"Unknown Runner policy version '{version}'.", nameof(version));
+        if (version is not (V27 or V28))
+            throw new ArgumentException($"The live Runner policy is {V27} or {V28}; '{version}' is {nameof(LegacyRunnerPolicy)}.", nameof(version));
         Version = version;
-        Generation = version switch { V1 => 1, V4 => 3, V5 => 4, V6 => 5, V7 or V8 or V9 => 6, V10 => 7, V11 or V12 => 8, V13 => 9, V14 => 10, V15 => 11, V16 => 12, V17 => 13, V18 => 14, V19 => 15, V20 => 16, V21 => 17, V22 => 18, V23 => 19, V24 => 20, V25 => 21, V26 => 22, _ => 2 };
-        // V18 on: only the Hard profile (A6) has planner parameters, so Standard and Easy play as before.
-        Plans = version is V3 or V8 or V9 || Generation >= 14;
-        Repairs = version is V4 or V5 or V6 or V7 or V8 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16 or V17 or V18 or V19 or V20 or V21 or V22 or V23 or V24 or V25 or V26;
+        _contextGeneration = version == V28 ? 23 : 22;
     }
 
-    /// <summary>Whether this version has the playtest repairs (V4).</summary>
-    private bool Repairs { get; }
-
-    private bool Plans { get; }
+    /// <summary>
+    /// The generation the shared helpers (<see cref="HeuristicContext"/>, RunnerValues, RunModel) switch on: V26's (22) for
+    /// V27, and 23 for V28's remote valuation. They keep their switches for <see cref="LegacyRunnerPolicy"/>, and V27 stays
+    /// constructible so the regret suite can compare the two (<c>ai-regret score --discordant</c>).
+    /// </summary>
+    private readonly int _contextGeneration;
 
     public ImmutableArray<AgentCandidate> EvaluateDecision(AgentFeatures features, AgentKnowledge knowledge, AgentObjective? objective,
         OfflineAgentConfiguration configuration, ICardEvaluationCatalog catalog, AgentWorkBudget budget, PlanningContext? planning)
     {
         ImmutableArray<AgentCandidate> heuristic = EvaluateDecision(features, knowledge, objective, configuration, catalog, budget);
-        if (!Plans || planning is null) return heuristic;
+        if (planning is null) return heuristic;
         var planner = new TurnPlanner(this, configuration, catalog);
         return planner.Applies(features) ? planner.Plan(features, heuristic, knowledge, planning) : heuristic;
     }
 
     public string Version { get; }
-    private int Generation { get; }
 
     public void ValidateAction(AgentFeatures features, AgentAction action)
     {
@@ -243,9 +253,9 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     {
         AgentAction[] preferred = IssuedRunPaymentPreference.Select(features.Actions, action => (action.Id, action.Kind, action.Parameters)).ToArray();
         var preferredIds = preferred.Select(action => action.Id).ToHashSet();
-        var context = new HeuristicContext(features with { Actions = preferred.ToImmutableArray() }, catalog, configuration, Generation)
+        var context = new HeuristicContext(features with { Actions = preferred.ToImmutableArray() }, catalog, configuration, _contextGeneration)
         {
-            Knowledge = Generation >= 7 ? knowledge : null,
+            Knowledge = knowledge,
         };
         IReadOnlyDictionary<ActionId, AgentUtility> encounter = RunnerEncounterPlanner.Evaluate(context, budget);
         return features.Actions.Select(action => new AgentCandidate(action.Id,
@@ -308,7 +318,7 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// <summary>v26: after a successful run, drawing up to the grip that survives the Corp's punishing operations comes first.</summary>
     private static int PunisherDraw(HeuristicContext context)
     {
-        if (context.Generation < 22 || context.Features.Board.TurnFacts?.Runner.ThisTurn?.SuccessfulRun != true) return 0;
+        if (context.Features.Board.TurnFacts?.Runner.ThisTurn?.SuccessfulRun != true) return 0;
         (int grip, double chance) = RunnerInference.Punishers(context);
         return grip > context.Features.Hand.Length ? (int)Math.Min(700, chance * PunishedGame) : 0;
     }
@@ -332,7 +342,7 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
             && HeuristicContext.Flatten(behavior.Instructions).Any(instruction => instruction.Kind is BehaviorInstructionKind.GainCredits or BehaviorInstructionKind.LoadHostedCredits));
         // v19 (Codex review, 1 October): a tutor (Mutual Favor) finds the breaker the hand lacks.
         bool coverage = context.Features.Hand.Any(card => context.Definition(card)?.Icebreaker is not null
-            || context.Generation >= 15 && context.Definition(card)?.Behavior is { } behavior
+            || context.Definition(card)?.Behavior is { } behavior
                 && HeuristicContext.Flatten(behavior.Instructions).Any(instruction => instruction.Kind == BehaviorInstructionKind.Search));
         return Value((choice.Value == 0) == (economy && coverage) ? 100 : 0, "opening/economy-and-breaker-foundation");
     }
@@ -344,6 +354,6 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     private static AgentUtility RemoveTag(HeuristicContext context, RemoveTagParameters remove)
     {
         int score = RunnerValues.TagRisk(context) - remove.CreditCost * context.CreditValue;
-        return new(context.Generation >= 16 && score <= 0 ? 0 : 10, score, "defense/remove-tag");
+        return new(score <= 0 ? 0 : 10, score, "defense/remove-tag");
     }
 }

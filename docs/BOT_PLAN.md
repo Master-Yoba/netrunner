@@ -160,6 +160,10 @@ observation ──> heuristic (candidate generator: top-K actions with priority 
   `TurnPlanner.AppliesToRun` does now, once the leaf is replaced.
 - **Hidden cards** are dealt from the tracker (pins at their belief weight) and the pool, or the decklist for Hard, as
   `TurnPlanner.Pins` does. One shared set of samples serves every candidate at a root (common random numbers).
+- **The opponent in the rollouts is the live Standard heuristic** (`plan-model 1`), for the teacher now and for S5's
+  Standard when it ships. The planner's pinned model (Runner v7, Corp v8, kept so the shipped Corp planner plays as it
+  did) is not a defensible opponent for labels meant to train set 5: the S1.5 follow-up found the teacher could not see
+  the cost of an exposed agenda because its v7 Runner, like the live one before Runner v28, did not run the remote.
 
 ### 4.2 Evaluation set 5: a leaf trained by search
 
@@ -249,15 +253,21 @@ A fixed corpus of recorded decision roots with teacher labels, scored in minutes
   Every meaningful candidate group at a root is labelled, not only the heuristic's best few: a planner is expected to
   choose outside them, and a choice without a label drops out of regret, which would hide exactly the decisions the
   planner changes. Where a labelling has cut the groups, `score` labels an unlabelled choice on demand.
+  **Targeted roots** (S1.6): a paired comparison of two versions has power only at the roots where they choose
+  differently, and roots drawn at random hold few of those. `ai-regret diverge` replays the saved games with both
+  versions and keeps every decision where their chosen groups differ, so a comparison that matters (two Corp versions,
+  or a planner against the heuristic) is measured where it happens, not diluted over thousands of roots where nothing
+  changed.
   Each root keeps the acting side's observation, the checkpoint, the legal candidates and the deal, so any policy
   version can be asked to choose there (`BotLoop1Tests.ChooseAtAsync` already does this).
 - **Teacher:** the planner at an offline budget (start: 32 samples × every meaningful candidate) with common random
-  numbers across candidates. It searches the root side's own turn as lines (4.1), so a candidate is valued at its best
-  follow-up rather than the heuristic's; a label made with the heuristic's continuation (the first labelling) is
-  marked as such and replaced. Its rollouts go **deeper than the leaf's horizon**: to the game's end with the rollout
-  policy where S0.1's costs allow it, otherwise a fixed number of turns (start 4) and then the leaf. A label is then
-  mostly the result of play, not a reading of set 4, so fitting set 5 to it does not inherit set 4's bias. It writes each
-  candidate's value, its standard error over the samples, and the horizon it used.
+  numbers across candidates, its rollouts modelling the opponent by the live Standard heuristic (4.1; `ai-regret label`
+  defaults to it, and a label names its teacher). It searches the root side's own turn as lines (4.1), so a candidate is
+  valued at its best follow-up rather than the heuristic's; a label made with the heuristic's continuation (the first
+  labelling) is marked as such and replaced. Its rollouts go **deeper than the leaf's horizon**: to the game's end with
+  the rollout policy where S0.1's costs allow it, otherwise a fixed number of turns (start 4) and then the leaf. A label
+  is then mostly the result of play, not a reading of set 4, so fitting set 5 to it does not inherit set 4's bias. It
+  writes each candidate's value, its standard error over the samples, and the horizon it used.
 - **Label noise.** A rollout to the game's end returns a win or a loss, so 32 samples give a candidate's value to about
   ±0.09, and common random numbers help less as the rollouts diverge over several turns, while candidates often differ
   by a few points. Regret *differences* between versions stay unbiased under that noise; agreement and "the best
@@ -271,9 +281,26 @@ A fixed corpus of recorded decision roots with teacher labels, scored in minutes
   - Both per side, per pool, per category (the puzzle categories, 5.3), with a bootstrap interval over roots.
 - **Blunder list:** the roots with the highest regret for the current version, with the candidates and values. This
   is the review list for a person or an LLM (section 7); it is also where new puzzles come from.
-- **Teacher drift:** the teacher is only as good as its leaf, so every expert-iteration round (S6) re-labels the suite
-  and reports how much the labels moved; a round whose relabelling flips more than a set share of best choices is
-  inspected before it is accepted.
+- **Teacher drift:** the teacher is only as good as its leaf, so every expert-iteration round (S6) re-labels the core
+  (below) and reports how much the labels moved; a round whose relabelling flips more than a set share of best choices
+  is inspected before it is accepted.
+- **Labelling cost.** A whole-suite relabel is about seven hours on the development box, and S1 changed the teacher
+  three times in two days (one-step, the line search, the live opponent model). The suite is sized for the questions it
+  answers, so that a relabel is an hour or two and never the critical path:
+  - **The teacher is versioned and frozen between milestones.** Teacher v2 is the line search (beam 5, one-turn
+    screen), the live Standard opponent, a 4-turn horizon and 32 samples. Labels and scores name their teacher. A
+    teacher change is a milestone event with a relabel budgeted overnight, not something a step does in passing.
+  - **A core and targeted roots.** The core is about 2,000 random roots, held out by deal; it is what a teacher change
+    relabels, what absolute regret is quoted on, and what the leaf is fitted on. Targeted roots (`diverge`) are
+    labelled when a comparison needs them and keep the labels they got. A paired comparison is valid root by root as
+    long as both values at a root come from one teacher, so a suite with roots labelled by different teachers still
+    compares versions; only absolute regret needs one teacher, and it is quoted on the core.
+  - **Adaptive samples.** A root gets 8 samples that decide how many more it needs, and the recorded values come only
+    from the samples drawn after that decision: 8 where the deciding samples showed a clear gap, more where they did
+    not. The deciding samples are never recorded, because a stop triggered by a gap that happened to look large would
+    otherwise preserve exactly that inflated gap in the labels the leaf is fitted to. Most roots are decided early.
+  - **Scheduling.** The relabel and the ladders both want the box to themselves and there is no second box, so relabels
+    run overnight and ladders by day; a step never waits on a relabel it could have scheduled the evening before.
 
 CLI: `ai-regret label <games-dir> --output <suite>` and `ai-regret score <suite> [--version V] [--profile P]`.
 

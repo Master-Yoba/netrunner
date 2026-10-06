@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Netrunner.Core;
 
 namespace Netrunner.Match.Regret;
@@ -12,6 +13,22 @@ public sealed record RegretComparison(string First, string Second, int Roots, do
     /// <summary>Whether the interval excludes zero.</summary>
     public bool Separated => Lower > 0 || Upper < 0;
 }
+
+/// <summary>
+/// A root where two versions chose different labelled groups: each choice, the teacher's value of it (the best value
+/// minus its regret) and its regret.
+/// </summary>
+public sealed record RegretDiscord(string RootId, PlayerSide Side, string Kind, string Split, ImmutableArray<string> Categories,
+    string FirstChosen, string FirstDescription, double FirstValue, double FirstRegret,
+    string SecondChosen, string SecondDescription, double SecondValue, double SecondRegret);
+
+/// <summary>
+/// Two versions where they choose differently (the discordant view): the roots, and the paired mean of (first's regret −
+/// second's) over those roots only and over every root both chose at. Elsewhere the difference is zero, so the second
+/// is the first diluted by the concordant roots.
+/// </summary>
+public sealed record RegretDiscordance(string First, string Second, ImmutableArray<RegretDiscord> Discords, RegretComparison Discordant,
+    RegretComparison All);
 
 /// <summary>The noise floor (bot plan 5.1): how often two independent labellings of the same roots disagree on the best group.</summary>
 public sealed record RegretNoise(int Roots, double BestDisagreement, double MedianStandardError);
@@ -41,6 +58,35 @@ public static class RegretReport
         if (differences.Length == 0) return new RegretComparison(first, second, 0, double.NaN, double.NaN, double.NaN);
         (double lower, double upper) = Interval(differences, bootstrap, seed);
         return new RegretComparison(first, second, differences.Length, differences.Average(), lower, upper);
+    }
+
+    public static RegretDiscordance Discordance(string first, IReadOnlyList<RegretChoice> firstChoices, string second,
+        IReadOnlyList<RegretChoice> secondChoices, IReadOnlyDictionary<string, RegretRoot> roots, IReadOnlyDictionary<string, RegretLabel> labels,
+        int bootstrap = 200, ulong seed = 1)
+    {
+        ArgumentNullException.ThrowIfNull(firstChoices);
+        ArgumentNullException.ThrowIfNull(secondChoices);
+        ArgumentNullException.ThrowIfNull(roots);
+        ArgumentNullException.ThrowIfNull(labels);
+        var other = secondChoices.Where(choice => choice.Regret is not null).ToDictionary(choice => choice.RootId);
+        ImmutableArray<RegretDiscord> discords = [.. firstChoices
+            .Where(choice => choice.Regret is not null && other.TryGetValue(choice.RootId, out RegretChoice? them) && them.Chosen != choice.Chosen)
+            .OrderBy(choice => choice.RootId, StringComparer.Ordinal)
+            .Select(choice =>
+            {
+                RegretChoice them = other[choice.RootId];
+                // The chosen group's value is the best value less its regret, and both regrets share the best.
+                double best = labels[choice.RootId].Best!.Mean;
+                return new RegretDiscord(choice.RootId, choice.Side, choice.Kind, choice.Split,
+                    roots.TryGetValue(choice.RootId, out RegretRoot? root) ? root.Categories : [],
+                    choice.Chosen!, choice.ChosenDescription, best - choice.Regret!.Value, choice.Regret!.Value,
+                    them.Chosen!, them.ChosenDescription, best - them.Regret!.Value, them.Regret!.Value);
+            })];
+        HashSet<string> discordant = [.. discords.Select(discord => discord.RootId)];
+        return new RegretDiscordance(first, second, discords,
+            Compare(first, [.. firstChoices.Where(choice => discordant.Contains(choice.RootId))], second,
+                [.. secondChoices.Where(choice => discordant.Contains(choice.RootId))], bootstrap, seed),
+            Compare(first, firstChoices, second, secondChoices, bootstrap, seed));
     }
 
     public static RegretNoise Noise(IReadOnlyList<RegretLabel> first, IReadOnlyList<RegretLabel> second)

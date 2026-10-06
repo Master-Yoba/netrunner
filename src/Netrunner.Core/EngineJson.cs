@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -31,6 +32,13 @@ public static class EngineJson
         ThrowIfSimulated(value);
         return JsonSerializer.SerializeToUtf8Bytes(value, SerializationOptions);
     }
+
+    /// <summary>
+    /// A fingerprint of a state, simulated or not, for a search's memo of positions it has already valued (bot plan S1.5):
+    /// equal states have equal fingerprints. It is not a saved form or an authoritative hash and never leaves the process.
+    /// </summary>
+    public static string SearchFingerprint(GameState state) =>
+        Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(state, SerializationOptions)));
 
     /// <summary>Simulated states never reach saves, replays or hashes.</summary>
     private static void ThrowIfSimulated<T>(T value)

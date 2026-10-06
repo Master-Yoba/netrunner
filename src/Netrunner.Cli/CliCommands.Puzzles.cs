@@ -13,9 +13,10 @@ public static partial class CliCommands
 {
     /// <summary>
     /// Bot plan S2, the puzzle suite:
-    /// ai-puzzles run SET-DIR [--corp V] [--runner V] [--profile P] [--split all|tuning|held-out] [--workers N] [--json]
+    /// ai-puzzles run SET-DIR [--corp V] [--runner V] [--profile P] [--split all|tuning|held-out|teacher-v1|teacher-v2] [--workers N] [--json]
+    ///   (all is the gate: tuning and held-out)
     /// ai-puzzles import SET-DIR SAVED-GAME-FILE --id ID [--source TEXT]
-    /// ai-puzzles show SET-DIR --game ID --sequence N [--play I,J,...] [--teacher SAMPLES] [--horizon game|TURNS] [--json]
+    /// ai-puzzles show SET-DIR --game ID --sequence N [--play I,J,...] [--teacher SAMPLES] [--horizon game|TURNS] [--lines W] [--json]
     /// ai-puzzles import SET-DIR --suite SUITE-DIR --game ID (a regret suite's game)
     /// ai-puzzles find SUITE-DIR --side corp|runner [--turn-start true] [--hand DEF,...] [--installed DEF,...]
     ///   [--legal KIND[:DEF],...] [--limit N] [--workers N]
@@ -59,10 +60,11 @@ public static partial class CliCommands
         string corp = options.GetValueOrDefault("--corp", CorpHeuristicPolicy.PolicyVersion);
         string runner = options.GetValueOrDefault("--runner", RunnerHeuristicPolicy.PolicyVersion);
         string split = options.GetValueOrDefault("--split", "all");
-        if (split is not ("all" or "tuning" or "held-out")) throw new ArgumentException("--split requires all, tuning or held-out.");
+        if (split is not ("all" or "tuning" or "held-out") && !Puzzle.Retired(split))
+            throw new ArgumentException("--split requires all, tuning, held-out or teacher-v1.");
         int workers = options.TryGetValue("--workers", out string? count) ? ProfileInt(count, "--workers", 1, 64) : 1;
         var games = set.Games.ToDictionary(game => game.Id);
-        Puzzle[] puzzles = [.. set.Puzzles.Where(puzzle => split == "all" || puzzle.Split == split)];
+        Puzzle[] puzzles = [.. set.Puzzles.Where(puzzle => split == "all" ? !Puzzle.Retired(puzzle.Split) : puzzle.Split == split)];
         var results = new PuzzleResult[puzzles.Length];
         var started = System.Diagnostics.Stopwatch.StartNew();
         System.Threading.Tasks.Parallel.For(0, puzzles.Length, new ParallelOptions { MaxDegreeOfParallelism = workers }, index =>
@@ -206,7 +208,9 @@ public static partial class CliCommands
             values = RolloutTeacher.Evaluate(teacher,
                 ObservationBuilder.Build(state, side, definition.Behavior, definition.Runtime),
                 [.. groups.Select(group => new ActionId(group.ActionIds[0]))],
-                new TeacherSettings(ProfileInt(samples, "--teacher", 1, 4096), 1, horizon == "game" ? 0 : ProfileInt(horizon, "--horizon", 1, 100)));
+                new TeacherSettings(ProfileInt(samples, "--teacher", 1, 4096), 1, horizon == "game" ? 0 : ProfileInt(horizon, "--horizon", 1, 100),
+                    Lines: options.TryGetValue("--lines", out string? width) ? ProfileInt(width, "--lines", 0, 16) : 0,
+                    ScreenTurns: options.TryGetValue("--screen-turns", out string? screen) ? ProfileInt(screen, "--screen-turns", 0, 100) : 1));
         }
         if (options.ContainsKey("--json"))
         {
@@ -221,20 +225,21 @@ public static partial class CliCommands
                     parameters = RegretRoots.Parameters(state, pending.LegalActions.First(action => action.Id.Value == group.ActionIds[0])),
                     mean = values?[index].Mean,
                     standardError = values?[index].StandardError,
+                    line = values?[index].Line,
                 }),
             }, RegretSuite.Json));
             return 0;
         }
         for (int index = 0; index < groups.Count; index++)
             output.WriteLine(string.Create(CultureInfo.InvariantCulture,
-                $"  {(values is null ? "" : $"{values[index].Mean:F3} ±{values[index].StandardError:F3} ")}{groups[index].Kind} {groups[index].Description}"));
+                $"  {(values is null ? "" : $"{values[index].Mean:F3} ±{values[index].StandardError:F3} ")}{groups[index].Kind} {groups[index].Description}{(values?[index].Line is { Count: > 0 } line ? $" line {string.Join(',', line)}" : "")}"));
         return 0;
     }
 
-    /// <summary>The latest Hard bot of a side, having watched a game to (and including) a decision.</summary>
+    /// <summary>The teacher of a side (<see cref="RegretLabels.DefaultTeacher"/>), having watched a game to (and including) a decision.</summary>
     private static OfflineAgent Watched(RegretGame game, FullMatchDefinition definition, PlayerSide side, long sequence)
     {
-        OfflineAgent teacher = RatingLadder.CreateAgent("hard", side, definition) as OfflineAgent
+        OfflineAgent teacher = RatingLadder.CreateAgent(RegretLabels.DefaultTeacher, side, definition) as OfflineAgent
             ?? throw new InvalidOperationException("The Hard bot is not an offline agent.");
         foreach (RegretPosition position in RegretGames.Positions(game, definition).TakeWhile(position => position.Sequence <= sequence))
             AgentLifecycleHost.Observe(teacher, position.State, definition.Behavior);
