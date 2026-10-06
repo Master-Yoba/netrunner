@@ -128,6 +128,29 @@ public sealed class RegretSuiteTests
         Assert.True(shared > 0, "No two lines left the turn in one state, so nothing was checked.");
     }
 
+    /// <summary>
+    /// The S1.5 follow-up's exposure count: every agenda the Corp installs in a remote is followed to where it went, and
+    /// one the Runner stole ends in its score area while one the Corp scored ends in the Corp's.
+    /// </summary>
+    [Fact]
+    public void AnAgendaInstalledInARemoteIsFollowedToWhereItWent()
+    {
+        if (!Official) return;
+        RegretSuite suite = RegretSuite.Load(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "data", "ai", "regret",
+            "gateway-elevation"));
+        var fates = suite.Games.Where(game => game.Source == "ladder").Take(6).SelectMany(AgendaExposure.FromGame).ToList();
+
+        Assert.NotEmpty(fates);
+        Assert.All(fates, fate => Assert.Contains(fate.Outcome, new[] { AgendaExposure.Scored, AgendaExposure.Stolen, AgendaExposure.Trashed,
+            AgendaExposure.Installed, "installed-at-end" }));
+        Assert.All(fates, fate => Assert.True(fate.Runs >= 0 && fate.Turns >= 0));
+        Assert.Contains(fates, fate => fate.Outcome == AgendaExposure.Scored);
+        // The run model is asked once, at the Runner's next turn, unless the agenda was gone by then.
+        Assert.All(fates.Where(fate => fate.Breakable is null), fate => Assert.True(fate.Outcome != AgendaExposure.Stolen || fate.Runs > 0));
+        Assert.Equal(fates.Select(fate => (fate.Source, fate.Outcome, fate.Runs)),
+            suite.Games.Where(game => game.Source == "ladder").Take(6).SelectMany(AgendaExposure.FromGame).Select(fate => (fate.Source, fate.Outcome, fate.Runs)));
+    }
+
     [Fact]
     public void EveryCandidateIsPlayedOnTheSameSamples()
     {

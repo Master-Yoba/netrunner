@@ -282,12 +282,13 @@ internal sealed partial class TurnPlanner
     /// </summary>
     internal double? PlayLine(GameState sample, ActionId first, IReadOnlyList<int> ranks, PlayerSide side, AgentKnowledge knowledge,
         ObservationDeterminizer determinizer, int horizonTurns, int evaluation, int cap, out int reached,
-        Dictionary<string, double>? memo = null, bool toTurnEnd = false)
+        Dictionary<string, double>? memo = null, bool toTurnEnd = false, Action<GameState>? observe = null)
     {
         reached = 0;
         ApplyResult applied = Simulate(sample, first, determinizer);
         if (!applied.Accepted) return null;
         GameState state = applied.State;
+        observe?.Invoke(state);
         int turn = sample.Turn.TurnNumber;
         int lastTurn = horizonTurns > 0 ? turn + horizonTurns : int.MaxValue;
         string? key = null;
@@ -311,6 +312,7 @@ internal sealed partial class TurnPlanner
             applied = Simulate(state, action, determinizer);
             if (!applied.Accepted) break;
             state = applied.State;
+            observe?.Invoke(state);
         }
         double value = Leaf(state, side, determinizer, evaluation);
         if (key is not null) memo![key] = value;

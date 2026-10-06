@@ -70,6 +70,36 @@ public static class RolloutTeacher
     }
 
     /// <summary>
+    /// Plays <paramref name="action"/> on the teacher's samples, followed by the heuristic as the one-step value plays it,
+    /// and shows <paramref name="observe"/> each sample's states in order (with the sample's index), so a caller can see
+    /// what the rollout's opponent does after a candidate (the S1.5 follow-up's agenda exposure). Returns the samples played.
+    /// </summary>
+    public static int Trace(OfflineAgent agent, Observation observation, ActionId action, TeacherSettings settings, Action<int, GameState> observe)
+    {
+        ArgumentNullException.ThrowIfNull(agent);
+        ArgumentNullException.ThrowIfNull(observation);
+        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(observe);
+        ObservationDeterminizer determinizer = observation.Determinizer
+            ?? throw new ArgumentException("The observation carries no determinizer.", nameof(observation));
+        var planner = new TurnPlanner(agent.Policy, agent.Configuration, agent.Catalog);
+        AgentKnowledge knowledge = agent.Checkpoint.Knowledge;
+        PlayerSide side = agent.ControlledSide;
+        var planning = new PlanningContext(determinizer, new DeterministicRandom(settings.Seed));
+        OpponentCardPool pool = planner.PoolFor(side, knowledge, fromList: true);
+        int played = 0;
+        for (int dealt = 0; dealt < 2 * settings.Samples && played < settings.Samples; dealt++)
+        {
+            GameState sample = TurnPlanner.Deal(side, knowledge, pool, planning, pinned: true);
+            int index = played;
+            if (planner.PlayLine(sample, action, [], side, knowledge, determinizer, settings.HorizonTurns, settings.Evaluation, settings.Cap,
+                out _, observe: state => observe(index, state)) is not null)
+                played++;
+        }
+        return played;
+    }
+
+    /// <summary>
     /// Bot plan S1.5: every candidate valued at its best line of the turn (<see cref="TurnPlanner.BestLine"/>) on the same
     /// samples, dealt first: the lines are screened by the leaf where the turn ends, and the heuristic's own line and the
     /// best other are played on. A sample where one candidate cannot be played is dropped for all, as above.

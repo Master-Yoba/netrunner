@@ -20,6 +20,9 @@ public static partial class CliCommands
     /// ai-regret findings SUITE-DIR --manifest FILE --fixtures DIR --content POOL [--labelled N]
     /// ai-regret dedupe SUITE-DIR
     /// ai-regret extend SUITE-DIR [--labelled N] [--workers N] (every meaningful group at every root, S1.4)
+    /// ai-regret exposure SUITE-DIR [--workers N] [--json] (every agenda the Corp installed in a remote in the suite's games)
+    /// ai-regret exposure SUITE-DIR --roots FILE [--samples N] [--horizon TURNS] [--workers N] [--json] (the teacher's
+    ///   play-outs of the groups FILE lists, "ROOT-ID GROUP" a line)
     /// </summary>
     private static int RunAiRegret(string[] args, TextWriter output, TextWriter error)
     {
@@ -37,6 +40,7 @@ public static partial class CliCommands
                 "findings" => RegretFindingsCommand(args[2], options, output),
                 "dedupe" => RegretDedupeCommand(args[2], options, output),
                 "extend" => RegretExtendCommand(args[2], options, output, error),
+                "exposure" => RegretExposureCommand(args[2], options, output, error),
                 _ => throw new ArgumentException($"Unknown ai-regret command '{args[1]}'."),
             };
         }
@@ -242,8 +246,11 @@ public static partial class CliCommands
         }
         if (options.Json)
         {
-            output.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { schemaVersion = 1, kind = "ai-regret-score", split = options.Split, report, comparisons,
-                discordance }, RegretSuite.Json));
+            // Regret is comparable only within one labelling, so the report names its labels and their teacher.
+            string teacher = labels.Values.FirstOrDefault(label => label.Lines > 1) is { } lined
+                ? $"line teacher, beam {lined.Lines}, {lined.ScreenTurns}-turn screen" : "one-step teacher";
+            output.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { schemaVersion = 1, kind = "ai-regret-score", split = options.Split,
+                labels = options.LabelsFile, teacher, report, comparisons, discordance }, RegretSuite.Json));
             return 0;
         }
         foreach (var entry in report)
@@ -265,6 +272,45 @@ public static partial class CliCommands
             output.WriteLine(string.Create(CultureInfo.InvariantCulture,
                 $"compare {comparison.First} − {comparison.Second}: roots={comparison.Roots} regret difference={comparison.MeanDifference:F4} [{comparison.Lower:F4}, {comparison.Upper:F4}]{(comparison.Separated ? " separated" : "")}"));
         if (discordance is not null) WriteDiscordance(discordance, options.LabelsFile, output);
+        return 0;
+    }
+
+    /// <summary>
+    /// The S1.5 follow-up: does the bot Runner punish an agenda left in a remote? Every agenda the Corp installed in a
+    /// remote in the suite's games, or the teacher's play-outs of the listed groups at their roots, followed until it is
+    /// scored, stolen or trashed; split by whether the run model let the Runner in at its next turn.
+    /// </summary>
+    private static int RegretExposureCommand(string suiteDirectory, RegretOptions options, TextWriter output, TextWriter error)
+    {
+        RegretSuite suite = RegretSuite.Load(suiteDirectory);
+        AgendaFate[] fates;
+        if (options.RootsFile is { } file)
+        {
+            var wanted = File.ReadLines(file).Select(line => line.Split(' ', StringSplitOptions.RemoveEmptyEntries)).Where(parts => parts.Length == 2)
+                .ToDictionary(parts => parts[0], parts => parts[1]);
+            RegretRoot[] roots = [.. suite.Roots.Where(root => wanted.ContainsKey(root.Id))];
+            var byGame = roots.GroupBy(root => root.GameId).ToDictionary(group => group.Key, group => group.ToList());
+            var settings = new TeacherSettings(options.Samples, options.Seed, options.HorizonTurns, options.Evaluation);
+            fates = [.. ForGames([.. suite.Games.Where(game => byGame.ContainsKey(game.Id))], options.Workers, error, "exposure",
+                game => byGame[game.Id].SelectMany(root => AgendaExposure.FromRoot(game, root, wanted[root.Id], settings)).ToArray()).SelectMany(found => found)];
+        }
+        else fates = [.. ForGames([.. suite.Games], options.Workers, error, "exposure", AgendaExposure.FromGame).SelectMany(found => found)];
+        if (options.Json)
+        {
+            output.WriteLine(System.Text.Json.JsonSerializer.Serialize(fates, RegretSuite.Json));
+            return 0;
+        }
+        output.WriteLine($"ai-regret exposure agendas={fates.Length} roots={fates.Select(fate => fate.Source).Distinct().Count()}");
+        foreach (var group in fates.GroupBy(fate => fate.Breakable switch { true => "breakable", false => "not breakable", null => "no Runner turn" })
+            .OrderBy(group => group.Key, StringComparer.Ordinal))
+        {
+            int count = group.Count();
+            string Share(string outcome) => string.Create(CultureInfo.InvariantCulture,
+                $"{outcome}={group.Count(fate => fate.Outcome == outcome)} ({group.Count(fate => fate.Outcome == outcome) / (double)count:P0})");
+            output.WriteLine(string.Create(CultureInfo.InvariantCulture,
+                $"  {group.Key}: {count}, run at least once {group.Count(fate => fate.Runs > 0) / (double)count:P0}, runs {group.Average(fate => fate.Runs):F2} an agenda; ") +
+                string.Join(" ", group.Select(fate => fate.Outcome).Distinct().Order(StringComparer.Ordinal).Select(Share)));
+        }
         return 0;
     }
 

@@ -556,3 +556,52 @@ better turns than the heuristic plays, and the lift adds to it. Run-root values 
 misranks, the best line is missed, and a blunder-list root that turns out to be a missed line is the sign to revisit
 it. Without the teacher's play-out, `plan-lines` takes the best of every screened line, which is more optimistic than
 the teacher and favours candidates whose turn has more later clicks (S5.1's gates check it).
+
+**The Corp's separation: why it fails (6 October 2026).** Regret below is on the line teacher's labels unless named.
+`ai-regret score --discordant A,B` lists the roots where two versions chose different groups:
+
+| Pair (Standard, all roots) | Discordant roots | Over the discordant roots | Over every root |
+|---|---|---|---|
+| Corp v29 − v30 | 272 (all turn roots) | +0.0029 [−0.0087, 0.0149] | +0.0003 [−0.0009, 0.0017] |
+| Corp v28 − v30 | 324 (272 turn, 52 run) | +0.0060 [−0.0070, 0.0198] | +0.0008 [−0.0007, 0.0025] |
+| Corp v29 − v30, `labels-v1` | 272 | +0.0108 [−0.0017, 0.0245] | +0.0011 [−0.0005, 0.0028] |
+
+272 discordant roots are enough to read, so this is not dilution: v30 is level where it chooses differently, and the
+one-step teacher did not separate the pair either. v30's change from v29 was four rules (Petty Cash first, IP
+Enforcement, Mercia's free install, an agenda held in HQ); the ladder's +50 Elo was for the four together, never
+attributed. Split by agenda installs (value of v30's choice − v29's, two groups relabelled at 128 samples):
+
+| Discordant roots | Roots | 4 turns | 8 turns |
+|---|---:|---|---|
+| v29 installs an agenda in a remote, v30 holds it | 119 | −0.0021 [−0.0280, 0.0285] | −0.0005 [−0.0279, 0.0299] |
+| No agenda install | 144 | +0.0056 [+0.0001, 0.0116] | +0.0059 [−0.0003, 0.0127] |
+| Both install an agenda | 8 | −0.0089 | +0.0032 |
+
+v30 is ahead where no agenda is involved and level on the agenda hold. The agenda roots' interval is wide (it cannot
+exclude +0.02 a decision, about what a 50 Elo gain spread over a few decisions a game would be), so "level" is a weak
+reading. **The horizon is closed as a suspect:** at 8 turns neither mean moves.
+
+**The rollout's Runner is the blind spot.** `ai-regret exposure` follows every agenda the Corp installs in a remote until
+it is scored, stolen or trashed, and asks the run model, at the Runner's next turn, whether the Runner can get in
+(unrezzed ICE is counted, not priced). Over the suite's games (3,779 agendas):
+
+| Agendas in a remote | Count | Run at least once | Stolen | Scored |
+|---|---:|---:|---:|---:|
+| The Runner can get in, every ICE known | 299 | 43% | 36% | 60% |
+| The Runner can get in, 1 unrezzed ICE | 1,337 | 29% | 17% | 78% |
+| The Runner can get in, 2 or more unrezzed | 1,136 | 44% | 16% | 76% |
+| The Runner cannot get in | 485 | 9% | 5% | 87% |
+| Scored before the Runner's turn | 522 | 0% | 0% | 99% |
+
+Where every ICE is known and the run model says the Runner gets in, it runs fewer than half of those remotes, and
+steals 107 of the 129 it runs. In the teacher's own play-outs of v29's install at the 119 agenda roots (128 samples, 4
+turns; 15,232 play-outs), the Runner runs the agenda's remote in **19%** of them, steals it in 14%, and the Corp scores
+it in 62%; when it runs, it steals 75%. The ladder's games and the teacher's rollouts share this Runner, so neither can
+see the cost of an exposed agenda: the agenda-hold rule is neutral in self-play because the bot Runner does not punish
+what it guards against (an outside player did, which is why v30 has the rule).
+
+**What closes the Corp gate.** Not a relabel at a longer horizon: a Runner that values a remote the Corp has just
+installed into and that it can get in to (Runner v28, a live-policy change gated as any other), after which the suite is
+relabelled (the teacher's rollouts use the live Runner) and the agenda roots are read again. S1.3's gate stays open for
+the Corp until then. S1.6, the targeted-roots sampler, is still worth building for S4.2 and S5.3, but it does not fix
+this.
