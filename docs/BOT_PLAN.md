@@ -281,9 +281,24 @@ A fixed corpus of recorded decision roots with teacher labels, scored in minutes
   - Both per side, per pool, per category (the puzzle categories, 5.3), with a bootstrap interval over roots.
 - **Blunder list:** the roots with the highest regret for the current version, with the candidates and values. This
   is the review list for a person or an LLM (section 7); it is also where new puzzles come from.
-- **Teacher drift:** the teacher is only as good as its leaf, so every expert-iteration round (S6) re-labels the suite
-  and reports how much the labels moved; a round whose relabelling flips more than a set share of best choices is
-  inspected before it is accepted.
+- **Teacher drift:** the teacher is only as good as its leaf, so every expert-iteration round (S6) re-labels the core
+  (below) and reports how much the labels moved; a round whose relabelling flips more than a set share of best choices
+  is inspected before it is accepted.
+- **Labelling cost.** A whole-suite relabel is about seven hours on the development box, and S1 changed the teacher
+  three times in two days (one-step, the line search, the live opponent model). The suite is sized for the questions it
+  answers, so that a relabel is an hour or two and never the critical path:
+  - **The teacher is versioned and frozen between milestones.** Teacher v2 is the line search (beam 5, one-turn
+    screen), the live Standard opponent, a 4-turn horizon and 32 samples. Labels and scores name their teacher. A
+    teacher change is a milestone event with a relabel budgeted overnight, not something a step does in passing.
+  - **A core and targeted roots.** The core is about 2,000 random roots, held out by deal; it is what a teacher change
+    relabels, what absolute regret is quoted on, and what the leaf is fitted on. Targeted roots (`diverge`) are
+    labelled when a comparison needs them and keep the labels they got. A paired comparison is valid root by root as
+    long as both values at a root come from one teacher, so a suite with roots labelled by different teachers still
+    compares versions; only absolute regret needs one teacher, and it is quoted on the core.
+  - **Adaptive samples.** A root is labelled at 8 samples, and the rest are spent only where the best two groups are
+    within two standard errors of each other. Most roots are decided early.
+  - **Scheduling.** The relabel and the ladders both want the box to themselves and there is no second box, so relabels
+    run overnight and ladders by day; a step never waits on a relabel it could have scheduled the evening before.
 
 CLI: `ai-regret label <games-dir> --output <suite>` and `ai-regret score <suite> [--version V] [--profile P]`.
 
