@@ -772,3 +772,59 @@ samples are kept for S1.6's targeted roots, where the two versions' choices usua
 there is measured on S1.6's first run rather than assumed. One point of the design to watch there: an undecided root
 stops extending once its recording samples separate, which is optional stopping on the recorded samples; the signed
 difference above shows no lift from it on these roots.
+
+### S1.6: targeted roots (7 October 2026)
+
+**The roots.** `ai-regret diverge` replayed the suite's 974 games and asked two Corp versions (Standard) at every
+turn-action and run-choice decision; the positions where they chose different groups became roots, both choices
+recorded (`diverge:VERSION=GROUP` in the root's categories), deduplicated by position and held out by deal:
+
+| Pair | Roots (before deduplication) | Kind | Held out | Groups a root | Time |
+|---|---:|---|---:|---:|---:|
+| Corp v29, v30 | 2,073 (4,514) | turn | 528 | 13.8 | 599 s |
+| Corp v28, v29 | 499 (1,096) | run | 66 | 3.3 | 573 s |
+
+179 of the 2,572 were already suite roots (they keep their labels and gain the choices); the other **2,393** were
+labelled by teacher v2 and merged (`ai-regret merge`): the suite is now 8,905 roots, 4,945 of them the Corp's.
+
+**Pruning, measured** (`--decide 8 --record 24 --prune 3`: every group 8 deciding samples, then 24 recording samples for
+the best three and both chosen groups; a pruned group keeps its deciding value, marked, never a root's best). The 2,393
+roots took **2 h 59 min** (10,744 s). Against flat 32-sample labels of 200 targeted turn roots (2,438 s, 12.2 s a root):
+
+- **samples: 48% of flat's** (13.6 groups a root, 4.2 recorded);
+- recorded groups: mean signed difference −0.0046 (standard error 0.0015), mean absolute 0.0237. The sign is the
+  selection, not a lift: the recorded groups were chosen for their deciding samples, which flat's value includes and the
+  pruned value does not;
+- the best group differs at 36%, under the noise floor; **flat's best was pruned at 17% of roots**, so a pruned root's
+  best is often too low and its absolute regret reads lower (Corp v29 0.0791 against 0.0892);
+- the pair's regret difference agrees within the intervals: Corp v29 − v30 −0.0016 [−0.0224, 0.0217] pruned, +0.0038
+  [−0.0174, 0.0265] flat;
+- noise floor on 200 targeted roots (repeat seed 2): 56% best-group disagreement, median standard error 0.045
+  (`labels-targeted-repeat*`).
+
+**Verdict: pruning pays on targeted roots** (about half the samples, the comparison unchanged) and is kept for them. It
+biases a root's absolute regret low, so absolute regret is never quoted from targeted roots: it is quoted on the core,
+which relabels flat (S1.7). `bot-check`'s regret line now reads the core's held-out roots.
+
+**Gate: the Corp separates** (teacher v2, every choice labelled, none of a pruned group):
+
+| Comparison | Discordant roots | Over the discordant roots | Every Corp root (4,945) | Before (S1.5's table) |
+|---|---:|---|---|---|
+| Corp v29 − v30 | 2,198 | **+0.0180 [0.0120, 0.0243]** | +0.0080 [0.0052, 0.0103] | +0.0142 [0.0010, 0.0284] (272) |
+| Corp v28 − v30 | 2,717 | **+0.0231 [0.0176, 0.0287]** | +0.0127 [0.0092, 0.0156] | +0.0173 [0.0049, 0.0298] (324) |
+| Corp v28 − v29 | 519 | **+0.0451 [0.0332, 0.0593]** | +0.0047 [0.0033, 0.0061] | +0.0007 [−0.0001, 0.0014] (all) |
+
+The every-root column mixes the targeted roots in, so it is a comparison, not an absolute regret. **The agenda-hold
+rule**, read where v29 and v30 choose differently:
+
+| Discordant roots (v29 − v30) | Roots (targeted) | Regret difference | v30 better / v29 better |
+|---|---:|---|---|
+| v29 installs an agenda in a remote, v30 holds it | 1,201 (1,146) | **+0.0241 [0.0141, 0.0340]** | 609 / 505 |
+| No agenda install | 945 (881) | +0.0112 [0.0063, 0.0167] | 537 / 328 |
+| Both install an agenda | 39 | −0.0126 [−0.0683, 0.0398] | 16 / 21 |
+| v30 installs one, v29 does not | 13 | +0.0356 [−0.0286, 0.0990] | 9 / 3 |
+
+At ten times the roots the agenda roots separate: holding the agenda is worth 0.024 a decision against the live Runner
+v28, the gain the outside player found and self-play could not see. **S1.3's gate for the Corp is closed** (teacher v2,
+Runner v28, and S1.6's roots). The Runner's comparisons are unchanged (v24 − v25 +0.0027 [0.0020, 0.0035], v24 − v26
++0.0028 [0.0020, 0.0037], v26 − v28 +0.0014 [0.0008, 0.0020]).

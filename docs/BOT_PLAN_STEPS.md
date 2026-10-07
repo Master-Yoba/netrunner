@@ -265,6 +265,13 @@ S4.2 and S5.3 compare planners whose choices diverge from the heuristic's far mo
   - the labelling time and the roots added, per side and category, are recorded.
 - **Record:** the counts, the time, and the Corp table before and after, in `docs/BOT_VERSIONS.md`.
 
+**Outcome (7 October; the record is in `docs/BOT_VERSIONS.md`).** `diverge` found 2,073 roots for Corp v29 against v30
+(turn decisions) and 499 for v28 against v29 (run choices); 2,393 new roots were labelled by teacher v2 with pruning in
+2 h 59 min and merged (8,905 roots). Pruning pays on targeted roots (48% of flat's samples, the pair's comparison within
+the intervals) and stays for them; it biases absolute regret low, which is quoted on the core only. **The Corp
+separates** over the discordant roots for every pair (v29 − v30 +0.0180 [0.0120, 0.0243] over 2,198), and the agenda
+roots on their own (+0.0241 [0.0141, 0.0340] over 1,201): S1.3's gate is closed. The Runner's comparisons hold.
+
 **Later uses.** S4.2 runs `diverge` for the planner on set 5 against the planner on set 4 before its regret gate;
 S5.3 for the new Standard against `standard-prev`; S6 for each round's candidate against the current Standard. In each
 case the gate is read over the discordant roots, and the all-roots table is reported beside it.
