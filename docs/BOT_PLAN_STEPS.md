@@ -544,6 +544,17 @@ horizon leaf) is the one Corp arm the reference lifts. So, before any trees:
 - **Calibration:** a ranker ships only calibrated by a monotone one-dimensional fit over all rows whose log loss is no
   worse than the value fit's; failing that, the planner keeps its tie threshold and static mix on the value fit's scale.
 
+**Outcome (8 October; the record is in `docs/BOT_VERSIONS.md`).** The game's-end relabel took 5 hours (1.8 times the
+4-turn run) and no play-out reached the cap; its reference counts fewer pairs (3,566 Corp, 3,097 Runner) as repeatably
+(98% split halves). It measures the confound: the pool's fit loses its lead without its own horizon (the Runner's
+reverses, −0.065 against the general fit), and every fit to the 4-turn values falls with it. Against it no arm passes
+the gate. The Corp's arms, linear or boosted, value- or rank-fitted, sit between 0.59 and 0.65 with nothing separated;
+the Runner's rank fit is clear of the value fits but level with the general fit (0.731 against 0.726). The boosted
+trees (2.2 µs a state) overfit a weak per-sample signal and read no better. No ranker's monotone calibration matches the
+value fit's log loss, so none reaches the planner. The limit is what the end-of-turn state says about the game; the
+next lever is the fallback kept in view above (one opponent turn before the leaf), a decision for the plan. A teacher
+v3 to the game's end is affordable (5 hours for the core) and its reference reliable where it counts.
+
 ## S5. The planner becomes Standard (L)
 
 ### S5.0 Engine cost of simulation
