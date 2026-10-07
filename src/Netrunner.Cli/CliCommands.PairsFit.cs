@@ -3,7 +3,6 @@ using System.Text.Json;
 using Netrunner.AI;
 using Netrunner.Cards;
 using Netrunner.Core;
-using Netrunner.Match;
 using Netrunner.Match.Regret;
 
 namespace Netrunner.Cli;
