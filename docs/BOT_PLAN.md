@@ -188,8 +188,9 @@ a name; `data/ai/evaluation-v5.json` stores the fit with its provenance.
 **Targets.** Not the game's winner, and not a position's value either. The planner never asks the leaf how good a
 position is; it asks which of two end-of-turn states reached from the same root is better. A leaf fitted to predict
 values spends its capacity on the level across roots (which deck is ahead), which is easy and useless to a planner:
-S4.2 fitted set 5 to the teacher's values, beat set 4 on held-out log loss in both seats, and ranked pairs of end
-states from one root at 60% for the Corp and 64% for the Runner (chance 50%; set 4 shipped 55% and 63%). So the leaf
+S4.2 fitted set 5 to the teacher's values and beat set 4 on held-out log loss in both seats; refitted to the values
+of end-of-turn states (S4.2b), it ranked pairs of end states from one root at 60% for the Corp and 64% for the Runner
+(chance 50%; set 4 shipped 55% and 63%). So the leaf
 is fitted **to rank**:
 
 - the rows are the end-of-turn states of the lines the teacher plays (section 5.1 records them), with the play-out
