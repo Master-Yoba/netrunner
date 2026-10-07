@@ -280,6 +280,46 @@ public sealed class RegretSuiteTests
             (definition, side, version) => SavedDecision.Agent(definition, side, version), new RegretSampling()).Select(root => root.Id));
     }
 
+    /// <summary>
+    /// Bot plan S4.1: evaluation set 5 on real positions of the box suite, from both sides with the teacher's knowledge:
+    /// every value is finite, and set 5's own terms vary.
+    /// </summary>
+    [Fact]
+    public void SetFiveReadsRealPositions()
+    {
+        if (!Official) return;
+        RegretSuite suite = RegretSuite.Load(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "data", "ai", "regret",
+            "gateway-elevation"));
+        IReadOnlyList<string> names = EvaluationFeatures.NamesFor(5);
+        int own = names.Count - EvaluationFeatures.NamesFor(4).Count;
+        var seen = Enumerable.Range(0, names.Count).Select(_ => new HashSet<double>()).ToArray();
+        foreach (RegretGame game in suite.Games.Where(entry => entry.Source == "ladder").Take(4))
+        {
+            FullMatchDefinition definition = RegretGames.Definition(game);
+            var catalog = new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior);
+            var agents = new[] { PlayerSide.Corp, PlayerSide.Runner }.ToDictionary(side => side,
+                side => (OfflineAgent)RatingLadder.CreateAgent(RegretLabels.DefaultTeacher, side, definition));
+            foreach (RegretPosition position in RegretGames.Positions(game, definition))
+            {
+                foreach (OfflineAgent agent in agents.Values) AgentLifecycleHost.Observe(agent, position.State, definition.Behavior);
+                if (position.Sequence % 7 != 0) continue;
+                foreach ((PlayerSide side, OfflineAgent agent) in agents)
+                {
+                    AgentFeatures features = ObservationReader.Read(ObservationBuilder.Build(position.State, side, definition.Behavior, definition.Runtime),
+                        agent.Configuration.FeatureVersion);
+                    double[] values = EvaluationFeatures.Extract(features, catalog, 5, agent.Checkpoint.Knowledge);
+                    Assert.Equal(names.Count, values.Length);
+                    Assert.All(values, value => Assert.True(double.IsFinite(value)));
+                    for (int index = 0; index < values.Length; index++) seen[index].Add(Math.Round(values[index], 6));
+                }
+            }
+        }
+        // A punisher the Runner cannot survive (a castable one, the threat met, a grip under its damage) is rare in self-play,
+        // where v26 keeps the grip up against it; its unit test covers it.
+        Assert.All(Enumerable.Range(names.Count - own, own).Where(index => names[index] != "punisher-exposure"),
+            index => Assert.True(seen[index].Count > 1, $"{names[index]} never varies."));
+    }
+
     /// <summary>Bot plan S1.7: a label names its teacher's version, and a root whose values come from two is refused.</summary>
     [Fact]
     public void ALabelNamesItsTeacherAndARootMixingTwoIsRefused()

@@ -828,3 +828,32 @@ At ten times the roots the agenda roots separate: holding the agenda is worth 0.
 v28, the gain the outside player found and self-play could not see. **S1.3's gate for the Corp is closed** (teacher v2,
 Runner v28, and S1.6's roots). The Runner's comparisons are unchanged (v24 − v25 +0.0027 [0.0020, 0.0035], v24 − v26
 +0.0028 [0.0020, 0.0037], v26 − v28 +0.0014 [0.0008, 0.0020]).
+
+### S4.1: evaluation feature set 5 (7 October 2026)
+
+`EvaluationFeatures.NamesFor(5)` is set 4's 28 features and 12 more, each from the observing side's view: what its
+observation shows, and what its knowledge infers (`Extract(features, catalog, 5, knowledge)`; without knowledge, the
+pool prior and no tracker). The Corp reads its own cards; the Runner reads the run model and `RunnerInference`, the
+tracker and prior Runner v28 values remotes with.
+
+| Feature | Corp's view | Runner's view |
+|---|---|---|
+| `exposed-agenda-points` | its agenda points in remotes the Runner can get into now | the same, inferred (`RootAgenda`: the tracker, else the root share moved by protection) |
+| `hq-agenda-density` | agendas in its hand over its size | `HqAgendaShare` (tracker) |
+| `rd-agenda-density` | agenda points per unseen Corp card (the pool less what it sees) | the same from its prior (the list for Hard) |
+| `advancements-left`, `scoring-server-open` | its most advanced agenda's counters still needed, and whether the Runner can get into that server | the most advanced face-down card, its requirement the prior's average |
+| `punisher-exposure`, `grip-margin` | a punisher it holds and can pay for against the grip; the grip less the largest damage (punisher or known trap), ±5 | `Punishers`' chance when the grip is short |
+| `central-min-cost`, `central-affordable` | the cheaper of HQ and R&D as set 1 prices them, and whether either is open at the Runner's credits | same |
+| `money-after-reserve`, `income-cards` | credits less its cheapest unrezzed ICE's rez cost; its rezzed money-making cards | credits less the cheapest central; its money-making rig cards |
+| `race-to-move` | the agenda lead in sevenths when it moves next | same |
+
+The score race's own terms (points, near-win, turn, who moves) are set 1's, so only the interaction is new. Archives was
+dropped from the central tax: almost never protected, it pinned the term at zero. Each server's run is planned once per
+extraction, since set 5 is read at the end of every rollout once S4.2 fits it. `RunnerInference.PunisherDamage` is
+`Punishers`' predicate extracted for the Corp's view, the Runner's use unchanged.
+
+**Gate.** A unit test per term on constructed observations, and a twin test (two states differing only in which hidden
+card is where give the same features, from either side) in `EvaluationFeaturesTests`; on real box positions
+(`RegretSuiteTests.SetFiveReadsRealPositions`, both sides with the teacher's knowledge) every value is finite and every
+new term varies except `punisher-exposure`, which is rare in self-play (a castable punisher, the threat met and a grip
+under its damage at once, which v26 guards against). No fit yet: S4.2 fits set 5 on the core.

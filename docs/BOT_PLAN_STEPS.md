@@ -415,6 +415,12 @@ previous live version that is not legacy code.
 - Unit tests per term on constructed observations (`tests/Netrunner.AI.Tests/EvaluationFeaturesTests.cs`), including
   a twin test: two states with the same observation give the same features.
 
+**Outcome (7 October; the record is in `docs/BOT_VERSIONS.md`).** Set 5 is set 4 and 12 terms, each from the observer's
+view with its knowledge (`Extract(…, 5, knowledge)`): exposed agenda points, HQ and R&D agenda density, advancements
+left and whether that server is open, punisher exposure and grip margin, the central tax (HQ and R&D), money after
+reserve and income cards, and the score race's interaction (its other terms are set 1's). Unit and twin tests pass, and
+the terms vary on real positions (the punisher term is rare in self-play). No fit yet.
+
 ### S4.2 Fitting to the teacher
 
 - `ai-fit-evaluation --target teacher --suite <suite-dir> --feature-set 5 --outcome-weight 0.2 --output <doc>`: fits
