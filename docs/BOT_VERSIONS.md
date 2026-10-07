@@ -1202,3 +1202,35 @@ rows, which keeps its order): Corp 0.663 against the value fit's 0.500 (4-turn) 
 the game's-end rank fit); Runner 0.570 against 0.560 and 0.617 against 0.541. **No monotone calibration of a ranker is
 as good as the value fit's**, since a within-root ranker carries no level across roots; by the decision, a ranker that
 reaches the planner takes its tie threshold and static mix on the value fit's scale.
+
+**The boosted scalar trees** (step 6: the Corp's linear arms all sit between 0.59 and 0.65 on the clean reference).
+`ai-fit-evaluation --target trees`: `g(set 5)` per side, 200 trees of depth 3, learning rate 0.1, histogram splits over
+64 quantile thresholds a feature, Newton steps on the pairwise logistic loss over the game's-end training pairs (as
+`--target pairs` forms them: Corp 67,503 pairs over 76,434 states, Runner 135,897 over 142,302), calibrated by an
+isotonic fit interpolated between its blocks. Fitted in 6 and 9 s. **Inference: 2.2 µs a state** (score and calibration,
+one thread), against set 5's 93 µs extraction, so the leaf's cost is unchanged in practice. The fits and the report are
+in `data/ai/s4.2c/` (with the linear arms refitted on the game's-end rows).
+
+| Seat | Arm (game's-end reference, mean leaf) | Accuracy | Trees − arm |
+|---|---|---|---|
+| Corp | boosted trees | 0.598 [0.489, 0.711] | |
+| Corp | set 4, value-fitted (game's-end rows), the best arm | 0.645 [0.560, 0.729] | −0.047 [−0.127, +0.032] |
+| Corp | set 5, fitted to rank (game's-end rows) | 0.616 [0.541, 0.704] | −0.018 [−0.145, +0.118] |
+| Runner | boosted trees | 0.712 [0.657, 0.759] | |
+| Runner | set 5, fitted to rank (game's-end rows), the best arm | 0.731 [0.662, 0.796] | −0.019 [−0.086, +0.051] |
+| Runner | set 4, general fit | 0.726 [0.654, 0.790] | −0.014 [−0.082, +0.065] |
+
+On the 4-turn reference the Corp's trees read 0.674, level with the pool's fit (+0.000 [−0.068, +0.067]): the trees
+fitted to game results do not inherit the horizon's lift, and on the clean reference they are no better than the
+linear arms. They overfit what signal there is: on per-sample pairs of the Corp's game's-end rows they order 59.3% of
+training pairs and 53.1% of held-out ones, where the linear fits hold 55% on both (Runner: 56.8% and 53.4%, against
+the rank fit's 57.9% and 56.2%). Lighter boosting (60 trees, learning rate 0.05) reads worse on the reference (Corp
+0.542, Runner 0.674).
+
+**Reading.** On the reference with no leaf in it, no learned leaf, linear or boosted, value- or rank-fitted, orders the
+Corp's end-of-turn states measurably better than another (all between 0.59 and 0.65, 81 held-out roots), and the
+Runner's best arms (the rank fit, the general fit, the trees) are level at about 0.71 to 0.73. The per-sample game
+result from an end-of-turn state is a weak signal (55% of per-sample pairs ordered by any fit). The gate of S4.2c is
+not met in either seat, and the trees do not change that: the limit is what the end-of-turn state says about the game,
+not the model's form. The fallback the step kept in view (one opponent turn played out before the leaf, so the leaf
+scores a state where exposure has been punished or not) is the next lever; it is not built.

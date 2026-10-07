@@ -22,7 +22,12 @@ public static partial class CliCommands
     private static int RunAiFitEvaluation(string[] args, TextWriter output, TextWriter error)
     {
         if (args.Contains("--target", StringComparer.Ordinal))
-            return args.SkipWhile(arg => arg != "--target").Skip(1).FirstOrDefault() == "pairs" ? RunPairsFit(args, output, error) : RunTeacherFit(args, output, error);
+            return args.SkipWhile(arg => arg != "--target").Skip(1).FirstOrDefault() switch
+            {
+                "pairs" => RunPairsFit(args, output, error),
+                "trees" => RunTreesFit(args, output, error),
+                _ => RunTeacherFit(args, output, error),
+            };
         string content = "both";
         int games = 400, holdoutGames = 120, workers = 1, featureVersion = 1;
         ulong seed = 1;
