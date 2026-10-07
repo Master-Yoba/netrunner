@@ -1055,3 +1055,81 @@ teacher-fitted set 5 pairs, with `labels-flat.jsonl.gz`, the 100-root flat sampl
 `plan-value` and `end-lines` (the `plan-value 1` pairs). They are not merged into the main suite: a root found by two
 pairs keeps one label, whose pruning recorded the choices of the pair that labelled it, so each pair is scored on its
 own suite.
+
+### S4.2c: the leaf fitted to rank (7 October 2026)
+
+**Recording.** The end-of-line rows now carry their sample and line (the candidate's group and rank path), so pairs of
+end states form on common random numbers. Every line has a row on every sample: a line the memo values gets its row,
+and so does one whose game ended inside the turn (`ended: game`, its value the result, which the planner scores
+exactly). The core relabelled flat with recording on took 2 h 46 min (9,955 s); its 2,050 labels are identical to the
+core's. It recorded **987,180 rows** (947,879 at the turn's end, 39,301 at the game's end), 30,849 of 30,851 lines with
+every sample. On 200 held-out core roots each row also has two more play-outs (repeatability, not a ceiling, #117):
+the hidden state dealt again as one world for all of a sample's end states (`ObservationDeterminizer.SampleJointly`),
+and only the engine's random stream reseeded (`ObservationSampler.Reseeded`).
+
+**The reference order** (#117): two lines of a root ordered by their values' mean difference over every sample (on
+common random numbers), counted where it exceeds twice its standard error. Over the held-out deals: Corp 28,716 line
+pairs of 129 roots, 10,005 counted; Runner 44,003 of 227, 7,176 counted. It is repeatable:
+
+| Seat | Split halves, counted pairs | Split halves, every pair | Re-dealt second play-out | Reseeded second play-out |
+|---|---|---|---|---|
+| Corp | 0.995 [0.993, 0.998] | 0.906 [0.885, 0.924] | 0.932 [0.909, 0.954] (57 roots) | 0.985 [0.969, 0.998] |
+| Runner | 0.995 [0.992, 0.997] | 0.830 [0.813, 0.847] | 0.920 [0.886, 0.946] (96 roots) | 0.996 [0.993, 0.999] |
+
+**The baseline table, read twice** (gap-weighted accuracy; the first reading is #116's method on these rows: distinct
+end states pooled over samples, pairs more than 0.1 apart, up to 50 a root; the second is against the reference order,
+on the state pairs of every sample; an independent script reproduces the second):
+
+| Seat | Arm | First reading | Against the reference |
+|---|---|---:|---:|
+| Corp | set 5, fitted to the end-of-line values | 60.4% | 63.8% |
+| Corp | set 4, fitted to the end-of-line values | 56.5% | 63.4% |
+| Corp | set 4, general fit (`evaluation-v2`, #116's column) | 55.4% | 63.3% |
+| Corp | set 4, the pool's fit (`evaluation-gateway-elevation-v2`, what Hard plays) | 55.1% | **66.6%** |
+| Runner | set 5, fitted to the end-of-line values | 64.7% | 74.1% |
+| Runner | set 4, fitted to the end-of-line values | 64.5% | 73.9% |
+| Runner | set 4, general fit | 63.2% | 71.5% |
+| Runner | set 4, the pool's fit | 64.0% | 73.2% |
+
+#116's table measured the general fit as "shipped"; for this pool Hard plays the pool's own fit. **A confound in the
+reference:** the teacher scores the horizon with set 4 (`--evaluation 4`), which for this pool is the pool's fit, so
+the reference partly rewards agreeing with that leaf four turns on. The pool's fit is the one arm the reference lifts
+above the others for the Corp (66.6% against the general fit's 63.3% on the same features).
+
+**The fit** (`ai-fit-evaluation --target pairs`: at most 200 pairs of a sample's distinct end states a training root,
+Corp 83,224 and Runner 158,689; linear on the feature difference, both orders, weighted by the gap; then calibrated):
+calibrating on the play-out values across roots turned the Corp's slope negative (the level across roots, which a
+ranker does not model, outweighed its order), so the slope is now taken within roots (Corp 0.36 and 0.30, Runner 0.44
+and 0.43 for sets 4 and 5). Against the reference (`data/ai/evaluation-v5-pairs.report.json`):
+
+| Seat | Arm | State pairs | Mean leaf | Log loss |
+|---|---|---|---|---:|
+| Corp | set 4, the pool's fit | 0.666 [0.604, 0.725] | 0.673 [0.610, 0.735] | 0.5420 |
+| Corp | set 4, fitted to the end-of-line values | 0.634 [0.573, 0.695] | 0.639 [0.577, 0.700] | 0.5243 |
+| Corp | set 5, fitted to the end-of-line values | 0.638 [0.581, 0.692] | 0.640 [0.578, 0.697] | 0.5000 |
+| Corp | set 4, fitted to rank | 0.585 [0.525, 0.653] | 0.578 [0.514, 0.655] | 1.2912 |
+| Corp | set 5, fitted to rank | 0.619 [0.567, 0.674] | 0.615 [0.561, 0.677] | 1.1879 |
+| Runner | set 4, the pool's fit | 0.732 [0.703, 0.758] | 0.855 [0.817, 0.889] | 0.5655 |
+| Runner | set 4, fitted to the end-of-line values | 0.739 [0.709, 0.768] | 0.852 [0.811, 0.887] | 0.5654 |
+| Runner | set 5, fitted to the end-of-line values | 0.741 [0.712, 0.768] | 0.855 [0.817, 0.889] | 0.5603 |
+| Runner | set 4, fitted to rank | 0.738 [0.710, 0.765] | 0.865 [0.830, 0.896] | 0.5725 |
+| Runner | set 5, fitted to rank | 0.736 [0.708, 0.763] | **0.873 [0.840, 0.903]** | 0.5719 |
+
+Set 5 fitted to rank against the others, paired over roots (state pairs; mean leaf):
+
+| Seat | Against | State pairs | Mean leaf |
+|---|---|---|---|
+| Corp | set 4, the pool's fit | −0.047 [−0.108, +0.019] | −0.059 [−0.130, +0.015] |
+| Corp | set 5, fitted to the end-of-line values | −0.019 [−0.080, +0.048] | −0.025 [−0.097, +0.049] |
+| Runner | set 4, the pool's fit | +0.004 [−0.017, +0.024] | +0.018 [−0.005, +0.039] |
+| Runner | set 5, fitted to the end-of-line values | −0.005 [−0.018, +0.008] | **+0.018 [+0.004, +0.035]** |
+
+**Fit gate: not met.** On the state pairs, set 5 fitted to rank is not above the baseline in either seat; for the Corp
+it is below every value fit, though not separated. The Runner's mean-leaf reading, the order the planner uses, does
+improve on the value fits. The calibrated rankers' log loss is poor for the Corp (1.19 and 1.29): a ranker carries no
+level across roots, so its calibrated probabilities are often extreme.
+
+**Where this leaves the step.** The Corp's linear ranker is at 62%, under #117's 70%, with the reference repeatable at
+99.5%: by the step, the next fit is boosted scalar trees with the pairwise gradient. Before building it, the reference's
+dependence on the horizon leaf (above) is the open question: a ranker trained on these values learns, in part, to
+agree with the pool's set 4 four turns on.

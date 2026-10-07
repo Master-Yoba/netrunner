@@ -1,0 +1,363 @@
+{
+  "schemaVersion": 1,
+  "target": "pairs",
+  "suite": "data/ai/regret/gateway-elevation",
+  "endLines": "/home/alex/netrunner/.tools/s42c/end-lines.jsonl.gz",
+  "pairsPerRoot": 200,
+  "sides": [
+    {
+      "side": "corp",
+      "trainPairs": 83224,
+      "heldOutRoots": 129,
+      "linePairs": 28716,
+      "reliableLinePairs": 10005,
+      "accuracy": [
+        {
+          "arm": "set 4, shipped weights",
+          "statePairs": {
+            "mean": 0.666125465180097,
+            "lower": 0.603984513157961,
+            "upper": 0.7254950639923149
+          },
+          "meanLeaf": {
+            "mean": 0.6734205254415707,
+            "lower": 0.6097051097445917,
+            "upper": 0.7346147678760143
+          }
+        },
+        {
+          "arm": "set 4, fitted to the end-of-line values",
+          "statePairs": {
+            "mean": 0.6342620957369798,
+            "lower": 0.5727694381187706,
+            "upper": 0.6949881101674691
+          },
+          "meanLeaf": {
+            "mean": 0.6388554271748862,
+            "lower": 0.5765166161144009,
+            "upper": 0.7000991833275523
+          }
+        },
+        {
+          "arm": "set 5, fitted to the end-of-line values",
+          "statePairs": {
+            "mean": 0.6380120925310941,
+            "lower": 0.5808258526046569,
+            "upper": 0.6924692314068295
+          },
+          "meanLeaf": {
+            "mean": 0.6398304662036455,
+            "lower": 0.5784188655547212,
+            "upper": 0.6969415072695018
+          }
+        },
+        {
+          "arm": "set 4, fitted to rank",
+          "statePairs": {
+            "mean": 0.5846649857863364,
+            "lower": 0.5251384769658607,
+            "upper": 0.6530749821966979
+          },
+          "meanLeaf": {
+            "mean": 0.578111198220064,
+            "lower": 0.5135884964387559,
+            "upper": 0.6554420888936943
+          }
+        },
+        {
+          "arm": "set 5, fitted to rank",
+          "statePairs": {
+            "mean": 0.6193547241981313,
+            "lower": 0.5674909360874543,
+            "upper": 0.6741496639778929
+          },
+          "meanLeaf": {
+            "mean": 0.6148946779130978,
+            "lower": 0.5611447790755488,
+            "upper": 0.6766529965186766
+          }
+        }
+      ],
+      "paired": [
+        {
+          "against": "set 4, shipped weights",
+          "statePairs": {
+            "mean": -0.04677074098196616,
+            "lower": -0.10798383600185885,
+            "upper": 0.018785602095258435
+          },
+          "meanLeaf": {
+            "mean": -0.05852584752847298,
+            "lower": -0.1298492410699742,
+            "upper": 0.014747913434010234
+          }
+        },
+        {
+          "against": "set 4, fitted to the end-of-line values",
+          "statePairs": {
+            "mean": -0.014907371538849214,
+            "lower": -0.0788983059800247,
+            "upper": 0.05872293186011542
+          },
+          "meanLeaf": {
+            "mean": -0.023960749261788598,
+            "lower": -0.09851450448431523,
+            "upper": 0.0581837937614481
+          }
+        },
+        {
+          "against": "set 5, fitted to the end-of-line values",
+          "statePairs": {
+            "mean": -0.018657368332963133,
+            "lower": -0.07992569902600291,
+            "upper": 0.047957207713116075
+          },
+          "meanLeaf": {
+            "mean": -0.024935788290547843,
+            "lower": -0.09694160475474489,
+            "upper": 0.04880510649257958
+          }
+        },
+        {
+          "against": "set 4, fitted to rank",
+          "statePairs": {
+            "mean": 0.0346897384117947,
+            "lower": 0.0001241158921015224,
+            "upper": 0.068621265315043
+          },
+          "meanLeaf": {
+            "mean": 0.036783479693034166,
+            "lower": -0.0008351992294849625,
+            "upper": 0.07408296631995684
+          }
+        }
+      ],
+      "repeatability": {
+        "splitHalvesReliable": {
+          "mean": 0.9953516308110697,
+          "lower": 0.9928157226787648,
+          "upper": 0.9977224223550524
+        },
+        "splitHalvesAll": {
+          "mean": 0.9062583479770965,
+          "lower": 0.8852781828437563,
+          "upper": 0.923589703580242
+        },
+        "secondPlayOutRoots": 57,
+        "redealt": {
+          "mean": 0.9320863076682999,
+          "lower": 0.9089026472165037,
+          "upper": 0.9535437804408872
+        },
+        "reseeded": {
+          "mean": 0.9849334125839937,
+          "lower": 0.9688943527013916,
+          "upper": 0.9981322498634152
+        }
+      },
+      "calibration": [
+        {
+          "arm": "set 4, shipped weights",
+          "logLoss": 0.5419918208129153
+        },
+        {
+          "arm": "set 4, fitted to the end-of-line values",
+          "logLoss": 0.5242901900930526
+        },
+        {
+          "arm": "set 5, fitted to the end-of-line values",
+          "logLoss": 0.499998999182176
+        },
+        {
+          "arm": "set 4, fitted to rank",
+          "logLoss": 1.291168143287606
+        },
+        {
+          "arm": "set 5, fitted to rank",
+          "logLoss": 1.1879154937027288
+        }
+      ],
+      "calibrationSlope": {
+        "set4": 0.361579476507509,
+        "set5": 0.30049924952364004
+      }
+    },
+    {
+      "side": "runner",
+      "trainPairs": 158689,
+      "heldOutRoots": 227,
+      "linePairs": 44003,
+      "reliableLinePairs": 7176,
+      "accuracy": [
+        {
+          "arm": "set 4, shipped weights",
+          "statePairs": {
+            "mean": 0.7318051123614481,
+            "lower": 0.7029640311518678,
+            "upper": 0.7584941478418853
+          },
+          "meanLeaf": {
+            "mean": 0.8553828877207725,
+            "lower": 0.8173160924531501,
+            "upper": 0.888684797542717
+          }
+        },
+        {
+          "arm": "set 4, fitted to the end-of-line values",
+          "statePairs": {
+            "mean": 0.7390336001926289,
+            "lower": 0.7086063740304868,
+            "upper": 0.768190668174436
+          },
+          "meanLeaf": {
+            "mean": 0.8523335496697065,
+            "lower": 0.8114227112390888,
+            "upper": 0.8872382396200347
+          }
+        },
+        {
+          "arm": "set 5, fitted to the end-of-line values",
+          "statePairs": {
+            "mean": 0.7408802184261485,
+            "lower": 0.7119165554383043,
+            "upper": 0.7682431974958878
+          },
+          "meanLeaf": {
+            "mean": 0.8550179480013855,
+            "lower": 0.816778612348707,
+            "upper": 0.8888244905247791
+          }
+        },
+        {
+          "arm": "set 4, fitted to rank",
+          "statePairs": {
+            "mean": 0.7380652549680102,
+            "lower": 0.7096585613272166,
+            "upper": 0.7653329403316825
+          },
+          "meanLeaf": {
+            "mean": 0.8651905842626827,
+            "lower": 0.8303068832401056,
+            "upper": 0.8958850409039298
+          }
+        },
+        {
+          "arm": "set 5, fitted to rank",
+          "statePairs": {
+            "mean": 0.7358577009222795,
+            "lower": 0.7081904510062687,
+            "upper": 0.762823899106756
+          },
+          "meanLeaf": {
+            "mean": 0.8729457897291224,
+            "lower": 0.8395961088599136,
+            "upper": 0.9025803611893789
+          }
+        }
+      ],
+      "paired": [
+        {
+          "against": "set 4, shipped weights",
+          "statePairs": {
+            "mean": 0.004052588560832785,
+            "lower": -0.01660672981188647,
+            "upper": 0.02388491158696711
+          },
+          "meanLeaf": {
+            "mean": 0.01756290200835014,
+            "lower": -0.0045217017670617764,
+            "upper": 0.03927629401521206
+          }
+        },
+        {
+          "against": "set 4, fitted to the end-of-line values",
+          "statePairs": {
+            "mean": -0.0031758992703485997,
+            "lower": -0.016076021369659015,
+            "upper": 0.010301388136585276
+          },
+          "meanLeaf": {
+            "mean": 0.020612240059416014,
+            "lower": 0.005536530345546028,
+            "upper": 0.039095633433303356
+          }
+        },
+        {
+          "against": "set 5, fitted to the end-of-line values",
+          "statePairs": {
+            "mean": -0.005022517503868251,
+            "lower": -0.01795569111947575,
+            "upper": 0.007982705677612535
+          },
+          "meanLeaf": {
+            "mean": 0.017927841727737547,
+            "lower": 0.0034588001616109657,
+            "upper": 0.03458847520711416
+          }
+        },
+        {
+          "against": "set 4, fitted to rank",
+          "statePairs": {
+            "mean": -0.0022075540457299893,
+            "lower": -0.008706224269829298,
+            "upper": 0.004054871450684251
+          },
+          "meanLeaf": {
+            "mean": 0.007755205466439107,
+            "lower": 0.001292016052227454,
+            "upper": 0.015017526478171651
+          }
+        }
+      ],
+      "repeatability": {
+        "splitHalvesReliable": {
+          "mean": 0.9948023537907749,
+          "lower": 0.9923749916887282,
+          "upper": 0.9967785071189689
+        },
+        "splitHalvesAll": {
+          "mean": 0.8304771679889139,
+          "lower": 0.8132086956963976,
+          "upper": 0.8465927503353962
+        },
+        "secondPlayOutRoots": 96,
+        "redealt": {
+          "mean": 0.9203754506128979,
+          "lower": 0.8862256903061942,
+          "upper": 0.9464143357504227
+        },
+        "reseeded": {
+          "mean": 0.9964024333039253,
+          "lower": 0.992696877030235,
+          "upper": 0.9990069207358884
+        }
+      },
+      "calibration": [
+        {
+          "arm": "set 4, shipped weights",
+          "logLoss": 0.5654798781840419
+        },
+        {
+          "arm": "set 4, fitted to the end-of-line values",
+          "logLoss": 0.5653776137595271
+        },
+        {
+          "arm": "set 5, fitted to the end-of-line values",
+          "logLoss": 0.560259081200835
+        },
+        {
+          "arm": "set 4, fitted to rank",
+          "logLoss": 0.5724908831780141
+        },
+        {
+          "arm": "set 5, fitted to rank",
+          "logLoss": 0.5718602789451459
+        }
+      ],
+      "calibrationSlope": {
+        "set4": 0.4390046827250072,
+        "set5": 0.43056629396889984
+      }
+    }
+  ]
+}
