@@ -241,7 +241,9 @@ public sealed class RegretSuiteTests
         RegretLabels.Label(game, [root], settings, endLines: again, repeatRoots: new HashSet<string> { root.Id });
         Assert.Equal(repeated.Select(row => (row.Redeal, row.Reseed)), again.Select(row => (row.Redeal, row.Reseed)));
         Assert.Equal(rows.Count, rows.Select(row => (row.Sample, row.Line)).Distinct().Count());
-        // At most one row a line played to the horizon: each group's lines on each sample, less any memo hits.
+        // Every line played has a row on every sample (memo hits, and games that end inside the turn, included).
+        Assert.All(rows.GroupBy(row => row.Line), line => Assert.Equal(label.Samples, line.Count()));
+        // At most one row a line played to the horizon: each group's lines on each sample, memo hits included (S4.2c).
         Assert.True(rows.Count <= label.Values.Length * settings.Samples * Math.Max(2, lines), $"{rows.Count} rows");
         Assert.All(rows, row =>
         {

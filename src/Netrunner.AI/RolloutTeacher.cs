@@ -71,7 +71,7 @@ public static class RolloutTeacher
         Action<EndOfTurn>? Ended(GameState sample, ActionId action, IReadOnlyList<int> ranks) => endOfLine is null ? null : end =>
         {
             var line = new EndLine(planner.LeafFeatures(end.State, side, determinizer, knowledge), end.Value, sampleIds[sample],
-                IndexOf(candidates, action), [.. ranks], null, null);
+                IndexOf(candidates, action), [.. ranks], null, null, end.Ended);
             if (repeat) held.Add((end, line));
             else endOfLine(line);
         };
@@ -253,7 +253,8 @@ public static class RolloutTeacher
 /// play-out's value from there, the sample (its place in the root's deal) and the line (the candidate by index and the
 /// heuristic's rank at each later turn action), and with the ceiling's repeat, the values of a play-out with the hidden
 /// state dealt again (<paramref name="Redeal"/>) and of one with only the engine's random stream reseeded
-/// (<paramref name="Reseed"/>).
+/// (<paramref name="Reseed"/>). <paramref name="Ended"/> is where the line stopped: <c>turn</c> (the turn's end), <c>game</c>
+/// (the game's end inside the turn; the value is the result) or <c>stopped</c> (short of both).
 /// </summary>
 public sealed record EndLine(double[] Features, double Value, int Sample, int Candidate, IReadOnlyList<int> Ranks, double? Redeal,
-    double? Reseed);
+    double? Reseed, string Ended = "turn");

@@ -21,7 +21,8 @@ public static partial class CliCommands
     /// </summary>
     private static int RunAiFitEvaluation(string[] args, TextWriter output, TextWriter error)
     {
-        if (args.Contains("--target", StringComparer.Ordinal)) return RunTeacherFit(args, output, error);
+        if (args.Contains("--target", StringComparer.Ordinal))
+            return args.SkipWhile(arg => arg != "--target").Skip(1).FirstOrDefault() == "pairs" ? RunPairsFit(args, output, error) : RunTeacherFit(args, output, error);
         string content = "both";
         int games = 400, holdoutGames = 120, workers = 1, featureVersion = 1;
         ulong seed = 1;
@@ -285,7 +286,9 @@ public static partial class CliCommands
             return version;
         }
         int setFour = EvaluationFeatures.NamesFor(4).Count;
-        return [.. Netrunner.Match.Regret.RegretSuite.ReadLines<Netrunner.Match.Regret.EndLineRow>(path).Where(row => core.Contains(row.RootId))
+        // Rows where the turn ended (S4.2c also records lines that stopped short of it).
+        return [.. Netrunner.Match.Regret.RegretSuite.ReadLines<Netrunner.Match.Regret.EndLineRow>(path)
+            .Where(row => core.Contains(row.RootId) && row.Ended == "turn")
             .Select(row => new FitRow(row.RootId, row.Side, row.Split, row.Features[..setFour], row.Features, row.Value, double.NaN, Behavior(row.GameId)))];
     }
 

@@ -332,7 +332,7 @@ internal sealed partial class TurnPlanner
     /// line's value: the rest of the play-out is a function of the state. With <paramref name="toTurnEnd"/>, the line is
     /// scored by the leaf where the root side's turn ends (the teacher's screen). <paramref name="endOfLine"/> (bot plan
     /// S4.2b) is shown the state where the root side's turn ended and the play-out's value from it, once per line played
-    /// past it: not for a line the memo already valued, nor one whose game ended inside the turn. With it come the play-out's
+    /// past it (a line the memo values gets its row too, S4.2c), but not one whose game ended inside the turn. With it come the play-out's
     /// last turn and the decisions it had left there, so the same play-out can be repeated from that state (S4.2c).
     /// </summary>
     internal double? PlayLine(GameState sample, ActionId first, IReadOnlyList<int> ranks, PlayerSide side, AgentKnowledge knowledge,
@@ -362,7 +362,12 @@ internal sealed partial class TurnPlanner
                 if (memo is not null)
                 {
                     key = string.Create(CultureInfo.InvariantCulture, $"{steps}:{EngineJson.SearchFingerprint(state)}");
-                    if (memo.TryGetValue(key, out double known)) return known;
+                    if (memo.TryGetValue(key, out double known))
+                    {
+                        // S4.2c: the line still has its row on this sample, so its value over every sample is recoverable.
+                        if (endOfLine is not null) endOfLine(new EndOfTurn(turnEnd!, known, lastTurn, cap - stepsAtEnd));
+                        return known;
+                    }
                 }
             }
             bool turnAction = pending.Kind == DecisionKind.TurnAction && state.RunState is null && state.Turn.TurnNumber == turn
@@ -381,7 +386,10 @@ internal sealed partial class TurnPlanner
         {
             // A turn that ends on the horizon's step leaves the loop before it is seen.
             if (turnEnd is null && state.Outcome.Kind == GameOutcomeKind.Ongoing && Ended(state)) (turnEnd, stepsAtEnd) = (state, played + 1);
-            if (turnEnd is not null) endOfLine(new EndOfTurn(turnEnd, value, lastTurn, cap - stepsAtEnd));
+            // S4.2c: a line whose game ended inside the turn, or that stopped short of the turn's end, has its row where it
+            // stopped, as the planner scores it there, so every line has a value on every sample.
+            endOfLine(turnEnd is not null ? new EndOfTurn(turnEnd, value, lastTurn, cap - stepsAtEnd)
+                : new EndOfTurn(state, value, lastTurn, 0, state.Outcome.Kind != GameOutcomeKind.Ongoing ? EndOfTurn.Game : EndOfTurn.Stopped));
         }
         return value;
     }
@@ -604,6 +612,12 @@ public static class PlannerPriorities
 
 /// <summary>
 /// Bot plan S4.2b and S4.2c: where a played line left the root side's turn, the play-out's value from there, and what the
-/// play-out had left (its last turn and decisions), so it can be repeated from the same state.
+/// play-out had left (its last turn and decisions), so it can be repeated from the same state. <paramref name="Ended"/>
+/// says where the line stopped: at the turn's end, at the game's end inside the turn, or short of either.
 /// </summary>
-internal sealed record EndOfTurn(GameState State, double Value, int LastTurn, int CapLeft);
+internal sealed record EndOfTurn(GameState State, double Value, int LastTurn, int CapLeft, string Ended = EndOfTurn.Turn)
+{
+    public const string Turn = "turn";
+    public const string Game = "game";
+    public const string Stopped = "stopped";
+}

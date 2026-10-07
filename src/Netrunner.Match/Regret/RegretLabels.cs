@@ -81,7 +81,8 @@ public static class RegretLabels
                 endLines is null ? null : line => endLines.Add(new EndLineRow(root.Id, root.GameId, root.Side, root.Split,
                     [.. line.Features.Select(feature => Math.Round(feature, 4))], Math.Round(line.Value, 5), line.Sample,
                     $"{root.Candidates[line.Candidate].Group}|{string.Join('.', line.Ranks)}",
-                    line.Redeal is { } redeal ? Math.Round(redeal, 5) : null, line.Reseed is { } reseed ? Math.Round(reseed, 5) : null)),
+                    line.Redeal is { } redeal ? Math.Round(redeal, 5) : null, line.Reseed is { } reseed ? Math.Round(reseed, 5) : null,
+                    line.Ended)),
                 repeatRoots?.Contains(root.Id) == true);
             // A root no sample could play every candidate on has no label: it is scored as unlabelled.
             if (values.Any(value => value.PlayOuts == 0)) return;
@@ -205,6 +206,7 @@ public static class RegretScores
 /// heuristic's rank at each later turn action), so rows of one sample pair on common random numbers; and at the ceiling's
 /// roots, the values of two more play-outs from the same state: the hidden state dealt again, one world for the sample's
 /// end states (<paramref name="Redeal"/>), and only the engine's random stream reseeded (<paramref name="Reseed"/>).
+/// <paramref name="Ended"/>: where the line stopped (<c>turn</c>, <c>game</c> inside the turn, or <c>stopped</c> short of both).
 /// </summary>
 public sealed record EndLineRow(string RootId, string GameId, PlayerSide Side, string Split, double[] Features, double Value,
-    int Sample = -1, string? Line = null, double? Redeal = null, double? Reseed = null);
+    int Sample = -1, string? Line = null, double? Redeal = null, double? Reseed = null, string Ended = "turn");
