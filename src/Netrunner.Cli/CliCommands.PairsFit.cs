@@ -14,12 +14,14 @@ public static partial class CliCommands
     /// The leaf fitted to rank: on the core's training deals, pairs of distinct end states of one root on one sample (common
     /// random numbers) are the examples, the sign of their play-out values' difference the target and its size the weight;
     /// the model is linear on the feature difference with no bias (both orders of every pair), then calibrated by a
-    /// one-dimensional fit of bias and slope on the play-out values. Reports, on the held-out deals' pairs, the gap-weighted
-    /// within-root pairwise accuracy and the accuracy over pairs more than 0.1 apart of four arms (set 4 shipped, set 4 and
-    /// set 5 fitted to rank, set 5 fitted to the end-of-line values), paired intervals over roots, and the ceiling: how
-    /// often a second play-out of the same pairs agrees on their order, with the hidden state dealt again and with only the
-    /// engine's random stream reseeded (the rows <c>ai-regret label --end-lines-repeat</c> recorded). Writes
-    /// evaluation-v5-pairs.json, evaluation-v4-pairs.json and the report.
+    /// one-dimensional fit of bias and slope on the play-out values, so it is a scalar scorer. On the held-out deals it is
+    /// read against the <b>reference order</b> (plan 4.2): two lines of a root ordered by their values' mean difference over
+    /// every sample, counted where that exceeds twice its standard error. Each arm (set 4 shipped, sets 4 and 5 fitted to
+    /// the end-of-line values, sets 4 and 5 fitted to rank) is scored on the state pairs of every sample (the gate) and by
+    /// the order of its mean leaf over the samples (the planner's), gap-weighted by the reference difference, with paired
+    /// intervals over roots. Beside it: the reference's split-half repeatability, and where the labelling recorded them,
+    /// the second play-outs' agreement with the first (repeatability, not a ceiling). Writes evaluation-v5-pairs.json,
+    /// evaluation-v4-pairs.json and the report.
     /// </summary>
     private static int RunPairsFit(string[] args, TextWriter output, TextWriter error)
     {
@@ -61,33 +63,30 @@ public static partial class CliCommands
                 behaviors[gameId] = version = RegretGames.Definition(suite.Games.First(game => game.Id == gameId)).Behavior.Version;
             return version;
         }
-        EndLineRow[] rows = [.. RegretSuite.ReadLines<EndLineRow>(Path.Combine(suiteDirectory, endLines)).Where(row => core.Contains(row.RootId))];
-        if (rows.Any(row => row.Sample < 0)) throw new InvalidOperationException("The end-of-line rows carry no sample ids (S4.2c records them).");
+        State[] rows = [.. RegretSuite.ReadLines<EndLineRow>(Path.Combine(suiteDirectory, endLines)).Where(row => core.Contains(row.RootId))
+            .Select(row => row.Sample < 0 || row.Line is null
+                ? throw new InvalidOperationException("The end-of-line rows carry no sample or line ids (S4.2c records them).")
+                : new State(row.RootId, row.Split, row.Side, row.Sample, row.Line, row.Ended, row.Features, row.Value, row.Redeal, row.Reseed,
+                    Behavior(row.GameId)))];
         int setFour = EvaluationFeatures.NamesFor(4).Count;
         var models = new Dictionary<(PlayerSide Side, int Set), LogisticSideModel>();
         var report = new List<object>();
         foreach (PlayerSide side in new[] { PlayerSide.Corp, PlayerSide.Runner })
         {
-            // One end state of each distinct position a sample reached (two lines leaving the turn alike are one state).
-            State[][] groups = [.. rows.Where(row => row.Side == side)
-                .GroupBy(row => (row.RootId, row.Sample))
-                .OrderBy(group => group.Key.RootId, StringComparer.Ordinal).ThenBy(group => group.Key.Sample)
-                .Select(group => group.GroupBy(row => string.Join(',', row.Features.Select(value => value.ToString("R", CultureInfo.InvariantCulture))))
-                    .Select(same => same.First())
-                    .Select(row => new State(row.RootId, row.Split, row.Features, row.Value, row.Redeal, row.Reseed, Behavior(row.GameId)))
-                    .ToArray())];
-            State[][] train = [.. groups.Where(group => group[0].Split != "held-out")];
-            State[][] held = [.. groups.Where(group => group[0].Split == "held-out")];
-
-            // Training pairs, at most perRoot a root, drawn on one stream in the roots' order.
+            State[] sided = [.. rows.Where(row => row.Side == side)];
+            // Training: pairs of a sample's distinct end states (a game that ended inside the turn is scored exactly, not by the leaf).
             var random = new DeterministicRandom(1);
             var pairs = new List<(State A, State B)>();
-            foreach (IGrouping<string, State[]> root in train.GroupBy(group => group[0].RootId, StringComparer.Ordinal))
+            foreach (IGrouping<string, State> root in sided.Where(row => row.Split != "held-out").GroupBy(row => row.RootId, StringComparer.Ordinal)
+                .OrderBy(root => root.Key, StringComparer.Ordinal))
             {
-                List<(State, State)> all = [.. root.SelectMany(Pairs)];
+                List<(State, State)> all = [.. root.Where(row => row.Ended != EndGame).GroupBy(row => row.Sample).OrderBy(sample => sample.Key)
+                    .SelectMany(sample => Pairs([.. sample.GroupBy(row => FeatureKey(row.Features)).Select(same => same.First())]))];
                 random.Shuffle(all);
                 pairs.AddRange(all.Take(perRoot));
             }
+            State[] calibrationRows = [.. sided.Where(row => row.Split != "held-out" && row.Ended != EndGame)];
+            var calibrations = new Dictionary<int, (double Slope, double Bias)>();
             LogisticSideModel RankOn(Func<State, double[]> features)
             {
                 var differences = new List<double[]>(pairs.Count * 2);
@@ -113,130 +112,125 @@ public static partial class CliCommands
                     for (int index = 0; index < values.Length; index++) score += ranker.Weights[index] * values[index] / ranker.Deviation[index];
                     return score;
                 }
-                State[] states = [.. train.SelectMany(group => group)];
-                LogisticSideModel calibration = LogisticSideModel.Fit([.. states.Select(state => (double[])[Score(state)])], [.. states.Select(state => state.Value)]);
-                double slope = calibration.Weights[0] / calibration.Deviation[0];
+                (double slope, double bias) = Calibrate([.. calibrationRows.Select(state => (state.RootId, Score(state), state.Value))]);
+                calibrations[features(calibrationRows[0]).Length] = (slope, bias);
                 return new LogisticSideModel(new double[ranker.Weights.Length], ranker.Deviation,
-                    [.. ranker.Weights.Select(weight => weight * slope)], calibration.Bias - slope * calibration.Mean[0]);
+                    [.. ranker.Weights.Select(weight => weight * slope)], bias);
             }
             models[(side, 4)] = RankOn(state => state.Features[..setFour]);
             models[(side, 5)] = RankOn(state => state.Features);
             LogisticSideModel Shipped(State state) =>
                 side == PlayerSide.Corp ? FittedEvaluation.DocumentFor(4, state.Behavior).Corp : FittedEvaluation.DocumentFor(4, state.Behavior).Runner;
-            LogisticSideModel valueFit = side == PlayerSide.Corp ? FittedEvaluation.DocumentFor(7).Corp : FittedEvaluation.DocumentFor(7).Runner;
+            LogisticSideModel Of(int version) => side == PlayerSide.Corp ? FittedEvaluation.DocumentFor(version).Corp : FittedEvaluation.DocumentFor(version).Runner;
+            LogisticSideModel valueFive = Of(7), valueFour = Of(8);
+            // A game that ended inside the turn is its result, as the planner scores it.
             (string Name, Func<State, double> Score)[] arms =
             [
-                ("set 4, shipped weights", state => Shipped(state).Probability(state.Features[..setFour])),
-                ("set 4, fitted to rank", state => models[(side, 4)].Probability(state.Features[..setFour])),
-                ("set 5, fitted to rank", state => models[(side, 5)].Probability(state.Features)),
-                ("set 5, fitted to the end-of-line values", state => valueFit.Probability(state.Features)),
+                ("set 4, shipped weights", state => state.Ended == EndGame ? state.Value : Shipped(state).Probability(state.Features[..setFour])),
+                ("set 4, fitted to the end-of-line values", state => state.Ended == EndGame ? state.Value : valueFour.Probability(state.Features[..setFour])),
+                ("set 5, fitted to the end-of-line values", state => state.Ended == EndGame ? state.Value : valueFive.Probability(state.Features)),
+                ("set 4, fitted to rank", state => state.Ended == EndGame ? state.Value : models[(side, 4)].Probability(state.Features[..setFour])),
+                ("set 5, fitted to rank", state => state.Ended == EndGame ? state.Value : models[(side, 5)].Probability(state.Features)),
             ];
-            // Per root: each arm's gap-weighted correct and its weight, and its correct and count over pairs more than 0.1 apart.
-            var perArm = arms.Select(_ => new Dictionary<string, (double Correct, double Weight, double Wide, double Count)>(StringComparer.Ordinal)).ToArray();
-            var ceilings = new Dictionary<string, Dictionary<string, (double Correct, double Weight, double Wide, double Count)>>(StringComparer.Ordinal)
+            const int ranked = 4;
+
+            // Per held-out root: each arm's gap-weighted credit against the reference, on the state pairs and by the mean leaf.
+            var states = new Dictionary<string, Tally>[arms.Length];
+            var means = new Dictionary<string, Tally>[arms.Length];
+            for (int arm = 0; arm < arms.Length; arm++) (states[arm], means[arm]) = (new(StringComparer.Ordinal), new(StringComparer.Ordinal));
+            Dictionary<string, Tally> halves = new(StringComparer.Ordinal), halvesAll = new(StringComparer.Ordinal);
+            Dictionary<string, Tally> redeal = new(StringComparer.Ordinal), reseed = new(StringComparer.Ordinal);
+            int reliable = 0, compared = 0;
+            foreach (IGrouping<string, State> root in sided.Where(row => row.Split == "held-out").GroupBy(row => row.RootId, StringComparer.Ordinal)
+                .OrderBy(root => root.Key, StringComparer.Ordinal))
             {
-                ["redeal"] = new(StringComparer.Ordinal),
-                ["reseed"] = new(StringComparer.Ordinal),
-            };
-            var onCeilingRoots = arms.Select(_ => new Dictionary<string, (double Correct, double Weight, double Wide, double Count)>(StringComparer.Ordinal)).ToArray();
-            static void Add(Dictionary<string, (double Correct, double Weight, double Wide, double Count)> into, string root, double gap, double credit)
-            {
-                (double correct, double weight, double wide, double count) = into.GetValueOrDefault(root);
-                into[root] = (correct + gap * credit, weight + gap, wide + (gap > 0.1 ? credit : 0), count + (gap > 0.1 ? 1 : 0));
-            }
-            static double Credit(double truth, double guess) => guess == 0 ? 0.5 : Math.Sign(truth) == Math.Sign(guess) ? 1 : 0;
-            foreach (State[] group in held)
-            {
-                double[][] scores = [.. arms.Select(arm => group.Select(arm.Score).ToArray())];
-                bool repeated = group.All(state => state.Redeal is not null && state.Reseed is not null);
-                for (int i = 0; i < group.Length; i++)
-                    for (int j = i + 1; j < group.Length; j++)
+                // Each line's row on each sample; the lines are compared on the samples they share (every one, S4.2c).
+                Dictionary<string, Dictionary<int, State>> lines = root.GroupBy(row => row.Line, StringComparer.Ordinal)
+                    .ToDictionary(line => line.Key, line => line.GroupBy(row => row.Sample).ToDictionary(sample => sample.Key, sample => sample.First()),
+                        StringComparer.Ordinal);
+                var scored = lines.ToDictionary(line => line.Key, line => line.Value.ToDictionary(sample => sample.Key,
+                    sample => arms.Select(arm => arm.Score(sample.Value)).ToArray()), StringComparer.Ordinal);
+                string[] names = [.. lines.Keys.Order(StringComparer.Ordinal)];
+                for (int i = 0; i < names.Length; i++)
+                    for (int j = i + 1; j < names.Length; j++)
                     {
-                        double difference = group[i].Value - group[j].Value;
-                        if (difference == 0) continue;
-                        double gap = Math.Abs(difference);
-                        string root = group[i].RootId;
+                        int[] shared = [.. lines[names[i]].Keys.Intersect(lines[names[j]].Keys).Order()];
+                        if (shared.Length < 2) continue;
+                        double[] differences = [.. shared.Select(sample => lines[names[i]][sample].Value - lines[names[j]][sample].Value)];
+                        double mean = differences.Average();
+                        if (mean == 0) continue;
+                        compared++;
+                        double standardError = Math.Sqrt(differences.Sum(value => (value - mean) * (value - mean)) / (differences.Length - 1) / differences.Length);
+                        double gap = Math.Abs(mean);
+                        // Split halves of the samples: does the order on the first half match the order on the second?
+                        int half = shared.Length / 2;
+                        double first = differences[..half].Average(), second = differences[half..].Average();
+                        Tally.Add(halvesAll, root.Key, gap, Credit(first, second));
+                        if (gap <= 2 * standardError) continue;
+                        reliable++;
+                        Tally.Add(halves, root.Key, gap, Credit(first, second));
                         for (int arm = 0; arm < arms.Length; arm++)
                         {
-                            double credit = Credit(difference, scores[arm][i] - scores[arm][j]);
-                            Add(perArm[arm], root, gap, credit);
-                            if (repeated) Add(onCeilingRoots[arm], root, gap, credit);
+                            double perSample = shared.Average(sample => Credit(mean, scored[names[i]][sample][arm] - scored[names[j]][sample][arm]));
+                            Tally.Add(states[arm], root.Key, gap, perSample);
+                            Tally.Add(means[arm], root.Key, gap, Credit(mean,
+                                shared.Average(sample => scored[names[i]][sample][arm]) - shared.Average(sample => scored[names[j]][sample][arm])));
                         }
-                        if (!repeated) continue;
-                        Add(ceilings["redeal"], root, gap, Credit(difference, group[i].Redeal!.Value - group[j].Redeal!.Value));
-                        Add(ceilings["reseed"], root, gap, Credit(difference, group[i].Reseed!.Value - group[j].Reseed!.Value));
+                        // The second play-outs, where recorded: does their mean order match the reference's?
+                        if (shared.All(sample => lines[names[i]][sample].Redeal is not null && lines[names[j]][sample].Redeal is not null))
+                        {
+                            Tally.Add(redeal, root.Key, gap, Credit(mean, shared.Average(sample => lines[names[i]][sample].Redeal!.Value - lines[names[j]][sample].Redeal!.Value)));
+                            Tally.Add(reseed, root.Key, gap, Credit(mean, shared.Average(sample => lines[names[i]][sample].Reseed!.Value - lines[names[j]][sample].Reseed!.Value)));
+                        }
                     }
             }
-            string[] roots = [.. perArm[0].Keys.Order(StringComparer.Ordinal)];
-            (double Mean, double Lower, double Upper) Interval(Func<string, (double Value, double Weight)> of, string[] over)
+            string[] roots = [.. states[0].Keys.Order(StringComparer.Ordinal)];
+            object Interval(Dictionary<string, Tally> of, string[] over)
             {
-                (double Value, double Weight)[] items = [.. over.Select(of)];
-                var draws = new DeterministicRandom(1);
-                double[] means = [.. Enumerable.Range(0, 2000).Select(_ =>
-                {
-                    double value = 0, weight = 0;
-                    for (int draw = 0; draw < items.Length; draw++)
-                    {
-                        (double v, double w) = items[draws.NextInt(items.Length)];
-                        value += v;
-                        weight += w;
-                    }
-                    return weight == 0 ? 0 : value / weight;
-                }).Order()];
-                double total = items.Sum(item => item.Weight);
-                return (total == 0 ? 0 : items.Sum(item => item.Value) / total, means[50], means[1949]);
+                (double Mean, double Lower, double Upper) range = Bootstrap(over, root => of.TryGetValue(root, out Tally tally) ? (tally.Credit, tally.Weight) : (0, 0));
+                return new { mean = range.Mean, lower = range.Lower, upper = range.Upper };
             }
-            object Accuracy(Dictionary<string, (double Correct, double Weight, double Wide, double Count)> of, string[] over)
+            object[] accuracy = [.. arms.Select((arm, index) => (object)new { arm = arm.Name, statePairs = Interval(states[index], roots), meanLeaf = Interval(means[index], roots) })];
+            object[] paired = [.. Enumerable.Range(0, ranked).Select(other =>
             {
-                var weighted = Interval(root => (of.GetValueOrDefault(root).Correct, of.GetValueOrDefault(root).Weight), over);
-                var wide = Interval(root => (of.GetValueOrDefault(root).Wide, of.GetValueOrDefault(root).Count), over);
-                return new
-                {
-                    gapWeighted = new { mean = weighted.Mean, lower = weighted.Lower, upper = weighted.Upper },
-                    overTenth = new { mean = wide.Mean, lower = wide.Lower, upper = wide.Upper, pairs = over.Sum(root => of.GetValueOrDefault(root).Count) },
-                };
-            }
-            object[] accuracy = [.. arms.Select((arm, index) => (object)new { arm = arm.Name, accuracy = Accuracy(perArm[index], roots) })];
-            // Set 5 fitted to rank against each other arm, paired root by root (gap-weighted).
-            object[] paired = [.. OtherArms.Select(other =>
-            {
-                var difference = Interval(root => (perArm[2][root].Correct - perArm[other][root].Correct, perArm[2][root].Weight), roots);
+                (double Mean, double Lower, double Upper) state = Bootstrap(roots, root => (states[ranked][root].Credit - states[other][root].Credit, states[ranked][root].Weight));
+                (double Mean, double Lower, double Upper) leaf = Bootstrap(roots, root => (means[ranked][root].Credit - means[other][root].Credit, means[ranked][root].Weight));
                 output.WriteLine(string.Create(CultureInfo.InvariantCulture,
-                    $"{side,-6} set 5 ranked - {arms[other].Name}: gap-weighted accuracy {difference.Mean:+0.0000;-0.0000} [{difference.Lower:+0.0000;-0.0000}, {difference.Upper:+0.0000;-0.0000}]"));
-                return (object)new { against = arms[other].Name, gapWeighted = new { mean = difference.Mean, lower = difference.Lower, upper = difference.Upper } };
+                    $"{side,-6} set 5 ranked - {arms[other].Name}: state pairs {state.Mean:+0.0000;-0.0000} [{state.Lower:+0.0000;-0.0000}, {state.Upper:+0.0000;-0.0000}], mean leaf {leaf.Mean:+0.0000;-0.0000} [{leaf.Lower:+0.0000;-0.0000}, {leaf.Upper:+0.0000;-0.0000}]"));
+                return (object)new
+                {
+                    against = arms[other].Name,
+                    statePairs = new { mean = state.Mean, lower = state.Lower, upper = state.Upper },
+                    meanLeaf = new { mean = leaf.Mean, lower = leaf.Lower, upper = leaf.Upper },
+                };
             })];
-            string[] ceilingRoots = [.. ceilings["redeal"].Keys.Order(StringComparer.Ordinal)];
-            // Two draws that each order a pair correctly with probability p agree with probability p² + (1 − p)².
-            static double Implied(double agreement) => (1 + Math.Sqrt(Math.Max(0, 2 * agreement - 1))) / 2;
-            object ceiling = new
+            string[] repeated = [.. redeal.Keys.Order(StringComparer.Ordinal)];
+            object repeatability = new
             {
-                roots = ceilingRoots.Length,
-                redeal = Accuracy(ceilings["redeal"], ceilingRoots),
-                reseed = Accuracy(ceilings["reseed"], ceilingRoots),
-                arms = arms.Select((arm, index) => new { arm = arm.Name, accuracy = Accuracy(onCeilingRoots[index], ceilingRoots) }).ToArray(),
+                splitHalvesReliable = Interval(halves, roots),
+                splitHalvesAll = Interval(halvesAll, [.. halvesAll.Keys.Order(StringComparer.Ordinal)]),
+                secondPlayOutRoots = repeated.Length,
+                redealt = repeated.Length == 0 ? null : Interval(redeal, repeated),
+                reseeded = repeated.Length == 0 ? null : Interval(reseed, repeated),
             };
-            // Calibration: log loss of the play-out values on the held-out states, reported beside.
-            State[] heldStates = [.. held.SelectMany(group => group)];
+            // Calibration: log loss of the play-out values on the held-out states the leaf scores, reported beside.
+            State[] heldStates = [.. sided.Where(row => row.Split == "held-out" && row.Ended != EndGame)];
             object[] calibration = [.. arms.Select(arm => (object)new { arm = arm.Name, logLoss = heldStates.Average(state => SoftLoss(arm.Score(state), state.Value)) })];
             report.Add(new
             {
                 side = side.ToString().ToLowerInvariant(),
                 trainPairs = pairs.Count,
                 heldOutRoots = roots.Length,
+                linePairs = compared,
+                reliableLinePairs = reliable,
                 accuracy,
                 paired,
-                ceiling,
+                repeatability,
                 calibration,
+                calibrationSlope = new { set4 = calibrations[setFour].Slope, set5 = calibrations[EvaluationFeatures.NamesFor(5).Count].Slope },
             });
-            output.WriteLine(JsonSerializer.Serialize(new { side = side.ToString(), accuracy, ceiling }, FitJsonOptions)
-                .ReplaceLineEndings(" "));
-            if (ceilingRoots.Length > 0)
-            {
-                double redeal = ceilings["redeal"].Values.Sum(value => value.Correct) / ceilings["redeal"].Values.Sum(value => value.Weight);
-                double reseed = ceilings["reseed"].Values.Sum(value => value.Correct) / ceilings["reseed"].Values.Sum(value => value.Weight);
-                output.WriteLine(string.Create(CultureInfo.InvariantCulture,
-                    $"{side,-6} ceiling over {ceilingRoots.Length} roots: re-dealt agreement {redeal:0.000} (one draw at most {Implied(redeal):0.000}), reseeded {reseed:0.000} (at most {Implied(reseed):0.000})"));
-            }
+            output.WriteLine(JsonSerializer.Serialize(new { side = side.ToString(), linePairs = compared, reliableLinePairs = reliable, accuracy, repeatability },
+                FitJsonOptions).ReplaceLineEndings(" "));
         }
         Directory.CreateDirectory(destination);
         string provenance = string.Create(CultureInfo.InvariantCulture,
@@ -251,8 +245,73 @@ public static partial class CliCommands
         return 0;
     }
 
-    /// <summary>The arms set 5 fitted to rank (arm 2) is compared with: set 4 shipped, set 4 ranked, set 5 value-fitted.</summary>
-    private static readonly int[] OtherArms = [0, 1, 3];
+    private const string EndGame = "game";
+
+    /// <summary>
+    /// The ranker's score calibrated to a win probability, σ(bias + slope · score), without disturbing its order within a
+    /// root: the slope from the score's least-squares fit to the play-out values within each root (each root's means taken
+    /// out, so the level across roots, which a ranker does not model, cannot turn it negative), put on the logistic scale at
+    /// the mean value and never below zero; the bias so the mean predicted value is the mean play-out value.
+    /// </summary>
+    private static (double Slope, double Bias) Calibrate(IReadOnlyList<(string Root, double Score, double Value)> rows)
+    {
+        double covariance = 0, variance = 0;
+        foreach (IGrouping<string, (string Root, double Score, double Value)> root in rows.GroupBy(row => row.Root, StringComparer.Ordinal))
+        {
+            double score = root.Average(row => row.Score), value = root.Average(row => row.Value);
+            foreach ((_, double s, double v) in root)
+            {
+                covariance += (s - score) * (v - value);
+                variance += (s - score) * (s - score);
+            }
+        }
+        double mean = rows.Average(row => row.Value);
+        double slope = variance <= 0 ? 0 : Math.Max(0, covariance / variance / Math.Max(1e-6, mean * (1 - mean)));
+        double Predicted(double bias) => rows.Average(row => 1 / (1 + Math.Exp(-(bias + slope * row.Score))));
+        double low = -50, high = 50;
+        for (int step = 0; step < 100; step++)
+        {
+            double middle = (low + high) / 2;
+            if (Predicted(middle) < mean) low = middle; else high = middle;
+        }
+        return (slope, (low + high) / 2);
+    }
+
+    /// <summary>Credit for an order: 1 when <paramref name="guess"/> has the reference's sign, 0 when not, a half for a tie.</summary>
+    private static double Credit(double reference, double guess) => guess == 0 ? 0.5 : Math.Sign(reference) == Math.Sign(guess) ? 1 : 0;
+
+    private static string FeatureKey(double[] features) => string.Join(',', features.Select(value => value.ToString("R", CultureInfo.InvariantCulture)));
+
+    /// <summary>A ratio of sums over roots, and its 95% bootstrap interval resampling roots (2,000 draws).</summary>
+    private static (double Mean, double Lower, double Upper) Bootstrap(string[] roots, Func<string, (double Value, double Weight)> of)
+    {
+        (double Value, double Weight)[] items = [.. roots.Select(of)];
+        double total = items.Sum(item => item.Weight);
+        if (items.Length == 0 || total == 0) return (0, 0, 0);
+        var draws = new DeterministicRandom(1);
+        double[] means = [.. Enumerable.Range(0, 2000).Select(_ =>
+        {
+            double value = 0, weight = 0;
+            for (int draw = 0; draw < items.Length; draw++)
+            {
+                (double v, double w) = items[draws.NextInt(items.Length)];
+                value += v;
+                weight += w;
+            }
+            return weight == 0 ? 0 : value / weight;
+        }).Order()];
+        return (items.Sum(item => item.Value) / total, means[50], means[1949]);
+    }
+
+    /// <summary>A root's gap-weighted credit and weight.</summary>
+    private readonly record struct Tally(double Credit, double Weight)
+    {
+        public static void Add(Dictionary<string, Tally> into, string root, double gap, double credit)
+        {
+            Tally tally = into.GetValueOrDefault(root);
+            into[root] = new Tally(tally.Credit + gap * credit, tally.Weight + gap);
+        }
+    }
 
     /// <summary>Every pair of a sample's distinct end states whose play-out values differ.</summary>
     private static IEnumerable<(State A, State B)> Pairs(State[] group)
@@ -262,6 +321,8 @@ public static partial class CliCommands
                 if (group[i].Value != group[j].Value) yield return (group[i], group[j]);
     }
 
-    /// <summary>One distinct end state of a sample: its root, split, set 5, play-out value, the ceiling's repeats and its pool.</summary>
-    private sealed record State(string RootId, string Split, double[] Features, double Value, double? Redeal, double? Reseed, string Behavior);
+    /// <summary>One line's end state on one sample: its root, split, side, sample, line, where it ended, set 5, the play-out's
+    /// value, the second play-outs' where recorded, and its pool.</summary>
+    private sealed record State(string RootId, string Split, PlayerSide Side, int Sample, string Line, string Ended, double[] Features,
+        double Value, double? Redeal, double? Reseed, string Behavior);
 }
