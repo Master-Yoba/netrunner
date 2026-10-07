@@ -200,12 +200,17 @@ is fitted **to rank**:
 - the model is the same linear form on the feature *difference*, with no bias, so it is a ranker; a one-dimensional
   calibration of bias and slope on the play-out values afterwards gives it back a win-probability scale for the
   planner's delta from the root;
-- the fit is gated on within-root pairwise accuracy on held-out pairs, gap-weighted, against a ceiling measured from
-  two independent play-outs of the same pairs; log loss is reported, not gated.
+- the fit is gated on within-root pairwise accuracy on held-out pairs against a **reference order**: the sign of the
+  difference of the two lines' values averaged over every sample, counted only where that difference exceeds twice
+  its standard error, so the reference itself is reliable. The agreement of two single play-outs is not a ceiling on
+  that accuracy (two reports that are each right 80% of the time agree only 68% of the time); it is reported as
+  repeatability, beside the gate. Log loss is reported, not gated.
 
-The model stays small, linear on differences or, if the linear ranker stays well under the ceiling, a small
-tree ensemble over the difference vector, deterministic, exported to JSON and loadable without any runtime beyond
-`Netrunner.AI`. A fit is accepted only by the gates in section 6.
+The model is always a **scalar scorer** `g(features)`, because the planner evaluates one state at a time and averages
+calibrated win probabilities before subtracting the root; only the loss is pairwise. It stays small: linear, or, if the
+linear ranker stays well under what the reference order allows, boosted scalar trees trained with the pairwise
+gradient, deterministic, exported to JSON and loadable without any runtime beyond `Netrunner.AI`. A model that takes a
+pair's difference as its input cannot serve as the leaf. A fit is accepted only by the gates in section 6.
 
 **Per pool.** As with set 2, a pool keeps its own fit only where it beats the general fit on that pool's held-out
 roots. The Core Battle Box is the first target.
