@@ -233,6 +233,14 @@ times one-step). Gate:
   (+0.0142 [0.0010, 0.0284]). The 119 agenda roots read +0.0185 [−0.0099, 0.0463]: the right way, inside zero, so the
   agenda rule's own reading waits for S1.6. Labels: `labels.jsonl.gz` is teacher v2, `labels-v1-lines` the S1.5 one.
 
+**The horizon's leaf is a confound (S4.2c, 7 October).** Teacher v2 plays four turns and scores the horizon with set
+4, which for the Gateway + Elevation pool is the pool's own fit: the same leaf the shipped planner and one of S4's arms
+use. So its values partly reward agreeing with that leaf four turns on (S4.2c measured it: the pool's fit is the one
+Corp arm the 4-turn reference lifts). Regret under teacher v2 is still comparable within its labelling, but it favours
+a policy whose choices that leaf likes. Until a teacher v3 that plays to the game's end replaces it, the ladder, which
+has no leaf in its result, is the unconfounded arbiter of planner gates. Teacher v3 replaces v2 only at a milestone,
+and only if S4.2c's game's-end run shows it affordable and its reference reliable.
+
 ### S1.6 Targeted roots (S)
 
 **After the hard-model relabel's re-read; before S4.2's gate. Independent of S4.1.** A paired comparison has power only
@@ -516,6 +524,25 @@ only ever compares within one. The fit's target and its gate change accordingly 
   rollout: affordable for Hard, probably not for Standard before S5.0.
 - **Record:** the reference's repeatability, the four arms' pairwise accuracy with intervals, the calibration, and
   the planner gate.
+
+**First reading and the confound (7 October; the record is in `docs/BOT_VERSIONS.md`).** Against the 4-turn reference
+the linear rank fit is not above the baseline in either seat, and the pool's fit (the shipped set 4, and the teacher's
+horizon leaf) is the one Corp arm the reference lifts. So, before any trees:
+
+- **A second reference with no leaf in it:** the core relabelled to the game's end (`--horizon game`, 32 samples,
+  end-of-line recording). Its split-half repeatability and the pairs it counts are recorded beside the 4-turn
+  reference's; fewer pairs is the price of no leaf.
+- **Every arm read against both references** (the general fit, the pool's fit, sets 4 and 5 value-fitted, the rank
+  fit), by the mean leaf over the samples (the planner's view, the gate) and on per-sample state pairs (beside it);
+  `game` rows in the line means and out of the counted pairs. The difference between the two readings, arm by arm, is
+  the confound's size. If the pool's Corp lead vanishes on the game's-end reference, the 4-turn reference rewarded
+  agreement with itself; if it holds, the pool's fit is better on this pool.
+- **Gate:** the planner's view against the game's-end reference, above the best value arm with the interval clear.
+- **Then:** if the Corp's linear arms all sit near the mid-60s on the clean reference too, the Corp leaf is
+  feature-limited in linear form: the boosted scalar trees, fitted on the game's-end rows. The Runner's rank fit goes
+  forward.
+- **Calibration:** a ranker ships only calibrated by a monotone one-dimensional fit over all rows whose log loss is no
+  worse than the value fit's; failing that, the planner keeps its tie threshold and static mix on the value fit's scale.
 
 ## S5. The planner becomes Standard (L)
 
