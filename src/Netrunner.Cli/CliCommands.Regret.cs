@@ -24,9 +24,10 @@ public static partial class CliCommands
     /// ai-regret findings SUITE-DIR --manifest FILE --fixtures DIR --content POOL [--labelled N]
     /// ai-regret dedupe SUITE-DIR
     /// ai-regret extend SUITE-DIR [--labelled N] [--workers N] (every meaningful group at every root, S1.4)
-    /// ai-regret diverge SUITE-DIR|GAMES-DIR --versions A,B --output SUITE-DIR [--profile P] [--workers N] (S1.6: the
+    /// ai-regret diverge SUITE-DIR|GAMES-DIR --versions A,B [--side S] [--games N] --output SUITE-DIR [--profile P] [--workers N] (S1.6: the
     ///   decisions where two versions choose differently, as roots of a new suite)
     /// ai-regret merge SUITE-DIR --from SUITE-DIR [--labels FILE] (folds a suite's games, roots and labels into another)
+    /// ai-regret leaf-cost SUITE-DIR [--turn-roots GAMES] (S4.1: the leaf's cost per extraction, set 4 against set 5, one thread)
     /// ai-regret tag SUITE-DIR [--labels FILE] (writes each label's teacher version into it, S1.7)
     /// ai-regret core SUITE-DIR [--roots N] [--seed S] (marks a core of about N roots by deal, S1.7; score --core reads it)
     /// ai-regret exposure SUITE-DIR|GAMES-DIR [--all-roots] [--version RUNNER] [--workers N] [--json] (every agenda, or every card, the Corp installed in
@@ -53,6 +54,7 @@ public static partial class CliCommands
                 "exposure" => RegretExposureCommand(args[2], options, output, error),
                 "core" => RegretCoreCommand(args[2], options, output),
                 "tag" => RegretTagCommand(args[2], options, output),
+                "leaf-cost" => RegretLeafCostCommand(args[2], options, output),
                 "diverge" => RegretDivergeCommand(args[2], options, output, error),
                 "merge" => RegretMergeCommand(args[2], options, output),
                 _ => throw new ArgumentException($"Unknown ai-regret command '{args[1]}'."),
@@ -70,7 +72,8 @@ public static partial class CliCommands
         int Blunders, int Bootstrap, bool Json, bool Missing = false, string? Manifest = null, string? Fixtures = null, string? Content = null,
         bool LabelMissing = false, int Lines = 0, string? RootsFile = null, int ScreenTurns = 1, string[]? Discordant = null,
         bool AllRoots = false, string TeacherEntrant = RegretLabels.DefaultTeacher, bool Core = false,
-        int CoreRoots = 2000, int Decide = 0, int ExtendTo = 0, string[]? Pair = null, string? From = null, int Prune = 0)
+        int CoreRoots = 2000, int Decide = 0, int ExtendTo = 0, string[]? Pair = null, string? From = null, int Prune = 0,
+        PlayerSide? Side = null, int Games = 0, string? EndLines = null)
     {
         public static RegretOptions Parse(string[] args)
         {
@@ -119,12 +122,18 @@ public static partial class CliCommands
                             ? versions : throw new ArgumentException("--versions requires two versions, A,B."),
                     },
                     "--from" => options with { From = Next() },
+                    "--side" => options with
+                    {
+                        Side = Next() switch { "corp" => PlayerSide.Corp, "runner" => PlayerSide.Runner, _ => throw new ArgumentException("--side requires corp or runner.") },
+                    },
                     // S1.7, adaptive samples: --decide 8 --record 8 --extend-to 32.
                     "--decide" => options with { Decide = Int("--decide", 1, 4096) },
                     "--record" => options with { Samples = Int("--record", 1, 4096) },
                     "--extend-to" => options with { ExtendTo = Int("--extend-to", 1, 4096) },
                     // S1.6, pruning: --decide 8 --record 24 --prune 3.
                     "--prune" => options with { Prune = Int("--prune", 1, 64) },
+                    "--games" => options with { Games = Int("--games", 1, 1_000_000) },
+                    "--end-lines" => options with { EndLines = Next() },
                     "--teacher" => options with
                     {
                         TeacherEntrant = Next() is var teacher && teacher is "hard" or "hard-model" ? teacher
@@ -203,13 +212,39 @@ public static partial class CliCommands
         HashSet<string>? listed = options.RootsFile is { } file
             ? [.. File.ReadLines(file).Select(line => line.Trim()).Where(line => line.Length > 0)] : null;
         HashSet<string> wanted = [.. suite.Roots.Select(root => root.Id).Where(id => !labelled.Contains(id) && (listed is null || listed.Contains(id)))];
-        // The file is rewritten at every progress line, so a stopped run resumes with --missing.
-        ImmutableArray<RegretLabel> labels = Label(suite, wanted, options, error, finished =>
-            RegretSuite.WriteLines(labelsPath, kept.Concat(finished).OrderBy(label => label.RootId, StringComparer.Ordinal)));
-        RegretSuite.WriteLines(labelsPath, kept.Concat(labels).OrderBy(label => label.RootId, StringComparer.Ordinal));
+        // S4.2b, --end-lines FILE: the rows of every line played to the horizon, kept with their roots' labels.
+        string? endLinesPath = options.EndLines is { } endLinesFile ? Path.Combine(suiteDirectory, endLinesFile) : null;
+        EndLineRow[] keptRows = endLinesPath is not null && options.Missing && File.Exists(endLinesPath)
+            ? [.. RegretSuite.ReadLines<EndLineRow>(endLinesPath).Where(row => labelled.Contains(row.RootId))] : [];
+        void Save(IEnumerable<(ImmutableArray<RegretLabel> Labels, List<EndLineRow> Rows)> finished)
+        {
+            var done = finished.ToArray();
+            RegretSuite.WriteLines(labelsPath, kept.Concat(done.SelectMany(game => game.Labels)).OrderBy(label => label.RootId, StringComparer.Ordinal));
+            if (endLinesPath is not null)
+                RegretSuite.WriteLines(endLinesPath, keptRows.Concat(done.OrderBy(game => game.Labels.FirstOrDefault()?.RootId, StringComparer.Ordinal)
+                    .SelectMany(game => game.Rows)));
+        }
+        // The files are rewritten at every progress line, so a stopped run resumes with --missing.
+        var found = LabelWithRows(suite, wanted, options, error, Save, endLinesPath is not null);
+        Save(found);
+        ImmutableArray<RegretLabel> labels = [.. found.SelectMany(game => game.Labels)];
         output.WriteLine(string.Create(CultureInfo.InvariantCulture,
             $"ai-regret label roots={labels.Length} unlabellable={wanted.Count - labels.Length} samples={options.Samples} horizon={(options.HorizonTurns == 0 ? "game" : options.HorizonTurns.ToString(CultureInfo.InvariantCulture))} lines={options.Lines} seconds={started.Elapsed.TotalSeconds:F0} file={options.LabelsFile}"));
         return 0;
+    }
+
+    private static (ImmutableArray<RegretLabel> Labels, List<EndLineRow> Rows)[] LabelWithRows(RegretSuite suite, HashSet<string> rootIds,
+        RegretOptions options, TextWriter error, Action<IEnumerable<(ImmutableArray<RegretLabel> Labels, List<EndLineRow> Rows)>> save, bool rows)
+    {
+        var settings = new TeacherSettings(options.Samples, options.Seed, options.HorizonTurns, options.Evaluation, Lines: options.Lines,
+            ScreenTurns: options.ScreenTurns, Decide: options.Decide, ExtendTo: options.ExtendTo, Prune: options.Prune);
+        var byGame = suite.Roots.Where(root => rootIds.Contains(root.Id)).GroupBy(root => root.GameId).ToDictionary(group => group.Key, group => group.ToList());
+        RegretGame[] games = [.. suite.Games.Where(game => byGame.ContainsKey(game.Id))];
+        return ForGames(games, options.Workers, error, "label", game =>
+        {
+            var found = new List<EndLineRow>();
+            return (RegretLabels.Label(game, byGame[game.Id], settings, options.TeacherEntrant, rows ? found : null), found);
+        }, finished => save(finished));
     }
 
     private static ImmutableArray<RegretLabel> Label(RegretSuite suite, HashSet<string> rootIds, RegretOptions options, TextWriter error,
@@ -243,13 +278,15 @@ public static partial class CliCommands
         var results = new List<(string Version, PlayerSide Side, ImmutableArray<RegretChoice> Choices, TimeSpan Elapsed)>();
         foreach (string version in options.Versions)
         {
-            PlayerSide side = OfflinePolicies.IsSupported(PlayerSide.Corp, version) ? PlayerSide.Corp
+            // S4.2: a ladder entrant (hard-set5) is scored on the side --side names; a version on its own side.
+            PlayerSide side = Entrant(version, options) is { } seat ? seat
+                : OfflinePolicies.IsSupported(PlayerSide.Corp, version) ? PlayerSide.Corp
                 : OfflinePolicies.IsSupported(PlayerSide.Runner, version) ? PlayerSide.Runner
                 : throw new ArgumentException($"Unknown policy version '{version}'.");
             var started = System.Diagnostics.Stopwatch.StartNew();
             RegretGame[] games = [.. suite.Games.Where(game => byGame.TryGetValue(game.Id, out var list) && list.Any(root => root.Side == side))];
             ImmutableArray<RegretChoice> choices = [.. ForGames(games, options.Workers, TextWriter.Null, "score",
-                    game => RegretScores.Choose(game, byGame[game.Id], labels, (definition, seat) => seat == side ? Scored(definition, seat, options.Profile, version) : null))
+                    game => RegretScores.Choose(game, byGame[game.Id], labels, (definition, seat) => seat == side ? Scored(definition, seat, options.Profile, version, options) : null))
                 .SelectMany(found => found).OrderBy(choice => choice.RootId, StringComparer.Ordinal)];
             results.Add((version, side, choices, started.Elapsed));
         }
@@ -392,15 +429,19 @@ public static partial class CliCommands
         if (options.Pair is not [string first, string second]) throw new ArgumentException("ai-regret diverge needs --versions A,B.");
         string destination = options.Output ?? throw new ArgumentException("ai-regret diverge needs --output SUITE-DIR.");
         if (Directory.Exists(destination) || File.Exists(destination)) throw new ArgumentException("--output must name a new directory.");
-        PlayerSide side = OfflinePolicies.IsSupported(PlayerSide.Corp, first) ? PlayerSide.Corp
+        PlayerSide side = Entrant(first, options) is { } seat ? seat
+            : OfflinePolicies.IsSupported(PlayerSide.Corp, first) ? PlayerSide.Corp
             : OfflinePolicies.IsSupported(PlayerSide.Runner, first) ? PlayerSide.Runner : throw new ArgumentException($"Unknown policy version '{first}'.");
-        if (!OfflinePolicies.IsSupported(side, second)) throw new ArgumentException("--versions needs two versions of one side.");
+        if (Entrant(second, options) is null && !OfflinePolicies.IsSupported(side, second)) throw new ArgumentException("--versions needs two versions of one side.");
         RegretGame[] games = File.Exists(Path.Combine(source, RegretSuite.GamesFile))
             ? [.. RegretSuite.Load(source).Games]
             : [.. LadderGameArchive.ReadAll(source, options.Workers).Select(entry => RegretGames.FromSaved(entry.Game, entry.Definition, "train", "ladder"))];
+        // --games N: every k-th game, so a sizing run or a costly pair (S4.2's planners) spans the deals evenly.
+        if (options.Games > 0 && options.Games < games.Length)
+            games = [.. Enumerable.Range(0, options.Games).Select(index => games[(int)((long)index * games.Length / options.Games)])];
         var started = System.Diagnostics.Stopwatch.StartNew();
         RegretRoot[] roots = [.. ForGames(games, options.Workers, error, "diverge",
-            game => RegretRoots.Diverge(game, first, second, side, (definition, seat, version) => Scored(definition, seat, options.Profile, version),
+            game => RegretRoots.Diverge(game, first, second, side, (definition, seat, version) => Scored(definition, seat, options.Profile, version, options),
                 new RegretSampling(Seed: options.Seed))).SelectMany(found => found)];
         HashSet<string> used = [.. roots.Select(root => root.GameId)];
         RegretSuite suite = new RegretSuite([.. games.Where(game => used.Contains(game.Id))], [.. roots], []).Deduplicated();
@@ -450,6 +491,50 @@ public static partial class CliCommands
             RegretSuite.WriteLines(labelsPath, labels.Values.OrderBy(label => label.RootId, StringComparer.Ordinal));
         }
         output.WriteLine($"ai-regret merge from={from} roots-added={added} roots-joined={joined} labels-added={labelled} file={options.LabelsFile}");
+        return 0;
+    }
+
+    /// <summary>
+    /// Bot plan S4.1: what the planner's leaf costs per extraction on real positions: the observation's build and read,
+    /// then evaluation set 4's features and set 5's (with the teacher's knowledge), each timed alone on one thread over the
+    /// first games of a suite (<c>--turn-roots</c> of them), both sides at every decision.
+    /// </summary>
+    private static int RegretLeafCostCommand(string suiteDirectory, RegretOptions options, TextWriter output)
+    {
+        RegretGame[] games = [.. RegretSuite.Load(suiteDirectory).Games.Where(game => game.Source == "ladder").Take(options.TurnRoots)];
+        long observeTicks = 0, set4Ticks = 0, set5Ticks = 0;
+        int positions = 0;
+        foreach ((RegretGame game, int index) in games.Select((game, index) => (game, index)))
+        {
+            FullMatchDefinition definition = RegretGames.Definition(game);
+            var catalog = new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior);
+            var agents = new[] { PlayerSide.Corp, PlayerSide.Runner }.ToDictionary(side => side,
+                side => (OfflineAgent)RatingLadder.CreateAgent(RegretLabels.DefaultTeacher, side, definition));
+            foreach (RegretPosition position in RegretGames.Positions(game, definition))
+            {
+                foreach (OfflineAgent agent in agents.Values) AgentLifecycleHost.Observe(agent, position.State, definition.Behavior);
+                foreach ((PlayerSide side, OfflineAgent agent) in agents)
+                {
+                    long start = System.Diagnostics.Stopwatch.GetTimestamp();
+                    AgentFeatures features = ObservationReader.Read(ObservationBuilder.Build(position.State, side, definition.Behavior),
+                        agent.Configuration.FeatureVersion);
+                    long observed = System.Diagnostics.Stopwatch.GetTimestamp();
+                    EvaluationFeatures.Extract(features, catalog, 4);
+                    long four = System.Diagnostics.Stopwatch.GetTimestamp();
+                    EvaluationFeatures.Extract(features, catalog, 5, agent.Checkpoint.Knowledge);
+                    long five = System.Diagnostics.Stopwatch.GetTimestamp();
+                    // The first game warms the code up and is not counted.
+                    if (index == 0) continue;
+                    observeTicks += observed - start;
+                    set4Ticks += four - observed;
+                    set5Ticks += five - four;
+                    positions++;
+                }
+            }
+        }
+        double Micro(long ticks) => positions == 0 ? 0 : ticks * 1e6 / System.Diagnostics.Stopwatch.Frequency / positions;
+        output.WriteLine(string.Create(CultureInfo.InvariantCulture,
+            $"ai-regret leaf-cost games={games.Length - 1} positions={positions} observation={Micro(observeTicks):F1}us set4={Micro(set4Ticks):F1}us set5={Micro(set5Ticks):F1}us leaf4={Micro(observeTicks + set4Ticks):F1}us leaf5={Micro(observeTicks + set5Ticks):F1}us"));
         return 0;
     }
 
@@ -616,8 +701,15 @@ public static partial class CliCommands
     }
 
     /// <summary>The scored version's bot for a seat, keeping its reasons.</summary>
-    private static OfflineAgent Scored(FullMatchDefinition definition, PlayerSide side, string profile, string version) =>
-        SavedDecision.Agent(definition, side, version, profile, diagnostics: true);
+    private static OfflineAgent Scored(FullMatchDefinition definition, PlayerSide side, string profile, string version, RegretOptions? options = null) =>
+        options is not null && Entrant(version, options) is not null
+            ? RatingLadder.CreateAgent(version, side, definition) as OfflineAgent ?? throw new ArgumentException($"'{version}' is not an offline agent.")
+            : SavedDecision.Agent(definition, side, version, profile, diagnostics: true);
+
+    /// <summary>The side a ladder entrant is scored on (S4.2: <c>--side</c>), or null when the name is a policy version.</summary>
+    private static PlayerSide? Entrant(string name, RegretOptions options) =>
+        OfflinePolicies.IsSupported(PlayerSide.Corp, name) || OfflinePolicies.IsSupported(PlayerSide.Runner, name) ? null
+        : options.Side ?? throw new ArgumentException($"'{name}' is a ladder entrant: name its side with --side corp|runner.");
 
     /// <summary>Runs <paramref name="work"/> over the games on <paramref name="workers"/> threads, in the games' order, reporting progress.</summary>
     /// <param name="save">Called with every finished game's result at each progress line, so a long run that is

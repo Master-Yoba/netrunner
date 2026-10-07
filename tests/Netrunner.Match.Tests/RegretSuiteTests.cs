@@ -209,6 +209,36 @@ public sealed class RegretSuiteTests
         Assert.NotEqual(flat.Values.Select(value => value.Mean), label.Values.Select(value => value.Mean));
     }
 
+    /// <summary>
+    /// Bot plan S4.2b: labelling with end-of-line rows records, for lines played past the root side's turn, set 5 of the
+    /// state where the turn ended and the play-out's value from it, and labels exactly as without them.
+    /// </summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(3)]
+    public void EndOfLineRowsAreTheStatesWhereTheTurnEndedAndLeaveTheLabelsAlone(int lines)
+    {
+        if (!Official) return;
+        (LadderSavedGame saved, FullMatchDefinition definition) = Saved();
+        RegretGame game = RegretGames.FromSaved(saved, definition, "held-out", "finding");
+        RegretRoot root = Assert.Single(RegretRoots.At(game, new HashSet<long> { CorpTurn }, new RegretSampling(), []));
+        var settings = new TeacherSettings(Samples: 3, Seed: 3, HorizonTurns: 2, Lines: lines);
+        var rows = new List<EndLineRow>();
+
+        RegretLabel label = Assert.Single(RegretLabels.Label(game, [root], settings, endLines: rows));
+
+        Assert.Equal(Assert.Single(RegretLabels.Label(game, [root], settings)).Values.Select(value => value.Mean), label.Values.Select(value => value.Mean));
+        Assert.NotEmpty(rows);
+        // At most one row a line played to the horizon: each group's lines on each sample, less any memo hits.
+        Assert.True(rows.Count <= label.Values.Length * settings.Samples * Math.Max(2, lines), $"{rows.Count} rows");
+        Assert.All(rows, row =>
+        {
+            Assert.Equal((root.Id, root.Side, "held-out"), (row.RootId, row.Side, row.Split));
+            Assert.Equal(EvaluationFeatures.NamesFor(5).Count, row.Features.Length);
+            Assert.InRange(row.Value, 0, 1);
+        });
+    }
+
     [Fact]
     public void TheDiscordantViewComparesTwoVersionsWhereTheyChooseDifferently()
     {
@@ -284,6 +314,31 @@ public sealed class RegretSuiteTests
     /// Bot plan S4.1: evaluation set 5 on real positions of the box suite, from both sides with the teacher's knowledge:
     /// every value is finite, and set 5's own terms vary.
     /// </summary>
+    /// <summary>S4.2: a game's labelled roots become fitting rows, each the acting side's sets 4 and 5, the teacher's root value and the outcome.</summary>
+    [Fact]
+    public void TeacherFitRowsAreTheLabelledRootsOfAFinishedGame()
+    {
+        if (!Official) return;
+        RegretSuite suite = RegretSuite.Load(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "data", "ai", "regret",
+            "gateway-elevation"));
+        RegretGame game = suite.Games.First(entry => entry.Source == "ladder");
+        RegretRoot[] roots = [.. suite.Roots.Where(root => root.GameId == game.Id).Take(3)];
+        var labelled = roots.Select((root, index) => (root, new RegretLabel(root.Id, 32, 4, 4, 1,
+            [new(root.Candidates[0].Group, 0.4 + index / 10.0, 0.02, 32), new(root.Candidates[1].Group, 0.1, 0.02, 32)], 5, 1, "hard-model"))).ToArray();
+
+        IReadOnlyList<TeacherFitRow> rows = TeacherFit.Collect(game, labelled);
+
+        Assert.Equal(roots.Select(root => root.Id), rows.Select(row => row.RootId));
+        Assert.Equal([0.4, 0.5, 0.6], rows.Select(row => Math.Round(row.Teacher, 6)));
+        Assert.All(rows, row =>
+        {
+            Assert.Equal(EvaluationFeatures.NamesFor(4).Count, row.Set4.Length);
+            Assert.Equal(row.Set4, row.Set5[..row.Set4.Length]);
+            Assert.True(row.Won is 0 or 1, $"won {row.Won}");
+        });
+        Assert.Equal(rows.Select(row => row.Set5), TeacherFit.Collect(game, labelled).Select(row => row.Set5));
+    }
+
     [Fact]
     public void SetFiveReadsRealPositions()
     {

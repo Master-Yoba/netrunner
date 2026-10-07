@@ -57,6 +57,22 @@ public sealed class PlayStyleTests
         Assert.Equal(("hard", RunnerHeuristicPolicy.PolicyVersion), (hard.Configuration.ProfileId, hard.Configuration.PolicyVersion));
     }
 
+    [Theory]
+    [InlineData("hard-set5", 5)]
+    [InlineData("hard-set4-teacher", 6)]
+    public void TheTeacherFitEntrantsPlanWithTheirEvaluation(string entrant, int evaluation)
+    {
+        // S4.2: Hard's planner on set 5, and on set 4 refitted to the teacher, in either seat.
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
+        FullMatchDefinition definition = RulesFuzzRunner.CreateDefinition("gateway-discretion-advised~gateway-stolen-goods", 11);
+        foreach (PlayerSide side in new[] { PlayerSide.Corp, PlayerSide.Runner })
+        {
+            var agent = (OfflineAgent)RatingLadder.CreateAgent(entrant, side, definition);
+            Assert.Equal("hard", agent.Configuration.ProfileId);
+            Assert.Equal(evaluation, agent.Configuration.Parameters["plan-evaluation"]);
+        }
+    }
+
     [Fact]
     public void ThePlayersOpponentTakesItsDifficultyAndPersonality()
     {

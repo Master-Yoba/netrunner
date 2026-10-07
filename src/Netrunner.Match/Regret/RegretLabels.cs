@@ -48,8 +48,10 @@ public static class RegretLabels
 
     /// <param name="teacher">The ladder entrant that teaches: Hard, or <c>hard-model</c>, Hard modelling the opponent by the
     /// live Standard version instead of the planner's pinned model (Runner v7, Corp v8).</param>
+    /// <param name="endLines">Bot plan S4.2b: receives a row for every line played to the horizon (the end-of-turn state's
+    /// feature set 5 and the play-out's value from it), in play order.</param>
     public static ImmutableArray<RegretLabel> Label(RegretGame game, IReadOnlyList<RegretRoot> roots, TeacherSettings settings,
-        string teacher = DefaultTeacher)
+        string teacher = DefaultTeacher, ICollection<EndLineRow>? endLines = null)
     {
         ArgumentNullException.ThrowIfNull(game);
         ArgumentNullException.ThrowIfNull(roots);
@@ -74,7 +76,9 @@ public static class RegretLabels
             IReadOnlyList<TeacherValue> values = RolloutTeacher.Evaluate(teachers[root.Side], observation,
                 [.. root.Candidates.Select(candidate => new ActionId(candidate.ActionIds[0]))], rooted,
                 root.Candidates.Select((candidate, index) => (candidate, index)).Where(entry => chosen.Contains(entry.candidate.Group))
-                    .Select(entry => entry.index).ToHashSet());
+                    .Select(entry => entry.index).ToHashSet(),
+                endLines is null ? null : (features, value) => endLines.Add(new EndLineRow(root.Id, root.GameId, root.Side, root.Split,
+                    [.. features.Select(feature => Math.Round(feature, 4))], Math.Round(value, 5))));
             // A root no sample could play every candidate on has no label: it is scored as unlabelled.
             if (values.Any(value => value.PlayOuts == 0)) return;
             // With adaptive samples the label records the recording samples the root used, and the deciding ones.
@@ -189,3 +193,9 @@ public static class RegretScores
             value.Group == best.Group, regret <= best.StandardError + value.StandardError, Pruned: value.Pruned);
     }
 }
+
+/// <summary>
+/// Bot plan S4.2b: a state the planner's leaf is read at (where the root side's turn ends, on a line the teacher played to
+/// its horizon), from the root side's view: its feature set 5 (set 4 the first terms) and the play-out's value from there.
+/// </summary>
+public sealed record EndLineRow(string RootId, string GameId, PlayerSide Side, string Split, double[] Features, double Value);

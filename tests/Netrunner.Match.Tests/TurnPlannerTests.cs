@@ -30,6 +30,37 @@ public sealed class TurnPlannerTests
         Assert.True(twins > 0, "No twin positions with a planned turn action.");
     }
 
+    /// <summary>
+    /// Bot plan S4.2 (S5.1's scoring, plan-value 1): planned candidates are ranked by their value in win probability, and
+    /// the chosen one is the heuristic's first within plan-tie (0.005) of the best; hidden-state twins still get one plan.
+    /// </summary>
+    [Theory]
+    [InlineData(PlayerSide.Runner)]
+    [InlineData(PlayerSide.Corp)]
+    public async Task ValueScoringChoosesTheHeuristicsFirstWithinTheTieOfTheBestValue(PlayerSide side)
+    {
+        int checkedPositions = 0;
+        foreach ((FullMatchDefinition definition, GameState state) in (await PositionsAsync(side)).Take(6))
+        {
+            OfflineAgent agent = AgentAt(definition, state, side, value: true);
+            ActionId chosen = await agent.ChooseActionAsync(ObservationBuilder.Build(state, side, definition.Behavior, definition.Runtime));
+            AgentCandidate[] planned = [.. agent.LastEvaluation!.Candidates.Where(candidate => candidate.Utility.Priority >= TurnPlannerPriority / 2)];
+            if (planned.Length < 2) continue;
+            int top = planned.Max(candidate => candidate.Utility.Priority);
+            AgentCandidate[] band = [.. planned.Where(candidate => candidate.Utility.Priority == top)];
+            double Value(AgentCandidate candidate) => double.Parse(System.Text.RegularExpressions.Regex.Match(candidate.Utility.Reason,
+                @" value ([+-][0-9.]+) ").Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
+            Assert.All(planned, candidate => Assert.InRange(Value(candidate), -2, 1));
+            AgentCandidate winner = band.Single(candidate => candidate.ActionId == chosen);
+            Assert.True(Value(winner) >= band.Max(Value) - 0.0051, $"{Value(winner)} against the best {band.Max(Value)}");
+            Assert.Equal(band.Max(candidate => candidate.Utility.Score), winner.Utility.Score);
+            Assert.Equal(chosen, await AgentAt(definition, state, side, value: true)
+                .ChooseActionAsync(ObservationBuilder.Build(state, side, definition.Behavior, definition.Runtime)));
+            checkedPositions++;
+        }
+        Assert.True(checkedPositions > 0, "No position with two planned candidates.");
+    }
+
     [Theory]
     [InlineData(PlayerSide.Runner)]
     [InlineData(PlayerSide.Corp)]
@@ -61,9 +92,9 @@ public sealed class TurnPlannerTests
     private static string Live(PlayerSide side) =>
         side == PlayerSide.Corp ? CorpHeuristicPolicy.PolicyVersion : RunnerHeuristicPolicy.PolicyVersion;
 
-    private static OfflineAgentConfiguration WithLines(OfflineAgentConfiguration current) => OfflineAgentConfiguration.Create(current.Side,
+    private static OfflineAgentConfiguration With(OfflineAgentConfiguration current, string key) => OfflineAgentConfiguration.Create(current.Side,
         current.PolicyVersion, current.ProfileId, current.PolicySeed, current.WorkBudget, current.NearTieTolerance,
-        [.. current.Parameters, new KeyValuePair<string, int>("plan-lines", 1)], current.FeatureVersion);
+        [.. current.Parameters, new KeyValuePair<string, int>(key, 1)], current.FeatureVersion);
 
     private static bool Official => CardDataResource.EmbeddedMode == CardDataResource.OfficialMode;
 
@@ -77,15 +108,18 @@ public sealed class TurnPlannerTests
 
     /// <summary>
     /// A fresh Standard agent that has observed <paramref name="state"/> as its first position; with <paramref name="lines"/>,
-    /// the live Hard bot searching lines of the turn (plan-lines, bot plan S1.5; the live Runner's Standard does not plan).
+    /// the live Hard bot searching lines of the turn (plan-lines, bot plan S1.5; the live Runner's Standard does not plan);
+    /// with <paramref name="value"/>, the live Hard bot valuing candidates in win probability (plan-value, S4.2).
     /// </summary>
-    private static OfflineAgent AgentAt(FullMatchDefinition definition, GameState state, PlayerSide side, bool lines = false)
+    private static OfflineAgent AgentAt(FullMatchDefinition definition, GameState state, PlayerSide side, bool lines = false, bool value = false)
     {
+        bool live = lines || value;
         OfflineAgent fresh = OfflineMatchFactory.CreateOpponent(definition, side == PlayerSide.Corp ? PlayerSide.Runner : PlayerSide.Corp,
-            lines ? "hard" : "standard", lines ? Live(side) : Planning(side));
-        OfflineAgentConfiguration configuration = lines ? WithLines(fresh.Configuration) : fresh.Configuration;
+            live ? "hard" : "standard", live ? Live(side) : Planning(side));
+        OfflineAgentConfiguration configuration = lines ? With(fresh.Configuration, "plan-lines")
+            : value ? With(fresh.Configuration, "plan-value") : fresh.Configuration;
         // A checkpoint belongs to its configuration, so the switched-on agent starts from its own.
-        OfflineAgentCheckpoint start = lines ? new OfflineAgent(configuration, OfflinePolicies.Create(configuration),
+        OfflineAgentCheckpoint start = live ? new OfflineAgent(configuration, OfflinePolicies.Create(configuration),
             new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior)).Checkpoint : fresh.Checkpoint;
         OfflineAgentCheckpoint checkpoint = state.ActionSequence == 0 ? start
             : start with { ObservationCursor = state.ActionSequence - 1, ObservationDigest = "position" };

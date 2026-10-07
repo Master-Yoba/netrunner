@@ -773,6 +773,16 @@ there is measured on S1.6's first run rather than assumed. One point of the desi
 stops extending once its recording samples separate, which is optional stopping on the recorded samples; the signed
 difference above shows no lift from it on these roots.
 
+**Pruning's miss rate, per labelling** (the share of roots where a flat 32-sample labelling's best group was pruned):
+
+| Labelling | Roots compared | Prune | Missed |
+|---|---:|---:|---:|
+| S1.6, Corp v29/v30 and v28/v29 targeted roots (turn sample) | 200 | best 3 | 17% (34) |
+| S4.2, the planner pairs' targeted roots (sample, seed 2) | 100 | best 4 | 10% (10) |
+
+S4.2 kept four finalists: the miss rate fell to 10% and the samples rose from 48% of flat's to 62% (1,159 roots in
+65 min, 3.4 s a root, against flat's 4.6 s on its sample).
+
 ### S1.6: targeted roots (7 October 2026)
 
 **The roots.** `ai-regret diverge` replayed the suite's 974 games and asked two Corp versions (Standard) at every
@@ -857,3 +867,83 @@ card is where give the same features, from either side) in `EvaluationFeaturesTe
 (`RegretSuiteTests.SetFiveReadsRealPositions`, both sides with the teacher's knowledge) every value is finite and every
 new term varies except `punisher-exposure`, which is rare in self-play (a castable punisher, the threat met and a grip
 under its damage at once, which v26 guards against). No fit yet: S4.2 fits set 5 on the core.
+
+**The leaf's cost** (`ai-regret leaf-cost`, one thread, 8 box games, both sides at every decision, 10,026 positions):
+set 5's extraction is **93.1 µs** against set 4's **46.6 µs** (set 5 computes set 4 and then its own terms); with the
+observation's build and read (228.0 µs) a leaf is **321.1 µs** against 274.6 µs, 17% more. S0.1 measured the whole leaf
+at 217 µs a rollout in the planner, 6.1% of a plan's time; at that share, set 5 adds about 1% to a planner decision.
+S5.0's budget reads these numbers.
+
+### S4.2: fitting the leaf to the teacher (7 October 2026)
+
+**The fits** (`ai-fit-evaluation --target teacher --suite data/ai/regret/gateway-elevation --outcome-weight 0.2`; the
+core's training roots, teacher v2's root value as a soft target at weight 1 and the game's outcome at weight 0.2,
+`LogisticSideModel` on standardised features; report `data/ai/evaluation-v5.report.json`). Held out: the core's
+held-out roots, Corp 195 and Runner 268 (622 and 962 trained on):
+
+| Seat | Arm | Teacher log loss | Teacher mean absolute error | Outcome log loss |
+|---|---|---:|---:|---:|
+| Corp | the training rows' mean teacher value (a constant) | 0.6067 | 0.2254 | 0.7124 |
+| Corp | set 4, shipped weights | 0.4930 | 0.1392 | 0.5844 |
+| Corp | set 4, fitted to the teacher (`evaluation-v4-teacher.json`) | 0.4847 | 0.1338 | 0.5259 |
+| Corp | set 5, fitted to the teacher (`evaluation-v5.json`) | **0.4658** | **0.1149** | 0.5142 |
+| Runner | the training rows' mean teacher value | 0.6777 | 0.2068 | 0.6747 |
+| Runner | set 4, shipped weights | 0.6386 | 0.1622 | 0.6296 |
+| Runner | set 4, fitted to the teacher | 0.5922 | 0.1153 | 0.5538 |
+| Runner | set 5, fitted to the teacher | **0.5814** | **0.1068** | 0.5426 |
+
+Set 5 against each set 4 arm, paired root by root (95% bootstrap, 2,000 draws):
+
+| Seat | Against | Teacher log loss | Mean absolute error |
+|---|---|---|---|
+| Corp | set 4 shipped | −0.0272 [−0.0391, −0.0154] | −0.0242 [−0.0352, −0.0126] |
+| Corp | set 4 refitted | −0.0188 [−0.0270, −0.0106] | −0.0189 [−0.0271, −0.0100] |
+| Runner | set 4 shipped | −0.0573 [−0.0750, −0.0391] | −0.0554 [−0.0724, −0.0384] |
+| Runner | set 4 refitted | −0.0108 [−0.0163, −0.0064] | −0.0085 [−0.0129, −0.0043] |
+
+**The fit gate passes**: set 5 beats both set 4 arms in both seats. The gain is attributed differently by seat: the
+Corp's is mostly the features (refitting set 4 recovers about a third of it), the Runner's mostly the refit (about
+four fifths). `punisher-exposure` is rare in the core, not absent: non-zero at about 2% of the Corp's rows (mean 0.019)
+and as small a share of the Runner's (mean 0.015), and its standardised weights are near zero (Corp 0.007, Runner
+0.023). That is expected, since v26 guards against the state it measures (a castable punisher, the threat met and a
+grip under its damage), and is not a verdict on the term: self-play rarely shows it, and its unit test covers it.
+
+**The planner arms** (ladder entrants, Hard's settings): `hard` (Corp's set 4, Runner's set 3 with the shipped
+weights; set 3 and set 4 read the same from the Runner's side), `hard-set4-teacher` (`plan-evaluation 6`: set 4's
+features with the refitted weights) and `hard-set5` (`plan-evaluation 5`). The planner's leaf reads set 5 with its own
+knowledge (the tracker, the opponent's list for Hard).
+
+**The roots.** `ai-regret diverge --side S --games 48` (every 20th of the suite's games) for set 5 against each set 4
+arm, in each seat; Hard's choices repeat exactly, so a scored root's two choices are the ones `diverge` found:
+
+| Seat | Pair | Discordant roots | Held out | Time |
+|---|---|---:|---:|---:|
+| Corp | hard-set5, hard | 502 | 121 | 38 s |
+| Corp | hard-set5, hard-set4-teacher | 279 | 66 | 39 s |
+| Runner | hard-set5, hard | 485 | 119 | 61 s |
+| Runner | hard-set5, hard-set4-teacher | 269 | 74 | 60 s |
+
+All turn-action roots (Hard plans run choices with the heuristic). Merged, they are 1,159 roots (the two pairs share
+173 Corp and 203 Runner positions), labelled by teacher v2 with four finalists (`--decide 8 --record 24 --prune 4`,
+S1.7's miss-rate table): 65 min.
+
+**Gate: the planner on set 5 does not separate from either set 4 arm** (regret difference set 5 minus the other, teacher
+v2, labels of the S4.2 roots; negative is set 5 better; no choice unlabelled or of a pruned group):
+
+| Seat | Against | Over the discordant roots | Core held-out, discordant | Core held-out regret (set 5 / other) |
+|---|---|---|---|---|
+| Corp | set 4 shipped | +0.0059 [−0.0021, 0.0134] (502) | −0.0087 [−0.0242, 0.0055] (53) | 0.0347 / 0.0371 |
+| Corp | set 4 refitted | −0.0040 [−0.0117, 0.0039] (279) | −0.0059 [−0.0318, 0.0218] (41) | 0.0347 / 0.0360 |
+| Runner | set 4 shipped | −0.0025 [−0.0071, 0.0021] (485) | +0.0078 [−0.0050, 0.0208] (50) | 0.0368 / 0.0354 |
+| Runner | set 4 refitted | −0.0029 [−0.0091, 0.0032] (269) | +0.0079 [−0.0080, 0.0263] (32) | 0.0368 / 0.0359 |
+
+(The core columns are the main suite's labels, teacher v2, 466 held-out core roots; Hard Corp's 0.0371 equals the v31
+heuristic's by chance: they choose differently at 20 of the 196 roots, and their difference there is −0.0002.)
+
+Every interval spans zero and the signs disagree between the targeted roots and the core. The leaf fits the teacher's
+values better by a clear margin, but the planner at Hard's settings does not choose better with it. On the Corp's
+targeted roots set 5 is worse where it draws and the shipped leaf advances (42 roots, +0.046) and where it installs and
+the shipped leaf takes a credit (20 roots, +0.043).
+
+**The ladder agrees** (box, `hard,hard-set5`, 400 deals, 1,600 games, `--stop-when-clear`, 20 min): level in both
+seats, Corp set 5 − set 4 −10 Elo [−42, 18], Runner +14 [−19, 42], not separated.

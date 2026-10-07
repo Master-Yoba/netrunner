@@ -25,12 +25,16 @@ public sealed record LogisticSideModel(
     /// descent on standardized features (A5). Small, linear and reproducible:
     /// the same samples always give the same weights.
     /// </summary>
+    /// <param name="outcomes">Each sample's target probability: an outcome (0 or 1), or a soft one (S4.2: the teacher's value).</param>
+    /// <param name="sampleWeights">Each sample's weight in the loss (S4.2: the outcome rows count 0.2); all 1 when null.</param>
     public static LogisticSideModel Fit(IReadOnlyList<double[]> samples, IReadOnlyList<double> outcomes, double ridge = 0.01,
-        int iterations = 4000, double learningRate = 0.5)
+        int iterations = 4000, double learningRate = 0.5, IReadOnlyList<double>? sampleWeights = null)
     {
         ArgumentNullException.ThrowIfNull(samples);
         ArgumentNullException.ThrowIfNull(outcomes);
         if (samples.Count == 0 || samples.Count != outcomes.Count) throw new ArgumentException("Samples and outcomes must pair up.");
+        if (sampleWeights is not null && sampleWeights.Count != samples.Count) throw new ArgumentException("Weights must pair with samples.");
+        double totalWeight = sampleWeights?.Sum() ?? samples.Count;
         int width = samples[0].Length;
         double[] mean = new double[width], deviation = new double[width];
         for (int feature = 0; feature < width; feature++)
@@ -39,6 +43,7 @@ public sealed record LogisticSideModel(
             double variance = samples.Average(sample => Math.Pow(sample[feature] - mean[feature], 2));
             deviation[feature] = variance > 1e-12 ? Math.Sqrt(variance) : 1;
         }
+        double Weight(int sample) => sampleWeights?[sample] ?? 1;
         double[][] standardized = samples.Select(sample => sample.Select((value, feature) => (value - mean[feature]) / deviation[feature]).ToArray()).ToArray();
         double[] weights = new double[width];
         double bias = 0;
@@ -51,13 +56,13 @@ public sealed record LogisticSideModel(
             {
                 double logit = bias;
                 for (int feature = 0; feature < width; feature++) logit += weights[feature] * standardized[sample][feature];
-                double residual = outcomes[sample] - 1 / (1 + Math.Exp(-logit));
+                double residual = Weight(sample) * (outcomes[sample] - 1 / (1 + Math.Exp(-logit)));
                 biasGradient += residual;
                 for (int feature = 0; feature < width; feature++) gradient[feature] += residual * standardized[sample][feature];
             }
-            bias += learningRate * biasGradient / standardized.Length;
+            bias += learningRate * biasGradient / totalWeight;
             for (int feature = 0; feature < width; feature++)
-                weights[feature] += learningRate * (gradient[feature] / standardized.Length - ridge * weights[feature]);
+                weights[feature] += learningRate * (gradient[feature] / totalWeight - ridge * weights[feature]);
         }
         return new(mean, deviation, weights, bias);
     }
@@ -95,6 +100,16 @@ public static class FittedEvaluation
     private static readonly Lazy<FittedEvaluationDocument> V1 = new(() => Load(1));
     private static readonly Lazy<FittedEvaluationDocument> V2 = new(() => Load(2));
 
+    /// <summary>Bot plan S4.2: set 5 fitted to the teacher, and set 4's features refitted to it (the attribution arm).</summary>
+    private static readonly Lazy<FittedEvaluationDocument> V5 = new(() => Load("evaluation-v5", 5));
+    private static readonly Lazy<FittedEvaluationDocument> V4Teacher = new(() => Load("evaluation-v4-teacher", 4));
+
+    /// <summary>
+    /// The feature set an evaluation reads: its own number, except 6, set 4's features with weights fitted to the teacher
+    /// (S4.2's control arm).
+    /// </summary>
+    public static int FeatureSetOf(int version) => version == 6 ? 4 : version;
+
     /// <summary>
     /// A7: the behavior-registry version of the System Gateway + Elevation pool
     /// (ElevationBehaviorCatalog.Version), whose games plan with that pool's own fit.
@@ -118,40 +133,44 @@ public static class FittedEvaluation
         1 => V1.Value,
         // Sets 3 and 4 correct one feature of set 2 and keep its fitted weights.
         2 or 3 or 4 => V2.Value,
+        5 => V5.Value,
+        6 => V4Teacher.Value,
         _ => throw new ArgumentOutOfRangeException(nameof(version), "Unknown fitted evaluation."),
     };
 
+    /// <param name="knowledge">The observer's knowledge, which set 5 reads (the tracker, the opponent's list).</param>
     public static double WinProbability(AgentFeatures features, ICardEvaluationCatalog catalog, int version = 1,
-        string? behaviorVersion = null)
+        string? behaviorVersion = null, AgentKnowledge? knowledge = null)
     {
         ArgumentNullException.ThrowIfNull(features);
         AgentOutcome outcome = features.Board.Outcome;
         if (outcome.Kind != GameOutcomeKind.Ongoing) return outcome.Winner == features.Side ? 1 : 0;
         FittedEvaluationDocument document = DocumentFor(version, behaviorVersion);
         LogisticSideModel model = features.Side == PlayerSide.Corp ? document.Corp : document.Runner;
-        return model.Probability(EvaluationFeatures.Extract(features, catalog, version));
+        return model.Probability(EvaluationFeatures.Extract(features, catalog, FeatureSetOf(version), knowledge));
     }
 
     /// <summary>The win probability as a planner score: log-odds in thousandths, with wins and losses at the extremes.</summary>
-    public static long Score(AgentFeatures features, ICardEvaluationCatalog catalog, int version = 1, string? behaviorVersion = null)
+    public static long Score(AgentFeatures features, ICardEvaluationCatalog catalog, int version = 1, string? behaviorVersion = null,
+        AgentKnowledge? knowledge = null)
     {
-        double probability = Math.Clamp(WinProbability(features, catalog, version, behaviorVersion), 1e-6, 1 - 1e-6);
+        double probability = Math.Clamp(WinProbability(features, catalog, version, behaviorVersion, knowledge), 1e-6, 1 - 1e-6);
         return (long)Math.Round(Math.Log(probability / (1 - probability)) * 1000);
     }
 
     /// <summary>The planner score with a personality's shift of its named terms (A6); Balanced is the plain score.</summary>
     public static long Score(AgentFeatures features, ICardEvaluationCatalog catalog, int version, AgentPersonality personality,
-        string? behaviorVersion = null)
+        string? behaviorVersion = null, AgentKnowledge? knowledge = null)
     {
         ArgumentNullException.ThrowIfNull(features);
         if (personality == AgentPersonality.Balanced || version == 1 || features.Board.Outcome.Kind != GameOutcomeKind.Ongoing)
-            return Score(features, catalog, version, behaviorVersion);
+            return Score(features, catalog, version, behaviorVersion, knowledge);
         FittedEvaluationDocument document = DocumentFor(version, behaviorVersion);
         LogisticSideModel model = features.Side == PlayerSide.Corp ? document.Corp : document.Runner;
-        double[] values = EvaluationFeatures.Extract(features, catalog, version);
+        double[] values = EvaluationFeatures.Extract(features, catalog, FeatureSetOf(version), knowledge);
         double probability = Math.Clamp(model.Probability(values), 1e-6, 1 - 1e-6);
         return (long)Math.Round(Math.Log(probability / (1 - probability)) * 1000)
-            + AgentPersonalities.Shift(personality, values, EvaluationFeatures.NamesFor(version));
+            + AgentPersonalities.Shift(personality, values, EvaluationFeatures.NamesFor(FeatureSetOf(version)));
     }
 
     private static readonly JsonSerializerOptions ReadOptions = new() { PropertyNameCaseInsensitive = true };
@@ -162,6 +181,7 @@ public static class FittedEvaluation
 
     private static FittedEvaluationDocument Load(int version) => Load($"evaluation-v{version}", version);
 
+    /// <param name="version">The feature set the document's model reads.</param>
     private static FittedEvaluationDocument Load(string name, int version)
     {
         string resource = $"Netrunner.AI.Data.ai.{name}.json";

@@ -43,8 +43,10 @@ public static class RolloutTeacher
 {
     /// <param name="required">Candidates (by index) that get the recording samples whatever the deciding ones say (S1.6:
     /// the groups the compared versions chose at a targeted root).</param>
+    /// <param name="endOfLine">Bot plan S4.2b: shown, for every line played to the horizon, feature set 5 of the state where
+    /// the root side's turn ended (from its view, with its knowledge) and the play-out's value from there.</param>
     public static IReadOnlyList<TeacherValue> Evaluate(OfflineAgent agent, Observation observation, IReadOnlyList<ActionId> candidates,
-        TeacherSettings settings, IReadOnlySet<int>? required = null)
+        TeacherSettings settings, IReadOnlySet<int>? required = null, Action<double[], double>? endOfLine = null)
     {
         ArgumentNullException.ThrowIfNull(agent);
         ArgumentNullException.ThrowIfNull(observation);
@@ -59,6 +61,8 @@ public static class RolloutTeacher
         PlayerSide side = agent.ControlledSide;
         var planning = new PlanningContext(determinizer, new DeterministicRandom(settings.Seed));
         OpponentCardPool pool = planner.PoolFor(side, knowledge, fromList: true);
+        Action<GameState, double>? ended = endOfLine is null ? null
+            : (state, value) => endOfLine(planner.LeafFeatures(state, side, determinizer, knowledge), value);
         // The turn-line search is for a turn-action root; elsewhere a candidate's line is its heuristic continuation.
         bool lines = settings.Lines > 1 && observation.Decision?.Kind == DecisionKind.TurnAction;
         // One memo for the root: lines of different candidates often leave the turn in the same state.
@@ -78,9 +82,9 @@ public static class RolloutTeacher
             return drawn;
         }
         TeacherValue[] ValueOf(IReadOnlyList<ActionId> actions, List<GameState> samples) => samples.Count == 0 ? [.. actions.Select(action => Summarize(action, []))]
-            : lines ? Lines(planner, actions, settings, side, knowledge, determinizer, samples, memo, screens)
-            : [.. actions.Select(action => Summarize(action, [.. samples.Select(sample => planner.PlayOut(sample, action, side, knowledge,
-                determinizer, settings.HorizonTurns, settings.Evaluation, settings.Cap) ?? 0)]))];
+            : lines ? Lines(planner, actions, settings, side, knowledge, determinizer, samples, memo, screens, ended)
+            : [.. actions.Select(action => Summarize(action, [.. samples.Select(sample => planner.PlayLine(sample, action, [], side, knowledge,
+                determinizer, settings.HorizonTurns, settings.Evaluation, settings.Cap, out _, endOfLine: ended) ?? 0)]))];
         TeacherValue[] Value(List<GameState> samples) => ValueOf(candidates, samples);
         if (settings.Decide <= 0) return Value(Draw(settings.Samples));
         if (settings.Prune > 0)
@@ -147,7 +151,7 @@ public static class RolloutTeacher
     /// </summary>
     private static TeacherValue[] Lines(TurnPlanner planner, IReadOnlyList<ActionId> candidates, TeacherSettings settings, PlayerSide side,
         AgentKnowledge knowledge, ObservationDeterminizer determinizer, List<GameState> samples, Dictionary<string, double> memo,
-        Dictionary<string, double> screens)
+        Dictionary<string, double> screens, Action<GameState, double>? ended)
     {
         int screenTurns = settings.ScreenTurns == 0 ? settings.HorizonTurns : settings.ScreenTurns;
         return [.. candidates.Select(action =>
@@ -157,7 +161,7 @@ public static class RolloutTeacher
                     settings.Evaluation, settings.Cap, out int reached, screens, toTurnEnd: settings.ScreenTurns == 0) ?? 0, reached),
                 settings.Lines,
                 (index, ranks) => (planner.PlayLine(samples[index], action, ranks, side, knowledge, determinizer, settings.HorizonTurns,
-                    settings.Evaluation, settings.Cap, out int reached, memo) ?? 0, reached));
+                    settings.Evaluation, settings.Cap, out int reached, memo, endOfLine: ended) ?? 0, reached));
             return Summarize(action, [.. values]) with { Line = ranks };
         })];
     }

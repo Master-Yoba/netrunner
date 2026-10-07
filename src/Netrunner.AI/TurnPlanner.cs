@@ -55,6 +55,16 @@ internal sealed partial class TurnPlanner
     public int RunSamples => _configuration.Parameters.GetValueOrDefault("run-samples");
     public int RunWidth => _configuration.Parameters.GetValueOrDefault("run-width");
 
+    /// <summary>
+    /// plan-value 1 (bot plan S5.1, brought forward by S4.2): a planned candidate's value is the mean over the samples of its
+    /// leaf as a win probability less the sample's root (the position before it), and the heuristic's score is not part of
+    /// it; among the top band's candidates within <see cref="Tie"/> of the best value, the heuristic's order decides.
+    /// </summary>
+    public bool Values => _configuration.Parameters.GetValueOrDefault("plan-value") == 1;
+
+    /// <summary>plan-tie: the margin of value, in thousandths of a win probability, within which candidates tie (default 5).</summary>
+    public int Tie => _configuration.Parameters.GetValueOrDefault("plan-tie", 5);
+
     /// <summary>Whether a decision is one the planner handles: a turn action with a click left, or a searched run choice.</summary>
     public bool Applies(AgentFeatures features) => AppliesToTurn(features) || AppliesToRun(features);
 
@@ -89,31 +99,41 @@ internal sealed partial class TurnPlanner
             .ThenBy(candidate => candidate.ActionId.Value, StringComparer.Ordinal)
             .Take(run ? RunWidth : Width)];
         var totals = planned.ToDictionary(candidate => candidate.ActionId, _ => 0L);
+        // plan-value 1: each rollout's leaf as a win probability, and each sample's root.
+        var probabilities = planned.ToDictionary(candidate => candidate.ActionId, _ => 0.0);
+        double roots = 0;
         OpponentCardPool pool = PoolFor(features.Side, knowledge);
         if (!run && Lines)
         {
             // Bot plan S1.5: a candidate is valued at its best line of the turn, on the same samples.
             GameState[] states = [.. Enumerable.Range(0, samples).Select(_ => Deal(features.Side, knowledge, pool, planning))];
+            if (Values) roots = states.Sum(state => Probability(Score(state, features.Side, planning.Determinizer, knowledge)));
             foreach (AgentCandidate candidate in planned)
             {
                 long rolling = ProfileTimings.Start();
-                totals[candidate.ActionId] = (long)BestLine(samples, (index, ranks) =>
+                double[] lines = BestLine(samples, (index, ranks) =>
                     (Rollout(states[index], candidate.ActionId, ranks, features.Side, knowledge, planning.Determinizer, false, out int reached), reached),
-                    Width).Values.Sum();
+                    Width).Values;
+                totals[candidate.ActionId] = (long)lines.Sum();
+                if (Values) probabilities[candidate.ActionId] = lines.Sum(value => Probability((long)value));
                 ProfileTimings.Stop("plan.lines", rolling);
             }
         }
         else for (int sample = 0; sample < samples; sample++)
         {
             GameState state = Deal(features.Side, knowledge, pool, planning);
+            if (Values) roots += Probability(Score(state, features.Side, planning.Determinizer, knowledge));
             foreach (AgentCandidate candidate in planned)
             {
                 long rolling = ProfileTimings.Start();
-                totals[candidate.ActionId] += Rollout(state, candidate.ActionId, features.Side, knowledge, planning.Determinizer, run);
+                long leaf = Rollout(state, candidate.ActionId, features.Side, knowledge, planning.Determinizer, run);
+                totals[candidate.ActionId] += leaf;
+                if (Values) probabilities[candidate.ActionId] += Probability(leaf);
                 ProfileTimings.Stop("plan.rollout", rolling);
             }
         }
         ProfileTimings.Stop("plan", started);
+        if (Values) return Valued(heuristic, planned, probabilities, roots / samples, samples, run);
         // The heuristic knows things the end-of-turn score doesn't (pressure,
         // information, tempo), so a planned action keeps its heuristic score and
         // gains or loses what its rollouts show against the heuristic's own choice.
@@ -131,6 +151,38 @@ internal sealed partial class TurnPlanner
             }
             : candidate)];
     }
+
+    /// <summary>
+    /// plan-value 1: a planned candidate's score is its value in millionths of a win probability; the top band's
+    /// heuristic-first candidate within <see cref="Tie"/> of the band's best value is placed above the rest.
+    /// </summary>
+    private ImmutableArray<AgentCandidate> Valued(ImmutableArray<AgentCandidate> heuristic, AgentCandidate[] planned,
+        Dictionary<ActionId, double> probabilities, double root, int samples, bool run)
+    {
+        int Band(AgentCandidate candidate) => PlannedPriority + Math.Clamp(candidate.Utility.Priority, -PlannedPriority / 2, PlannedPriority / 2);
+        var values = planned.ToDictionary(candidate => candidate.ActionId, candidate => probabilities[candidate.ActionId] / samples - root);
+        int top = planned.Max(Band);
+        AgentCandidate[] band = [.. planned.Where(candidate => Band(candidate) == top)];
+        double best = band.Max(candidate => values[candidate.ActionId]);
+        // planned is in the heuristic's order.
+        ActionId chosen = band.First(candidate => values[candidate.ActionId] >= best - Tie / 1000.0).ActionId;
+        int Millionths(double value) => (int)Math.Round(value * 1_000_000);
+        return [.. heuristic.Select(candidate => values.TryGetValue(candidate.ActionId, out double value)
+            ? candidate with
+            {
+                Utility = candidate.Utility with
+                {
+                    Priority = Band(candidate),
+                    Score = candidate.ActionId == chosen ? Millionths(best) + 1 : Millionths(value),
+                    Reason = string.Create(CultureInfo.InvariantCulture,
+                        $"plan/{(run ? "run-search" : "turn-rollout")} value {value:+0.0000;-0.0000} ({candidate.Utility.Reason})"),
+                },
+            }
+            : candidate)];
+    }
+
+    /// <summary>A planner score (log-odds in thousandths) as a win probability; a first action the engine refuses is −1.</summary>
+    private static double Probability(long score) => score <= int.MinValue / 8 ? -1 : 1 / (1 + Math.Exp(-score / 1000.0));
 
     /// <summary>The cards the opponent's unseen cards are dealt from: Hard's known list when it deals from it, otherwise the pool.</summary>
     internal OpponentCardPool PoolFor(PlayerSide side, AgentKnowledge knowledge) =>
@@ -224,7 +276,7 @@ internal sealed partial class TurnPlanner
         for (int step = 0; step < RolloutDecisionCap && next is { } action; step++)
         {
             ApplyResult applied = Simulate(state, action, determinizer);
-            if (!applied.Accepted) return step == 0 ? int.MinValue / 4 : Score(state, side, determinizer);
+            if (!applied.Accepted) return step == 0 ? int.MinValue / 4 : Score(state, side, determinizer, knowledge);
             state = applied.State;
             if (state.Outcome.Kind != GameOutcomeKind.Ongoing || state.PendingDecision is null
                 || state.Turn.TurnNumber != turn || state.Turn.ActiveSide != side
@@ -236,7 +288,7 @@ internal sealed partial class TurnPlanner
             if (turnAction) reached++;
             next = Choose(state, knowledge, determinizer, side, rank);
         }
-        return Score(state, side, determinizer);
+        return Score(state, side, determinizer, knowledge);
     }
 
     /// <summary>
@@ -278,11 +330,14 @@ internal sealed partial class TurnPlanner
     /// <paramref name="reached"/> counts the later turn-action decisions the line met. With a <paramref name="memo"/>, a
     /// line that leaves the turn in a state another line left it in (the same actions in another order, often) takes that
     /// line's value: the rest of the play-out is a function of the state. With <paramref name="toTurnEnd"/>, the line is
-    /// scored by the leaf where the root side's turn ends (the teacher's screen).
+    /// scored by the leaf where the root side's turn ends (the teacher's screen). <paramref name="endOfLine"/> (bot plan
+    /// S4.2b) is shown the state where the root side's turn ended and the play-out's value from it, once per line played
+    /// past it: not for a line the memo already valued, nor one whose game ended inside the turn.
     /// </summary>
     internal double? PlayLine(GameState sample, ActionId first, IReadOnlyList<int> ranks, PlayerSide side, AgentKnowledge knowledge,
         ObservationDeterminizer determinizer, int horizonTurns, int evaluation, int cap, out int reached,
-        Dictionary<string, double>? memo = null, bool toTurnEnd = false, Action<GameState>? observe = null)
+        Dictionary<string, double>? memo = null, bool toTurnEnd = false, Action<GameState>? observe = null,
+        Action<GameState, double>? endOfLine = null)
     {
         reached = 0;
         ApplyResult applied = Simulate(sample, first, determinizer);
@@ -292,10 +347,13 @@ internal sealed partial class TurnPlanner
         int turn = sample.Turn.TurnNumber;
         int lastTurn = horizonTurns > 0 ? turn + horizonTurns : int.MaxValue;
         string? key = null;
+        GameState? turnEnd = null;
+        bool Ended(GameState at) => at.Turn.TurnNumber != turn || at.Turn.ActiveSide != side;
         for (int steps = 0; steps < cap && state.Outcome.Kind == GameOutcomeKind.Ongoing && state.PendingDecision is { } pending
             && state.Turn.TurnNumber < lastTurn; steps++)
         {
-            if (key is null && (state.Turn.TurnNumber != turn || state.Turn.ActiveSide != side))
+            if (turnEnd is null && Ended(state)) turnEnd = state;
+            if (key is null && Ended(state))
             {
                 if (toTurnEnd) break;
                 if (memo is not null)
@@ -314,18 +372,29 @@ internal sealed partial class TurnPlanner
             state = applied.State;
             observe?.Invoke(state);
         }
-        double value = Leaf(state, side, determinizer, evaluation);
+        double value = Leaf(state, side, determinizer, evaluation, knowledge);
         if (key is not null) memo![key] = value;
+        if (endOfLine is not null && !toTurnEnd)
+        {
+            // A turn that ends on the horizon's step leaves the loop before it is seen.
+            turnEnd ??= state.Outcome.Kind == GameOutcomeKind.Ongoing && Ended(state) ? state : null;
+            if (turnEnd is not null) endOfLine(turnEnd, value);
+        }
         return value;
     }
 
-    private double Leaf(GameState state, PlayerSide side, ObservationDeterminizer determinizer, int evaluation)
+    /// <summary>Bot plan S4.2b: feature set 5 (set 4 its first terms) of a state, from <paramref name="side"/>'s view with its knowledge.</summary>
+    internal double[] LeafFeatures(GameState state, PlayerSide side, ObservationDeterminizer determinizer, AgentKnowledge knowledge) =>
+        EvaluationFeatures.Extract(ObservationReader.Read(ObservationBuilder.Build(state, side, determinizer.Behavior), _configuration.FeatureVersion),
+            _catalog, 5, knowledge);
+
+    private double Leaf(GameState state, PlayerSide side, ObservationDeterminizer determinizer, int evaluation, AgentKnowledge knowledge)
     {
         if (state.Outcome.Kind != GameOutcomeKind.Ongoing) return state.Outcome.Winner == side ? 1 : 0;
         long scoring = ProfileTimings.Start();
         AgentFeatures features = ObservationReader.Read(ObservationBuilder.Build(state, side, determinizer.Behavior),
             _configuration.FeatureVersion);
-        double value = FittedEvaluation.WinProbability(features, _catalog, evaluation, determinizer.Behavior.Version);
+        double value = FittedEvaluation.WinProbability(features, _catalog, evaluation, determinizer.Behavior.Version, knowledge);
         ProfileTimings.Stop("plan.leaf", scoring);
         return value;
     }
@@ -462,22 +531,24 @@ internal sealed partial class TurnPlanner
     [GeneratedRegex(@"card:\d+", RegexOptions.CultureInvariant)]
     private static partial Regex CardInstance();
 
-    private long Score(GameState state, PlayerSide side, ObservationDeterminizer determinizer)
+    private long Score(GameState state, PlayerSide side, ObservationDeterminizer determinizer, AgentKnowledge knowledge)
     {
         long scoring = ProfileTimings.Start();
-        try { return ScoreLeaf(state, side, determinizer); }
+        try { return ScoreLeaf(state, side, determinizer, knowledge); }
         finally { ProfileTimings.Stop("plan.leaf", scoring); }
     }
 
-    private long ScoreLeaf(GameState state, PlayerSide side, ObservationDeterminizer determinizer)
+    /// <param name="knowledge">The planner's own, which set 5 reads (S4.2): the leaf sees what the planner knows.</param>
+    private long ScoreLeaf(GameState state, PlayerSide side, ObservationDeterminizer determinizer, AgentKnowledge knowledge)
     {
         AgentFeatures features = ObservationReader.Read(ObservationBuilder.Build(state, side, determinizer.Behavior),
             _configuration.FeatureVersion);
         // A5: planning versions score rollouts by the fitted win probability (as log-odds).
         // plan-evaluation 2: the refitted evaluation (feature set 2) Corp v11 plans with.
         // A6: a personality shifts named terms of the fitted evaluation.
-        return _configuration.Parameters.GetValueOrDefault("plan-evaluation") is int version and (1 or 2 or 3 or 4)
-            ? FittedEvaluation.Score(features, _catalog, version, AgentPersonalities.Of(_configuration), determinizer.Behavior.Version)
+        // S4.2: plan-evaluation 5 is set 5 fitted to the teacher, 6 set 4's features refitted to it.
+        return _configuration.Parameters.GetValueOrDefault("plan-evaluation") is int version and (1 or 2 or 3 or 4 or 5 or 6)
+            ? FittedEvaluation.Score(features, _catalog, version, AgentPersonalities.Of(_configuration), determinizer.Behavior.Version, knowledge)
             : PositionEvaluation.Score(features, _catalog, _configuration);
     }
 
