@@ -104,11 +104,15 @@ public static class FittedEvaluation
     private static readonly Lazy<FittedEvaluationDocument> V5 = new(() => Load("evaluation-v5", 5));
     private static readonly Lazy<FittedEvaluationDocument> V4Teacher = new(() => Load("evaluation-v4-teacher", 4));
 
+    /// <summary>Bot plan S4.2b: set 5 and set 4's features fitted to the play-out's value where the root side's turn ends.</summary>
+    private static readonly Lazy<FittedEvaluationDocument> V5Lines = new(() => Load("evaluation-v5-lines", 5));
+    private static readonly Lazy<FittedEvaluationDocument> V4Lines = new(() => Load("evaluation-v4-lines", 4));
+
     /// <summary>
     /// The feature set an evaluation reads: its own number, except 6, set 4's features with weights fitted to the teacher
-    /// (S4.2's control arm).
+    /// (S4.2's control arm), and S4.2b's end-of-line fits, 7 (set 5) and 8 (set 4's features).
     /// </summary>
-    public static int FeatureSetOf(int version) => version == 6 ? 4 : version;
+    public static int FeatureSetOf(int version) => version switch { 6 or 8 => 4, 7 => 5, _ => version };
 
     /// <summary>
     /// A7: the behavior-registry version of the System Gateway + Elevation pool
@@ -135,6 +139,8 @@ public static class FittedEvaluation
         2 or 3 or 4 => V2.Value,
         5 => V5.Value,
         6 => V4Teacher.Value,
+        7 => V5Lines.Value,
+        8 => V4Lines.Value,
         _ => throw new ArgumentOutOfRangeException(nameof(version), "Unknown fitted evaluation."),
     };
 

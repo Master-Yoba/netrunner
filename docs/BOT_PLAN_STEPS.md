@@ -437,7 +437,29 @@ the terms vary on real positions (the punisher term is rare in self-play). No fi
   set 4 captures most of the gain, the features are not the lever and S4.1's terms are reconsidered before S4.3.
 - **Record:** the three fit reports and the regret comparison.
 
+**Outcome (7 October; the record is in `docs/BOT_VERSIONS.md`).** Not met on the root-value fit. Set 5 beats both set 4
+arms on held-out teacher values in both seats, but the planner at Hard's settings does not separate from either set 4
+arm on the discordant roots or the core, and the box ladder is level. The measurement has two confounds, so this is not
+a verdict on the features and S4.1 is not revisited: the planner's value adds the rollout's log-odds to the heuristic's
+score (so the leaf moves only part of a choice), and the leaf was fitted at roots while the planner reads it where the
+turn ends. S4.2b removes both.
+
+### S4.2b Fitting where the planner reads the leaf
+
+- **S5.1's value scoring, brought forward** behind `plan-value 1`: a candidate's value is the mean over the samples of
+  (the leaf as a win probability − the sample's root value); the heuristic's score is not part of it, and the
+  heuristic's order breaks ties within `plan-tie` (thousandths, default 5). `diverge` and the discordant regret
+  comparison for set 5 against set 4 (shipped) with `plan-value 1` on both, recorded.
+- **End-of-line rows:** `ai-regret label --end-lines FILE` records, for every line played to the horizon, the
+  end-of-turn state's sets 4 and 5 (from the root side's view, with its knowledge) and the play-out's value from it. The
+  core is relabelled flat with recording on; the labels must equal the core's.
+- `ai-fit-evaluation --target end-lines` refits the three arms on those rows, held out by deal (intervals resample
+  roots), and the gate of S4.2 is read again under `plan-value 1`.
+
 ### S4.3 Budget scaling on set 5
+
+**With `plan-value 1`** (S4.2b): ×1, ×4 and ×8 on the box, about 400 deals a pairing. Monotone and clear starts S5;
+flat sends the plan back to the end-of-line fit.
 
 - Re-run S0.3's entrants with `plan-evaluation 5`.
 - **Gate:** monotone in both seats with each step's lower bound above zero. If not, the leaf still lacks a term the

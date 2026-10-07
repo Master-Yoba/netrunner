@@ -947,3 +947,68 @@ the shipped leaf takes a credit (20 roots, +0.043).
 
 **The ladder agrees** (box, `hard,hard-set5`, 400 deals, 1,600 games, `--stop-when-clear`, 20 min): level in both
 seats, Corp set 5 − set 4 −10 Elo [−42, 18], Runner +14 [−19, 42], not separated.
+
+**Reading.** Not met on the root-value fit: the measurement has two confounds, so it is not a verdict on set 5's
+features, and S4.1 is not revisited. The planner's value adds the rollout's log-odds to the heuristic's score, so the
+leaf moves only part of a choice; and the leaf was fitted at roots, while the planner reads it where the turn ends.
+S4.2b removes both (`docs/BOT_PLAN_STEPS.md`).
+
+### S4.2b: the planner's value in win probability (7 October 2026)
+
+**`plan-value 1`** (S5.1's scoring, brought forward): a planned candidate's value is the mean over the samples of its
+leaf as a win probability less the sample's root (the leaf at the position before it); the heuristic's score is not
+part of it, and among the top band's candidates within `plan-tie` (0.005) of the best value the heuristic's first is
+chosen. Entrants `hard-value` (Hard, set 4 shipped) and `hard-set5-value` (Hard, set 5 fitted to the teacher).
+
+**The roots.** `diverge --games 48` (the same games as S4.2's) found 696 Corp and 692 Runner discordant roots, all turn
+actions: more than either set 4 pair did under the old value. 741 of them were S4.2 roots whose labels (same teacher,
+settings and seed) already recorded both choices and were kept; the other 647 were labelled with four finalists
+(39 min).
+
+**Gate, re-read under `plan-value 1`: set 5 still does not separate from set 4** (set 5 minus set 4, both
+`plan-value 1`; teacher v2; no choice unlabelled or of a pruned group):
+
+| Seat | Over the discordant roots | Core held-out, discordant | Core held-out regret (set 5 / set 4 / Hard) |
+|---|---|---|---|
+| Corp | +0.0028 [−0.0034, 0.0087] (696) | −0.0007 [−0.0180, 0.0173] (53) | 0.0337 / 0.0339 / 0.0371 |
+| Runner | −0.0006 [−0.0047, 0.0034] (692) | +0.0022 [−0.0077, 0.0141] (69) | 0.0359 / 0.0354 / 0.0354 |
+
+The Corp's one consistent loss persists: where set 5 draws and set 4 advances (46 roots, +0.044, against 42 and +0.046
+under the old value). The leaf fitted at roots still undervalues an advance by the end of the turn, which is what the
+end-of-line fit tests.
+
+**End-of-line rows** (`ai-regret label --end-lines`): the core relabelled flat (teacher v2, 32 samples) with recording
+on took 2 h 26 min (8,739 s), and its 2,050 labels are identical to the core's, so recording changes nothing it labels.
+It recorded **937,110 rows**, 457 a root (8.8 groups × 32 samples × the lines played to the horizon, less the memo's
+repeats): Corp 361,630 and Runner 575,480, 7.0 MB compressed (`.tools/`, not committed).
+
+**The fits on those rows** (`ai-fit-evaluation --target end-lines`; the play-out's value from the end-of-turn state the
+target, no outcome rows; trained on the core's training deals, held out by deal: Corp 83,389 rows of 196 roots, Runner
+127,485 of 270; 323 s, 3 GB; `data/ai/evaluation-v5-lines.json`, `evaluation-v4-lines.json` and the report;
+`plan-evaluation` 7 and 8):
+
+| Seat | Arm | Log loss | Mean absolute error |
+|---|---|---:|---:|
+| Corp | the training rows' mean (a constant) | 0.6474 | 0.2864 |
+| Corp | set 4, shipped weights | 0.5420 | 0.2009 |
+| Corp | set 4, fitted to the end-of-line values | 0.5246 | 0.2025 |
+| Corp | set 5, fitted to the end-of-line values | **0.5003** | **0.1857** |
+| Runner | the training rows' mean | 0.6529 | 0.2470 |
+| Runner | set 4, shipped weights | 0.5641 | **0.1699** |
+| Runner | set 4, fitted to the end-of-line values | 0.5630 | 0.1753 |
+| Runner | set 5, fitted to the end-of-line values | **0.5580** | 0.1719 |
+
+Set 5 against each set 4 arm, paired (95% bootstrap over held-out roots, 2,000 draws):
+
+| Seat | Against | Log loss | Mean absolute error |
+|---|---|---|---|
+| Corp | set 4 shipped | −0.0417 [−0.0598, −0.0241] | −0.0152 [−0.0273, −0.0027] |
+| Corp | set 4 refitted | −0.0243 [−0.0341, −0.0156] | −0.0168 [−0.0229, −0.0110] |
+| Runner | set 4 shipped | −0.0060 [−0.0157, +0.0049] | +0.0020 [−0.0054, +0.0107] |
+| Runner | set 4 refitted | −0.0049 [−0.0075, −0.0026] | −0.0033 [−0.0050, −0.0015] |
+
+The Corp's fit separates from both arms, by more than at roots. The Runner's does not separate from the shipped
+weights: set 4's shipped fit (outcomes at Standard's turn starts) already reads end-of-turn states about as well as
+anything here, and the refit is no better than it. At the end of the root side's turn the observer never moves next, so
+`race-to-move` is always 0 and gets no weight; `punisher-exposure`, near zero at roots, gets weight here (Corp −0.094,
+Runner −0.050, standardised).

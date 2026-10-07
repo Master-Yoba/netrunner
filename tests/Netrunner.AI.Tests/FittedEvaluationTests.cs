@@ -61,6 +61,8 @@ public sealed class FittedEvaluationTests
     [Theory]
     [InlineData(5, 5)]
     [InlineData(6, 4)]
+    [InlineData(7, 5)]
+    [InlineData(8, 4)]
     public void TheTeacherFitsReadTheirFeatureSets(int version, int featureSet)
     {
         // S4.2: version 5 is set 5 fitted to the teacher; version 6 is set 4's features refitted to it.

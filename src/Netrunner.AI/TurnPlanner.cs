@@ -546,8 +546,9 @@ internal sealed partial class TurnPlanner
         // A5: planning versions score rollouts by the fitted win probability (as log-odds).
         // plan-evaluation 2: the refitted evaluation (feature set 2) Corp v11 plans with.
         // A6: a personality shifts named terms of the fitted evaluation.
-        // S4.2: plan-evaluation 5 is set 5 fitted to the teacher, 6 set 4's features refitted to it.
-        return _configuration.Parameters.GetValueOrDefault("plan-evaluation") is int version and (1 or 2 or 3 or 4 or 5 or 6)
+        // S4.2: plan-evaluation 5 is set 5 fitted to the teacher, 6 set 4's features refitted to it; S4.2b's 7 and 8 the
+        // same fitted where the turn ends.
+        return _configuration.Parameters.GetValueOrDefault("plan-evaluation") is int version and >= 1 and <= 8
             ? FittedEvaluation.Score(features, _catalog, version, AgentPersonalities.Of(_configuration), determinizer.Behavior.Version, knowledge)
             : PositionEvaluation.Score(features, _catalog, _configuration);
     }

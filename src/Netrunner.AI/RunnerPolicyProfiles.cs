@@ -157,7 +157,7 @@ public static class RunnerPolicyProfiles
                 "plan-value" => pair.Value is < 0 or > 1,
                 "plan-tie" => pair.Value is < 0 or > 100,
                 "archetype-primary" or "archetype-secondary" => !Enum.IsDefined((RunnerArchetype)pair.Value),
-                "plan-evaluation" => pair.Value is < 0 || pair.Value > (hard ? 6 : 1),
+                "plan-evaluation" => pair.Value is < 0 || pair.Value > (hard ? 8 : 1),
                 AgentPersonalities.ParameterKey => pair.Value == 0 || !AgentPersonalities.IsValid(PlayerSide.Runner, pair.Value),
                 _ => pair.Value is < 25 or > 200,
             })

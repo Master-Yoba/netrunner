@@ -52,7 +52,7 @@ public static partial class RatingLadder
     /// in its own seat, and "hard".
     /// </summary>
     public static IReadOnlyList<string> EntrantOrder { get; } =
-        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard-w3", "standard-c1", "standard-r22", "standard-c26", "standard-r23", "standard-c27", "standard-r24", "standard-c28", "standard-r25", "standard-c29", "standard-prev", "standard", "standard-plan", "standard-plan-fit", "standard-run", "standard-rez", "standard-w4a", "standard-w4b", "standard-arch", "standard-rarch", "standard-rgen", "standard-w4c", "standard-c13", "standard-w4d", "standard-c14", "standard-c15", "standard-c16", "standard-r13", "standard-c17", "standard-c18", "standard-c19", "standard-r14", "standard-c20", "standard-r15", "standard-c21", "standard-r16", "standard-c22", "standard-b3", "standard-c23", "standard-r17", "standard-r18", "standard-c24", "standard-r19", "standard-w5", "standard-r21", "hard-r21", "hard-a9c", "hard-a9d", "hard-a9d-list", "hard-a9d-pins", "glacier", "rush", "asset-spam", "aggressive", "rig-builder", "hard", "hard-wide", "hard-weight", "hard-rez", "hard-model", "hard-set5", "hard-set4-teacher", "hard-value", "hard-set5-value", "hard-set5-value-x1", "hard-set5-value-x4", "hard-set5-value-x8", "standard-x1", "standard-x2", "standard-x4", "standard-x8", "standard-x16"];
+        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard-w3", "standard-c1", "standard-r22", "standard-c26", "standard-r23", "standard-c27", "standard-r24", "standard-c28", "standard-r25", "standard-c29", "standard-prev", "standard", "standard-plan", "standard-plan-fit", "standard-run", "standard-rez", "standard-w4a", "standard-w4b", "standard-arch", "standard-rarch", "standard-rgen", "standard-w4c", "standard-c13", "standard-w4d", "standard-c14", "standard-c15", "standard-c16", "standard-r13", "standard-c17", "standard-c18", "standard-c19", "standard-r14", "standard-c20", "standard-r15", "standard-c21", "standard-r16", "standard-c22", "standard-b3", "standard-c23", "standard-r17", "standard-r18", "standard-c24", "standard-r19", "standard-w5", "standard-r21", "hard-r21", "hard-a9c", "hard-a9d", "hard-a9d-list", "hard-a9d-pins", "glacier", "rush", "asset-spam", "aggressive", "rig-builder", "hard", "hard-wide", "hard-weight", "hard-rez", "hard-model", "hard-set5", "hard-set4-teacher", "hard-value", "hard-set5-value", "hard-set5l-value", "hard-set4l-value", "hard-set5l-value-x1", "hard-set5l-value-x4", "hard-set5l-value-x8", "standard-x1", "standard-x2", "standard-x4", "standard-x8", "standard-x16"];
 
     private const double EloScale = 400 / 2.302585092994046;
     private const double Ridge = 0.01;
@@ -114,9 +114,14 @@ public static partial class RatingLadder
             "hard-value" => Tuned(OfflineMatchFactory.CreateOpponent(definition, other, "hard"), definition, ("plan-value", 1)),
             "hard-set5-value" => Tuned(OfflineMatchFactory.CreateOpponent(definition, other, "hard"), definition, ("plan-evaluation", 5),
                 ("plan-value", 1)),
-            // S4.3: budget scaling on set 5 with plan-value 1, at 1, 4 and 8 times Hard's samples.
-            "hard-set5-value-x1" or "hard-set5-value-x4" or "hard-set5-value-x8" => Scaled(Tuned(OfflineMatchFactory.CreateOpponent(definition, other, "hard"),
-                definition, ("plan-evaluation", 5), ("plan-value", 1)), definition, int.Parse(entrant["hard-set5-value-x".Length..], CultureInfo.InvariantCulture)),
+            // S4.2b: the same with the leaf fitted where the turn ends (set 5, and set 4's features).
+            "hard-set5l-value" => Tuned(OfflineMatchFactory.CreateOpponent(definition, other, "hard"), definition, ("plan-evaluation", 7),
+                ("plan-value", 1)),
+            "hard-set4l-value" => Tuned(OfflineMatchFactory.CreateOpponent(definition, other, "hard"), definition, ("plan-evaluation", 8),
+                ("plan-value", 1)),
+            // S4.3: budget scaling on set 5 (fitted where the turn ends) with plan-value 1, at 1, 4 and 8 times Hard's samples.
+            "hard-set5l-value-x1" or "hard-set5l-value-x4" or "hard-set5l-value-x8" => Scaled(Tuned(OfflineMatchFactory.CreateOpponent(definition, other, "hard"),
+                definition, ("plan-evaluation", 7), ("plan-value", 1)), definition, int.Parse(entrant["hard-set5l-value-x".Length..], CultureInfo.InvariantCulture)),
             // Bot plan S0.3, diagnostics: Hard's planner at 1, 2, 4, 8 and 16 times its samples, on its own leaf. Strength
             // that doesn't grow with the samples means the leaf carries no signal.
             "standard-x1" or "standard-x2" or "standard-x4" or "standard-x8" or "standard-x16" =>

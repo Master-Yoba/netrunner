@@ -177,7 +177,7 @@ public static class CorpPolicyProfiles
                 "plan-lines" => pair.Value is < 0 or > 1,
                 "plan-value" => pair.Value is < 0 or > 1,
                 "plan-tie" => pair.Value is < 0 or > 100,
-                "plan-evaluation" => pair.Value is < 0 or > 6,
+                "plan-evaluation" => pair.Value is < 0 or > 8,
                 "archetype-primary" or "archetype-secondary" => !Enum.IsDefined((CorpArchetype)pair.Value),
                 AgentPersonalities.ParameterKey => pair.Value == 0 || !AgentPersonalities.IsValid(PlayerSide.Corp, pair.Value),
                 _ => pair.Value is < 25 or > 200,
