@@ -1012,3 +1012,46 @@ weights: set 4's shipped fit (outcomes at Standard's turn starts) already reads 
 anything here, and the refit is no better than it. At the end of the root side's turn the observer never moves next, so
 `race-to-move` is always 0 and gets no weight; `punisher-exposure`, near zero at roots, gets weight here (Corp −0.094,
 Runner −0.050, standardised).
+
+**Gate, read again under `plan-value 1` on the end-of-line fits** (entrants `hard-set5l-value`, `plan-evaluation 7`,
+against `hard-value`, set 4 shipped, and `hard-set4l-value`, `plan-evaluation 8`; `diverge --games 48` on the same games:
+505 and 427 Corp, 422 and 211 Runner discordant roots, 1,187 merged, 991 of them already labelled with both choices
+recorded and 196 labelled with four finalists, 17 min; teacher v2, no choice unlabelled or of a pruned group):
+
+| Seat | Against | Over the discordant roots | Core held-out, discordant | Core held-out regret (set 5 / other) |
+|---|---|---|---|---|
+| Corp | set 4 shipped | −0.0060 [−0.0125, +0.0004] (505) | +0.0089 [−0.0049, 0.0221] (49) | 0.0362 / 0.0339 |
+| Corp | set 4 refitted | +0.0032 [−0.0037, 0.0106] (427) | +0.0037 [−0.0110, 0.0173] (49) | 0.0362 / 0.0352 |
+| Runner | set 4 shipped | −0.0015 [−0.0074, 0.0042] (422) | +0.0015 [−0.0083, 0.0114] (47) | 0.0356 / 0.0354 |
+| Runner | set 4 refitted | −0.0025 [−0.0113, 0.0065] (211) | −0.0075 [−0.0172, 0.0023] (25) | 0.0356 / 0.0363 |
+
+**Not met.** No interval clears zero. The Corp against the shipped weights is the nearest yet and has the right sign over
+the targeted roots, but the core's held-out roots read the other way, and against the refitted set 4 the Corp's point
+is the wrong sign. Removing both confounds did not turn the leaf's better fit into better choices at Hard's settings.
+
+### S4.3: budget scaling on set 5 with plan-value (7 October 2026)
+
+Entrants `hard-set5l-value-x1`, `-x4` and `-x8`: Hard's planner with `plan-value 1` on the end-of-line set 5
+(`plan-evaluation 7`) at 1, 4 and 8 times its samples, each against each in both seats on the Core Battle Box:
+
+```bash
+scripts/ai-ladder.sh --content gateway-elevation --entrants hard-set5l-value-x1,hard-set5l-value-x4,hard-set5l-value-x8 \
+  --deals 400 --batch-deals 48 --stop-when-clear --workers 12
+```
+
+3,600 games (no stop: no seat separated), no errors, none capped, 2 h 40 min. Elo against the next smaller budget:
+
+| Seat | ×4 over ×1 | ×8 over ×4 | ×8 over ×1 |
+|---|---|---|---|
+| Corp | +7 [−17, 28] | −10 [−37, 14] | −3 [−24, 23] |
+| Runner | +12 [−13, 36] | +2 [−21, 26] | +14 [−11, 41] |
+
+**Reading: flat; S5 does not start.** No step's lower bound is above zero in either seat. Against S0.3's shipped leaf
+(every point at or below ×1) the Runner's points now rise with the budget, and the Corp's do not. By S4.3's rule this
+sends the plan back to the end-of-line fit.
+
+**The S4.2 suites** are committed under `data/ai/regret/gateway-elevation-s4.2/`: `teacher-fit` (the set 4 and
+teacher-fitted set 5 pairs, with `labels-flat.jsonl.gz`, the 100-root flat sample of S1.7's miss-rate table),
+`plan-value` and `end-lines` (the `plan-value 1` pairs). They are not merged into the main suite: a root found by two
+pairs keeps one label, whose pruning recorded the choices of the pair that labelled it, so each pair is scored on its
+own suite.

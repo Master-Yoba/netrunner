@@ -461,6 +461,12 @@ turn ends. S4.2b removes both.
 **With `plan-value 1`** (S4.2b): ×1, ×4 and ×8 on the box, about 400 deals a pairing. Monotone and clear starts S5;
 flat sends the plan back to the end-of-line fit.
 
+**Outcome of S4.2b and S4.3 (7 October; the record is in `docs/BOT_VERSIONS.md`).** The core's end-of-line rows fit
+set 5 better than both set 4 arms for the Corp, and better than the refit but not the shipped weights for the Runner.
+Under `plan-value 1` neither the teacher-fitted nor the end-of-line set 5 separates from set 4 on the discordant roots,
+and S4.3 on the end-of-line set 5 is flat in both seats (no step clear). S5 does not start; the plan returns to the
+end-of-line fit.
+
 - Re-run S0.3's entrants with `plan-evaluation 5`.
 - **Gate:** monotone in both seats with each step's lower bound above zero. If not, the leaf still lacks a term the
   rollouts need; use the blunder list to find it, add it, refit, and repeat. S5 does not start until this holds.
