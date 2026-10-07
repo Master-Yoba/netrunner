@@ -224,11 +224,23 @@ public sealed class RegretSuiteTests
         RegretRoot root = Assert.Single(RegretRoots.At(game, new HashSet<long> { CorpTurn }, new RegretSampling(), []));
         var settings = new TeacherSettings(Samples: 3, Seed: 3, HorizonTurns: 2, Lines: lines);
         var rows = new List<EndLineRow>();
+        var repeated = new List<EndLineRow>();
 
         RegretLabel label = Assert.Single(RegretLabels.Label(game, [root], settings, endLines: rows));
+        RegretLabel withCeiling = Assert.Single(RegretLabels.Label(game, [root], settings, endLines: repeated, repeatRoots: new HashSet<string> { root.Id }));
 
         Assert.Equal(Assert.Single(RegretLabels.Label(game, [root], settings)).Values.Select(value => value.Mean), label.Values.Select(value => value.Mean));
+        Assert.Equal(label.Values.Select(value => value.Mean), withCeiling.Values.Select(value => value.Mean));
         Assert.NotEmpty(rows);
+        // S4.2c: every row names its sample and line; the ceiling's repeat changes nothing else and is repeatable.
+        Assert.All(rows, row => Assert.True(row.Sample >= 0 && row.Line is not null && row.Redeal is null && row.Reseed is null, $"{row.Sample} {row.Line}"));
+        Assert.Equal(rows.Select(row => (row.Sample, row.Line, row.Value)), repeated.Select(row => (row.Sample, row.Line, row.Value)));
+        Assert.All(repeated, row => Assert.InRange(row.Redeal ?? -1, 0, 1));
+        Assert.All(repeated, row => Assert.InRange(row.Reseed ?? -1, 0, 1));
+        var again = new List<EndLineRow>();
+        RegretLabels.Label(game, [root], settings, endLines: again, repeatRoots: new HashSet<string> { root.Id });
+        Assert.Equal(repeated.Select(row => (row.Redeal, row.Reseed)), again.Select(row => (row.Redeal, row.Reseed)));
+        Assert.Equal(rows.Count, rows.Select(row => (row.Sample, row.Line)).Distinct().Count());
         // At most one row a line played to the horizon: each group's lines on each sample, less any memo hits.
         Assert.True(rows.Count <= label.Values.Length * settings.Samples * Math.Max(2, lines), $"{rows.Count} rows");
         Assert.All(rows, row =>

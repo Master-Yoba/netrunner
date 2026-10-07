@@ -104,6 +104,43 @@ public sealed class ObservationSamplerTests
         Assert.True(played >= 10, $"Only {played} positions.");
     }
 
+    /// <summary>
+    /// Bot plan S4.2c: two later simulation states of one sample are dealt one hidden world again: each observes as it did,
+    /// a card hidden in both has one identity in both, and an authoritative state is refused. A reseed keeps every card.
+    /// </summary>
+    [Fact]
+    public async Task LaterSimulationStatesOfOneSampleAreDealtOneWorldAgain()
+    {
+        int dealt = 0;
+        foreach ((FullMatchDefinition definition, GameState state) in await PositionsAsync())
+        {
+            if (state.PendingDecision is not { } pending || pending.LegalActions.Count < 2) continue;
+            PlayerSide viewer = state.GetPlayer(pending.Owner).Side;
+            ObservationDeterminizer determinizer = ObservationBuilder.Build(state, viewer, definition.Behavior, definition.Runtime).Determinizer!;
+            Assert.Throws<ArgumentException>(() => determinizer.SampleJointly([state], Pool(definition, viewer), new DeterministicRandom(1)));
+            GameState sample = determinizer.Sample(SamplerKnowledge.None, Pool(definition, viewer), new DeterministicRandom(5));
+            GameState[] ends = [.. pending.LegalActions.Take(2).Select(action => GameEngine.Apply(sample, new ActionSubmission(pending.Owner,
+                pending.Id, pending.Revision, action.Id), definition.Behavior, definition.Runtime, ApplyMode.Simulation))
+                .Where(applied => applied.Accepted).Select(applied => applied.State)];
+            if (ends.Length < 2) continue;
+
+            IReadOnlyList<GameState> worlds = determinizer.SampleJointly(ends, Pool(definition, viewer), new DeterministicRandom(6));
+
+            for (int at = 0; at < ends.Length; at++)
+            {
+                Assert.True(worlds[at].IsSimulated);
+                Assert.Equal(Observe(ends[at], viewer, definition), Observe(worlds[at], viewer, definition));
+            }
+            Dictionary<CardInstanceId, CardDefinitionId> first = worlds[0].Cards.ToDictionary(card => card.Id, card => card.DefinitionId);
+            Assert.All(worlds[1].Cards, card => Assert.Equal(first[card.Id], card.DefinitionId));
+            GameState reseeded = ObservationSampler.Reseeded(ends[0], 99);
+            Assert.Equal(ends[0].Cards, reseeded.Cards);
+            Assert.NotEqual(ends[0].RandomState, reseeded.RandomState);
+            dealt++;
+        }
+        Assert.True(dealt >= 10, $"Only {dealt} positions.");
+    }
+
     private static string Observe(GameState state, PlayerSide viewer, FullMatchDefinition definition) =>
         EngineJson.Serialize(ObservationBuilder.Build(state, viewer, definition.Behavior));
 

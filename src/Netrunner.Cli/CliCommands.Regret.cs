@@ -17,6 +17,8 @@ public static partial class CliCommands
     ///   [--labels FILE] [--repeat N --repeat-seed S] [--roots FILE] (with --repeat, the roots to repeat)
     ///   [--decide N --record N --extend-to N] (adaptive samples, S1.7: N deciding samples, discarded, choose how many to record)
     ///   [--decide N --record N --prune K] (pruning, S1.6: only the best K groups, and a targeted root's chosen ones, are recorded)
+    ///   [--end-lines FILE [--end-lines-repeat ROOTS-FILE]] (S4.2b/c: a row where the root side's turn ends on every line played
+    ///   to the horizon, with its sample and line; at the listed roots, a second play-out of each for the ceiling)
     ///   [--teacher hard-model|hard] (hard-model, the default, models the opponent by the live Standard version; hard by
     ///   the planner's pinned Runner v7 and Corp v8, as labels-v1 was made)
     /// ai-regret score SUITE-DIR --version V[,V...]|latest [--profile P] [--split all|held-out|train] [--labels FILE]
@@ -73,7 +75,7 @@ public static partial class CliCommands
         bool LabelMissing = false, int Lines = 0, string? RootsFile = null, int ScreenTurns = 1, string[]? Discordant = null,
         bool AllRoots = false, string TeacherEntrant = RegretLabels.DefaultTeacher, bool Core = false,
         int CoreRoots = 2000, int Decide = 0, int ExtendTo = 0, string[]? Pair = null, string? From = null, int Prune = 0,
-        PlayerSide? Side = null, int Games = 0, string? EndLines = null)
+        PlayerSide? Side = null, int Games = 0, string? EndLines = null, string? RepeatRoots = null)
     {
         public static RegretOptions Parse(string[] args)
         {
@@ -134,6 +136,7 @@ public static partial class CliCommands
                     "--prune" => options with { Prune = Int("--prune", 1, 64) },
                     "--games" => options with { Games = Int("--games", 1, 1_000_000) },
                     "--end-lines" => options with { EndLines = Next() },
+                    "--end-lines-repeat" => options with { RepeatRoots = Next() },
                     "--teacher" => options with
                     {
                         TeacherEntrant = Next() is var teacher && teacher is "hard" or "hard-model" ? teacher
@@ -240,10 +243,13 @@ public static partial class CliCommands
             ScreenTurns: options.ScreenTurns, Decide: options.Decide, ExtendTo: options.ExtendTo, Prune: options.Prune);
         var byGame = suite.Roots.Where(root => rootIds.Contains(root.Id)).GroupBy(root => root.GameId).ToDictionary(group => group.Key, group => group.ToList());
         RegretGame[] games = [.. suite.Games.Where(game => byGame.ContainsKey(game.Id))];
+        // S4.2c, --end-lines-repeat FILE: the roots (one id a line) whose rows also get the ceiling's second play-out.
+        HashSet<string>? repeat = options.RepeatRoots is { } file
+            ? [.. File.ReadLines(file).Select(line => line.Trim()).Where(line => line.Length > 0)] : null;
         return ForGames(games, options.Workers, error, "label", game =>
         {
             var found = new List<EndLineRow>();
-            return (RegretLabels.Label(game, byGame[game.Id], settings, options.TeacherEntrant, rows ? found : null), found);
+            return (RegretLabels.Label(game, byGame[game.Id], settings, options.TeacherEntrant, rows ? found : null, repeat), found);
         }, finished => save(finished));
     }
 

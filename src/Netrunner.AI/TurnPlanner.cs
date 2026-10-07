@@ -332,12 +332,13 @@ internal sealed partial class TurnPlanner
     /// line's value: the rest of the play-out is a function of the state. With <paramref name="toTurnEnd"/>, the line is
     /// scored by the leaf where the root side's turn ends (the teacher's screen). <paramref name="endOfLine"/> (bot plan
     /// S4.2b) is shown the state where the root side's turn ended and the play-out's value from it, once per line played
-    /// past it: not for a line the memo already valued, nor one whose game ended inside the turn.
+    /// past it: not for a line the memo already valued, nor one whose game ended inside the turn. With it come the play-out's
+    /// last turn and the decisions it had left there, so the same play-out can be repeated from that state (S4.2c).
     /// </summary>
     internal double? PlayLine(GameState sample, ActionId first, IReadOnlyList<int> ranks, PlayerSide side, AgentKnowledge knowledge,
         ObservationDeterminizer determinizer, int horizonTurns, int evaluation, int cap, out int reached,
         Dictionary<string, double>? memo = null, bool toTurnEnd = false, Action<GameState>? observe = null,
-        Action<GameState, double>? endOfLine = null)
+        Action<EndOfTurn>? endOfLine = null)
     {
         reached = 0;
         ApplyResult applied = Simulate(sample, first, determinizer);
@@ -348,11 +349,13 @@ internal sealed partial class TurnPlanner
         int lastTurn = horizonTurns > 0 ? turn + horizonTurns : int.MaxValue;
         string? key = null;
         GameState? turnEnd = null;
+        int stepsAtEnd = 0, played = 0;
         bool Ended(GameState at) => at.Turn.TurnNumber != turn || at.Turn.ActiveSide != side;
         for (int steps = 0; steps < cap && state.Outcome.Kind == GameOutcomeKind.Ongoing && state.PendingDecision is { } pending
             && state.Turn.TurnNumber < lastTurn; steps++)
         {
-            if (turnEnd is null && Ended(state)) turnEnd = state;
+            played = steps;
+            if (turnEnd is null && Ended(state)) (turnEnd, stepsAtEnd) = (state, steps);
             if (key is null && Ended(state))
             {
                 if (toTurnEnd) break;
@@ -377,10 +380,29 @@ internal sealed partial class TurnPlanner
         if (endOfLine is not null && !toTurnEnd)
         {
             // A turn that ends on the horizon's step leaves the loop before it is seen.
-            turnEnd ??= state.Outcome.Kind == GameOutcomeKind.Ongoing && Ended(state) ? state : null;
-            if (turnEnd is not null) endOfLine(turnEnd, value);
+            if (turnEnd is null && state.Outcome.Kind == GameOutcomeKind.Ongoing && Ended(state)) (turnEnd, stepsAtEnd) = (state, played + 1);
+            if (turnEnd is not null) endOfLine(new EndOfTurn(turnEnd, value, lastTurn, cap - stepsAtEnd));
         }
         return value;
+    }
+
+    /// <summary>
+    /// Bot plan S4.2c: a play-out from <paramref name="state"/> as <see cref="PlayLine"/> plays past the root side's turn (both
+    /// sides' rollout choices) until the game ends, <paramref name="lastTurn"/> is reached or <paramref name="cap"/> decisions
+    /// are made, then the leaf.
+    /// </summary>
+    internal double ContinueFrom(GameState state, PlayerSide side, AgentKnowledge knowledge, ObservationDeterminizer determinizer,
+        int lastTurn, int evaluation, int cap)
+    {
+        for (int steps = 0; steps < cap && state.Outcome.Kind == GameOutcomeKind.Ongoing && state.PendingDecision is not null
+            && state.Turn.TurnNumber < lastTurn; steps++)
+        {
+            if (Choose(state, knowledge, determinizer, side, 0) is not { } action) break;
+            ApplyResult applied = Simulate(state, action, determinizer);
+            if (!applied.Accepted) break;
+            state = applied.State;
+        }
+        return Leaf(state, side, determinizer, evaluation, knowledge);
     }
 
     /// <summary>Bot plan S4.2b: feature set 5 (set 4 its first terms) of a state, from <paramref name="side"/>'s view with its knowledge.</summary>
@@ -579,3 +601,9 @@ public static class PlannerPriorities
     /// <summary>The band of a candidate's priority: 0 for an ordinary action, below it for a discouraged or vetoed one.</summary>
     public static int Band(int priority) => priority >= Planned / 2 ? priority - Planned : priority;
 }
+
+/// <summary>
+/// Bot plan S4.2b and S4.2c: where a played line left the root side's turn, the play-out's value from there, and what the
+/// play-out had left (its last turn and decisions), so it can be repeated from the same state.
+/// </summary>
+internal sealed record EndOfTurn(GameState State, double Value, int LastTurn, int CapLeft);
