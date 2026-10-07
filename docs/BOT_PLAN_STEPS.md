@@ -464,8 +464,45 @@ flat sends the plan back to the end-of-line fit.
 **Outcome of S4.2b and S4.3 (7 October; the record is in `docs/BOT_VERSIONS.md`).** The core's end-of-line rows fit
 set 5 better than both set 4 arms for the Corp, and better than the refit but not the shipped weights for the Runner.
 Under `plan-value 1` neither the teacher-fitted nor the end-of-line set 5 separates from set 4 on the discordant roots,
-and S4.3 on the end-of-line set 5 is flat in both seats (no step clear). S5 does not start; the plan returns to the
-end-of-line fit.
+and S4.3 on the end-of-line set 5 is flat in both seats (no step clear). S5 does not start. The reason is measurable on
+the recorded rows: the leaves barely rank end states of one root (S4.2c below), so neither the planner's width nor its
+samples could have moved anything. The plan goes to S4.2c, the leaf fitted to rank.
+
+### S4.2c The leaf fitted to rank
+
+**Before S4.3 is re-run; no feature or planner change.** On the held-out end-of-line rows of the core, pairs of distinct
+end states of one root whose play-out values differ by more than 0.1 (up to 50 a root; the pairs span samples, since
+the rows carry no sample id, so part of each gap is sample noise):
+
+| Seat | Pairs | Set 5, end-of-line fit | Set 4, refit | Set 4, shipped |
+|---|---:|---:|---:|---:|
+| Corp | 4,166 | 60.4% | 56.4% | 55.3% |
+| Runner | 11,711 | 64.0% | 63.5% | 62.9% |
+
+Chance is 50%. S4.2's log-loss gains came from the level across roots, not from the order within one, and the planner
+only ever compares within one. The fit's target and its gate change accordingly (plan 4.2):
+
+- **Recording:** the end-of-line rows carry `sample` and `line` ids, so pairs are formed on common random numbers.
+  For 200 core roots, a second independent play-out of every line is recorded as well, to measure the **ceiling**:
+  how often two play-outs of the same pair agree on its order. The gate is read against that ceiling.
+- **The fit:** `ai-fit-evaluation --target pairs`. Examples are within-root pairs of distinct end states on the same
+  sample; the target is the sign of the value difference, weighted by its size; the model is linear on the feature
+  difference with no bias (`P(A better) = sigmoid(w · (f_A − f_B))`), then calibrated with a one-dimensional fit of
+  bias and slope on the play-out values so the planner's delta from the root keeps a win-probability scale. Fitted on
+  the core's rows, held out by deal; the three arms as before, plus the current value-fitted set 5 as a fourth.
+- **Fit gate:** gap-weighted within-root pairwise accuracy on held-out pairs, per seat, against the ceiling, above the
+  table's baseline with the interval clear; log loss reported beside it.
+- **If the linear ranker stays under about 70% with the ceiling well above it,** the trade-offs are not linear in the
+  differences: one small nonlinear ranker, gradient-boosted trees over the difference vector (depth 3, about 200
+  trees), deterministic, exported to JSON, its inference cost recorded against set 5's 93 µs. No other model family.
+- **Then** the planner gate of S4.2 under `plan-value 1`, and S4.3 again. If the ranking accuracy moves and the
+  planner's choices still do not, the next suspect is the planner's own continuation (`plan-lines`, S1.5's machinery),
+  not the leaf.
+- **Fallback to keep in view, not to build now:** Standard as the teacher's screen, one opponent turn played out
+  before the leaf, so the leaf scores a state where exposure has been punished or not. About four times a one-step
+  rollout: affordable for Hard, probably not for Standard before S5.0.
+- **Record:** the ceiling, the four arms' pairwise accuracy with intervals, the calibration, and the planner gate.
+
 
 - Re-run S0.3's entrants with `plan-evaluation 5`.
 - **Gate:** monotone in both seats with each step's lower bound above zero. If not, the leaf still lacks a term the

@@ -185,14 +185,26 @@ model:
 Features are extracted by `EvaluationFeatures.Extract(features, catalog, 5)` from the agent's observation only. Each has
 a name; `data/ai/evaluation-v5.json` stores the fit with its provenance.
 
-**Targets.** Not the game's winner. For each recorded decision root (section 5.1) the **teacher** (the planner at an
-offline budget, section 5.1) gives a search value for the root and for each candidate. The leaf is fitted to:
+**Targets.** Not the game's winner, and not a position's value either. The planner never asks the leaf how good a
+position is; it asks which of two end-of-turn states reached from the same root is better. A leaf fitted to predict
+values spends its capacity on the level across roots (which deck is ahead), which is easy and useless to a planner:
+S4.2 fitted set 5 to the teacher's values, beat set 4 on held-out log loss in both seats, and ranked pairs of end
+states from one root at 60% for the Corp and 64% for the Runner (chance 50%; set 4 shipped 55% and 63%). So the leaf
+is fitted **to rank**:
 
-- the teacher's root value (win probability after the best line), as the main regression target;
-- the game outcome, as an auxiliary target with a small weight, so the scale stays calibrated.
+- the rows are the end-of-turn states of the lines the teacher plays (section 5.1 records them), with the play-out
+  value from each state;
+- the training examples are **pairs** of distinct end states from one root on the same sample (common random
+  numbers), the target the sign of their value difference, weighted by its size;
+- the model is the same linear form on the feature *difference*, with no bias, so it is a ranker; a one-dimensional
+  calibration of bias and slope on the play-out values afterwards gives it back a win-probability scale for the
+  planner's delta from the root;
+- the fit is gated on within-root pairwise accuracy on held-out pairs, gap-weighted, against a ceiling measured from
+  two independent play-outs of the same pairs; log loss is reported, not gated.
 
-The model stays small, linear or a two-layer GAM over the named features, deterministic, and loadable without any
-runtime beyond `Netrunner.AI`. A fit is accepted only by the gates in section 6.
+The model stays small, linear on differences or, if the linear ranker stays well under the ceiling, a small
+tree ensemble over the difference vector, deterministic, exported to JSON and loadable without any runtime beyond
+`Netrunner.AI`. A fit is accepted only by the gates in section 6.
 
 **Per pool.** As with set 2, a pool keeps its own fit only where it beats the general fit on that pool's held-out
 roots. The Core Battle Box is the first target.
