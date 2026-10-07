@@ -1133,3 +1133,72 @@ level across roots, so its calibrated probabilities are often extreme.
 99.5%: by the step, the next fit is boosted scalar trees with the pairwise gradient. Before building it, the reference's
 dependence on the horizon leaf (above) is the open question: a ranker trained on these values learns, in part, to
 agree with the pool's set 4 four turns on.
+
+**The game's-end reference** (the decision after the first reading: no trees on the 4-turn rows). The core relabelled
+to the game's end (`--horizon game`, 32 samples, end-of-line recording) took **5 h 0 min** (17,987 s), 1.8 times the
+4-turn run, not the 2.5 S1's measurement suggested. No play-out reached the 4,000-decision cap, so no leaf scored any
+value: the reference has no leaf in it. The rows are the 4-turn run's end states exactly (987,180, the same lines on
+the same samples); only the values differ. Its labels are `hard-model-lines5-screen1-horizon0-set4-…`, not teacher v2.
+
+| Reference | Seat | Held-out roots | Line pairs | Counted (> 2 SE) | Split halves, counted | Split halves, every pair |
+|---|---|---:|---:|---:|---|---|
+| 4 turns | Corp | 129 | 28,716 | 10,005 | 0.995 [0.993, 0.998] | 0.906 [0.885, 0.924] |
+| game's end | Corp | 81 | 19,936 | **3,566** | 0.987 [0.978, 0.993] | 0.779 [0.731, 0.814] |
+| 4 turns | Runner | 227 | 44,003 | 7,176 | 0.995 [0.992, 0.997] | 0.830 [0.813, 0.847] |
+| game's end | Runner | 151 | 32,800 | **3,097** | 0.980 [0.966, 0.990] | 0.694 [0.671, 0.718] |
+
+Fewer pairs is the price of no leaf: a game's result is 0 or 1, so fewer line pairs separate at twice the paired
+standard error (36% of the Corp's 4-turn count, 43% of the Runner's), and the counted ones are as repeatable.
+
+**Every arm against both references** (gap-weighted, the planner's view, mean leaf over the samples, the gate; state
+pairs beside it, without samples whose game ended in the turn; the arms of the first reading were fitted on the 4-turn
+rows, and the same fits refitted on the game's-end rows are added; `.tools/s42c/arms.py` reproduces the C# report):
+
+| Seat | Arm | 4 turns, mean leaf | Game's end, mean leaf | Game's end, state pairs |
+|---|---|---|---|---|
+| Corp | set 4, general fit | 0.639 [0.551, 0.725] | 0.604 [0.505, 0.706] | 0.600 |
+| Corp | set 4, the pool's fit (shipped) | **0.673** [0.610, 0.735] | 0.624 [0.535, 0.715] | 0.620 |
+| Corp | set 4, value-fitted (4-turn rows) | 0.639 [0.577, 0.700] | 0.633 [0.544, 0.720] | 0.628 |
+| Corp | set 5, value-fitted (4-turn rows) | 0.640 [0.578, 0.697] | 0.622 [0.536, 0.711] | 0.624 |
+| Corp | set 5, fitted to rank (4-turn rows) | 0.615 [0.561, 0.677] | 0.592 [0.523, 0.676] | 0.599 |
+| Corp | set 4, value-fitted (game's-end rows) | | **0.645** [0.559, 0.727] | 0.640 |
+| Corp | set 5, value-fitted (game's-end rows) | | 0.641 [0.556, 0.725] | 0.633 |
+| Corp | set 4, fitted to rank (game's-end rows) | | 0.622 [0.547, 0.706] | 0.636 |
+| Corp | set 5, fitted to rank (game's-end rows) | | 0.616 [0.541, 0.704] | 0.628 |
+| Runner | set 4, general fit | 0.839 [0.795, 0.876] | 0.726 [0.651, 0.791] | 0.613 |
+| Runner | set 4, the pool's fit (shipped) | 0.855 [0.817, 0.889] | 0.661 [0.602, 0.723] | 0.591 |
+| Runner | set 4, value-fitted (4-turn rows) | 0.852 [0.811, 0.887] | 0.654 [0.580, 0.726] | 0.594 |
+| Runner | set 5, value-fitted (4-turn rows) | 0.855 [0.817, 0.889] | 0.656 [0.586, 0.725] | 0.589 |
+| Runner | set 5, fitted to rank (4-turn rows) | **0.873** [0.840, 0.903] | 0.704 [0.634, 0.769] | 0.610 |
+| Runner | set 4, value-fitted (game's-end rows) | | 0.667 [0.593, 0.737] | 0.612 |
+| Runner | set 5, value-fitted (game's-end rows) | | 0.666 [0.594, 0.736] | 0.608 |
+| Runner | set 4, fitted to rank (game's-end rows) | | 0.730 [0.659, 0.792] | 0.626 |
+| Runner | set 5, fitted to rank (game's-end rows) | | **0.731** [0.659, 0.794] | 0.617 |
+
+**The confound, measured.** The two references count different pairs, so an arm's own drop mixes the confound with a
+harder reference; the arms' differences on one reference do not. The pool's fit leads the Corp's other arms by 0.033 at
+4 turns and by 0.002 on the game's end, and against the general fit, the same features with weights fitted to
+Standard's outcomes, it goes from +0.034 [−0.019, 0.090] to +0.020 [−0.056, 0.093]. For the Runner the reversal is
+clear: the pool's fit reads +0.016 [−0.011, 0.044] over the general fit at 4 turns and **−0.065 [−0.116, −0.016]** on the
+game's end, and every arm fitted on the 4-turn rows falls with it (the value fits to 0.654 to 0.656, below the general
+fit's 0.726). The 4-turn reference rewarded agreeing with its horizon leaf; a fit to its values learned that agreement.
+
+**Gate (the planner's view against the game's-end reference, above the best value arm with the interval clear): not
+met in either seat.**
+
+| Seat | Comparison (game's-end reference, mean leaf) | Difference |
+|---|---|---|
+| Corp | set 5 fitted to rank − set 4 value-fitted (game's-end rows), the best value arm | −0.030 [−0.130, +0.057] |
+| Corp | set 4 value-fitted (game's-end rows) − general fit | +0.041 [−0.028, +0.120] |
+| Runner | set 5 fitted to rank − general fit, the best value arm | +0.006 [−0.036, +0.042] |
+| Runner | set 5 fitted to rank − set 5 value-fitted (game's-end rows) | **+0.065 [+0.012, +0.129]** |
+| Runner | set 4 value-fitted (game's-end rows) − general fit | **−0.059 [−0.109, −0.018]** |
+
+The Runner's rank fit is clear of every arm fitted to play-out values but only level with the general fit; the Corp's
+arms all sit between 0.59 and 0.65 on the clean reference, with nothing separated.
+
+**Calibration** (log loss of the held-out values; the ranker's score calibrated by an isotonic fit over all training
+rows, which keeps its order): Corp 0.663 against the value fit's 0.500 (4-turn) and 0.693 against 0.512 (game's end,
+the game's-end rank fit); Runner 0.570 against 0.560 and 0.617 against 0.541. **No monotone calibration of a ranker is
+as good as the value fit's**, since a within-root ranker carries no level across roots; by the decision, a ranker that
+reaches the planner takes its tie threshold and static mix on the value fit's scale.
