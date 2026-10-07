@@ -486,26 +486,36 @@ the rows carry no sample id, so part of each gap is sample noise):
 Chance is 50%. S4.2's log-loss gains came from the level across roots, not from the order within one, and the planner
 only ever compares within one. The fit's target and its gate change accordingly (plan 4.2):
 
-- **Recording:** the end-of-line rows carry `sample` and `line` ids, so pairs are formed on common random numbers.
-  For 200 core roots, a second independent play-out of every line is recorded as well, to measure the **ceiling**:
-  how often two play-outs of the same pair agree on its order. The gate is read against that ceiling.
+- **Recording:** the end-of-line rows carry `sample` and `line` ids, so pairs are formed on common random numbers and
+  a line's value over all samples can be recovered. No extra play-outs are needed for the gate: the **reference order**
+  of two lines at a root is the sign of the difference of their mean values over every sample, and its reliability is
+  measured from the same samples by split halves (how often the order on 16 samples matches the order on the other
+  16). A second independent play-out, where one was recorded, is reported as repeatability only: the agreement of two
+  noisy reports is not a ceiling on a model's accuracy against the latent order (two reports each right 80% of the
+  time agree 68% of the time).
 - **The fit:** `ai-fit-evaluation --target pairs`. Examples are within-root pairs of distinct end states on the same
   sample; the target is the sign of the value difference, weighted by its size; the model is linear on the feature
   difference with no bias (`P(A better) = sigmoid(w · (f_A − f_B))`), then calibrated with a one-dimensional fit of
   bias and slope on the play-out values so the planner's delta from the root keeps a win-probability scale. Fitted on
   the core's rows, held out by deal; the three arms as before, plus the current value-fitted set 5 as a fourth.
-- **Fit gate:** gap-weighted within-root pairwise accuracy on held-out pairs, per seat, against the ceiling, above the
-  table's baseline with the interval clear; log loss reported beside it.
-- **If the linear ranker stays under about 70% with the ceiling well above it,** the trade-offs are not linear in the
-  differences: one small nonlinear ranker, gradient-boosted trees over the difference vector (depth 3, about 200
-  trees), deterministic, exported to JSON, its inference cost recorded against set 5's 93 µs. No other model family.
+- **Fit gate:** within-root pairwise accuracy on held-out pairs against the reference order, counted where the
+  reference difference exceeds twice its standard error, gap-weighted, per seat: above the table's baseline (re-read
+  against the same reference) with the interval clear. Split-half repeatability of the reference and log loss are
+  reported beside it, not gated.
+- **If the linear ranker stays under about 70%** while the reference is repeatable well above it, the trade-offs are
+  not linear in the differences. Then one small nonlinear model, and it must still be a **scalar scorer** the planner
+  calls one state at a time: boosted scalar trees `g(features)` (depth 3, about 200 trees) trained with the pairwise
+  gradient (RankNet-style: the loss is on `g(f_A) − g(f_B)`, the model is on one state), deterministic, exported to
+  JSON, its inference cost recorded against set 5's 93 µs. A tree over the difference vector is not a leaf: it cannot
+  be split into per-state scores and can answer a reversed pair inconsistently. No other model family.
 - **Then** the planner gate of S4.2 under `plan-value 1`, and S4.3 again. If the ranking accuracy moves and the
   planner's choices still do not, the next suspect is the planner's own continuation (`plan-lines`, S1.5's machinery),
   not the leaf.
 - **Fallback to keep in view, not to build now:** Standard as the teacher's screen, one opponent turn played out
   before the leaf, so the leaf scores a state where exposure has been punished or not. About four times a one-step
   rollout: affordable for Hard, probably not for Standard before S5.0.
-- **Record:** the ceiling, the four arms' pairwise accuracy with intervals, the calibration, and the planner gate.
+- **Record:** the reference's repeatability, the four arms' pairwise accuracy with intervals, the calibration, and
+  the planner gate.
 
 ## S5. The planner becomes Standard (L)
 
