@@ -59,8 +59,10 @@ public sealed class ApprenticeTests
     private static async Task<List<(FullMatchDefinition, GameState, PlayerSide)>> TurnActionsAsync()
     {
         var positions = new List<(FullMatchDefinition, GameState, PlayerSide)>();
-        foreach (ulong seed in new ulong[] { 41, 42 })
+        foreach (ulong seed in new ulong[] { 41, 42, 43, 44, 45, 46 })
         {
+            if (positions.Count >= 8) break;
+            int last = -100;
             FullMatchDefinition definition = RulesFuzzRunner.CreateDefinition(
                 Official ? RulesFuzzRunner.OfficialContentIds[0] : RulesFuzzRunner.DeveloperContentId, seed);
             var corp = new RandomLegalAgent(seed);
@@ -69,8 +71,12 @@ public sealed class ApprenticeTests
             for (int count = 0; count < 200 && state.Outcome.Kind == GameOutcomeKind.Ongoing && state.PendingDecision is { } pending; count++)
             {
                 PlayerSide owner = state.GetPlayer(pending.Owner).Side;
-                if (pending.Kind == DecisionKind.TurnAction && pending.LegalActions.Count > 2 && count % 9 == 0 && positions.Count < 8)
+                // Spaced positions, so the developer pool's short games still give several.
+                if (pending.Kind == DecisionKind.TurnAction && pending.LegalActions.Count > 2 && count - last >= 7 && positions.Count < 8)
+                {
                     positions.Add((definition, state, owner));
+                    last = count;
+                }
                 ActionId chosen = await (owner == PlayerSide.Corp ? corp : runner).ChooseActionAsync(ObservationBuilder.Build(state, owner, definition.Behavior));
                 state = GameEngine.Apply(state, new ActionSubmission(pending.Owner, pending.Id, pending.Revision, chosen), definition.Behavior, definition.Runtime).State;
             }
