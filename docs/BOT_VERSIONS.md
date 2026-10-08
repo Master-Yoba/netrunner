@@ -1235,6 +1235,122 @@ not met in either seat, and the trees do not change that: the limit is what the 
 not the model's form. The fallback the step kept in view (one opponent turn played out before the leaf, so the leaf
 scores a state where exposure has been punished or not) is the next lever; it is not built.
 
+### S4.4: horizon × samples, what ranks and at what cost (8 October 2026)
+
+**The curve.** The planner's-view accuracy of "k samples of horizon h" against the game's-end reference (#117's
+order: two lines of a core root ordered by their mean over k samples, common random numbers, credited when they
+agree with the order of their game's-end means, gap-weighted, over the pairs the reference counts), from the core's
+recorded end-of-line rows, all teacher v2 (lines 5, screen 1), every line on every sample:
+
+```bash
+ai-regret label data/ai/regret/gateway-elevation --samples 32 --horizon opponent --lines 5 --screen-turns 1 \
+  --roots core-roots.txt --labels labels-core-opponent.jsonl.gz --end-lines end-lines-opponent.jsonl.gz --workers 12
+ai-regret horizon-curve data/ai/regret/gateway-elevation --reference end-lines-game.jsonl.gz \
+  --horizon "opponent's turn=end-lines-opponent.jsonl.gz" --horizon "4 turns=end-lines.jsonl.gz" --draws 16
+```
+
+The opponent's-turn labelling is the one new run (2,050 roots, 87 min); the 4-turn and game's-end rows are S4.2c's.
+The turn's-end rows are the game's-end rows' own end-of-turn states scored by the general fit and the pool's fit.
+k samples are drawn 16 times and averaged; intervals resample roots (Corp 818 roots, Runner 1,231). Two designs:
+
+- **(a), as the step reads it:** k drawn from all 32 samples against the 32-sample reference. A row that shares its
+  samples with the reference reads high (the game's end at k = 32 is 1 by construction, and the 4-turn play-outs start
+  from the same sampled states).
+- **(b), unbiased:** k drawn from one half of the samples against the reference built from the other half, both halves
+  in turn (k up to 16). Nothing in it can read high; at k = 16 the game's-end cell is the reference's own split-half
+  reliability.
+
+| Corp, design (b) | k = 4 | k = 8 | k = 16 |
+|---|---:|---:|---:|
+| Turn's end, general fit | 0.582 | 0.582 | 0.581 |
+| Turn's end, pool's fit | 0.601 | 0.600 | 0.599 |
+| Opponent's turn, pool's fit | 0.657 | 0.670 | 0.676 |
+| 4 turns, pool's fit | 0.759 | 0.792 | **0.820** [0.787, 0.847] |
+| Game's end | 0.753 | **0.812** [0.782, 0.838] | 0.855 |
+
+| Runner, design (b) | k = 4 | k = 8 | k = 16 |
+|---|---:|---:|---:|
+| Turn's end, general fit | 0.685 | 0.698 | 0.708 [0.683, 0.731] |
+| Turn's end, pool's fit | 0.667 | 0.677 | 0.685 |
+| Opponent's turn, pool's fit | 0.679 | 0.696 | 0.707 |
+| 4 turns, pool's fit | 0.672 | 0.709 | 0.737 [0.710, 0.762] |
+| Game's end | 0.632 | 0.674 | 0.711 [0.684, 0.737] |
+
+| Design (a), k = 4 / 8 / 16 / 32 | Corp | Runner |
+|---|---|---|
+| Turn's end, general fit | 0.588 / 0.589 / 0.588 / 0.588 | 0.738 / 0.759 / 0.774 / 0.785 |
+| Turn's end, pool's fit | 0.611 / 0.612 / 0.610 / 0.610 | 0.725 / 0.743 / 0.752 / 0.763 |
+| Opponent's turn, pool's fit | 0.672 / 0.687 / 0.696 / 0.701 | 0.742 / 0.766 / 0.785 / 0.793 |
+| 4 turns, pool's fit | **0.806** / 0.850 / 0.885 / 0.908 | 0.773 / **0.840** / 0.889 / 0.922 |
+| Game's end | 0.864 / 0.949 / 0.995 / 1 | **0.822** / 0.928 / 0.993 / 1 |
+
+Intervals are about ±0.03 to ±0.05 throughout.
+
+**The cost.** Measured directly rather than composed from S0.1 and S0.4: `ai-regret decision-cost` times
+`RolloutTeacher.Evaluate` (teacher v2, lines 5, screen 1, so every candidate group at the teacher's count) on 41
+turn-action roots of the core (`--roots`, the first root not timed), at 4 samples, one thread, the machine otherwise
+idle. Corp roots average 13.2 candidate groups, Runner roots 10.5. A root's cost is taken as linear in its samples (each
+sample's play-outs are independent), so a cell's cost is the k = 4 cost times k / 4.
+
+| Horizon | Corp, mean / p95 at k = 4 | Runner, mean / p95 at k = 4 | Corp / Runner, one candidate, one sample (mean) |
+|---|---:|---:|---:|
+| Turn's end | 1.49 s / 6.2 s | 0.91 s / 3.4 s | 28 ms / 22 ms |
+| Opponent's turn | 1.98 s / 6.7 s | 1.20 s / 3.7 s | 38 ms / 29 ms |
+| 4 turns | 4.11 s / 12.0 s | 2.78 s / 6.1 s | 78 ms / 66 ms |
+| Game's end | 7.98 s / 26.0 s | 6.26 s / 9.8 s | 151 ms / 149 ms |
+
+S5.0's expected cuts, as a second column: the trace's items S5.0 targets (the state hash, the invariant check and the
+working state's build inside `ApplyCore`, `BehaviorStaticModifierProjection.Sum`, the `TurnFactsState` copies) are
+about 24% of all time, so a cell costs at least 0.76 of the figure above after S5.0, if every one of them goes.
+
+**The reading (a reading, not a pass).** The cheapest cell above 80% in the planner's view, with its wall time per
+turn-action decision at the teacher's count (mean / p95; after S5.0's cuts):
+
+| Seat | Design (b) | Design (a) |
+|---|---|---|
+| Corp | game's end, k = 8: 0.812; 16.0 s / 52 s (12.1 s / 39 s); 4 turns at k = 16 reads 0.820 at the same cost (16.4 s / 48 s) | 4 turns, k = 4: 0.806; 4.1 s / 12 s (3.1 s / 9.1 s) |
+| Runner | none: the best is 4 turns at k = 16, 0.737, level with the turn's end (0.708) and the game's end (0.711); 11.1 s / 25 s | 4 turns, k = 8: 0.840; 5.6 s / 12 s (4.2 s / 9.3 s) |
+
+No cell under one second reaches 80% in either seat or design: at the teacher's count no cell fits at all (the
+cheapest, the turn's end at k = 4, is 1.5 s and 0.9 s on the mean). What fits is set by the beam S5.1 ships: at
+S5.1's width of 4 candidates and the per-candidate costs above, one sample of 4 turns costs about 0.31 s for the
+Corp and 0.27 s for the Runner on the mean, so the one-second budget buys about 3 samples of 4 turns (Corp 0.759 and
+Runner 0.672 at k = 4 in design (b)), 6 to 8 of the opponent's turn (about 0.67 and 0.70), or 1 to 2 of the game's end
+(below 0.75), before p95 is counted. The best that fits is therefore 4 turns at about 3 samples for the Corp; for the
+Runner every horizon is level, so the cheapest (the turn's end) loses nothing.
+
+**Hard's cell for S5, as read here:** the Corp plays out 4 turns, with as many samples as S5.1's beam leaves inside
+the second (about 3 at width 4 today, more after S5.0); the Runner stops at the turn's end, the cheapest cell, since no
+horizon ranks its candidates better. Two things S5.1 checks rather than assumes: the 4-turn row ends on the pool's
+fit, where S5.1 plans the general fit, and the k = 3 cell is read off the curve, not measured.
+
+**What it says.**
+
+- **The Corp's question is the horizon, not the samples.** At the turn's end the Corp's accuracy is the same at 4
+  samples and at 32 (0.58 to 0.61); one opponent turn adds about 7 points; 4 turns or the game's end add about 20.
+- **The Runner's candidates are mostly noise to every horizon.** In design (b) every cell lies between 0.63 and 0.74,
+  and the game's end itself, 16 samples against the other 16, reads 0.711: the reference's own split-half reliability
+  is below the 80% the step asks for. Design (a)'s Runner cells above 80% are the ones that share their samples with
+  the reference.
+- **The opponent's turn is not where the Corp's signal is.** The fallback S4.2c kept in view (one opponent turn played
+  out before the leaf) reaches 0.676 at k = 16 in design (b), about a third of the way from the turn's end to 4 turns.
+
+**S4.3 re-read.** S4.3's entrants were Hard's planner at the turn's-end leaf with 1, 4 and 8 times its samples: the
+table's turn's-end row. That row is flat in k for the Corp (0.588 at 4 samples and at 32) and rises slowly for the
+Runner (0.738 to 0.785 in design (a), 0.685 to 0.708 in (b)), which is what S4.3's ladder showed: the Corp's points did
+not move with the budget and the Runner's rose without separating. More samples of the turn-end leaf buy almost
+nothing; the horizon is the lever.
+
+**Notes on the run.**
+
+- **The opponent's horizon is `--horizon opponent`, not the step's `--horizon 1`.** `TurnNumber` counts rounds and
+  increments when the Runner's turn ends, so `--horizon 1` from a Runner root stops at the end of the Runner's own
+  turn. `opponent` counts player turns: it stops where the root side's next turn begins, for either seat.
+- **The opponent's-turn and 4-turn rows end on the pool's fit**, the teacher's leaf for this pool (S1.5's confound): their
+  accuracy is the horizon and that leaf together. The game's-end row has no leaf.
+- **`--horizon turn`** (the play-out stops at the root side's turn end) was added for the cost probe; the turn's-end
+  accuracy is read from the recorded end-of-turn states, not from a fourth labelling.
+
 ### S4.5: the apprentice at the root (8 October 2026)
 
 **Gate not met; Standard stays the heuristic in both seats, and the Corp keeps its 3×3 planner.** The apprentice

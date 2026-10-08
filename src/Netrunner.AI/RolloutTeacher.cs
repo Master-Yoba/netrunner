@@ -5,7 +5,9 @@ namespace Netrunner.AI;
 /// <summary>How the teacher labels a decision (bot plan S1.2).</summary>
 /// <param name="Samples">States sampled from the agent's observation; every candidate is played out on every one.</param>
 /// <param name="Seed">The teacher's own random stream for the samples.</param>
-/// <param name="HorizonTurns">Turns to play past the decision before the leaf scores the position; 0 plays to the game's end.</param>
+/// <param name="HorizonTurns">Turns (rounds: a Corp turn and a Runner turn) to play past the decision before the leaf scores
+/// the position; 0 plays to the game's end; a negative number counts player turns past the root side's own (−1: through
+/// the opponent's next turn, bot plan S4.4).</param>
 /// <param name="Evaluation">The fitted evaluation's feature set that scores a position the play-out stopped short of the end.</param>
 /// <param name="Cap">Simulated decisions after which a play-out is scored where it stands.</param>
 /// <param name="Lines">Bot plan S1.5: the beam width of the turn-line search; a candidate is valued at its best line of the
@@ -22,7 +24,11 @@ namespace Netrunner.AI;
 /// deciding samples (and any the caller requires) get the recording samples; the rest keep their deciding value, marked
 /// pruned. 0 records every candidate.</param>
 public sealed record TeacherSettings(int Samples, ulong Seed, int HorizonTurns = 0, int Evaluation = 4, int Cap = PlannerProbe.GameRolloutCap,
-    int Lines = 0, int ScreenTurns = 1, int Decide = 0, int ExtendTo = 0, int ExtendStep = 8, int Prune = 0);
+    int Lines = 0, int ScreenTurns = 1, int Decide = 0, int ExtendTo = 0, int ExtendStep = 8, int Prune = 0)
+{
+    /// <summary>Bot plan S4.4: a horizon that stops where the root side's own turn ends, the leaf scoring it there.</summary>
+    public const int TurnEnd = -1000;
+}
 
 /// <summary>
 /// A candidate's teacher value: the mean win probability over its play-outs and the standard error of that mean. Every

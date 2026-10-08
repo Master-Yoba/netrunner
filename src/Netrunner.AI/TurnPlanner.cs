@@ -347,12 +347,25 @@ internal sealed partial class TurnPlanner
         observe?.Invoke(state);
         int turn = sample.Turn.TurnNumber;
         int lastTurn = horizonTurns > 0 ? turn + horizonTurns : int.MaxValue;
+        // Bot plan S4.4: a negative horizon counts player turns past the root side's own (−1: through the opponent's next
+        // turn), which a turn number, counted in rounds, cannot say for a Runner root.
+        // TeacherSettings.TurnEnd stops where the root side's own turn ends.
+        bool stopAtTurnEnd = horizonTurns == TeacherSettings.TurnEnd;
+        int playerTurns = horizonTurns < 0 && !stopAtTurnEnd ? -horizonTurns : 0, ends = 0;
+        (int Number, PlayerSide Side) phase = (turn, sample.Turn.ActiveSide);
+        void Seen(GameState at)
+        {
+            if ((at.Turn.TurnNumber, at.Turn.ActiveSide) == phase) return;
+            phase = (at.Turn.TurnNumber, at.Turn.ActiveSide);
+            ends++;
+        }
+        Seen(state);
         string? key = null;
         GameState? turnEnd = null;
         int stepsAtEnd = 0, played = 0;
         bool Ended(GameState at) => at.Turn.TurnNumber != turn || at.Turn.ActiveSide != side;
         for (int steps = 0; steps < cap && state.Outcome.Kind == GameOutcomeKind.Ongoing && state.PendingDecision is { } pending
-            && state.Turn.TurnNumber < lastTurn; steps++)
+            && state.Turn.TurnNumber < lastTurn && (stopAtTurnEnd ? ends == 0 : playerTurns == 0 || ends <= playerTurns); steps++)
         {
             played = steps;
             if (turnEnd is null && Ended(state)) (turnEnd, stepsAtEnd) = (state, steps);
@@ -378,6 +391,7 @@ internal sealed partial class TurnPlanner
             applied = Simulate(state, action, determinizer);
             if (!applied.Accepted) break;
             state = applied.State;
+            Seen(state);
             observe?.Invoke(state);
         }
         double value = Leaf(state, side, determinizer, evaluation, knowledge);
