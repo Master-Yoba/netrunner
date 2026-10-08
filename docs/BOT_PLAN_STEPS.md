@@ -582,6 +582,16 @@ times the lines a width-5 beam plays at a turn-action root (the teacher's count)
 - **Record:** the table and the chosen cell in `docs/BOT_VERSIONS.md`; the S4.3 flat result re-read against it (Hard
   at 3 to 4 samples of the turn-end leaf is the table's weakest cell, which is why more of it changed nothing).
 
+**Outcome (8 October; the record is in `docs/BOT_VERSIONS.md`).** Against the game's-end reference, the Corp's
+accuracy is set by the horizon, not the samples: the turn's end reads about 0.60 at any k, one opponent turn about
+0.67, and 4 turns or the game's end pass 80% (4 turns at k = 16, or the game's end at k = 8, with k drawn from one half
+of the samples and the reference from the other; 4 turns at k = 4 when both use all 32). The Runner's candidates are
+mostly noise to every horizon (0.63 to 0.74 on the unbiased design, the game's end's own split-half 0.711). No cell
+fits one second at the teacher's count (13 Corp and 10 Runner candidate groups, 5 lines): one sample of one candidate
+costs about 78 ms at 4 turns. Hard's cell as read: the Corp plays out 4 turns with as many samples as S5.1's beam
+leaves (about 3 at width 4 before S5.0); the Runner stops at the turn's end, since no horizon ranks better. The
+opponent's horizon was run as `--horizon opponent` (the next turn of the root side), since `--horizon 1` counts rounds.
+
 ### S4.5 The apprentice at the root (M)
 
 **From the regret suite as it stands; independent of S4.4. Decides Standard's decider before S5.** A pairwise ranker
