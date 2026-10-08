@@ -1638,7 +1638,7 @@ to choose worse. S5.2's Runner Hard keeps Standard's run choices, and its turn a
 (S4.4), so Runner Hard has nothing to plan on this pool: the record for S5.2 is that Runner Hard is Standard's Runner
 until a horizon ranks something.
 
-### S1.8, the rest: the puzzles, the noise floor and the Corp's targeted roots at v3 (8 October 2026)
+### S1.8, the rest: the puzzles, the noise floor and the Corp's targeted roots at v3 (8 and 9 October 2026)
 
 **Recertification** of the 26 teacher-certified puzzles at 128 samples with teacher v3, the game's end (S1.5's rule:
 the best group passes the puzzle, its standard error is at most 0.04, and every failing group is 0.15 or more behind):
@@ -1681,3 +1681,51 @@ either, and a flip costs about a third of a root's spread under v3 against a fif
 size as v2's for agreement and larger in value: a single root's best group under v3 says little on its own, and
 regret, compared paired on the same labels over many roots, is what v3 is read through, as before.
 
+
+**The Corp's targeted roots at v3** (`labels.jsonl.gz`): the 2,518 S1.6 Corp roots relabelled by teacher v3 with
+their v2 labelling's adaptive settings (8 deciding samples, 24 recording for the best three and both chosen groups,
+pruned otherwise) and the same seeds, played to the game's end: 5 h 44 min on 12 workers, about 1.9 times their v2
+labelling. Their v2 labels are replaced; the suite is now 4,568 roots at v3 (the core's 2,050 and these) and 4,337 at
+v2 (the other targeted and finding roots, 1,609 of them the Corp's). The 190 pruned groups the Corp's heuristic alone
+chose were then labelled on their roots' recording samples (`score --extend-pruned`), so no comparison below reads a
+pruned value; no Corp version's regret moved with them.
+
+**S1.3's table for the Corp at v3** (`score --teacher-version v3`, the 3,336 Corp roots v3 labels, Standard):
+
+| Comparison | Discordant roots | Over the discordant roots, v3 | Every Corp root at v3 (3,336) | v2 over the discordant roots (S1.6) |
+|---|---:|---|---|---|
+| Corp v29 − v30 | 2,107 | +0.0019 [−0.0052, 0.0090] | +0.0012 [−0.0035, 0.0058] | +0.0180 [0.0120, 0.0243] (2,198) |
+| Corp v28 − v30 | 2,613 | **+0.0125 [0.0060, 0.0193]** | **+0.0098 [0.0044, 0.0151]** | +0.0231 [0.0176, 0.0287] (2,717) |
+| Corp v28 − v29 | 506 | **+0.0568 [0.0414, 0.0726]** | **+0.0086 [0.0063, 0.0110]** | +0.0451 [0.0332, 0.0593] (519) |
+| Corp v30 − v31 | 0 | | 0.0000 | |
+
+**The agenda-hold rule at v3** (S1.6's split of the v29 − v30 discordant roots by whether each choice installs an
+agenda in a remote):
+
+| Discordant roots (v29 − v30) | Roots | Teacher v3 | v30 better / v29 better | Teacher v2 (S1.6) |
+|---|---:|---|---|---|
+| v29 installs an agenda in a remote, v30 holds it | 1,163 | −0.0027 [−0.0147, 0.0092] | 431 / 458 | +0.0241 [0.0141, 0.0340] (1,201) |
+| No agenda install | 896 | +0.0073 [−0.0002, 0.0156] | 335 / 281 | +0.0112 [0.0063, 0.0167] (945) |
+| Both install an agenda | 36 | −0.0191 [−0.0729, 0.0417] | 12 / 18 | −0.0126 [−0.0683, 0.0398] (39) |
+| v30 installs one, v29 does not | 12 | +0.1007 [0.0035, 0.2014] | 6 / 4 | +0.0356 [−0.0286, 0.0990] (13) |
+
+**Reading.** Corp v29's run fix (not spending LEO's end-the-run ability where the ICE ahead stops the run anyway)
+holds at v3, larger than at v2, and so does v28 against v30. **v30's agenda hold does not:** played to the game's end,
+holding the agenda where v29 installs it is level (−0.0027, with v29 better at slightly more roots), where v2 had it
+worth +0.024 a decision. That is S1.5's confound: v2 scored the fourth turn's position with the pool's fit, so its value
+of holding an agenda was what that fit makes of an agenda left in a remote four turns on, not what the rest of the game
+does with it. The ladder, which has no leaf, had v30 over v29 by +50 Elo [10, 96] (S1's table); v3 reads the pair
+level, not reversed, so the suite no longer contradicts the ladder but cannot separate the two, and the ladder stays
+the arbiter for v29 against v30. The Corp's gate at v3 is therefore partly met: v28's ordering against v29 and v30
+holds, and v29 − v30 does not separate.
+
+**The Corp's 3×3 planner at v3** (the 3,336 Corp roots, the heuristic's pruned choices labelled): live Standard
+against the heuristic alone −0.0020 [−0.0040, 0.0002] over every root, −0.0090 [−0.0191, 0.0009] over the 735 roots
+where they choose differently. The planner reads ahead, just short of separating, where v2 had it worse and the
+core's held-out roots at v3 had it level (+0.0029 [−0.0049, 0.0110]); the ladder has it ahead (+36 to +97 Elo). Before
+the pruned choices were labelled the gap read −0.0041 [−0.0062, −0.0019]: half of it was the heuristic's 190 pruned
+choices valued on 8 samples.
+
+**S1.5's confound note closes.** Every gate read on the Corp from here is on v3 labels: the core, and the S1.6 Corp
+roots. The remaining v2 labels (the other targeted and finding roots) are relabelled when a comparison needs them, and
+`score` refuses to mix them with v3.

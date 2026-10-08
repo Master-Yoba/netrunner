@@ -354,6 +354,16 @@ the core at v3 the Runner's ordering holds (v24 below v25 and v26, v28 above v27
 separates (as at v2 on the core), and the Corp's 3×3 planner reads level with the heuristic. Still to do: the S1.6 Corp
 roots relabelled at v3, the puzzles re-certified, the noise floor.
 
+**Outcome (9 October; the record is in `docs/BOT_VERSIONS.md`).** The 26 certified puzzles at v3: 7 hold, and the 8
+gated ones that fail move to a `teacher-v3` split out of the gate (the gated box set is 29 puzzles; Standard passes 28).
+The noise floor at v3 is v2's for agreement (62% of 200 core roots pick a different best group) and larger in value
+(flip cost 0.048 against 0.025). The 2,518 S1.6 Corp roots are relabelled at v3 (5¾ hours). On them Corp v28 still
+separates from v29 (+0.0568 over the 506 discordant run roots) and from v30, but **v29 − v30 does not**: holding an
+agenda where v29 installs it reads level at v3 (−0.0027 [−0.0147, 0.0092] over 1,163 roots), where v2's leaf had it
+worth +0.024. The ladder (+50 Elo for v30) stays the arbiter for that pair. The Corp's 3×3 planner reads just short of
+better than the heuristic (−0.0020 [−0.0040, 0.0002]), as the ladder has it. S1.5's confound note is closed: the
+Corp's gates read on v3 labels.
+
 ## S2. Puzzle suite v2 (M)
 
 **Independent of S1 after S1.1's root format exists.**
