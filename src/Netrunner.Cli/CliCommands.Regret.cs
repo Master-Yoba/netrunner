@@ -72,7 +72,7 @@ public static partial class CliCommands
     private sealed record RegretOptions(string? Output, int TurnRoots, int RunRoots, int Labelled, ulong Seed, int Workers, int Samples,
         int HorizonTurns, int Evaluation, string LabelsFile, int Repeat, ulong RepeatSeed, string[] Versions, string Profile, string Split,
         int Blunders, int Bootstrap, bool Json, bool Missing = false, string? Manifest = null, string? Fixtures = null, string? Content = null,
-        bool LabelMissing = false, int Lines = 0, string? RootsFile = null, int ScreenTurns = 1, string[]? Discordant = null,
+        bool LabelMissing = false, bool ExtendPruned = false, int Lines = 0, string? RootsFile = null, int ScreenTurns = 1, string[]? Discordant = null,
         bool AllRoots = false, string TeacherEntrant = RegretLabels.DefaultTeacher, bool Core = false,
         int CoreRoots = 2000, int Decide = 0, int ExtendTo = 0, string[]? Pair = null, string? From = null, int Prune = 0,
         PlayerSide? Side = null, int Games = 0, string? EndLines = null, string? RepeatRoots = null)
@@ -116,6 +116,7 @@ public static partial class CliCommands
                     "--json" => options with { Json = true },
                     "--missing" => options with { Missing = true },
                     "--label-missing" => options with { LabelMissing = true },
+                    "--extend-pruned" => options with { ExtendPruned = true },
                     "--all-roots" => options with { AllRoots = true },
                     "--core" => options with { Core = true },
                     "--versions" => options with
@@ -298,6 +299,8 @@ public static partial class CliCommands
         }
         if (options.LabelMissing && LabelMissing(suiteDirectory, suite, labels, results.SelectMany(result => result.Choices), options, output) > 0)
             return RegretScoreCommand(suiteDirectory, options with { LabelMissing = false }, output);
+        if (options.ExtendPruned && ExtendPruned(suiteDirectory, suite, labels, results.SelectMany(result => result.Choices), options, output) > 0)
+            return RegretScoreCommand(suiteDirectory, options with { ExtendPruned = false }, output);
         RegretComparison[] comparisons = [.. results.SelectMany((first, index) => results.Skip(index + 1).Where(second => second.Side == first.Side)
             .Select(second => RegretReport.Compare(first.Version, first.Choices, second.Version, second.Choices, options.Bootstrap, options.Seed)))];
         var report = results.Select(result => new
@@ -671,6 +674,40 @@ public static partial class CliCommands
         int count = found.Values.Sum(values => values.Length);
         output.WriteLine(string.Create(CultureInfo.InvariantCulture,
             $"ai-regret label-missing roots={found.Count} groups={count} of {wanted.Sum(request => request.Groups.Count)} wanted"));
+        return count;
+    }
+
+    /// <summary>
+    /// S4.5: a group a scored version chose that pruning left at its deciding samples is labelled again on the root's
+    /// recording samples (its own settings and seed, as <see cref="LabelMissing"/> labels), and replaces its value in the
+    /// labels file, so a comparison reads every choice on labels as good as any other choice's; returns how many.
+    /// </summary>
+    private static int ExtendPruned(string suiteDirectory, RegretSuite suite, Dictionary<string, RegretLabel> labels,
+        IEnumerable<RegretChoice> choices, RegretOptions options, TextWriter output)
+    {
+        var rootsById = suite.Roots.ToDictionary(root => root.Id);
+        var wanted = choices.Where(choice => choice.Pruned && choice.Chosen is not null && labels.ContainsKey(choice.RootId))
+            .GroupBy(choice => choice.RootId)
+            .Select(group => (Root: rootsById[group.Key], Label: labels[group.Key],
+                Groups: (IReadOnlyList<RegretCandidate>)[.. group.Select(choice => choice.Chosen!).Distinct(StringComparer.Ordinal)
+                    .Select(chosen => rootsById[group.Key].Candidates.First(candidate => candidate.Group == chosen))]))
+            .ToList();
+        if (wanted.Count == 0) return 0;
+        var byGame = wanted.GroupBy(request => request.Root.GameId).ToDictionary(group => group.Key, group => group.ToList());
+        RegretGame[] games = [.. suite.Games.Where(game => byGame.ContainsKey(game.Id))];
+        var found = ForGames(games, options.Workers, TextWriter.Null, "extend-pruned",
+                game => RegretLabels.LabelGroups(game, [.. byGame[game.Id].Select(request => (request.Root, request.Label, request.Groups))]))
+            .SelectMany(values => values).ToDictionary(pair => pair.Key, pair => pair.Value);
+        RegretLabel[] merged = [.. labels.Values.Select(label => found.TryGetValue(label.RootId, out var extended)
+            ? label with
+            {
+                Values = [.. label.Values.Select(value => extended.FirstOrDefault(again => again.Group == value.Group) ?? value)],
+            }
+            : label).OrderBy(label => label.RootId, StringComparer.Ordinal)];
+        RegretSuite.WriteLines(Path.Combine(suiteDirectory, options.LabelsFile), merged);
+        int count = found.Values.Sum(values => values.Length);
+        output.WriteLine(string.Create(CultureInfo.InvariantCulture,
+            $"ai-regret extend-pruned roots={found.Count} groups={count} of {wanted.Sum(request => request.Groups.Count)} wanted"));
         return count;
     }
 
