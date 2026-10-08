@@ -263,13 +263,20 @@ implementations above wait until S5's budgets are measured against that.
 |---|---|---|---|
 | Easy | Heuristic | Pool prior, forgetful tracker | None |
 | Standard | Heuristic with the apprentice ranker (4.7), or the heuristic alone if the apprentice does not beat it | Pool prior, full tracker | Fits 50 ms / 200 ms p95 on the reference box |
-| Hard | Play-out planner (4.6) | Opponent's decklist, full tracker | Turn-action decisions up to about 1 s on the reference box (accepted 8 October 2026); every other decision within 200 ms p95 |
+| Hard | Corp: play-out planner over turn lines (4.6). Runner: Standard's decider, with run-choice play-outs where S4.6 shows they rank | Opponent's decklist, full tracker | Turn-action decisions up to about 1 s on the reference box (accepted 8 October 2026); every other decision within 200 ms p95 |
 
 The order must hold on the ladder in both seats; the budget-scaling ladder (5.2) is the standing proof that Hard's
 extra compute is worth something. A one-second think on its own turn actions is ordinary for a human-facing opponent;
 the UI shows it as thinking, and no other decision waits on it.
 
 ### 4.6 Play at inference (Hard)
+
+> **Read (8 October 2026, S4.4).** For the Corp the horizon decides and the samples do not: a turn-end leaf ranks lines
+> at about 60% at any sample count, one opponent turn about 67%, and 4 turns or the game's end pass 80% (4 turns at 16
+> samples, the game's end at 8). For the Runner no horizon ranks turn lines above the turn-end fit, so Runner Hard
+> does not play out turn lines; its budget goes to run choices once S4.6 has measured them. No Corp cell fits one
+> second before S5.0 (one sample of one candidate over 4 turns costs about 78 ms), so Corp Hard starts at the samples
+> S5.1's beam leaves and S5.0 buys the rest.
 
 The teacher ranks because it plays past the turn: 32 play-outs separate versions, found the Petty Cash line the
 turn-end leaf missed, and made the agenda-hold gain visible. Hard is the teacher at a budget it can afford:
@@ -284,6 +291,11 @@ turn-end leaf missed, and made the agenda-hold gain visible. Hard is the teacher
   cost cuts buy either more samples or a longer horizon at the same budget, and the S4.4 curve says which is worth more.
 
 ### 4.7 The apprentice at the root (Standard)
+
+> **Outcome (8 October 2026, S4.5).** Not met under teacher v2, and the failure was the teacher's: the apprentice
+> learned v2's order faithfully, including that a banked credit is worth a run, and lost 250 Elo as the Runner. The
+> Corp's was level in play. The refit on teacher v3's labels is S4.5b; until it reads, Standard is the heuristic in
+> both seats, with the Corp's 3×3 planner, which the ladder keeps.
 
 The regret suite is also a training set: at every root, the teacher's value of every meaningful candidate group. A
 ranker **at the root**, over candidates, is what a cheap policy can learn from it:
@@ -348,9 +360,14 @@ A fixed corpus of recorded decision roots with teacher labels, scored in minutes
 - **Labelling cost.** A whole-suite relabel is about seven hours on the development box, and S1 changed the teacher
   three times in two days (one-step, the line search, the live opponent model). The suite is sized for the questions it
   answers, so that a relabel is an hour or two and never the critical path:
-  - **The teacher is versioned and frozen between milestones.** Teacher v2 is the line search (beam 5, one-turn
-    screen), the live Standard opponent, a 4-turn horizon and 32 samples. Labels and scores name their teacher. A
-    teacher change is a milestone event with a relabel budgeted overnight, not something a step does in passing.
+  - **The teacher is versioned and frozen between milestones.** Teacher v2 was the line search (beam 5, one-turn
+    screen), the live Standard opponent, a 4-turn horizon and 32 samples. **Teacher v3 (from 8 October 2026) is the
+    same search played to the game's end**, scored by the result, with no leaf anywhere in a label. The move was
+    forced by two readings in which the v2 suite and the ladder disagreed, both traced to v2's leaf at its horizon:
+    an apprentice that learned v2's order banked credits and lost 250 Elo, and the Corp's 3×3 planner read worse than
+    the heuristic on the suite while the ladder had it 44 to 97 Elo better. A teacher v3 label costs about 1.8 times
+    a v2 label. Labels and scores name their teacher. A teacher change is a milestone event with a relabel budgeted
+    overnight, not something a step does in passing; v3 is the last one planned.
   - **A core and targeted roots.** The core is about 2,000 random roots, held out by deal; it is what a teacher change
     relabels, what absolute regret is quoted on, and what the leaf is fitted on. Targeted roots (`diverge`) are
     labelled when a comparison needs them and keep the labels they got. A paired comparison is valid root by root as
@@ -460,6 +477,10 @@ effects), and any learned dynamics.
   S5; before S4 fits to the labels, the suite is relabelled with it, the change in labels is reported as teacher drift
   is, the certified puzzles are re-certified, and S1.3's separation gate is passed again. The cost falls on S5.0: a
   beam inside 50 ms needs cheaper simulated Apply.
+- **A suite that misreads what is optimised against it.** Realised on 8 October: teacher v2's horizon leaf made the
+  suite disagree with the ladder twice (section 5.1). Mitigation: teacher v3 has no leaf; every gate that promotes a
+  behaviour keeps a ladder beside the suite; an apprentice or planner that beats the suite and loses the ladder is a
+  finding about the teacher first.
 - **The apprentice reaches the heuristic's level and no further.** A root-level ranker may average away what the
   teacher sees. Mitigation: S4.5 measures it on the suite's metric before any planner work depends on it; if it lands
   level, Standard stays the heuristic with blunder-list fixes and the teacher's gains reach players through Hard.
