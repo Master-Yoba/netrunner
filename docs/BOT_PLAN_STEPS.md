@@ -708,6 +708,16 @@ rollout step gets cheaper, and S0.4's trace says the step is mostly simulated `A
   searches a narrower beam than the teacher; S5.1's record says which, and what the narrower beam costs on the regret
   suite against the teacher's.
 
+**Outcome (9 October; the record is in `docs/BOT_VERSIONS.md`).** Simulated `Apply` already skipped the state hash and
+the invariant check, so the cuts are the trace's next five, each exact: hosted-credit sources found before sorting,
+the static-modifier sum's zone lookup after its definition check, turn facts shared instead of copied, sorted lists left
+unsorted, and ability sources' cards looked up once. A simulated step in a plan is 35% cheaper (Standard games 119 to
+77 µs), a mid-game Hard decision 22% (43.4 to 34.0 ms), a box game 13 to 18% per action. The 240-deal box ladder is
+identical game by game, and the fuzz on every pool is clean. The next cost is the behaviour frame's identity (a JSON
+serialization and a hash, 7 to 10%) and its re-validation in simulation (5 to 7%); skipping that re-validation trusts
+simulated states, which is the user's decision. At 8 × 4 a mid-game Standard plan would be about 92 ms, still about
+twice the budget: S5.1 says which beam Standard searches.
+
 ### S5.1 Pipeline changes in `TurnPlanner`
 
 - **Meaningful-candidate filter:** drop candidates the heuristic marks as bookkeeping (pass, end turn with clicks left
