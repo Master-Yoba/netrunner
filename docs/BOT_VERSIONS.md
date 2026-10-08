@@ -1583,3 +1583,57 @@ open centrals, a Runner on its fourth run of the turn) and compounds small error
 heuristic's says nothing about that, whichever teacher labels the roots. The apprentice is set aside in both seats;
 before it returns, the rows would need the apprentice's own states (its games' roots labelled and added, round by
 round), not a better teacher alone. Standard stays the heuristic in both seats, and the Corp keeps its planner.
+
+### S4.6: run choices, the Runner's own curve (8 October 2026)
+
+**Reading: no cell beats the heuristic's own run choices; Runner Hard keeps Standard's run choices.**
+
+**The roots:** the core's 224 Runner run-choice roots (165 continue or jack out, 59 trash or not). **The rows:** the
+existing end-of-line recordings (teacher v3's game's end, S4.2c's 4 turns, S4.4's opponent's turn) and one new recording
+at the run's end (`--horizon run`, new: the play-out stops where the run in progress at the root ends and the pool's fit
+scores that state; 2,050 roots' worth of machinery, 224 roots, under a minute). The turn's end is read from the
+game's-end rows' end-of-turn states, as in S4.4.
+
+```bash
+ai-regret label data/ai/regret/gateway-elevation --samples 32 --horizon run --lines 5 --screen-turns 1 --roots run-roots.txt \
+  --labels labels-run.jsonl.gz --end-lines end-lines-run.jsonl.gz --workers 12
+ai-regret score data/ai/regret/gateway-elevation --version runner-heuristic-v28 --side runner --core --teacher-version v3 --choices choices.jsonl
+ai-regret horizon-curve data/ai/regret/gateway-elevation --reference end-lines-game.jsonl.gz --kind run --horizon "run's end=end-lines-run.jsonl.gz" \
+  --horizon "opponent's turn=end-lines-opponent.jsonl.gz" --horizon "4 turns=end-lines.jsonl.gz" --choices choices.jsonl --choice-version runner-heuristic-v28
+```
+
+**The planner's-view accuracy is nearly unreadable here:** the game's-end reference separates 17 pairs of choices over
+the 224 roots on all 32 samples, and 24 on halves. Run choices are mostly level at the game's end. On those pairs, design
+(b): the turn's end 0.66 to 0.75, the run's end 0.63 to 0.65, the opponent's turn 0.64 to 0.73, 4 turns 0.64 to 0.66,
+the game's end 0.57 to 0.65, every interval about ±0.18. No cell reaches 80%.
+
+**Pick regret** (`--choices`, new: each cell picks its best choice on one half of the samples and the other half's game
+results score the pick, against the heuristic's own choice scored on the same halves, paired by root; design (b)):
+
+| Cell | k = 4 | k = 8 | k = 16 |
+|---|---|---|---|
+| The heuristic's choice (Runner v28) | 0.0275 [0.0218, 0.0332] | | |
+| Run's end | +0.0047 [+0.0004, +0.0095] | +0.0037 [−0.0007, +0.0085] | +0.0035 [−0.0011, +0.0085] |
+| Turn's end, general fit | +0.0056 [+0.0010, +0.0103] | +0.0043 [−0.0002, +0.0089] | +0.0021 [−0.0024, +0.0066] |
+| Opponent's turn | +0.0056 [+0.0013, +0.0099] | +0.0049 [+0.0005, +0.0093] | +0.0025 [−0.0022, +0.0071] |
+| 4 turns | +0.0068 [+0.0022, +0.0117] | +0.0058 [+0.0009, +0.0109] | +0.0052 [−0.0004, +0.0109] |
+| Game's end | +0.0054 [+0.0006, +0.0104] | +0.0050 [−0.0003, +0.0106] | +0.0056 [−0.0011, +0.0128] |
+
+(The cells are each one's regret minus the heuristic's: positive is worse.) Every cell is worse than the heuristic at 4
+samples and none is better at 16.
+
+**Cost** (`ai-regret decision-cost`, 40 of the roots, 4 samples, one thread; 2.0 choices a root):
+
+| Horizon | Mean | p95 |
+|---|---:|---:|
+| Run's end | 8 ms | 26 ms |
+| Turn's end | 35 ms | 73 ms |
+| Opponent's turn | 74 ms | 133 ms |
+| 4 turns | 291 ms | 572 ms |
+| Game's end | 744 ms | 1,479 ms |
+
+Inside 200 ms: the run's end, the turn's end, and the opponent's turn at 4 samples (about 8 at the mean). None of them
+ranks the Runner's run choices better than the heuristic does, so a play-out at a run choice would spend Hard's time
+to choose worse. S5.2's Runner Hard keeps Standard's run choices, and its turn actions are Standard's decider too
+(S4.4), so Runner Hard has nothing to plan on this pool: the record for S5.2 is that Runner Hard is Standard's Runner
+until a horizon ranks something.
