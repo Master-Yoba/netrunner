@@ -53,13 +53,13 @@ if [[ "${BOT_CHECK_SUITES:-0}" == 1 ]]; then
     exit 1
   fi
   cli=(dotnet "$suites_build/bin/Netrunner.Cli/release/Netrunner.Cli.dll")
-  if "${cli[@]}" ai-regret score "$check_root/data/ai/regret/gateway-elevation" --version "${BOT_CHECK_VERSIONS:-latest}" --split held-out \
+  if "${cli[@]}" ai-regret score "$check_root/data/ai/regret/gateway-elevation" --version "${BOT_CHECK_VERSIONS:-latest}" --split held-out --core \
     --workers 12 --json >"$logs/regret.json" 2>"$logs/regret.err"; then
     python3 - "$logs/regret.json" <<'PY'
 import json, sys
 score = json.load(open(sys.argv[1]))
 report = score["report"]
-print(f"bot-check regret (box, held-out, {score['labels']}: {score['teacher']}) " + " ".join(
+print(f"bot-check regret (box core, held-out, {score['labels']}: {score['teacher']}) " + " ".join(
     f"{entry['version']}={entry['summaries'][0]['meanRegret']:.4f} [{entry['summaries'][0]['lower']:.4f}, {entry['summaries'][0]['upper']:.4f}]"
     for entry in report))
 PY

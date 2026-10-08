@@ -151,13 +151,13 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     /// </summary>
     public const string V26 = "corp-heuristic-v26";
     /// <summary>
-    /// V26 with bot loop 1's fixes (docs/BOT_IMPROVEMENT_PLAN.md): upgrades that work outside scoring (Mercia B4LL4RD,
+    /// V26 with bot loop 1's fixes (docs/history/BOT_IMPROVEMENT_PLAN.md): upgrades that work outside scoring (Mercia B4LL4RD,
     /// Mahkota Langit Grid) are rezzed once they have work, and assets that work by a click ability or by gathered
     /// counters (Humanoid Resources, Phật Gioan Baotixita) are rezzed at all.
     /// </summary>
     public const string V27 = "corp-heuristic-v27";
     /// <summary>
-    /// V27 with bot loop 1's deferred fixes (docs/BOT_LOOP_1.md): a card that loses nothing over time (an unrezzed copy,
+    /// V27 with bot loop 1's deferred fixes (docs/history/BOT_LOOP_1.md): a card that loses nothing over time (an unrezzed copy,
     /// or one without credits or counters to run out) isn't replaced by its own copy (Mahkota Langit Grid); an ability that
     /// plays a card the Corp can't pay for is a wasted click (Petty Cash from Archives with 2 credits); an advancement
     /// counter a trigger places without a click (PT Untaian) is worth what an advance costs; and the run model reads its
@@ -165,7 +165,7 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     /// </summary>
     public const string V28 = "corp-heuristic-v28";
     /// <summary>
-    /// V28 with bot loop 2's fixes (docs/BOT_LOOP_2.md): trashing the Runner's card is worth its threat (Bumi kept Botulus) and
+    /// V28 with bot loop 2's fixes (docs/history/BOT_LOOP_2.md): trashing the Runner's card is worth its threat (Bumi kept Botulus) and
     /// trashing its own costs the card (LEO's bioroid had counted as a Runner card); ending a run the ICE ahead stops anyway is
     /// worth little (LEO trashed the Brân it had just rezzed); an asset paying each turn (Public Access Plaza) is rezzed; an
     /// upgrade that works only on a steal isn't rezzed in a remote with no agenda (AMAZE); and the run model sees Scatter
@@ -173,7 +173,7 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     /// </summary>
     public const string V29 = "corp-heuristic-v29";
     /// <summary>
-    /// V29 with the Corp's sequencing and IP Enforcement (docs/BOT_STRATEGY_1.md): a play only possible before the turn's first
+    /// V29 with the Corp's sequencing and IP Enforcement (docs/history/BOT_STRATEGY_1.md): a play only possible before the turn's first
     /// action finishes (Petty Cash) comes first; IP Enforcement is worth the agenda it takes back from the Runner's score area,
     /// and a win when the Corp can score it this turn; and the only ICE in HQ waits for a rezzed Mercia B4LL4RD's free install
     /// rather than spending the last click.

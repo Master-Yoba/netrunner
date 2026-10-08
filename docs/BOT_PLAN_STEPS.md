@@ -233,6 +233,14 @@ times one-step). Gate:
   (+0.0142 [0.0010, 0.0284]). The 119 agenda roots read +0.0185 [−0.0099, 0.0463]: the right way, inside zero, so the
   agenda rule's own reading waits for S1.6. Labels: `labels.jsonl.gz` is teacher v2, `labels-v1-lines` the S1.5 one.
 
+**The horizon's leaf is a confound (S4.2c, 7 October).** Teacher v2 plays four turns and scores the horizon with set
+4, which for the Gateway + Elevation pool is the pool's own fit: the same leaf the shipped planner and one of S4's arms
+use. So its values partly reward agreeing with that leaf four turns on (S4.2c measured it: the pool's fit is the one
+Corp arm the 4-turn reference lifts). Regret under teacher v2 is still comparable within its labelling, but it favours
+a policy whose choices that leaf likes. Until a teacher v3 that plays to the game's end replaces it, the ladder, which
+has no leaf in its result, is the unconfounded arbiter of planner gates. Teacher v3 replaces v2 only at a milestone,
+and only if S4.2c's game's-end run shows it affordable and its reference reliable.
+
 ### S1.6 Targeted roots (S)
 
 **After the hard-model relabel's re-read; before S4.2's gate. Independent of S4.1.** A paired comparison has power only
@@ -245,9 +253,15 @@ S4.2 and S5.3 compare planners whose choices diverge from the heuristic's far mo
   (same profile) to choose at every turn-action and run-choice decision of their side, and keeps every decision where
   the chosen groups differ as a root in the suite's format, with `source: diverge A,B` and the two choices recorded.
   Roots are deduplicated by position and held out by deal, as the suite's are. The command labels nothing itself.
-- The new roots are labelled with the suite's current teacher, settings and seed (`ai-regret label`, with S1.7's
-  adaptive samples), a sample of them repeated for the noise floor, and merged with their provenance. A root that
-  already exists keeps its labels.
+- The new roots are labelled with the suite's current teacher, settings and seed, a sample of them repeated for the
+  noise floor, and merged with their provenance (`ai-regret merge`). A root that already exists keeps its labels.
+- **Pruning, measured here.** S1.7 found that adaptive samples by early stopping do not pay on the suite's roots (they
+  are drawn where the top two are close, so the rule almost always extends). S1.6 measures a pruning rule instead:
+  `ai-regret label --decide 8 --record 24 --prune 3` gives every group 8 deciding samples, then 24 recording samples to
+  the best three and to any group a scored version chose; a pruned group keeps its 8-sample value, marked, and is never
+  a root's best. It is checked on a sample of the targeted roots against their flat 32-sample labels (cost, and the
+  values and the pair's regret difference within noise). If it does not pay on targeted roots either, adaptive labelling
+  leaves the plan.
 - `--discordant` (S1.5's view) is the report for every version comparison from now on, beside the all-roots table.
 - **First run:** the 960 box games for Corp v29 against v30 and v28 against v29, so the Corp's gate is read at every
   root where it can be. Expected: a few hundred more Corp roots, mostly agenda installs and holds.
@@ -258,6 +272,13 @@ S4.2 and S5.3 compare planners whose choices diverge from the heuristic's far mo
   - the Runner comparisons of S1.3 still separate;
   - the labelling time and the roots added, per side and category, are recorded.
 - **Record:** the counts, the time, and the Corp table before and after, in `docs/BOT_VERSIONS.md`.
+
+**Outcome (7 October; the record is in `docs/BOT_VERSIONS.md`).** `diverge` found 2,073 roots for Corp v29 against v30
+(turn decisions) and 499 for v28 against v29 (run choices); 2,393 new roots were labelled by teacher v2 with pruning in
+2 h 59 min and merged (8,905 roots). Pruning pays on targeted roots (48% of flat's samples, the pair's comparison within
+the intervals) and stays for them; it biases absolute regret low, which is quoted on the core only. **The Corp
+separates** over the discordant roots for every pair (v29 − v30 +0.0180 [0.0120, 0.0243] over 2,198), and the agenda
+roots on their own (+0.0241 [0.0141, 0.0340] over 1,201): S1.3's gate is closed. The Runner's comparisons hold.
 
 **Later uses.** S4.2 runs `diverge` for the planner on set 5 against the planner on set 4 before its regret gate;
 S5.3 for the new Standard against `standard-prev`; S6 for each round's candidate against the current Standard. In each
@@ -351,7 +372,7 @@ converted puzzle.
 - Wire `ai-regret score` (target pool, the suite's held-out split), `ai-puzzles`, and `ai-lint` counts on the latest
   saved run into `scripts/bot-check.sh` behind `BOT_CHECK_SUITES=1`, with a summary line each.
 - Update `AGENTS.md`'s "Testing Guidelines" bot paragraph to the plan's section 6 tiers, and
-  [BOT_LOOP_WORKFLOW.md](BOT_LOOP_WORKFLOW.md) section 7 to point there.
+  [BOT_LOOP_WORKFLOW.md](history/BOT_LOOP_WORKFLOW.md) section 7 to point there.
 
 ## S3. One live policy (M)
 
@@ -402,6 +423,12 @@ previous live version that is not legacy code.
 - Unit tests per term on constructed observations (`tests/Netrunner.AI.Tests/EvaluationFeaturesTests.cs`), including
   a twin test: two states with the same observation give the same features.
 
+**Outcome (7 October; the record is in `docs/BOT_VERSIONS.md`).** Set 5 is set 4 and 12 terms, each from the observer's
+view with its knowledge (`Extract(…, 5, knowledge)`): exposed agenda points, HQ and R&D agenda density, advancements
+left and whether that server is open, punisher exposure and grip margin, the central tax (HQ and R&D), money after
+reserve and income cards, and the score race's interaction (its other terms are set 1's). Unit and twin tests pass, and
+the terms vary on real positions (the punisher term is rare in self-play). No fit yet.
+
 ### S4.2 Fitting to the teacher
 
 - `ai-fit-evaluation --target teacher --suite <suite-dir> --feature-set 5 --outcome-weight 0.2 --output <doc>`: fits
@@ -418,13 +445,189 @@ previous live version that is not legacy code.
   set 4 captures most of the gain, the features are not the lever and S4.1's terms are reconsidered before S4.3.
 - **Record:** the three fit reports and the regret comparison.
 
+**Outcome (7 October; the record is in `docs/BOT_VERSIONS.md`).** Not met on the root-value fit. Set 5 beats both set 4
+arms on held-out teacher values in both seats, but the planner at Hard's settings does not separate from either set 4
+arm on the discordant roots or the core, and the box ladder is level. The measurement has two confounds, so this is not
+a verdict on the features and S4.1 is not revisited: the planner's value adds the rollout's log-odds to the heuristic's
+score (so the leaf moves only part of a choice), and the leaf was fitted at roots while the planner reads it where the
+turn ends. S4.2b removes both.
+
+### S4.2b Fitting where the planner reads the leaf
+
+- **S5.1's value scoring, brought forward** behind `plan-value 1`: a candidate's value is the mean over the samples of
+  (the leaf as a win probability − the sample's root value); the heuristic's score is not part of it, and the
+  heuristic's order breaks ties within `plan-tie` (thousandths, default 5). `diverge` and the discordant regret
+  comparison for set 5 against set 4 (shipped) with `plan-value 1` on both, recorded.
+- **End-of-line rows:** `ai-regret label --end-lines FILE` records, for every line played to the horizon, the
+  end-of-turn state's sets 4 and 5 (from the root side's view, with its knowledge) and the play-out's value from it. The
+  core is relabelled flat with recording on; the labels must equal the core's.
+- `ai-fit-evaluation --target end-lines` refits the three arms on those rows, held out by deal (intervals resample
+  roots), and the gate of S4.2 is read again under `plan-value 1`.
+
 ### S4.3 Budget scaling on set 5
+
+**With `plan-value 1`** (S4.2b): ×1, ×4 and ×8 on the box, about 400 deals a pairing. Monotone and clear starts S5;
+flat sends the plan back to the end-of-line fit.
 
 - Re-run S0.3's entrants with `plan-evaluation 5`.
 - **Gate:** monotone in both seats with each step's lower bound above zero. If not, the leaf still lacks a term the
   rollouts need; use the blunder list to find it, add it, refit, and repeat. S5 does not start until this holds.
 
-## S5. The planner becomes Standard (L)
+**Outcome of S4.2b and S4.3 (7 October; the record is in `docs/BOT_VERSIONS.md`).** The core's end-of-line rows fit
+set 5 better than both set 4 arms for the Corp, and better than the refit but not the shipped weights for the Runner.
+Under `plan-value 1` neither the teacher-fitted nor the end-of-line set 5 separates from set 4 on the discordant roots,
+and S4.3 on the end-of-line set 5 is flat in both seats (no step clear). S5 does not start. The reason is measurable on
+the recorded rows: the leaves barely rank end states of one root (S4.2c below), so neither the planner's width nor its
+samples could have moved anything. The plan goes to S4.2c, the leaf fitted to rank.
+
+### S4.2c The leaf fitted to rank
+
+**Before S4.3 is re-run; no feature or planner change.** On the held-out end-of-line rows of the core, pairs of distinct
+end states of one root whose play-out values differ by more than 0.1 (up to 50 a root; the pairs span samples, since
+the rows carry no sample id, so part of each gap is sample noise):
+
+| Seat | Pairs | Set 5, end-of-line fit | Set 4, refit | Set 4, shipped |
+|---|---:|---:|---:|---:|
+| Corp | 4,166 | 60.4% | 56.4% | 55.3% |
+| Runner | 11,711 | 64.0% | 63.5% | 62.9% |
+
+Chance is 50%. S4.2's log-loss gains came from the level across roots, not from the order within one, and the planner
+only ever compares within one. The fit's target and its gate change accordingly (plan 4.2):
+
+- **Recording:** the end-of-line rows carry `sample` and `line` ids, so pairs are formed on common random numbers and
+  a line's value over all samples can be recovered. No extra play-outs are needed for the gate: the **reference order**
+  of two lines at a root is the sign of the difference of their mean values over every sample, and its reliability is
+  measured from the same samples by split halves (how often the order on 16 samples matches the order on the other
+  16). A second independent play-out, where one was recorded, is reported as repeatability only: the agreement of two
+  noisy reports is not a ceiling on a model's accuracy against the latent order (two reports each right 80% of the
+  time agree 68% of the time).
+- **The fit:** `ai-fit-evaluation --target pairs`. Examples are within-root pairs of distinct end states on the same
+  sample; the target is the sign of the value difference, weighted by its size; the model is linear on the feature
+  difference with no bias (`P(A better) = sigmoid(w · (f_A − f_B))`), then calibrated with a one-dimensional fit of
+  bias and slope on the play-out values so the planner's delta from the root keeps a win-probability scale. Fitted on
+  the core's rows, held out by deal; the three arms as before, plus the current value-fitted set 5 as a fourth.
+- **Fit gate:** within-root pairwise accuracy on held-out pairs against the reference order, counted where the
+  reference difference exceeds twice its standard error, gap-weighted, per seat: above the table's baseline (re-read
+  against the same reference) with the interval clear. Split-half repeatability of the reference and log loss are
+  reported beside it, not gated.
+- **If the linear ranker stays under about 70%** while the reference is repeatable well above it, the trade-offs are
+  not linear in the differences. Then one small nonlinear model, and it must still be a **scalar scorer** the planner
+  calls one state at a time: boosted scalar trees `g(features)` (depth 3, about 200 trees) trained with the pairwise
+  gradient (RankNet-style: the loss is on `g(f_A) − g(f_B)`, the model is on one state), deterministic, exported to
+  JSON, its inference cost recorded against set 5's 93 µs. A tree over the difference vector is not a leaf: it cannot
+  be split into per-state scores and can answer a reversed pair inconsistently. No other model family.
+- **Then** the planner gate of S4.2 under `plan-value 1`, and S4.3 again. If the ranking accuracy moves and the
+  planner's choices still do not, the next suspect is the planner's own continuation (`plan-lines`, S1.5's machinery),
+  not the leaf.
+- **Fallback to keep in view, not to build now:** Standard as the teacher's screen, one opponent turn played out
+  before the leaf, so the leaf scores a state where exposure has been punished or not. About four times a one-step
+  rollout: affordable for Hard, probably not for Standard before S5.0.
+- **Record:** the reference's repeatability, the four arms' pairwise accuracy with intervals, the calibration, and
+  the planner gate.
+
+**First reading and the confound (7 October; the record is in `docs/BOT_VERSIONS.md`).** Against the 4-turn reference
+the linear rank fit is not above the baseline in either seat, and the pool's fit (the shipped set 4, and the teacher's
+horizon leaf) is the one Corp arm the reference lifts. So, before any trees:
+
+- **A second reference with no leaf in it:** the core relabelled to the game's end (`--horizon game`, 32 samples,
+  end-of-line recording). Its split-half repeatability and the pairs it counts are recorded beside the 4-turn
+  reference's; fewer pairs is the price of no leaf.
+- **Every arm read against both references** (the general fit, the pool's fit, sets 4 and 5 value-fitted, the rank
+  fit), by the mean leaf over the samples (the planner's view, the gate) and on per-sample state pairs (beside it);
+  `game` rows in the line means and out of the counted pairs. The difference between the two readings, arm by arm, is
+  the confound's size. If the pool's Corp lead vanishes on the game's-end reference, the 4-turn reference rewarded
+  agreement with itself; if it holds, the pool's fit is better on this pool.
+- **Gate:** the planner's view against the game's-end reference, above the best value arm with the interval clear.
+- **Then:** if the Corp's linear arms all sit near the mid-60s on the clean reference too, the Corp leaf is
+  feature-limited in linear form: the boosted scalar trees, fitted on the game's-end rows. The Runner's rank fit goes
+  forward.
+- **Calibration:** a ranker ships only calibrated by a monotone one-dimensional fit over all rows whose log loss is no
+  worse than the value fit's; failing that, the planner keeps its tie threshold and static mix on the value fit's scale.
+
+**Outcome (8 October; the record is in `docs/BOT_VERSIONS.md`).** The game's-end relabel took 5 hours (1.8 times the
+4-turn run) and no play-out reached the cap; its reference counts fewer pairs (3,566 Corp, 3,097 Runner) as repeatably
+(98% split halves). It measures the confound: the pool's fit loses its lead without its own horizon (the Runner's
+reverses, −0.065 against the general fit), and every fit to the 4-turn values falls with it. Against it no arm passes
+the gate. The Corp's arms, linear or boosted, value- or rank-fitted, sit between 0.59 and 0.65 with nothing separated;
+the Runner's rank fit is clear of the value fits but level with the general fit (0.731 against 0.726). The boosted
+trees (2.2 µs a state) overfit a weak per-sample signal and read no better. No ranker's monotone calibration matches the
+value fit's log loss, so none reaches the planner. The limit is what the end-of-turn state says about the game; the
+next lever is the fallback kept in view above (one opponent turn before the leaf), a decision for the plan. A teacher
+v3 to the game's end is affordable (5 hours for the core) and its reference reliable where it counts.
+
+**Decision (8 October).** S4's premise is falsified at the turn boundary (plan 4.2's outcome note). No further leaf
+fit. The plan splits: Hard becomes the teacher at a budget it can afford (plan 4.6), Standard takes an apprentice
+ranker at the root if it beats the heuristic on the suite's own metric (plan 4.7). Both are measured before S5 commits
+to either: S4.4 and S4.5 below. The user accepted Hard's turn-action budget of about one second (plan 4.5).
+
+### S4.4 Horizon × samples: what ranks, at what cost (S)
+
+**From data on disk; one extra 45-minute run. Decides Hard's cell before S5.** Both labellings of the core exist with
+every line on every sample: 4 turns plus the leaf, and the game's end. So the planner's-view ranking accuracy of
+"k samples of horizon h", against the game's-end reference built from all 32 samples, is computable by subsampling the
+recorded rows, for k in 4, 8, 16, 32 (several draws each, averaged) and h in:
+
+- turn end plus the leaf (the arms already read: the baseline row);
+- one opponent turn plus the leaf (one new recording run on the core, `--horizon 1`, about 45 minutes; the horizon the
+  teacher's screen used when it found the Petty Cash line);
+- 4 turns plus the leaf;
+- the game's end (k samples of the result itself; at k = 32 this is the reference's own split-half figure).
+
+Beside each cell, its cost from S0.1 and S0.4: steps per play-out at that horizon times the per-step cost, times k,
+times the lines a width-5 beam plays at a turn-action root (the teacher's count), on the reference box.
+
+- **Gate (a reading, not a pass):** the table, per seat, with the cheapest cell above 80% in the planner's view marked,
+  and its wall time per turn-action decision. If no cell under one second reaches 80%, mark the best that fits and
+  record its accuracy; S5.0's expected cuts are applied to the costs as a second column.
+- **Record:** the table and the chosen cell in `docs/BOT_VERSIONS.md`; the S4.3 flat result re-read against it (Hard
+  at 3 to 4 samples of the turn-end leaf is the table's weakest cell, which is why more of it changed nothing).
+
+**Outcome (8 October; the record is in `docs/BOT_VERSIONS.md`).** Against the game's-end reference, the Corp's
+accuracy is set by the horizon, not the samples: the turn's end reads about 0.60 at any k, one opponent turn about
+0.67, and 4 turns or the game's end pass 80% (4 turns at k = 16, or the game's end at k = 8, with k drawn from one half
+of the samples and the reference from the other; 4 turns at k = 4 when both use all 32). The Runner's candidates are
+mostly noise to every horizon (0.63 to 0.74 on the unbiased design, the game's end's own split-half 0.711). No cell
+fits one second at the teacher's count (13 Corp and 10 Runner candidate groups, 5 lines): one sample of one candidate
+costs about 78 ms at 4 turns. Hard's cell as read: the Corp plays out 4 turns with as many samples as S5.1's beam
+leaves (about 3 at width 4 before S5.0); the Runner stops at the turn's end, since no horizon ranks better. The
+opponent's horizon was run as `--horizon opponent` (the next turn of the root side), since `--horizon 1` counts rounds.
+
+### S4.5 The apprentice at the root (M)
+
+**From the regret suite as it stands; independent of S4.4. Decides Standard's decider before S5.** A pairwise ranker
+over the meaningful candidate groups of a root, trained on the teacher's values (plan 4.7).
+
+- **Rows:** every labelled root of the suite (core and targeted; `game` and pruned groups included at their values,
+  marked), one example per pair of groups at a root, weighted by the value gap; features per plan 4.7. Held out by
+  deal, with the core's held-out split kept as the primary read.
+- **Model:** a scalar scorer `g(root, candidate)`, linear first, then boosted scalar trees with the pairwise gradient
+  if the linear one is clearly under the teacher's order on held-out pairs; exported to JSON; inference cost recorded
+  (target: under 50 µs a root, every candidate included).
+- **Use:** `apprentice 1` as a profile parameter on the live heuristic: within the heuristic's top priority band, the
+  candidates are re-ordered by `g`; priorities and vetoes are untouched. Off by default until the gate.
+- **Gate:** `ai-regret score` on held-out roots, the heuristic with the apprentice against the heuristic alone, paired,
+  per seat: regret lower with the interval clear. Then `diverge` on the pair and the discordant-root reading; then a
+  400-deal box ladder against `standard-prev` and 240 on Gateway; puzzles and lints not worse; `PolicyPerformanceTests`
+  within Standard's budgets. The budget-scaling ladder does not apply (no search).
+- **If it lands level with the heuristic** in a seat, Standard stays the heuristic in that seat and the record says
+  where the apprentice's order differed from the teacher's most (its own blunder list), which feeds S6's heuristic
+  fixes instead.
+- **Record:** held-out pairwise accuracy against the teacher's order, the regret table, the ladders, the cost.
+
+**Outcome (8 October; the record is in `docs/BOT_VERSIONS.md`).** Not met; Standard stays the heuristic in both seats.
+Boosted trees order the teacher's choices about 6.5 points better than the heuristic on held-out pairs in both seats,
+and regret is lower on every held-out root with the interval clear (Corp −0.0077, Runner −0.0034; the core's held-out
+roots lean the same way without clearing). In play the Runner's apprentice banks credits and loses (−248 Elo on the
+box, −371 on Gateway against the heuristic, 8% of games won); the Corp's is level (+24 and −12). The teacher's 4-turn
+play-out ending on the pool's fit rates a banked credit level with a draw, a run or an install, and the apprentice
+learned that order. Standard with its Corp planner off is below live Standard on both pools, so the 3×3 planner stays.
+
+## S5. Hard plays out; Standard takes the apprentice (L)
+
+**Rewritten 8 October after S4.2c.** S5 no longer makes a leaf-scored planner the Standard. Hard becomes the play-out
+planner at the cell S4.4 chose (plan 4.6), inside the one-second turn-action budget; Standard becomes the heuristic
+with the apprentice ranker if S4.5's gate passed in that seat (plan 4.7), otherwise the heuristic. S5.0 and S5.1 serve
+Hard; S5.2 and S5.3 cover both.
 
 ### S5.0 Engine cost of simulation
 
@@ -450,9 +653,12 @@ rollout step gets cheaper, and S0.4's trace says the step is mostly simulated `A
 - **Meaningful-candidate filter:** drop candidates the heuristic marks as bookkeeping (pass, end turn with clicks left
   while an affordable positive action exists) and exact duplicates (several copies of one card); keep up to
   `plan-width` by heuristic order.
-- **Probability-space values:** each rollout's leaf as a win probability; candidate value = mean(leaf − root) +
-  `static-mix` × (leaf after the first action − root). Remove the raw log-odds sum and the heuristic score from the value;
-  the heuristic orders candidates and breaks ties within `plan-tie` (start 0.005).
+- **Probability-space values:** each play-out's value as a win probability (the result when the horizon is the game's
+  end, otherwise the general fit at S4.4's horizon); candidate value = the mean over samples of (value − root value),
+  as `plan-value 1` already does. No static mix at the turn's end: S4.2c showed it carries no ranking signal. The
+  heuristic orders candidates and breaks ties within `plan-tie` (start 0.005).
+- **Horizon:** `plan-horizon` turns past the root side's turn, from S4.4's cell; the rollout policy plays both sides
+  through it. The lines' play-outs share samples across every line of the root.
 - **Turn-line search on** (`plan-lines`, S1.5): Standard and Hard value a candidate at its best line of the turn. The
   budget below is lines × samples, so S5.0's gains decide the beam Standard can afford inside 50 ms; if a beam of 4 does
   not fit after S5.0, Standard plans a beam of 3 or fewer samples and the record says which. Without the teacher's
@@ -470,10 +676,12 @@ rollout step gets cheaper, and S0.4's trace says the step is mostly simulated `A
 
 ### S5.2 Profiles and tiers
 
-- Standard: planner at 8 samples × width 4, `static-mix` 0.25, set 5, pool prior, full tracker. Hard: 32 × 6, decklist.
-  Easy: heuristic, forgetful tracker (unchanged). Personalities keep shifting named terms of set 5.
-- `PolicyPerformanceTests` on the reference box: Standard within 50 ms / 200 ms p95; Hard within the same, or with a
-  documented larger budget for turn-start decisions only.
+- Standard: the live heuristic with `apprentice 1` where S4.5's gate passed, pool prior, full tracker. Hard: the
+  play-out planner at S4.4's cell (`plan-lines 1`, `plan-value 1`, `plan-horizon h`, `plan-samples k`), decklist, full
+  tracker, modelling the opponent by the live Standard. Easy: heuristic, forgetful tracker (unchanged). Personalities
+  shift the heuristic's named terms as today; for Hard they shift the general fit's terms where the horizon ends on it.
+- `PolicyPerformanceTests` on the reference box: Standard within 50 ms / 200 ms p95; Hard's turn-action decisions
+  within about 1 s p95 (the budget accepted on 8 October, recorded in the test), every other decision within 200 ms.
 - Both sides' versions bump (`corp-heuristic-v32`, `runner-heuristic-v29`; v28 is the remote valuation of the S1.5
   follow-up) because the default profile's decider changed.
 - **Hard's opponent model is an open decision.** Hard today models the opponent by the pinned versions (Runner v7, Corp
@@ -483,7 +691,8 @@ rollout step gets cheaper, and S0.4's trace says the step is mostly simulated `A
 
 ### S5.3 Gates
 
-- Regret suite: Standard's regret below the heuristic's (v31/v27) with the interval clear.
+- Regret suite: Standard (with the apprentice) below the heuristic alone, and Hard below Standard, each with the
+  interval clear, read on the core's held-out roots and over the discordant roots of each pair.
 - Puzzle suite: no category worse; the sequencing and exposure categories better.
 - Ladders on the box pool, about 400 deals (what 10 minutes buys, S0.2), `--stop-when-clear`: new Standard beats
   `standard-prev` in both seats with the lower bound above zero; loses to no anchor; Gateway pool level or better; tiers
@@ -503,7 +712,8 @@ A round is one version. It runs when the previous round's gates are met.
    version, S1.7), adaptively, overnight: about two hours, not seven. Report teacher drift on the core: the share of
    roots whose best candidate changed, against the noise floor. Over 15% above the floor stops the round for inspection
    of the top changes. The rest of the suite keeps its older labels; a whole-suite relabel is a milestone event.
-3. Refit set 5's weights (a new document version, `evaluation-v5.<round>.json`).
+3. Refit the apprentice (S4.5) on the round's labels, a new document version; the Runner's general fit is refitted
+   only if a round's blunder list points at the horizon's leaf.
 4. Score the candidate (Standard with the new weights) by S5.3's gates, with box ladders (about 400 deals) only when
    the regret suite and puzzles improved.
 5. Work the blunder list: the top 20 roots by regret. Each is a leaf term, a filter bug, a rollout-policy weakness or an
@@ -517,9 +727,11 @@ the plan is the way to get them, on the user's ask).
 ## Timeline and order
 
 ```text
-S0 measure ──> S1 regret suite ──> S1.4 all groups, S1.5 line teacher, S1.6 targeted roots ──> S4 set 5 ──> S5 planner Standard ──> S6 rounds
-           ──> S2 puzzles ──────────────────────────────────────────────────────────────────┘
-           ──> S3 one live policy (alongside S1.4 to S1.6; before S4) ───────────────────────┘
+S0 measure ──> S1 regret suite ──> S1.4 all groups, S1.5 line teacher, S1.6 targeted roots ──> S4.1–S4.2c (the leaf: falsified)
+           ──> S2 puzzles ──────────────────────────────────────────────────────────────────┘        │
+           ──> S3 one live policy (alongside S1.4 to S1.6; before S4) ───────────────────────┘        ▼
+                                       S4.4 horizon × samples (Hard's cell) ──┬──> S5 Hard plays out, Standard takes the apprentice ──> S6 rounds
+                                       S4.5 apprentice at the root (Standard) ┘
 (S5.0, the engine cost of simulation, can run any time after S0 and must land before S5.1; S1.5 raises its stakes)
 ```
 

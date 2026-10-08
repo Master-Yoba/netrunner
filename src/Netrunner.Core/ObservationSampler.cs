@@ -126,6 +126,106 @@ public static class ObservationSampler
             state.RuntimeCardCatalogVersion, state.RuntimeCardCatalogFingerprint).MarkSimulated();
     }
 
+    /// <summary>
+    /// Bot plan S4.2c: one hidden world for several simulation states that share their card instances (the ends of lines
+    /// played from one sample), so a pair of them is played out again on common random numbers, as the sample they came
+    /// from paired them. A card the viewer sees in any of the states keeps that identity in all of them; the cards hidden
+    /// in all of them are dealt once, as <see cref="Sample"/> deals (the viewer's own unseen cards from their multiset, the
+    /// opponent's from the pool), and each instance has its one identity in every state. Every state gets the same new
+    /// random state. No pins: a tracker's pins are positions in one state.
+    /// </summary>
+    public static IReadOnlyList<GameState> SampleJointly(IReadOnlyList<GameState> states, PlayerSide viewer, OpponentCardPool pool,
+        IRuntimeCardCatalog runtime, DeterministicRandom random)
+    {
+        ArgumentNullException.ThrowIfNull(states);
+        ArgumentNullException.ThrowIfNull(pool);
+        ArgumentNullException.ThrowIfNull(runtime);
+        ArgumentNullException.ThrowIfNull(random);
+        if (!Enum.IsDefined(viewer)) throw new ArgumentOutOfRangeException(nameof(viewer));
+        if (states.Count == 0) return [];
+        var known = new Dictionary<CardInstanceId, CardDefinitionId>();
+        var hidden = new Dictionary<CardInstanceId, (List<Slot> Slots, CardDefinitionId Identity)>();
+        foreach (GameState state in states)
+        {
+            Dictionary<ZoneId, ZoneState> zones = state.Zones.ToDictionary(zone => zone.Id);
+            IReadOnlySet<CardInstanceId> accessVisible = ObservationBuilder.BuildAccessVisibleSet(state);
+            Dictionary<CardInstanceId, CardInstanceState> cards = state.Cards.ToDictionary(card => card.Id);
+            foreach (ZoneState zone in state.Zones)
+                for (int index = 0; index < zone.CardIds.Count; index++)
+                {
+                    CardInstanceState card = cards[zone.CardIds[index]];
+                    if (ObservationBuilder.IsVisibleTo(card, zone, viewer, accessVisible)) known[card.Id] = card.DefinitionId;
+                    else
+                    {
+                        if (!hidden.TryGetValue(card.Id, out var entry)) hidden[card.Id] = entry = ([], card.DefinitionId);
+                        entry.Slots.Add(new Slot(card.Id, zone, index, card.OwnerSide));
+                    }
+                }
+        }
+        // An instance's most constrained position decides which cards fit it.
+        Slot[] slots = [.. hidden.Where(entry => !known.ContainsKey(entry.Key)).OrderBy(entry => entry.Key.Value, StringComparer.Ordinal)
+            .Select(entry => entry.Value.Slots.OrderBy(slot => slot.Zone.Kind switch { ZoneKind.ServerIce => 0, ZoneKind.ServerRoot => 1, _ => 2 }).First())];
+        var dealt = new Dictionary<CardInstanceId, CardDefinitionId>();
+        var noPins = new Dictionary<(ZoneId, int), CardDefinitionId>();
+        Slot[] own = [.. slots.Where(slot => slot.Owner == viewer)];
+        DealFromMultiset(own, [.. own.Select(slot => hidden[slot.Id].Identity).OrderBy(id => id.Value, StringComparer.Ordinal)],
+            noPins, runtime, random, dealt, fallback: null);
+        Slot[] opponent = [.. slots.Where(slot => slot.Owner != viewer)];
+        switch (pool)
+        {
+            case OpponentCardPool.Decklist decklist:
+                {
+                    var remaining = new List<CardDefinitionId>();
+                    Dictionary<CardDefinitionId, int> seen = states[0].Cards.Where(card => card.OwnerSide != viewer && known.ContainsKey(card.Id))
+                        .GroupBy(card => known[card.Id]).ToDictionary(group => group.Key, group => group.Count());
+                    foreach ((CardDefinitionId definition, int count) in decklist.Counts.OrderBy(pair => pair.Key.Value, StringComparer.Ordinal))
+                        remaining.AddRange(Enumerable.Repeat(definition, Math.Max(0, count - seen.GetValueOrDefault(definition))));
+                    DealFromMultiset(opponent, remaining, noPins, runtime, random, dealt,
+                        fallback: [.. decklist.Counts.Keys.OrderBy(id => id.Value, StringComparer.Ordinal)]);
+                    break;
+                }
+            case OpponentCardPool.AnyOf any:
+                if (any.Candidates.Count == 0) throw new ArgumentException("The card pool is empty.", nameof(pool));
+                foreach (Slot slot in opponent)
+                {
+                    CardDefinitionId[] fitting = [.. any.Candidates.Where(candidate => Fits(slot, candidate, runtime))];
+                    if (fitting.Length == 0) throw new ArgumentException($"No pool card fits {slot.Zone.Kind}.", nameof(pool));
+                    dealt[slot.Id] = fitting[random.NextInt(fitting.Length)];
+                }
+                break;
+            case OpponentCardPool.Placeholders placeholders:
+                foreach (Slot slot in opponent) dealt[slot.Id] = slot.Zone.Kind == ZoneKind.ServerIce ? placeholders.Ice : placeholders.Card;
+                break;
+            default:
+                throw new ArgumentException("Unknown card pool.", nameof(pool));
+        }
+        ulong randomState = random.NextUInt64();
+        return [.. states.Select(state => new GameState(state.SchemaVersion, state.GameId, state.RulesVersion, state.CardDataVersion, state.Players,
+            [.. state.Cards.Select(card => (dealt.TryGetValue(card.Id, out CardDefinitionId definition) ? definition
+                    : known.TryGetValue(card.Id, out CardDefinitionId shown) ? shown : card.DefinitionId) is var identity && identity != card.DefinitionId
+                ? new CardInstanceState(card.Id, identity, card.ZoneId, card.OwnerSide, card.FaceUp, card.Rezzed, card.AdvancementCounters, card.HostCardId)
+                : card)],
+            state.Zones, state.Servers, state.Turn, state.Outcome, randomState, state.Allocator,
+            state.DecisionRevision, state.EventSequence, state.ResolutionStack, state.PendingDecision, state.ActionSequence,
+            state.InitialSeed, state.RunState, state.RulesState, state.BehaviorRegistryVersion, state.BehaviorCatalogFingerprint,
+            state.RuntimeCardCatalogVersion, state.RuntimeCardCatalogFingerprint).MarkSimulated())];
+    }
+
+    /// <summary>
+    /// Bot plan S4.2c: a simulation state with only its random state replaced, so a play-out from it differs only where the
+    /// engine draws (shuffles, random accesses): the play-out's own noise, every card where it was.
+    /// </summary>
+    public static GameState Reseeded(GameState state, ulong randomState)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        if (!state.IsSimulated) throw new ArgumentException("Only a simulation state is reseeded.", nameof(state));
+        return new GameState(state.SchemaVersion, state.GameId, state.RulesVersion, state.CardDataVersion, state.Players,
+            state.Cards, state.Zones, state.Servers, state.Turn, state.Outcome, randomState, state.Allocator,
+            state.DecisionRevision, state.EventSequence, state.ResolutionStack, state.PendingDecision, state.ActionSequence,
+            state.InitialSeed, state.RunState, state.RulesState, state.BehaviorRegistryVersion, state.BehaviorCatalogFingerprint,
+            state.RuntimeCardCatalogVersion, state.RuntimeCardCatalogFingerprint).MarkSimulated();
+    }
+
     private sealed record Slot(CardInstanceId Id, ZoneState Zone, int Index, PlayerSide Owner);
 
     /// <summary>

@@ -104,8 +104,11 @@ public static class CorpPolicyProfiles
     }
     public const int PlanSamples = 3;
     public const int PlanWidth = 3;
-    /// <summary>Planner settings a Hard profile may add (A6 tuning): rollout weight, run search and the opponent model.</summary>
-    internal static readonly string[] HardTuningKeys = ["plan-weight", "run-samples", "run-width", "plan-model", "plan-tracker"];
+    /// <summary>
+    /// Planner settings a Hard profile may add (A6 tuning): rollout weight, run search and the opponent model; and (bot plan
+    /// S4.2) the planner's value in win probability and its tie margin.
+    /// </summary>
+    internal static readonly string[] HardTuningKeys = ["plan-weight", "run-samples", "run-width", "plan-model", "plan-tracker", "plan-value", "plan-tie"];
 
 
     /// <summary>Whether a version has the A6 tiers: the Hard profile and personalities.</summary>
@@ -157,10 +160,12 @@ public static class CorpPolicyProfiles
         int tuning = hard ? configuration.Parameters.Keys.Count(key => HardTuningKeys.Contains(key) && !keys!.Contains(key)) : 0;
         // Bot plan S1.5: the turn-line search is an optional switch of a tiered profile.
         bool lines = tiers && configuration.Parameters.ContainsKey("plan-lines");
+        // Bot plan S4.5: the apprentice is an optional switch of a tiered profile.
+        bool apprentice = tiers && configuration.Parameters.ContainsKey(Apprentice.ParameterKey);
         if (configuration.Side != PlayerSide.Corp || keys is null
             || !(configuration.ProfileId is "standard" or "easy" || tiers && configuration.ProfileId == "hard")
             || personality && !tiers
-            || configuration.Parameters.Count != keys.Length + (personality ? 1 : 0) + (lines ? 1 : 0) + tuning
+            || configuration.Parameters.Count != keys.Length + (personality ? 1 : 0) + (lines ? 1 : 0) + (apprentice ? 1 : 0) + tuning
             || !keys.All(configuration.Parameters.ContainsKey)
             || configuration.Parameters.Any(pair => pair.Key switch
             {
@@ -172,7 +177,10 @@ public static class CorpPolicyProfiles
                 "plan-model" => pair.Value is < 0 or > 1,
                 "plan-tracker" => pair.Value is < 0 or > 3,
                 "plan-lines" => pair.Value is < 0 or > 1,
-                "plan-evaluation" => pair.Value is < 0 or > 4,
+                Apprentice.ParameterKey => pair.Value is < 0 or > 1,
+                "plan-value" => pair.Value is < 0 or > 1,
+                "plan-tie" => pair.Value is < 0 or > 100,
+                "plan-evaluation" => pair.Value is < 0 or > 8,
                 "archetype-primary" or "archetype-secondary" => !Enum.IsDefined((CorpArchetype)pair.Value),
                 AgentPersonalities.ParameterKey => pair.Value == 0 || !AgentPersonalities.IsValid(PlayerSide.Corp, pair.Value),
                 _ => pair.Value is < 25 or > 200,

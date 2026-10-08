@@ -149,6 +149,68 @@ public static partial class RegretRoots
         return found.ToImmutable();
     }
 
+    /// <summary>The category prefix that records a version's choice at a targeted root (S1.6): <c>diverge:VERSION=GROUP</c>.</summary>
+    public const string DivergeCategory = "diverge";
+
+    /// <summary>
+    /// Bot plan S1.6, targeted roots: every turn-action and run-choice decision of a game where two versions of one side
+    /// (same profile), both having watched the game, choose different groups. Each root has the latest Standard heuristic's
+    /// meaningful groups and both chosen groups, and records the two choices in its categories
+    /// (<see cref="DivergeCategory"/>), so labelling can keep them and the report can name them.
+    /// </summary>
+    /// <param name="agent">Makes the agent of a version for a side.</param>
+    public static ImmutableArray<RegretRoot> Diverge(RegretGame game, string first, string second, PlayerSide side,
+        Func<FullMatchDefinition, PlayerSide, string, OfflineAgent> agent, RegretSampling sampling)
+    {
+        ArgumentNullException.ThrowIfNull(game);
+        ArgumentNullException.ThrowIfNull(agent);
+        ArgumentNullException.ThrowIfNull(sampling);
+        FullMatchDefinition definition = RegretGames.Definition(game);
+        var judges = new Dictionary<PlayerSide, OfflineAgent>
+        {
+            [PlayerSide.Corp] = Judge(definition, PlayerSide.Corp),
+            [PlayerSide.Runner] = Judge(definition, PlayerSide.Runner),
+        };
+        OfflineAgent one = agent(definition, side, first), other = agent(definition, side, second);
+        var found = ImmutableArray.CreateBuilder<RegretRoot>();
+        RegretGames.Replay(game, definition, position =>
+        {
+            foreach (OfflineAgent watcher in judges.Values.Append(one).Append(other))
+                AgentLifecycleHost.Observe(watcher, position.State, definition.Behavior);
+            GameState state = position.State;
+            PendingDecision pending = state.PendingDecision!;
+            if (state.GetPlayer(pending.Owner).Side != side || KindOf(state, pending, side) is null) return;
+            IReadOnlyList<RegretCandidate> groups = Group(state, pending);
+            if (groups.Count < 2) return;
+            string Chosen(OfflineAgent chooser)
+            {
+                ActionId action = chooser.ChooseActionAsync(ObservationBuilder.Build(state, side, definition.Behavior, definition.Runtime))
+                    .AsTask().GetAwaiter().GetResult();
+                chooser.DiscardDecision();
+                return groups.First(group => group.ActionIds.Contains(action.Value)).Group;
+            }
+            string a = Chosen(one), b = Chosen(other);
+            if (a == b || Root(game, definition, position, judges, sampling, finding: true) is not { } root) return;
+            // Both choices are labelled, whatever the heuristic's band makes of them.
+            RegretCandidate[] missing = [.. groups.Where(group => (group.Group == a || group.Group == b)
+                && root.Candidates.All(candidate => candidate.Group != group.Group))];
+            found.Add(root with
+            {
+                Candidates = [.. root.Candidates, .. missing],
+                Categories = [.. root.Categories, DivergeCategory, $"{DivergeCategory}:{first}={a}", $"{DivergeCategory}:{second}={b}"],
+            });
+        });
+        return found.ToImmutable();
+    }
+
+    /// <summary>The groups the versions chose at a targeted root (S1.6), from its categories; empty for a drawn root.</summary>
+    public static IReadOnlySet<string> DivergeChoices(RegretRoot root)
+    {
+        ArgumentNullException.ThrowIfNull(root);
+        return root.Categories.Where(category => category.StartsWith(DivergeCategory + ":", StringComparison.Ordinal))
+            .Select(category => category[(category.IndexOf('=', StringComparison.Ordinal) + 1)..]).ToHashSet(StringComparer.Ordinal);
+    }
+
     private static RegretRoot? Root(RegretGame game, FullMatchDefinition definition, RegretPosition position,
         Dictionary<PlayerSide, OfflineAgent> agents, RegretSampling sampling, bool finding)
     {

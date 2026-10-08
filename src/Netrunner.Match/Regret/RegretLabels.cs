@@ -48,8 +48,11 @@ public static class RegretLabels
 
     /// <param name="teacher">The ladder entrant that teaches: Hard, or <c>hard-model</c>, Hard modelling the opponent by the
     /// live Standard version instead of the planner's pinned model (Runner v7, Corp v8).</param>
+    /// <param name="endLines">Bot plan S4.2b: receives a row for every line played to the horizon (the end-of-turn state's
+    /// feature set 5 and the play-out's value from it, with its sample and line, S4.2c), in play order.</param>
+    /// <param name="repeatRoots">S4.2c, the ceiling: roots whose rows also get a second, independent play-out.</param>
     public static ImmutableArray<RegretLabel> Label(RegretGame game, IReadOnlyList<RegretRoot> roots, TeacherSettings settings,
-        string teacher = DefaultTeacher)
+        string teacher = DefaultTeacher, ICollection<EndLineRow>? endLines = null, IReadOnlySet<string>? repeatRoots = null)
     {
         ArgumentNullException.ThrowIfNull(game);
         ArgumentNullException.ThrowIfNull(roots);
@@ -69,15 +72,25 @@ public static class RegretLabels
             if (!bySequence.TryGetValue(position.Sequence, out RegretRoot? root)) return;
             Observation observation = ObservationBuilder.Build(position.State, root.Side, definition.Behavior, definition.Runtime);
             TeacherSettings rooted = settings with { Seed = settings.Seed ^ RegretRoots.StableHash(root.Id) };
+            // A targeted root's chosen groups are always recorded (S1.6).
+            IReadOnlySet<string> chosen = RegretRoots.DivergeChoices(root);
             IReadOnlyList<TeacherValue> values = RolloutTeacher.Evaluate(teachers[root.Side], observation,
-                [.. root.Candidates.Select(candidate => new ActionId(candidate.ActionIds[0]))], rooted);
+                [.. root.Candidates.Select(candidate => new ActionId(candidate.ActionIds[0]))], rooted,
+                root.Candidates.Select((candidate, index) => (candidate, index)).Where(entry => chosen.Contains(entry.candidate.Group))
+                    .Select(entry => entry.index).ToHashSet(),
+                endLines is null ? null : line => endLines.Add(new EndLineRow(root.Id, root.GameId, root.Side, root.Split,
+                    [.. line.Features.Select(feature => Math.Round(feature, 4))], Math.Round(line.Value, 5), line.Sample,
+                    $"{root.Candidates[line.Candidate].Group}|{string.Join('.', line.Ranks)}",
+                    line.Redeal is { } redeal ? Math.Round(redeal, 5) : null, line.Reseed is { } reseed ? Math.Round(reseed, 5) : null,
+                    line.Ended)),
+                repeatRoots?.Contains(root.Id) == true);
             // A root no sample could play every candidate on has no label: it is scored as unlabelled.
             if (values.Any(value => value.PlayOuts == 0)) return;
             // With adaptive samples the label records the recording samples the root used, and the deciding ones.
-            labels.Add(new RegretLabel(root.Id, settings.Decide > 0 ? values.Max(value => value.PlayOuts) : settings.Samples,
+            labels.Add(new RegretLabel(root.Id, settings.Decide > 0 ? values.Where(value => !value.Pruned).Max(value => value.PlayOuts) : settings.Samples,
                 settings.HorizonTurns, settings.Evaluation, rooted.Seed,
                 [.. root.Candidates.Zip(values, Value)], settings.Lines, settings.Lines > 1 ? settings.ScreenTurns : 0,
-                teacher == "hard" ? null : teacher, VersionOf(settings, teacher), settings.Decide));
+                teacher == "hard" ? null : teacher, VersionOf(settings, teacher), settings.Decide, settings.Decide > 0 ? settings.Prune : 0));
         });
         return labels.ToImmutable();
     }
@@ -120,7 +133,7 @@ public static class RegretLabels
     }
 
     private static RegretValue Value(RegretCandidate candidate, TeacherValue value) =>
-        new(candidate.Group, value.Mean, value.StandardError, value.PlayOuts, value.Line is { } line ? [.. line] : null);
+        new(candidate.Group, value.Mean, value.StandardError, value.PlayOuts, value.Line is { } line ? [.. line] : null, Pruned: value.Pruned);
 
     private static OfflineAgent Teacher(FullMatchDefinition definition, PlayerSide side, string teacher) =>
         RatingLadder.CreateAgent(teacher, side, definition) as OfflineAgent
@@ -134,7 +147,7 @@ public static class RegretLabels
 /// <param name="AgreesWithinNoise">Whether the chosen group is within the two standard errors' sum of the best.</param>
 /// <param name="Missing">The chosen group when it is not one of the labelled groups (S1.4: labelled on demand).</param>
 public sealed record RegretChoice(string RootId, PlayerSide Side, string Kind, string Split, string? Chosen, string ChosenDescription,
-    string Reason, double? Regret, bool? Agrees, bool? AgreesWithinNoise, RegretCandidate? Missing = null);
+    string Reason, double? Regret, bool? Agrees, bool? AgreesWithinNoise, RegretCandidate? Missing = null, bool Pruned = false);
 
 /// <summary>Asks a policy version to choose at every root of a game, through the production path (bot plan S1.3).</summary>
 public static class RegretScores
@@ -179,8 +192,21 @@ public static class RegretScores
         RegretValue? value = group is null ? null : label.Values.FirstOrDefault(entry => entry.Group == group.Group && !double.IsNaN(entry.Mean));
         if (best is null || value is null)
             return new RegretChoice(root.Id, root.Side, root.Kind, root.Split, group?.Group, description, reason, null, null, null);
-        double regret = best.Mean - value.Mean;
+        // A pruned group's value is its deciding samples' (S1.6); its regret is floored at zero and the choice marked.
+        double regret = value.Pruned ? Math.Max(0, best.Mean - value.Mean) : best.Mean - value.Mean;
         return new RegretChoice(root.Id, root.Side, root.Kind, root.Split, group!.Group, description, reason, regret,
-            value.Group == best.Group, regret <= best.StandardError + value.StandardError);
+            value.Group == best.Group, regret <= best.StandardError + value.StandardError, Pruned: value.Pruned);
     }
 }
+
+/// <summary>
+/// Bot plan S4.2b: a state the planner's leaf is read at (where the root side's turn ends, on a line the teacher played to
+/// its horizon), from the root side's view: its feature set 5 (set 4 the first terms) and the play-out's value from there.
+/// S4.2c: the sample it was played on (its place in the root's deal) and the line (the candidate's group and the
+/// heuristic's rank at each later turn action), so rows of one sample pair on common random numbers; and at the ceiling's
+/// roots, the values of two more play-outs from the same state: the hidden state dealt again, one world for the sample's
+/// end states (<paramref name="Redeal"/>), and only the engine's random stream reseeded (<paramref name="Reseed"/>).
+/// <paramref name="Ended"/>: where the line stopped (<c>turn</c>, <c>game</c> inside the turn, or <c>stopped</c> short of both).
+/// </summary>
+public sealed record EndLineRow(string RootId, string GameId, PlayerSide Side, string Split, double[] Features, double Value,
+    int Sample = -1, string? Line = null, double? Redeal = null, double? Reseed = null, string Ended = "turn");

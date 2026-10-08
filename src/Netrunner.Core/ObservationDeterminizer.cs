@@ -27,6 +27,18 @@ public sealed class ObservationDeterminizer
     public IRuntimeCardCatalog Runtime { get; }
 
     /// <summary>
+    /// Bot plan S4.2c: one hidden world dealt again for several later states of this viewer's rollouts from one sample (see
+    /// <see cref="ObservationSampler.SampleJointly"/>). Only simulation states are accepted: they were dealt from this
+    /// viewer's observation already, so dealing them again reveals nothing.
+    /// </summary>
+    public IReadOnlyList<GameState> SampleJointly(IReadOnlyList<GameState> simulated, OpponentCardPool pool, DeterministicRandom random)
+    {
+        ArgumentNullException.ThrowIfNull(simulated);
+        if (simulated.Any(state => !state.IsSimulated)) throw new ArgumentException("Only simulation states are dealt again.", nameof(simulated));
+        return ObservationSampler.SampleJointly(simulated, Viewer, pool, Runtime, random);
+    }
+
+    /// <summary>
     /// The id of a zone by its public structure (a player's hand or deck, or a server's ICE or root), so a search agent
     /// can say where a card it knows of is (<see cref="KnownHiddenCard"/>). Zones and servers are public; no card identity is read.
     /// </summary>

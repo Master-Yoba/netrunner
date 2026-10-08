@@ -9,7 +9,7 @@ namespace Netrunner.AI;
 /// (A4a). Every value is public or the observer's own; a Corp view prices runs
 /// with its own ICE known, a Runner view with unrezzed ICE unknown.
 /// </summary>
-public static class EvaluationFeatures
+public static partial class EvaluationFeatures
 {
     public static IReadOnlyList<string> Names { get; } =
     [
@@ -33,11 +33,17 @@ public static class EvaluationFeatures
     {
         1 => Names,
         2 or 3 or 4 => NamesV2,
+        5 => NamesV5,
         _ => throw new ArgumentOutOfRangeException(nameof(version), "Unknown evaluation feature set."),
     };
 
+    /// <summary>A feature set with the observer's knowledge, which set 5 reads (the tracker, the opponent's list); sets 1 to 4 ignore it.</summary>
+    public static double[] Extract(AgentFeatures features, ICardEvaluationCatalog catalog, int version, AgentKnowledge? knowledge) =>
+        version == 5 ? ExtractV5(features, catalog, knowledge) : Extract(features, catalog, version);
+
     public static double[] Extract(AgentFeatures features, ICardEvaluationCatalog catalog, int version)
     {
+        if (version == 5) return ExtractV5(features, catalog, null);
         double[] v1 = Extract(features, catalog);
         if (version == 1) return v1;
         if (version is not (2 or 3 or 4)) throw new ArgumentOutOfRangeException(nameof(version), "Unknown evaluation feature set.");

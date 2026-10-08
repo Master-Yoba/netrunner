@@ -209,6 +209,92 @@ public sealed class RegretSuiteTests
         Assert.NotEqual(flat.Values.Select(value => value.Mean), label.Values.Select(value => value.Mean));
     }
 
+    /// <summary>
+    /// Bot plan S4.2b: labelling with end-of-line rows records, for lines played past the root side's turn, set 5 of the
+    /// state where the turn ended and the play-out's value from it, and labels exactly as without them.
+    /// </summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(3)]
+    public void EndOfLineRowsAreTheStatesWhereTheTurnEndedAndLeaveTheLabelsAlone(int lines)
+    {
+        if (!Official) return;
+        (LadderSavedGame saved, FullMatchDefinition definition) = Saved();
+        RegretGame game = RegretGames.FromSaved(saved, definition, "held-out", "finding");
+        RegretRoot root = Assert.Single(RegretRoots.At(game, new HashSet<long> { CorpTurn }, new RegretSampling(), []));
+        var settings = new TeacherSettings(Samples: 3, Seed: 3, HorizonTurns: 2, Lines: lines);
+        var rows = new List<EndLineRow>();
+        var repeated = new List<EndLineRow>();
+
+        RegretLabel label = Assert.Single(RegretLabels.Label(game, [root], settings, endLines: rows));
+        RegretLabel withCeiling = Assert.Single(RegretLabels.Label(game, [root], settings, endLines: repeated, repeatRoots: new HashSet<string> { root.Id }));
+
+        Assert.Equal(Assert.Single(RegretLabels.Label(game, [root], settings)).Values.Select(value => value.Mean), label.Values.Select(value => value.Mean));
+        Assert.Equal(label.Values.Select(value => value.Mean), withCeiling.Values.Select(value => value.Mean));
+        Assert.NotEmpty(rows);
+        // S4.2c: every row names its sample and line; the ceiling's repeat changes nothing else and is repeatable.
+        Assert.All(rows, row => Assert.True(row.Sample >= 0 && row.Line is not null && row.Redeal is null && row.Reseed is null, $"{row.Sample} {row.Line}"));
+        Assert.Equal(rows.Select(row => (row.Sample, row.Line, row.Value)), repeated.Select(row => (row.Sample, row.Line, row.Value)));
+        Assert.All(repeated, row => Assert.InRange(row.Redeal ?? -1, 0, 1));
+        Assert.All(repeated, row => Assert.InRange(row.Reseed ?? -1, 0, 1));
+        var again = new List<EndLineRow>();
+        RegretLabels.Label(game, [root], settings, endLines: again, repeatRoots: new HashSet<string> { root.Id });
+        Assert.Equal(repeated.Select(row => (row.Redeal, row.Reseed)), again.Select(row => (row.Redeal, row.Reseed)));
+        Assert.Equal(rows.Count, rows.Select(row => (row.Sample, row.Line)).Distinct().Count());
+        // Every line played has a row on every sample (memo hits, and games that end inside the turn, included).
+        Assert.All(rows.GroupBy(row => row.Line), line => Assert.Equal(label.Samples, line.Count()));
+        // At most one row a line played to the horizon: each group's lines on each sample, memo hits included (S4.2c).
+        Assert.True(rows.Count <= label.Values.Length * settings.Samples * Math.Max(2, lines), $"{rows.Count} rows");
+        Assert.All(rows, row =>
+        {
+            Assert.Equal((root.Id, root.Side, "held-out"), (row.RootId, row.Side, row.Split));
+            Assert.Equal(EvaluationFeatures.NamesFor(5).Count, row.Features.Length);
+            Assert.InRange(row.Value, 0, 1);
+        });
+    }
+
+    /// <summary>
+    /// Bot plan S4.4: a horizon of −1 plays through the opponent's next turn and stops where the root side's next turn
+    /// begins, for either side (a turn number counts rounds, so a horizon of 1 would stop a Runner root at its own turn's end).
+    /// </summary>
+    [Fact]
+    public void TheOpponentHorizonStopsWhereTheRootSidesNextTurnBegins()
+    {
+        if (!Official) return;
+        (LadderSavedGame saved, FullMatchDefinition definition) = Saved();
+        RegretGame game = RegretGames.FromSaved(saved, definition, "held-out", "finding");
+        int checkedSides = 0;
+        foreach (RegretPosition position in RegretGames.Positions(game, definition).Where(position => position.State.PendingDecision?.Kind == DecisionKind.TurnAction)
+            .GroupBy(position => position.State.Turn.ActiveSide).Select(side => side.First()))
+        {
+            PlayerSide side = position.State.Turn.ActiveSide;
+            OfflineAgent teacher = (OfflineAgent)RatingLadder.CreateAgent("hard", side, definition);
+            foreach (RegretPosition earlier in RegretGames.Positions(game, definition))
+            {
+                AgentLifecycleHost.Observe(teacher, earlier.State, definition.Behavior);
+                if (earlier.Sequence == position.Sequence) break;
+            }
+            Observation observation = ObservationBuilder.Build(position.State, side, definition.Behavior, definition.Runtime);
+            PendingDecision pending = position.State.PendingDecision!;
+            var last = new Dictionary<int, GameState>();
+            int played = RolloutTeacher.Trace(teacher, observation, pending.LegalActions[0].Id, new TeacherSettings(Samples: 3, Seed: 5, HorizonTurns: -1),
+                (sample, state) => last[sample] = state);
+            Assert.True(played > 0);
+            int turn = position.State.Turn.TurnNumber;
+            Assert.All(last.Values, state => Assert.True(state.Outcome.Kind != GameOutcomeKind.Ongoing
+                || state.Turn.ActiveSide == side && state.Turn.TurnNumber == turn + 1, $"{side} root at {turn}: stopped at {state.Turn.ActiveSide} {state.Turn.TurnNumber}"));
+            // The turn's-end horizon stops where the opponent's turn begins.
+            var ended = new Dictionary<int, GameState>();
+            RolloutTeacher.Trace(teacher, observation, pending.LegalActions[0].Id, new TeacherSettings(Samples: 3, Seed: 5, HorizonTurns: TeacherSettings.TurnEnd),
+                (sample, state) => ended[sample] = state);
+            (int Number, PlayerSide Side) next = side == PlayerSide.Corp ? (turn, PlayerSide.Runner) : (turn + 1, PlayerSide.Corp);
+            Assert.All(ended.Values, state => Assert.True(state.Outcome.Kind != GameOutcomeKind.Ongoing
+                || (state.Turn.TurnNumber, state.Turn.ActiveSide) == next, $"{side} root at {turn}: turn's end stopped at {state.Turn.ActiveSide} {state.Turn.TurnNumber}"));
+            checkedSides++;
+        }
+        Assert.Equal(2, checkedSides);
+    }
+
     [Fact]
     public void TheDiscordantViewComparesTwoVersionsWhereTheyChooseDifferently()
     {
@@ -228,6 +314,121 @@ public sealed class RegretSuiteTests
         Assert.Equal(("InstallCard|a", 0.5, "GainCredit|b", 0.6), (discord.FirstChosen, discord.FirstValue, discord.SecondChosen, discord.SecondValue));
         Assert.Equal((3, 0.1), (discordance.Discordant.Roots, Math.Round(discordance.Discordant.MeanDifference, 9)));
         Assert.Equal((10, 0.03), (discordance.All.Roots, Math.Round(discordance.All.MeanDifference, 9)));
+    }
+
+    /// <summary>
+    /// Bot plan S1.6, pruning: every group is valued on the deciding samples, only the best few and the required ones get
+    /// the recording samples, and a pruned group keeps its deciding value, marked, and is never the root's best.
+    /// </summary>
+    [Fact]
+    public void PruningRecordsTheBestGroupsAndTheRequiredOnes()
+    {
+        if (!Official) return;
+        (LadderSavedGame saved, FullMatchDefinition definition) = Saved();
+        RegretGame game = RegretGames.FromSaved(saved, definition, "held-out", "finding");
+        RegretRoot root = Assert.Single(RegretRoots.At(game, new HashSet<long> { CorpTurn }, new RegretSampling(), []));
+        Assert.True(root.Candidates.Length > 3);
+        // The last group is a version's choice at a targeted root: recorded whatever the deciding samples say.
+        string required = root.Candidates[^1].Group;
+        RegretRoot targeted = root with { Categories = [.. root.Categories, RegretRoots.DivergeCategory, $"{RegretRoots.DivergeCategory}:x={required}"] };
+
+        RegretLabel label = Assert.Single(RegretLabels.Label(game, [targeted],
+            new TeacherSettings(Samples: 4, Seed: 3, HorizonTurns: 1, Decide: 4, Prune: 2)));
+
+        RegretValue[] recorded = [.. label.Values.Where(value => !value.Pruned)];
+        Assert.InRange(recorded.Length, 2, 3);
+        Assert.Contains(recorded, value => value.Group == required);
+        Assert.All(recorded, value => Assert.Equal(label.Samples, value.PlayOuts));
+        Assert.Contains(label.Values, value => value.Pruned);
+        Assert.False(label.Best!.Pruned);
+        Assert.Equal((4, 2), (label.Decide, label.Prune));
+    }
+
+    /// <summary>Bot plan S1.6: a targeted root is a decision where the two versions chose different groups, and both are labelled.</summary>
+    [Fact]
+    public void ADivergentRootRecordsTwoDifferentChoices()
+    {
+        if (!Official) return;
+        RegretSuite suite = RegretSuite.Load(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "data", "ai", "regret",
+            "gateway-elevation"));
+        RegretGame game = suite.Games.First(entry => entry.Source == "ladder");
+        ImmutableArray<RegretRoot> roots = RegretRoots.Diverge(game, CorpHeuristicPolicy.V29, CorpHeuristicPolicy.V30, PlayerSide.Corp,
+            (definition, side, version) => SavedDecision.Agent(definition, side, version), new RegretSampling());
+
+        Assert.All(roots, root =>
+        {
+            IReadOnlySet<string> chosen = RegretRoots.DivergeChoices(root);
+            Assert.Equal(2, chosen.Count);
+            Assert.All(chosen, group => Assert.Contains(root.Candidates, candidate => candidate.Group == group));
+            Assert.Equal(PlayerSide.Corp, root.Side);
+        });
+        Assert.Equal(roots.Select(root => root.Id), RegretRoots.Diverge(game, CorpHeuristicPolicy.V29, CorpHeuristicPolicy.V30, PlayerSide.Corp,
+            (definition, side, version) => SavedDecision.Agent(definition, side, version), new RegretSampling()).Select(root => root.Id));
+    }
+
+    /// <summary>
+    /// Bot plan S4.1: evaluation set 5 on real positions of the box suite, from both sides with the teacher's knowledge:
+    /// every value is finite, and set 5's own terms vary.
+    /// </summary>
+    /// <summary>S4.2: a game's labelled roots become fitting rows, each the acting side's sets 4 and 5, the teacher's root value and the outcome.</summary>
+    [Fact]
+    public void TeacherFitRowsAreTheLabelledRootsOfAFinishedGame()
+    {
+        if (!Official) return;
+        RegretSuite suite = RegretSuite.Load(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "data", "ai", "regret",
+            "gateway-elevation"));
+        RegretGame game = suite.Games.First(entry => entry.Source == "ladder");
+        RegretRoot[] roots = [.. suite.Roots.Where(root => root.GameId == game.Id).Take(3)];
+        var labelled = roots.Select((root, index) => (root, new RegretLabel(root.Id, 32, 4, 4, 1,
+            [new(root.Candidates[0].Group, 0.4 + index / 10.0, 0.02, 32), new(root.Candidates[1].Group, 0.1, 0.02, 32)], 5, 1, "hard-model"))).ToArray();
+
+        IReadOnlyList<TeacherFitRow> rows = TeacherFit.Collect(game, labelled);
+
+        Assert.Equal(roots.Select(root => root.Id), rows.Select(row => row.RootId));
+        Assert.Equal([0.4, 0.5, 0.6], rows.Select(row => Math.Round(row.Teacher, 6)));
+        Assert.All(rows, row =>
+        {
+            Assert.Equal(EvaluationFeatures.NamesFor(4).Count, row.Set4.Length);
+            Assert.Equal(row.Set4, row.Set5[..row.Set4.Length]);
+            Assert.True(row.Won is 0 or 1, $"won {row.Won}");
+        });
+        Assert.Equal(rows.Select(row => row.Set5), TeacherFit.Collect(game, labelled).Select(row => row.Set5));
+    }
+
+    [Fact]
+    public void SetFiveReadsRealPositions()
+    {
+        if (!Official) return;
+        RegretSuite suite = RegretSuite.Load(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "data", "ai", "regret",
+            "gateway-elevation"));
+        IReadOnlyList<string> names = EvaluationFeatures.NamesFor(5);
+        int own = names.Count - EvaluationFeatures.NamesFor(4).Count;
+        var seen = Enumerable.Range(0, names.Count).Select(_ => new HashSet<double>()).ToArray();
+        foreach (RegretGame game in suite.Games.Where(entry => entry.Source == "ladder").Take(4))
+        {
+            FullMatchDefinition definition = RegretGames.Definition(game);
+            var catalog = new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior);
+            var agents = new[] { PlayerSide.Corp, PlayerSide.Runner }.ToDictionary(side => side,
+                side => (OfflineAgent)RatingLadder.CreateAgent(RegretLabels.DefaultTeacher, side, definition));
+            foreach (RegretPosition position in RegretGames.Positions(game, definition))
+            {
+                foreach (OfflineAgent agent in agents.Values) AgentLifecycleHost.Observe(agent, position.State, definition.Behavior);
+                if (position.Sequence % 7 != 0) continue;
+                foreach ((PlayerSide side, OfflineAgent agent) in agents)
+                {
+                    AgentFeatures features = ObservationReader.Read(ObservationBuilder.Build(position.State, side, definition.Behavior, definition.Runtime),
+                        agent.Configuration.FeatureVersion);
+                    double[] values = EvaluationFeatures.Extract(features, catalog, 5, agent.Checkpoint.Knowledge);
+                    Assert.Equal(names.Count, values.Length);
+                    Assert.All(values, value => Assert.True(double.IsFinite(value)));
+                    for (int index = 0; index < values.Length; index++) seen[index].Add(Math.Round(values[index], 6));
+                }
+            }
+        }
+        // A punisher the Runner cannot survive (a castable one, the threat met, a grip under its damage) is rare in self-play,
+        // where v26 keeps the grip up against it; its unit test covers it.
+        Assert.All(Enumerable.Range(names.Count - own, own).Where(index => names[index] != "punisher-exposure"),
+            index => Assert.True(seen[index].Count > 1, $"{names[index]} never varies."));
     }
 
     /// <summary>Bot plan S1.7: a label names its teacher's version, and a root whose values come from two is refused.</summary>

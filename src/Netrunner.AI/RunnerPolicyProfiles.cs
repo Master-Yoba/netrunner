@@ -139,10 +139,12 @@ public static class RunnerPolicyProfiles
         int tuning = hard ? configuration.Parameters.Keys.Count(key => CorpPolicyProfiles.HardTuningKeys.Contains(key) && !keys!.Contains(key)) : 0;
         // Bot plan S1.5: the turn-line search is an optional switch of a tiered profile.
         bool lines = tiers && configuration.Parameters.ContainsKey("plan-lines");
+        // Bot plan S4.5: the apprentice is an optional switch of a tiered profile.
+        bool apprentice = tiers && configuration.Parameters.ContainsKey(Apprentice.ParameterKey);
         if (configuration.Side != PlayerSide.Runner || keys is null
             || !(configuration.ProfileId is "standard" or "easy" || hard)
             || personality && !tiers
-            || configuration.Parameters.Count != keys.Length + (personality ? 1 : 0) + (lines ? 1 : 0) + tuning
+            || configuration.Parameters.Count != keys.Length + (personality ? 1 : 0) + (lines ? 1 : 0) + (apprentice ? 1 : 0) + tuning
             || !keys.All(configuration.Parameters.ContainsKey)
             || configuration.Parameters.Any(pair => pair.Key switch
             {
@@ -154,8 +156,11 @@ public static class RunnerPolicyProfiles
                 "plan-model" => pair.Value is < 0 or > 1,
                 "plan-tracker" => pair.Value is < 0 or > 3,
                 "plan-lines" => pair.Value is < 0 or > 1,
+                Apprentice.ParameterKey => pair.Value is < 0 or > 1,
+                "plan-value" => pair.Value is < 0 or > 1,
+                "plan-tie" => pair.Value is < 0 or > 100,
                 "archetype-primary" or "archetype-secondary" => !Enum.IsDefined((RunnerArchetype)pair.Value),
-                "plan-evaluation" => pair.Value is < 0 || pair.Value > (hard ? 3 : 1),
+                "plan-evaluation" => pair.Value is < 0 || pair.Value > (hard ? 8 : 1),
                 AgentPersonalities.ParameterKey => pair.Value == 0 || !AgentPersonalities.IsValid(PlayerSide.Runner, pair.Value),
                 _ => pair.Value is < 25 or > 200,
             })

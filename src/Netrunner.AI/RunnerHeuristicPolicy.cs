@@ -123,14 +123,14 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// <summary>V21 with A9c, copy counting: a Hard Runner, which knows the Corp's list, values HQ and R&amp;D by the agendas left in it.</summary>
     public const string V22 = "runner-heuristic-v22";
     /// <summary>
-    /// V22 with bot loop 1's fixes (docs/BOT_IMPROVEMENT_PLAN.md): damage to the Runner costs a card a point, and damage
+    /// V22 with bot loop 1's fixes (docs/history/BOT_IMPROVEMENT_PLAN.md): damage to the Runner costs a card a point, and damage
     /// the grip can't absorb (after the cards the same effect installs from it) is a flatline, never chosen. 41% of
     /// Standard's Core Battle Box games were lost to the Runner's own choice: Topan installing its last card, and taking
     /// Semak-samun's 3 net damage or Measured Response's 4 meat damage with too few cards in the grip.
     /// </summary>
     public const string V23 = "runner-heuristic-v23";
     /// <summary>
-    /// V23 with bot loop 1's deferred fixes (docs/BOT_LOOP_1.md): Elevation subroutines written as behaviors are read for what
+    /// V23 with bot loop 1's deferred fixes (docs/history/BOT_LOOP_1.md): Elevation subroutines written as behaviors are read for what
     /// they do (N-Pot's end the run at threat 2 and 4, Lamplighter's on a tagged Runner), and N-Pot's break costs credits,
     /// not clicks, so a run isn't left half-broken; an unadvanced root card may be an ambush that flatlines a small grip
     /// (Byte!), and a known operation that would is trashed (Measured Response); Clean Getaway is played on a run whose
@@ -139,14 +139,14 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// </summary>
     public const string V24 = "runner-heuristic-v24";
     /// <summary>
-    /// V24 with bot loop 2's fixes (docs/BOT_LOOP_2.md): Scatter Field's +4 as the only ICE is seen (the Runner ran it with
+    /// V24 with bot loop 2's fixes (docs/history/BOT_LOOP_2.md): Scatter Field's +4 as the only ICE is seen (the Runner ran it with
     /// credits for strength 0); an unrezzed ICE already passed isn't unknown ICE ahead at the jack-out decision; Topan isn't
     /// used without a card it can pay for and would install; a card MuslihaT adds to the grip is a free draw; BANGUN's damage
     /// on accessing a faceup agenda is priced; and with one card in the grip the Runner draws before running unknown ICE.
     /// </summary>
     public const string V25 = "runner-heuristic-v25";
     /// <summary>
-    /// V25 against its self-flatlines (docs/BOT_STRATEGY_1.md): after a successful run, a grip too small for an operation that
+    /// V25 against its self-flatlines (docs/history/BOT_STRATEGY_1.md): after a successful run, a grip too small for an operation that
     /// punishes one (Measured Response's 4 meat damage at threat 4) is drawn up, as likely as the Corp holding one; a run
     /// event's trap risk counts the grip without the event; at match point an empty grip draws before running a possible
     /// trap; and a breaker trashed at the run's end (Mayfly) is priced as spent by the run.

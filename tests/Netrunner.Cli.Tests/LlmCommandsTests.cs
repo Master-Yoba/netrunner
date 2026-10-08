@@ -47,7 +47,7 @@ public sealed class LlmCommandsTests
         string[] codes = cards.Select(static card => card.GetProperty("code").GetString()!).ToArray();
         Assert.Equal(77, codes.Count(static code => code.StartsWith("30", StringComparison.Ordinal)));
         Assert.Equal(codes.Length, codes.Distinct(StringComparer.Ordinal).Count());
-        // E6 (docs/ELEVATION_PLAN.md): an icebreaker's spec type is part of its vocabulary.
+        // E6 (docs/history/ELEVATION_PLAN.md): an icebreaker's spec type is part of its vocabulary.
         var breaker = cards.Single(card => card.GetProperty("code").GetString() == "30005");
         Assert.Contains("type:IcebreakerBehaviorSpec", breaker.GetProperty("vocabulary").EnumerateArray().Select(value => value.GetString()));
         Assert.Equal(2, CliCommands.Run(["card-vocabulary", "--all"], TextWriter.Null, new StringWriter()));

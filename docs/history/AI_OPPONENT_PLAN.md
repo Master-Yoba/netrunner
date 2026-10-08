@@ -1,6 +1,6 @@
 # AI opponent improvement plan
 
-> **Superseded for new work (4 October 2026):** [BOT_PLAN.md](BOT_PLAN.md) is the authoritative bot plan. This document
+> **Superseded for new work (4 October 2026):** [BOT_PLAN.md](../BOT_PLAN.md) is the authoritative bot plan. This document
 > is kept as the record of phases A1–A9 through Wave 5.5; its open items (A4 run search, A5 expert iteration, A9d)
 > continue there, redesigned.
 

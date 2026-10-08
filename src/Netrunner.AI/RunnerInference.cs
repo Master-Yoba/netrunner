@@ -173,13 +173,8 @@ internal static class RunnerInference
         {
             // Every copy already seen: the Corp can't hold one (PR #97's review).
             if (weight <= 0) continue;
-            if (!context.Catalog.TryGet(new CardDefinitionId(definition), out CardEvaluationDescriptor card)
-                || card.Printed.CardClass != RuntimeCardClass.Operation || card.Behavior is not { } behavior
-                || !behavior.Conditions.Any(condition => condition.Kind == BehaviorConditionKind.SuccessfulRunDuringRunnerLastTurn)
-                || behavior.Conditions.Any(condition => condition.Kind == BehaviorConditionKind.ThreatLevelAtLeast && threat < (condition.Value ?? 0))
-                || (card.Printed.PlayCost ?? 0) > context.Opponent.Credits + 3)
-                continue;
-            int damage = Damage(behavior.Instructions);
+            if (!context.Catalog.TryGet(new CardDefinitionId(definition), out CardEvaluationDescriptor card)) continue;
+            int damage = PunisherDamage(card, threat, context.Opponent.Credits, context.Self.Credits);
             if (damage == 0) continue;
             need = Math.Max(need, damage);
             copies += weight;
@@ -190,6 +185,23 @@ internal static class RunnerInference
         int hand = Math.Max(1, context.Features.Board.HiddenZoneCounts.CorpHand);
         double chance = total <= 0 ? 0 : 1 - Math.Pow(1 - Math.Min(1, copies / total), hand);
         return (need, seen ? Math.Max(chance, 1.0 / 3) : chance);
+    });
+
+    /// <summary>
+    /// The damage an operation that punishes a successful run deals, which the Runner can't pay its way out of with
+    /// <paramref name="runnerCredits"/>: 0 unless it needs a successful run during the Runner's last turn, its threat
+    /// condition holds, and the Corp can pay for it after a turn's credits. <see cref="Punishers"/> and evaluation set 5's
+    /// Corp view read it.
+    /// </summary>
+    public static int PunisherDamage(CardEvaluationDescriptor card, int threat, int corpCredits, int runnerCredits)
+    {
+        ArgumentNullException.ThrowIfNull(card);
+        if (card.Printed.CardClass != RuntimeCardClass.Operation || card.Behavior is not { } behavior
+            || !behavior.Conditions.Any(condition => condition.Kind == BehaviorConditionKind.SuccessfulRunDuringRunnerLastTurn)
+            || behavior.Conditions.Any(condition => condition.Kind == BehaviorConditionKind.ThreatLevelAtLeast && threat < (condition.Value ?? 0))
+            || (card.Printed.PlayCost ?? 0) > corpCredits + 3)
+            return 0;
+        return Damage(behavior.Instructions);
 
         // Damage the Runner can't pay its way out of with the credits it has.
         int Damage(IEnumerable<BehaviorInstruction> instructions) => instructions.Sum(instruction => instruction switch
@@ -197,12 +209,12 @@ internal static class RunnerInference
             { Kind: BehaviorInstructionKind.DealDamage } => instruction.Amount,
             { Kind: BehaviorInstructionKind.Choose, Choice: { Options.Count: > 0 } choice } when choice.Chooser == BehaviorChooser.Runner =>
                 choice.Options.Where(option => (option.Costs ?? []).Where(cost => cost.Kind == BehaviorCostKind.Credits).Sum(cost => cost.Amount)
-                    <= context.Self.Credits).Select(option => Damage(option.Instructions)).DefaultIfEmpty(0).Min(),
+                    <= runnerCredits).Select(option => Damage(option.Instructions)).DefaultIfEmpty(0).Min(),
             { Kind: BehaviorInstructionKind.Choose, Choice: { Options.Count: > 0 } choice } => choice.Options.Max(option => Damage(option.Instructions)),
             { Kind: BehaviorInstructionKind.Branch, Branch: { } branch } => Math.Max(Damage(branch.WhenTrue), Damage(branch.WhenFalse)),
             _ => 0,
         });
-    });
+    }
 
     /// <summary>The credits the Corp pays for an ambush's damage on access (Byte!'s 4), or 0 when it costs nothing.</summary>
     private static int AmbushCost(CardEvaluationDescriptor card) => card.Behavior?.Triggers

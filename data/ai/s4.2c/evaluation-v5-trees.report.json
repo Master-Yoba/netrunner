@@ -1,0 +1,662 @@
+{
+  "schemaVersion": 1,
+  "target": "trees",
+  "suite": "data/ai/regret/gateway-elevation",
+  "endLines": "/home/alex/netrunner/.tools/s42g/end-lines-game.jsonl.gz",
+  "trees": 200,
+  "depth": 3,
+  "learningRate": 0.1,
+  "pairsPerRoot": 200,
+  "sides": [
+    {
+      "side": "corp",
+      "trainPairs": 67503,
+      "trainStates": 76434,
+      "fitSeconds": 5.7838167,
+      "inferenceMicroseconds": 2.15598,
+      "readings": [
+        {
+          "reference": "fit\u0027s rows",
+          "heldOutRoots": 81,
+          "countedPairs": 3566,
+          "accuracy": [
+            {
+              "arm": "set 4, general fit",
+              "meanLeaf": {
+                "mean": 0.6042078428002635,
+                "lower": 0.5012185475768005,
+                "upper": 0.7042049517946861
+              },
+              "statePairs": {
+                "mean": 0.5997720095385408,
+                "lower": 0.5002044568906017,
+                "upper": 0.6987049231575975
+              },
+              "logLoss": 0.5081260416470326
+            },
+            {
+              "arm": "set 4, the pool\u0027s fit (shipped)",
+              "meanLeaf": {
+                "mean": 0.6242588295952565,
+                "lower": 0.5298932640992355,
+                "upper": 0.7188742734781278
+              },
+              "statePairs": {
+                "mean": 0.6196842506659792,
+                "lower": 0.5268297529757052,
+                "upper": 0.7128399721307688
+              },
+              "logLoss": 0.5876284750751266
+            },
+            {
+              "arm": "set 4, value-fitted (game\u0027s end)",
+              "meanLeaf": {
+                "mean": 0.6454842313310991,
+                "lower": 0.559951953649403,
+                "upper": 0.7289462212182459
+              },
+              "statePairs": {
+                "mean": 0.6404370219987969,
+                "lower": 0.556012711971016,
+                "upper": 0.7227359299188039
+              },
+              "logLoss": 0.5168431991649146
+            },
+            {
+              "arm": "set 5, value-fitted (game\u0027s end)",
+              "meanLeaf": {
+                "mean": 0.6413881011715505,
+                "lower": 0.5545492618573972,
+                "upper": 0.726754419530114
+              },
+              "statePairs": {
+                "mean": 0.6333077325198362,
+                "lower": 0.5450881537668142,
+                "upper": 0.7224571078431372
+              },
+              "logLoss": 0.4853415001142811
+            },
+            {
+              "arm": "set 5, fitted to rank (game\u0027s end)",
+              "meanLeaf": {
+                "mean": 0.6158087708745095,
+                "lower": 0.5412001664271124,
+                "upper": 0.7037123876514263
+              },
+              "statePairs": {
+                "mean": 0.627805347884621,
+                "lower": 0.5587222012176206,
+                "upper": 0.7055674678919958
+              },
+              "logLoss": 1.6191730309221686
+            },
+            {
+              "arm": "set 5, boosted trees",
+              "meanLeaf": {
+                "mean": 0.5981639024949157,
+                "lower": 0.489,
+                "upper": 0.7110604598542575
+              },
+              "statePairs": {
+                "mean": 0.5952072770759932,
+                "lower": 0.4919657848818068,
+                "upper": 0.7031534525757416
+              },
+              "logLoss": 0.6490018307353242
+            }
+          ],
+          "paired": [
+            {
+              "against": "set 4, general fit",
+              "meanLeaf": {
+                "mean": -0.006043940305347884,
+                "lower": -0.10477178423236515,
+                "upper": 0.09324254333851263
+              },
+              "statePairs": {
+                "mean": -0.004564732462547621,
+                "lower": -0.107222001695239,
+                "upper": 0.09453850893680403
+              }
+            },
+            {
+              "against": "set 4, the pool\u0027s fit (shipped)",
+              "meanLeaf": {
+                "mean": -0.026094927100340868,
+                "lower": -0.10296727129337539,
+                "upper": 0.05898819010257039
+              },
+              "statePairs": {
+                "mean": -0.024476973589985965,
+                "lower": -0.10032171187086494,
+                "upper": 0.05754574323302586
+              }
+            },
+            {
+              "against": "set 4, value-fitted (game\u0027s end)",
+              "meanLeaf": {
+                "mean": -0.04732032883618344,
+                "lower": -0.1272605319505714,
+                "upper": 0.03179759103838185
+              },
+              "statePairs": {
+                "mean": -0.045229744922803704,
+                "lower": -0.12308776513458695,
+                "upper": 0.031756070794423254
+              }
+            },
+            {
+              "against": "set 5, value-fitted (game\u0027s end)",
+              "meanLeaf": {
+                "mean": -0.04322419867663487,
+                "lower": -0.12358352625807238,
+                "upper": 0.037369183176462845
+              },
+              "statePairs": {
+                "mean": -0.03810045544384291,
+                "lower": -0.11508695731021726,
+                "upper": 0.04039334606071894
+              }
+            },
+            {
+              "against": "set 5, fitted to rank (game\u0027s end)",
+              "meanLeaf": {
+                "mean": -0.017644868379593823,
+                "lower": -0.1451667184425805,
+                "upper": 0.11799157673071861
+              },
+              "statePairs": {
+                "mean": -0.03259807080862765,
+                "lower": -0.1442051275953908,
+                "upper": 0.08429478160272645
+              }
+            }
+          ]
+        },
+        {
+          "reference": "4 turns",
+          "heldOutRoots": 129,
+          "countedPairs": 10005,
+          "accuracy": [
+            {
+              "arm": "set 4, general fit",
+              "meanLeaf": {
+                "mean": 0.6394746850940879,
+                "lower": 0.550664985574282,
+                "upper": 0.7246575252950284
+              },
+              "statePairs": {
+                "mean": 0.6334024663872226,
+                "lower": 0.5467261841792959,
+                "upper": 0.7169178231700372
+              },
+              "logLoss": 0.5175449567949036
+            },
+            {
+              "arm": "set 4, the pool\u0027s fit (shipped)",
+              "meanLeaf": {
+                "mean": 0.6734205254415707,
+                "lower": 0.6097051097445917,
+                "upper": 0.7346147678760143
+              },
+              "statePairs": {
+                "mean": 0.666125465180097,
+                "lower": 0.603984513157961,
+                "upper": 0.7254950639923149
+              },
+              "logLoss": 0.5419918208129153
+            },
+            {
+              "arm": "set 4, value-fitted (game\u0027s end)",
+              "meanLeaf": {
+                "mean": 0.6219954064589479,
+                "lower": 0.5488546850234317,
+                "upper": 0.6929041412647342
+              },
+              "statePairs": {
+                "mean": 0.616526202723599,
+                "lower": 0.5460252183237656,
+                "upper": 0.6855026347795292
+              },
+              "logLoss": 0.5211125768182897
+            },
+            {
+              "arm": "set 5, value-fitted (game\u0027s end)",
+              "meanLeaf": {
+                "mean": 0.6387503200819734,
+                "lower": 0.5655399171653509,
+                "upper": 0.7063831628177418
+              },
+              "statePairs": {
+                "mean": 0.6312278345350342,
+                "lower": 0.5593675374341063,
+                "upper": 0.6997381747908792
+              },
+              "logLoss": 0.5015338012302347
+            },
+            {
+              "arm": "set 5, fitted to rank (game\u0027s end)",
+              "meanLeaf": {
+                "mean": 0.6209982632337944,
+                "lower": 0.5641233574377057,
+                "upper": 0.6861863798944332
+              },
+              "statePairs": {
+                "mean": 0.627874005281481,
+                "lower": 0.5764349065799759,
+                "upper": 0.6835510746642003
+              },
+              "logLoss": 1.6279320983350287
+            },
+            {
+              "arm": "set 5, boosted trees",
+              "meanLeaf": {
+                "mean": 0.6735173312466862,
+                "lower": 0.595928319220097,
+                "upper": 0.7384022555992829
+              },
+              "statePairs": {
+                "mean": 0.6714578740044709,
+                "lower": 0.5976017131964692,
+                "upper": 0.7336111584109686
+              },
+              "logLoss": 0.6313365008960276
+            }
+          ],
+          "paired": [
+            {
+              "against": "set 4, general fit",
+              "meanLeaf": {
+                "mean": 0.03404264615259814,
+                "lower": -0.05958439886385118,
+                "upper": 0.13337752050897267
+              },
+              "statePairs": {
+                "mean": 0.03805540761724806,
+                "lower": -0.05361725071686428,
+                "upper": 0.13671483575498897
+              }
+            },
+            {
+              "against": "set 4, the pool\u0027s fit (shipped)",
+              "meanLeaf": {
+                "mean": 9.680580511521285E-05,
+                "lower": -0.06833294836537854,
+                "upper": 0.06714643582175114
+              },
+              "statePairs": {
+                "mean": 0.005332408824373475,
+                "lower": -0.060011568507910076,
+                "upper": 0.07085487911693171
+              }
+            },
+            {
+              "against": "set 4, value-fitted (game\u0027s end)",
+              "meanLeaf": {
+                "mean": 0.05152192478773838,
+                "lower": -0.028403711553706273,
+                "upper": 0.13890984551441882
+              },
+              "statePairs": {
+                "mean": 0.05493167128087155,
+                "lower": -0.024159268001177854,
+                "upper": 0.1425984701002365
+              }
+            },
+            {
+              "against": "set 5, value-fitted (game\u0027s end)",
+              "meanLeaf": {
+                "mean": 0.034767011164712404,
+                "lower": -0.037262904487476774,
+                "upper": 0.11004804212374657
+              },
+              "statePairs": {
+                "mean": 0.04023003946943662,
+                "lower": -0.03168260152830137,
+                "upper": 0.11789339147610262
+              }
+            },
+            {
+              "against": "set 5, fitted to rank (game\u0027s end)",
+              "meanLeaf": {
+                "mean": 0.052519068012891364,
+                "lower": -0.04960822222113303,
+                "upper": 0.14798035013307925
+              },
+              "statePairs": {
+                "mean": 0.0435838687229899,
+                "lower": -0.04442803570058585,
+                "upper": 0.12257120530902584
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "side": "runner",
+      "trainPairs": 135897,
+      "trainStates": 142302,
+      "fitSeconds": 8.7120852,
+      "inferenceMicroseconds": 2.2684450000000003,
+      "readings": [
+        {
+          "reference": "fit\u0027s rows",
+          "heldOutRoots": 151,
+          "countedPairs": 3097,
+          "accuracy": [
+            {
+              "arm": "set 4, general fit",
+              "meanLeaf": {
+                "mean": 0.725854383358098,
+                "lower": 0.6541511541325391,
+                "upper": 0.7901779618588138
+              },
+              "statePairs": {
+                "mean": 0.6128943043865889,
+                "lower": 0.5604568182678742,
+                "upper": 0.6610073233248087
+              },
+              "logLoss": 0.5392876480655494
+            },
+            {
+              "arm": "set 4, the pool\u0027s fit (shipped)",
+              "meanLeaf": {
+                "mean": 0.6606939952801328,
+                "lower": 0.6004343850022862,
+                "upper": 0.7241708521854634
+              },
+              "statePairs": {
+                "mean": 0.5908777165251702,
+                "lower": 0.5481881539618441,
+                "upper": 0.6374491336676925
+              },
+              "logLoss": 0.5608819958865114
+            },
+            {
+              "arm": "set 4, value-fitted (game\u0027s end)",
+              "meanLeaf": {
+                "mean": 0.6669871514727733,
+                "lower": 0.5942270992366412,
+                "upper": 0.7394326603628929
+              },
+              "statePairs": {
+                "mean": 0.6115874865652972,
+                "lower": 0.557508307319974,
+                "upper": 0.6637333325932117
+              },
+              "logLoss": 0.5410922135235838
+            },
+            {
+              "arm": "set 5, value-fitted (game\u0027s end)",
+              "meanLeaf": {
+                "mean": 0.6661568044751333,
+                "lower": 0.5942479523454952,
+                "upper": 0.7400031424306701
+              },
+              "statePairs": {
+                "mean": 0.6078051236891607,
+                "lower": 0.5559047628718534,
+                "upper": 0.6592058632947925
+              },
+              "logLoss": 0.525459926980733
+            },
+            {
+              "arm": "set 5, fitted to rank (game\u0027s end)",
+              "meanLeaf": {
+                "mean": 0.7314045975002185,
+                "lower": 0.6622453261224299,
+                "upper": 0.7962855146716349
+              },
+              "statePairs": {
+                "mean": 0.6174579287110821,
+                "lower": 0.5747267707519105,
+                "upper": 0.658850824019958
+              },
+              "logLoss": 0.6229962735710846
+            },
+            {
+              "arm": "set 5, boosted trees",
+              "meanLeaf": {
+                "mean": 0.712044401713137,
+                "lower": 0.6569708491761723,
+                "upper": 0.7593312463449035
+              },
+              "statePairs": {
+                "mean": 0.6091494792321882,
+                "lower": 0.5734680281194424,
+                "upper": 0.64441571689841
+              },
+              "logLoss": 0.5816909803378174
+            }
+          ],
+          "paired": [
+            {
+              "against": "set 4, general fit",
+              "meanLeaf": {
+                "mean": -0.013809981644961104,
+                "lower": -0.08247562296858071,
+                "upper": 0.06511173691860465
+              },
+              "statePairs": {
+                "mean": -0.0037448251544009224,
+                "lower": -0.04554366892366495,
+                "upper": 0.04127562984339916
+              }
+            },
+            {
+              "against": "set 4, the pool\u0027s fit (shipped)",
+              "meanLeaf": {
+                "mean": 0.051350406433004106,
+                "lower": -0.015051205130857557,
+                "upper": 0.1146232558139535
+              },
+              "statePairs": {
+                "mean": 0.018271762707017795,
+                "lower": -0.020803409313519886,
+                "upper": 0.055491690471100696
+              }
+            },
+            {
+              "against": "set 4, value-fitted (game\u0027s end)",
+              "meanLeaf": {
+                "mean": 0.045057250240363604,
+                "lower": -0.03226587859115353,
+                "upper": 0.12575814686632628
+              },
+              "statePairs": {
+                "mean": -0.002438007333109352,
+                "lower": -0.04531315564782916,
+                "upper": 0.03994542893811259
+              }
+            },
+            {
+              "against": "set 5, value-fitted (game\u0027s end)",
+              "meanLeaf": {
+                "mean": 0.04588759723800367,
+                "lower": -0.02955341506129597,
+                "upper": 0.1249217772215269
+              },
+              "statePairs": {
+                "mean": 0.00134435554302735,
+                "lower": -0.04022121848602932,
+                "upper": 0.04322089695915276
+              }
+            },
+            {
+              "against": "set 5, fitted to rank (game\u0027s end)",
+              "meanLeaf": {
+                "mean": -0.01936019578708155,
+                "lower": -0.08594902043395829,
+                "upper": 0.0507949713440562
+              },
+              "statePairs": {
+                "mean": -0.008308449478894048,
+                "lower": -0.04458544018140789,
+                "upper": 0.024845148258972344
+              }
+            }
+          ]
+        },
+        {
+          "reference": "4 turns",
+          "heldOutRoots": 227,
+          "countedPairs": 7176,
+          "accuracy": [
+            {
+              "arm": "set 4, general fit",
+              "meanLeaf": {
+                "mean": 0.8389463415602082,
+                "lower": 0.7954242895837835,
+                "upper": 0.8756515236136797
+              },
+              "statePairs": {
+                "mean": 0.6773906648149072,
+                "lower": 0.6423727077100181,
+                "upper": 0.7122380222555202
+              },
+              "logLoss": 0.5675856706616419
+            },
+            {
+              "arm": "set 4, the pool\u0027s fit (shipped)",
+              "meanLeaf": {
+                "mean": 0.8553828877207725,
+                "lower": 0.8173160924531501,
+                "upper": 0.888684797542717
+              },
+              "statePairs": {
+                "mean": 0.6936611551735853,
+                "lower": 0.6581026470302943,
+                "upper": 0.7298584182483695
+              },
+              "logLoss": 0.5654798781840419
+            },
+            {
+              "arm": "set 4, value-fitted (game\u0027s end)",
+              "meanLeaf": {
+                "mean": 0.8346588129764251,
+                "lower": 0.7912184174301754,
+                "upper": 0.8715158454926326
+              },
+              "statePairs": {
+                "mean": 0.6907256415898441,
+                "lower": 0.6527668409464744,
+                "upper": 0.7275199004952728
+              },
+              "logLoss": 0.5724724315543083
+            },
+            {
+              "arm": "set 5, value-fitted (game\u0027s end)",
+              "meanLeaf": {
+                "mean": 0.8350073419654599,
+                "lower": 0.7927309875683065,
+                "upper": 0.8716369570313415
+              },
+              "statePairs": {
+                "mean": 0.6903730980825361,
+                "lower": 0.6546404884925078,
+                "upper": 0.7249870237359721
+              },
+              "logLoss": 0.5623175325056404
+            },
+            {
+              "arm": "set 5, fitted to rank (game\u0027s end)",
+              "meanLeaf": {
+                "mean": 0.8715178919902994,
+                "lower": 0.8396459673812111,
+                "upper": 0.8997224176933118
+              },
+              "statePairs": {
+                "mean": 0.6953318961783242,
+                "lower": 0.6625251817944129,
+                "upper": 0.7256982900650457
+              },
+              "logLoss": 0.620175440940647
+            },
+            {
+              "arm": "set 5, boosted trees",
+              "meanLeaf": {
+                "mean": 0.8422587632318254,
+                "lower": 0.8080920372525872,
+                "upper": 0.8717710305864372
+              },
+              "statePairs": {
+                "mean": 0.6788159185318908,
+                "lower": 0.6477308747927712,
+                "upper": 0.7096015350381514
+              },
+              "logLoss": 0.5988182296511442
+            }
+          ],
+          "paired": [
+            {
+              "against": "set 4, general fit",
+              "meanLeaf": {
+                "mean": 0.003312421671616982,
+                "lower": -0.02842024917516045,
+                "upper": 0.03887846040529854
+              },
+              "statePairs": {
+                "mean": 0.0014252537169826703,
+                "lower": -0.025420646006319235,
+                "upper": 0.028251810767118534
+              }
+            },
+            {
+              "against": "set 4, the pool\u0027s fit (shipped)",
+              "meanLeaf": {
+                "mean": -0.013124124488946703,
+                "lower": -0.051789134499200876,
+                "upper": 0.025183674725095122
+              },
+              "statePairs": {
+                "mean": -0.014845236641694466,
+                "lower": -0.04767633747392907,
+                "upper": 0.017725346013443173
+              }
+            },
+            {
+              "against": "set 4, value-fitted (game\u0027s end)",
+              "meanLeaf": {
+                "mean": 0.007599950255400402,
+                "lower": -0.027801331165983385,
+                "upper": 0.04339616701880608
+              },
+              "statePairs": {
+                "mean": -0.011909723057953597,
+                "lower": -0.04088991281226426,
+                "upper": 0.017347670078070088
+              }
+            },
+            {
+              "against": "set 5, value-fitted (game\u0027s end)",
+              "meanLeaf": {
+                "mean": 0.007251421266366247,
+                "lower": -0.0267993420848893,
+                "upper": 0.04232140109060505
+              },
+              "statePairs": {
+                "mean": -0.011557179550645582,
+                "lower": -0.03789042259456991,
+                "upper": 0.015354794684198586
+              }
+            },
+            {
+              "against": "set 5, fitted to rank (game\u0027s end)",
+              "meanLeaf": {
+                "mean": -0.029259128758473946,
+                "lower": -0.0534666786954876,
+                "upper": -0.0035330512026742695
+              },
+              "statePairs": {
+                "mean": -0.01651597764643415,
+                "lower": -0.04160825103070886,
+                "upper": 0.008545218427362002
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
