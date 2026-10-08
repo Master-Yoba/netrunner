@@ -7,7 +7,7 @@ using static Netrunner.Match.Tests.BotLoop1Tests;
 namespace Netrunner.Match.Tests;
 
 /// <summary>
-/// docs/BOT_STRATEGY_1.md: Runner v26 against its self-flatlines and Corp v30's sequencing and IP Enforcement, at decisions
+/// docs/history/BOT_STRATEGY_1.md: Runner v26 against its self-flatlines and Corp v30's sequencing and IP Enforcement, at decisions
 /// from the Core Battle Box ladder where the new version and the previous one choose differently.
 /// </summary>
 public sealed class BotStrategy1Tests

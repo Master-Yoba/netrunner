@@ -38,10 +38,10 @@ is stable. M5 benchmark design can start during M4, but bot tuning must not
 become a substitute for missing rules behavior.
 
 After M5, three proposed improvement tracks cover the
-[engine and architecture](ENGINE_ARCHITECTURE_PLAN.md), the
-[AI opponent](AI_OPPONENT_PLAN.md) and the
-[UI/UX redesign](UI_UX_REDESIGN_PLAN.md). The
-[improvement roadmap](IMPROVEMENT_ROADMAP.md) orders their phases (E*, A*,
+[engine and architecture](history/ENGINE_ARCHITECTURE_PLAN.md), the
+[AI opponent](history/AI_OPPONENT_PLAN.md) and the
+[UI/UX redesign](history/UI_UX_REDESIGN_PLAN.md). The
+[improvement roadmap](history/IMPROVEMENT_ROADMAP.md) orders their phases (E*, A*,
 U*) into gated waves and recommends where M6 fits. At Wave 5's decision
 point the next card set (Elevation) was chosen ahead of M6; see section 2.
 
@@ -70,7 +70,7 @@ than assuming compatibility from package versions.
 
 ### Wave 5 decision point: the next card set is Elevation (1 October 2026)
 
-The [roadmap](IMPROVEMENT_ROADMAP.md)'s Wave 5 ends with a choice between M6
+The [roadmap](history/IMPROVEMENT_ROADMAP.md)'s Wave 5 ends with a choice between M6
 (LLM/hybrid mode), the next card set and an RC. **Decided: the next card set,
 Elevation.**
 
@@ -83,12 +83,12 @@ Elevation.**
 - **Why not an RC:** a release with one learn-to-play pool is small, and
   Startup needs Elevation, then Vantage Point.
 - **Why Elevation:** the bots' remaining faults (see the
-  [Wave 4.5 progress](WAVE_4_5_PROGRESS.md)) increasingly come from a pool too
+  [Wave 4.5 progress](history/WAVE_4_5_PROGRESS.md)) increasingly come from a pool too
   small to need deck-aware play. More cards and the remaining Netrunner
   mechanics give the planner, the fitted evaluation (A7's per-format weights)
   and the personalities more to work with.
 
-The plan is [ELEVATION_PLAN.md](ELEVATION_PLAN.md) (2 October 2026). What starting the card set requires, before its
+The plan is [ELEVATION_PLAN.md](history/ELEVATION_PLAN.md) (2 October 2026). What starting the card set requires, before its
 first batch:
 
 - **E6 Core-growth budget:** at least 80% of Elevation's cards need no Core

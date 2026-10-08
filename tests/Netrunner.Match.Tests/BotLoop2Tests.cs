@@ -7,7 +7,7 @@ using static Netrunner.Match.Tests.BotLoop1Tests;
 namespace Netrunner.Match.Tests;
 
 /// <summary>
-/// Bot loop 2's findings (docs/BOT_LOOP_2.md), at the recorded decision of the loop's games against Claude Sonnet: Runner
+/// Bot loop 2's findings (docs/history/BOT_LOOP_2.md), at the recorded decision of the loop's games against Claude Sonnet: Runner
 /// v25 and Corp v29 against the versions the loop played.
 /// </summary>
 public sealed class BotLoop2Tests

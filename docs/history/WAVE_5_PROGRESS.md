@@ -116,7 +116,7 @@ heuristic and the fit were tuned for.
 
 ## Decision point
 
-Recorded in the [implementation plan](IMPLEMENTATION_PLAN.md), section 2:
+Recorded in the [implementation plan](../IMPLEMENTATION_PLAN.md), section 2:
 **the next card set is Elevation**, chosen ahead of M6 and an RC, because the
 bots' remaining faults come more and more from a pool too small to need
 deck-aware play. Before its first batch, the card-set wave sets the E6

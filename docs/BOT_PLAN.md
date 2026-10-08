@@ -7,12 +7,12 @@ This plan supersedes, for new work:
 
 | Document | New status |
 |---|---|
-| [AI_OPPONENT_PLAN.md](AI_OPPONENT_PLAN.md) (A1–A9) | Record of what was built through Wave 5.5. Its open items (A4 run search, A5 expert iteration, A9d) continue here, redesigned. |
-| [BOT_IMPROVEMENT_PLAN.md](BOT_IMPROVEMENT_PLAN.md) | Closed. LLM review loops are no longer the improvement engine. |
-| [BOT_LOOP_WORKFLOW.md](BOT_LOOP_WORKFLOW.md) | Kept as the how-to for an outside-player arm, run only when the user asks (section 7). Its section 7 verification order is replaced by section 6 here. |
-| [IMPROVEMENT_ROADMAP.md](IMPROVEMENT_ROADMAP.md), AI track | The AI track continues here; the roadmap's A* entries are history. |
+| [AI_OPPONENT_PLAN.md](history/AI_OPPONENT_PLAN.md) (A1–A9) | Record of what was built through Wave 5.5. Its open items (A4 run search, A5 expert iteration, A9d) continue here, redesigned. |
+| [BOT_IMPROVEMENT_PLAN.md](history/BOT_IMPROVEMENT_PLAN.md) | Closed. LLM review loops are no longer the improvement engine. |
+| [BOT_LOOP_WORKFLOW.md](history/BOT_LOOP_WORKFLOW.md) | Kept as the how-to for an outside-player arm, run only when the user asks (section 7). Its section 7 verification order is replaced by section 6 here. |
+| [IMPROVEMENT_ROADMAP.md](history/IMPROVEMENT_ROADMAP.md), AI track | The AI track continues here; the roadmap's A* entries are history. |
 
-[BOT_LOOP_1.md](BOT_LOOP_1.md), [BOT_LOOP_2.md](BOT_LOOP_2.md) and [BOT_STRATEGY_1.md](BOT_STRATEGY_1.md) stay as
+[BOT_LOOP_1.md](history/BOT_LOOP_1.md), [BOT_LOOP_2.md](history/BOT_LOOP_2.md) and [BOT_STRATEGY_1.md](history/BOT_STRATEGY_1.md) stay as
 records; their confirmed findings become puzzles (section 5.3).
 
 ## 1. Diagnosis
@@ -418,7 +418,7 @@ A change that moves no number (regret, puzzles, lints, ladder) is not shipped as
 ## 7. Outside play: humans and LLMs
 
 Outside play finds what self-play cannot (1.4). It runs **only when the user asks**, under
-[BOT_LOOP_WORKFLOW.md](BOT_LOOP_WORKFLOW.md) sections 1–5, and its output changes:
+[BOT_LOOP_WORKFLOW.md](history/BOT_LOOP_WORKFLOW.md) sections 1–5, and its output changes:
 
 - Each confirmed finding becomes a **puzzle** (5.3) and, where the position is general, a **lint** (5.4). It is not
   fixed as a one-off rule.

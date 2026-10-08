@@ -6,7 +6,7 @@ using Xunit;
 namespace Netrunner.Match.Tests;
 
 /// <summary>
-/// Bot loop 1's diagnosis (docs/BOT_IMPROVEMENT_PLAN.md): on the Core Battle Box, 41% of Standard Runner v22's games were
+/// Bot loop 1's diagnosis (docs/history/BOT_IMPROVEMENT_PLAN.md): on the Core Battle Box, 41% of Standard Runner v22's games were
 /// lost to its own choice, because a choice's damage cost nothing. Each fixture is a Battle Box ladder game at the fatal
 /// decision.
 /// </summary>
@@ -108,7 +108,7 @@ public sealed class BotLoop1Tests
         Assert.True(rezzes == humanoid, $"{version} chose {chosen.Kind} {chosen.Description}.");
     }
 
-    // Loop 1's deferred findings (docs/BOT_LOOP_1.md), fixed in Runner v24 and Corp v28.
+    // Loop 1's deferred findings (docs/history/BOT_LOOP_1.md), fixed in Runner v24 and Corp v28.
 
     [Theory]
     [InlineData(RunnerHeuristicPolicy.V23, true)]
