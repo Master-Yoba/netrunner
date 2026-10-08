@@ -1475,3 +1475,38 @@ the core (v3) or the targeted roots (`--teacher-version v2`) until those are rel
 
 The two columns are different labellings and are not compared: v3's values are win rates at the game's end, where
 v2's are a 4-turn play-out ending on the pool's fit, so their scales differ. From here every regret on the core is v3.
+
+**S1.3's table on the core at v3** (`--core --teacher-version v3`, all 2,050 core roots; the targeted roots wait for
+their relabel):
+
+| Comparison | Teacher v3, the core |
+|---|---|
+| Runner v24 − v25 | +0.0033 [0.0019, 0.0050] |
+| Runner v24 − v26 | +0.0041 [0.0026, 0.0058] |
+| Runner v27 − v28 | +0.0014 [0.0000, 0.0029] |
+| Runner v26 − v27 | 0.0000 |
+| Corp v28 − v29 | +0.0003 [−0.0005, 0.0010] |
+| Corp v28 − v30 | +0.0004 [−0.0028, 0.0030]; discordant (95) +0.0033 [−0.0257, 0.0303] |
+| Corp v29 − v30 | +0.0001 [−0.0030, 0.0031]; discordant (78) +0.0012 [−0.0317, 0.0296] |
+| Corp v30 − v31 | 0.0000 |
+
+| Version (Standard) | Regret, core | Turn | Run | Held out |
+|---|---|---|---|---|
+| Runner v24 | 0.0696 [0.0653, 0.0736] | 0.0808 | 0.0190 | 0.0692 |
+| Runner v25 | 0.0663 [0.0620, 0.0704] | 0.0768 | 0.0183 | 0.0628 |
+| Runner v26, v27 | 0.0655 [0.0615, 0.0694] | 0.0759 | 0.0183 | 0.0628 |
+| Runner v28 | 0.0640 [0.0598, 0.0677] | 0.0741 | 0.0183 | 0.0591 |
+| Corp v28 | 0.0691 [0.0624, 0.0773] | 0.0934 | 0.0272 | 0.0596 |
+| Corp v29 | 0.0688 [0.0618, 0.0769] | 0.0934 | 0.0265 | 0.0598 |
+| Corp v30, v31 | 0.0687 [0.0618, 0.0760] | 0.0932 | 0.0265 | 0.0579 |
+
+**The Runner's ordering holds at v3**: v24 below v25 and v26, and v28 above v27, each separated, by margins like v2's
+on the core (+0.0033, +0.0038, +0.0011). **The Corp's does not show on the core**, as it did not at v2 (the core holds a
+third of the Corp's discordant roots, S1.7); its gate is read once the S1.6 Corp roots are relabelled at v3.
+
+**The Corp's 3×3 planner on v3** (core held-out roots, S4.5b's run): live Standard against the heuristic alone
++0.0029 [−0.0049, +0.0110] (standard 0.0579, the heuristic 0.0550), level, where v2 had the planner worse. The ladder
+has it ahead (+36 to +97 Elo); the suite at v3 no longer disagrees, it cannot separate the two.
+
+**Still to do in S1.8:** the S1.6 Corp roots relabelled at v3 (about 1.8 times their v2 labelling), the 26 certified
+puzzles re-certified at v3, and the noise floor measured again on the core.
