@@ -253,6 +253,41 @@ public sealed class RegretSuiteTests
         });
     }
 
+    /// <summary>
+    /// Bot plan S4.4: a horizon of −1 plays through the opponent's next turn and stops where the root side's next turn
+    /// begins, for either side (a turn number counts rounds, so a horizon of 1 would stop a Runner root at its own turn's end).
+    /// </summary>
+    [Fact]
+    public void TheOpponentHorizonStopsWhereTheRootSidesNextTurnBegins()
+    {
+        if (!Official) return;
+        (LadderSavedGame saved, FullMatchDefinition definition) = Saved();
+        RegretGame game = RegretGames.FromSaved(saved, definition, "held-out", "finding");
+        int checkedSides = 0;
+        foreach (RegretPosition position in RegretGames.Positions(game, definition).Where(position => position.State.PendingDecision?.Kind == DecisionKind.TurnAction)
+            .GroupBy(position => position.State.Turn.ActiveSide).Select(side => side.First()))
+        {
+            PlayerSide side = position.State.Turn.ActiveSide;
+            OfflineAgent teacher = (OfflineAgent)RatingLadder.CreateAgent("hard", side, definition);
+            foreach (RegretPosition earlier in RegretGames.Positions(game, definition))
+            {
+                AgentLifecycleHost.Observe(teacher, earlier.State, definition.Behavior);
+                if (earlier.Sequence == position.Sequence) break;
+            }
+            Observation observation = ObservationBuilder.Build(position.State, side, definition.Behavior, definition.Runtime);
+            PendingDecision pending = position.State.PendingDecision!;
+            var last = new Dictionary<int, GameState>();
+            int played = RolloutTeacher.Trace(teacher, observation, pending.LegalActions[0].Id, new TeacherSettings(Samples: 3, Seed: 5, HorizonTurns: -1),
+                (sample, state) => last[sample] = state);
+            Assert.True(played > 0);
+            int turn = position.State.Turn.TurnNumber;
+            Assert.All(last.Values, state => Assert.True(state.Outcome.Kind != GameOutcomeKind.Ongoing
+                || state.Turn.ActiveSide == side && state.Turn.TurnNumber == turn + 1, $"{side} root at {turn}: stopped at {state.Turn.ActiveSide} {state.Turn.TurnNumber}"));
+            checkedSides++;
+        }
+        Assert.Equal(2, checkedSides);
+    }
+
     [Fact]
     public void TheDiscordantViewComparesTwoVersionsWhereTheyChooseDifferently()
     {

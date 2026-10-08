@@ -5,7 +5,9 @@ namespace Netrunner.AI;
 /// <summary>How the teacher labels a decision (bot plan S1.2).</summary>
 /// <param name="Samples">States sampled from the agent's observation; every candidate is played out on every one.</param>
 /// <param name="Seed">The teacher's own random stream for the samples.</param>
-/// <param name="HorizonTurns">Turns to play past the decision before the leaf scores the position; 0 plays to the game's end.</param>
+/// <param name="HorizonTurns">Turns (rounds: a Corp turn and a Runner turn) to play past the decision before the leaf scores
+/// the position; 0 plays to the game's end; a negative number counts player turns past the root side's own (−1: through
+/// the opponent's next turn, bot plan S4.4).</param>
 /// <param name="Evaluation">The fitted evaluation's feature set that scores a position the play-out stopped short of the end.</param>
 /// <param name="Cap">Simulated decisions after which a play-out is scored where it stands.</param>
 /// <param name="Lines">Bot plan S1.5: the beam width of the turn-line search; a candidate is valued at its best line of the

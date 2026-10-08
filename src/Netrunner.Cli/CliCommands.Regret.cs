@@ -93,7 +93,11 @@ public static partial class CliCommands
                     "--seed" => options with { Seed = ulong.Parse(Next(), NumberStyles.None, CultureInfo.InvariantCulture) },
                     "--workers" => options with { Workers = Int("--workers", 1, 64) },
                     "--samples" => options with { Samples = Int("--samples", 1, 4096) },
-                    "--horizon" => options with { HorizonTurns = Next() is "game" ? 0 : ProfileInt(args[index], "--horizon", 1, 1000) },
+                    // S4.4: "opponent" plays through the opponent's next turn (a horizon in player turns, −1).
+                    "--horizon" => options with
+                    {
+                        HorizonTurns = Next() switch { "game" => 0, "opponent" => -1, _ => ProfileInt(args[index], "--horizon", 1, 1000) },
+                    },
                     "--evaluation" => options with { Evaluation = Int("--evaluation", 1, 4) },
                     "--labels" => options with { LabelsFile = Next() },
                     "--repeat" => options with { Repeat = Int("--repeat", 1, 100_000) },
