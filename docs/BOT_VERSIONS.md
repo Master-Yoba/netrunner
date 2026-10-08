@@ -1661,3 +1661,23 @@ lead 0.164) and stays out of the gate; three have v3's best group failing the pu
 **The gated box set is now 29 puzzles** (26 tuning, 3 held out). Standard (Corp v31, Runner v28) passes 28 of them;
 it passed 31 of the 37 before, and five of its six failures are among the eight that moved. The one it still fails,
 `teacher-e0d88291` (held out), holds at v3 with a lead of 0.867. On the `teacher-v3` split Standard passes 3 of 8.
+
+**The noise floor at v3** (`labels-v3-repeat.jsonl.gz`, 200 core roots: the 44 of the S1 repeat's roots in the core and
+156 drawn at random, labelled again with repeat seed 2; 58 minutes):
+
+| Teacher, roots | Best group differs | Tied best shared counts as agreeing | Flip cost: mean, median, 90th | Spread | Median SE |
+|---|---:|---:|---|---:|---:|
+| v3, 200 core roots | 62% | 47.5% | 0.048, 0.031, 0.125 | 0.163 | 0.070 |
+| v3, the 44 S1 repeat roots | | 65.9% | 0.055, 0.031, 0.125 | 0.168 | 0.074 |
+| v2, the same 44 roots | | 65.9% | 0.023, 0.011, 0.060 | 0.129 | 0.034 |
+| v2, the S1 repeat's 145 roots | 61% | 60.0% | 0.025, 0.009, 0.071 | 0.122 | 0.032 |
+
+(The flip cost is the first labelling's best minus its value of the second's best, over every root, agreeing ones at
+zero; the spread is a root's best minus its worst group in the first labelling. The first column is
+`ai-regret label --repeat`'s count, which breaks ties; the second counts two labellings that share a tied best group as
+agreeing.) A v3 value is a win rate over 32 games, a multiple of 1/32, so half the roots have a tied best group and a
+group's standard error is about twice v2's. On the roots both teachers repeated, the best group moves as often under
+either, and a flip costs about a third of a root's spread under v3 against a fifth under v2. The floor is the same
+size as v2's for agreement and larger in value: a single root's best group under v3 says little on its own, and
+regret, compared paired on the same labels over many roots, is what v3 is read through, as before.
+
