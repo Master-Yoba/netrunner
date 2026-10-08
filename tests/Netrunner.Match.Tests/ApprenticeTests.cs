@@ -23,7 +23,11 @@ public sealed class ApprenticeTests
         {
             OfflineAgent agent = (OfflineAgent)RatingLadder.CreateAgent(RatingLadder.ApprenticeBase, side, definition);
             var catalog = new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior);
-            var keeping = new OfflineAgent(agent.Configuration, OfflinePolicies.Create(agent.Configuration), catalog, null, captureDiagnostics: true);
+            // An agent that has observed the position as its first.
+            OfflineAgentCheckpoint start = agent.Checkpoint;
+            OfflineAgentCheckpoint checkpoint = state.ActionSequence == 0 ? start
+                : start with { ObservationCursor = state.ActionSequence - 1, ObservationDigest = "position" };
+            var keeping = new OfflineAgent(agent.Configuration, OfflinePolicies.Create(agent.Configuration), catalog, checkpoint, captureDiagnostics: true);
             AgentLifecycleHost.Observe(keeping, state, definition.Behavior);
             Observation observation = ObservationBuilder.Build(state, side, definition.Behavior, definition.Runtime);
             await keeping.ChooseActionAsync(observation);

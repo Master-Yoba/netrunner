@@ -58,8 +58,7 @@ public static class ApprenticeFeatures
         ArgumentNullException.ThrowIfNull(catalog);
         var values = new double[Names.Count];
         int at = 0;
-        int kind = Kinds.ToList().IndexOf(action.Kind);
-        values[kind >= 0 ? kind : Kinds.Count] = 1;
+        values[KindIndexes.Value.TryGetValue(action.Kind, out int kind) ? kind : Kinds.Count] = 1;
         at = Kinds.Count + 1;
 
         // The heuristic's view: its band, its score (on a log scale), its rank among the candidates and whether it is first.
@@ -140,8 +139,7 @@ public static class ApprenticeFeatures
     {
         ArgumentNullException.ThrowIfNull(candidate);
         ArgumentNullException.ThrowIfNull(root);
-        IReadOnlyList<string> rootNames = EvaluationFeatures.NamesFor(5);
-        int[] interacting = [.. InteractingRootTerms.Select(name => rootNames.ToList().IndexOf(name))];
+        int[] interacting = Interacting.Value;
         int kinds = Kinds.Count + 1;
         var values = new double[candidate.Length + kinds * interacting.Length + root.Length];
         candidate.CopyTo(values, 0);
@@ -151,6 +149,12 @@ public static class ApprenticeFeatures
         root.CopyTo(values, at);
         return values;
     }
+
+    private static readonly Lazy<int[]> Interacting = new(() =>
+        [.. InteractingRootTerms.Select(name => EvaluationFeatures.NamesFor(5).ToList().IndexOf(name))]);
+
+    private static readonly Lazy<Dictionary<ActionKind, int>> KindIndexes = new(() =>
+        Kinds.Select((kind, index) => (kind, index)).ToDictionary(entry => entry.kind, entry => entry.index));
 
     /// <summary>The combined terms' names, in <see cref="Combine"/>'s order.</summary>
     public static IReadOnlyList<string> CombinedNames { get; } =
