@@ -438,6 +438,9 @@ public sealed class RegretSuiteTests
         Assert.Equal("v1", RegretLabels.VersionOf(0, 0, 4, 4, "hard"));
         Assert.Equal("v1-lines", RegretLabels.VersionOf(5, 1, 4, 4, "hard"));
         Assert.Equal("v2", RegretLabels.VersionOf(5, 1, 4, 4, "hard-model"));
+        // S1.8: v3 is the same search played to the game's end; the leaf's evaluation is recorded but plays no part.
+        Assert.Equal("v3", RegretLabels.VersionOf(5, 1, 0, 4, "hard-model"));
+        Assert.Equal("v3", RegretLabels.VersionOf(5, 1, 0, 5, "hard-model"));
         // Other settings are named by them and by the live policies the teacher plays.
         Assert.Equal($"hard-model-lines5-screen1-horizon8-set4-{CorpHeuristicPolicy.PolicyVersion}-{RunnerHeuristicPolicy.PolicyVersion}",
             RegretLabels.VersionOf(5, 1, 8, 4, "hard-model"));

@@ -810,7 +810,7 @@ roots took **2 h 59 min** (10,744 s). Against flat 32-sample labels of 200 targe
 - the pair's regret difference agrees within the intervals: Corp v29 − v30 −0.0016 [−0.0224, 0.0217] pruned, +0.0038
   [−0.0174, 0.0265] flat;
 - noise floor on 200 targeted roots (repeat seed 2): 56% best-group disagreement, median standard error 0.045
-  (`labels-targeted-repeat*`).
+  (`labels-targeted-repeat*`, `labels-v2-targeted-repeat*` since S1.8).
 
 **Verdict: pruning pays on targeted roots** (about half the samples, the comparison unchanged) and is kept for them. It
 biases a root's absolute regret low, so absolute regret is never quoted from targeted roots: it is quoted on the core,
@@ -1448,3 +1448,30 @@ ability (at least 43 roots), and runs on a remote where the heuristic draws.
 **Next.** The apprentice is only as good as its teacher's order. A refit on the core's game's-end labels (S4.2c's
 recording, 2,050 roots, every line on every sample) would teach it the order that whole games reward; it is not run
 here.
+
+### S1.8, the core: teacher v3 is the suite's teacher (8 October 2026)
+
+**Teacher v3** is teacher v2's search played to the game's end and scored by the result: the line search (beam 5,
+a one-turn screen on a quarter of the samples, two finalists), the live Standard opponent (`hard-model`), 32 samples,
+no leaf. `RegretLabels.VersionOf` names it `v3` while the live versions are Corp v31 and Runner v28.
+
+**The files** (`data/ai/regret/gateway-elevation`):
+
+- `labels.jsonl.gz`: the core's 2,050 roots labelled by v3 (S4.2c's game's-end relabel, every group on all 32
+  samples, none pruned), and the 6,855 targeted roots at v2 until S1.8 relabels them, each label naming its teacher.
+- `labels-v2.jsonl.gz`: the whole suite at v2 as it stood (with S4.5's 160 extended Corp groups);
+  `labels-v2-repeat*` and `labels-v2-targeted-repeat*`: v2's noise floors on the core and on targeted roots.
+
+**Scoring reads one teacher.** `ai-regret score` refuses roots labelled by more than one teacher and names them;
+`--teacher-version V` keeps the roots that teacher labelled. A held-out read of the whole suite is therefore either
+the core (v3) or the targeted roots (`--teacher-version v2`) until those are relabelled.
+
+**bot-check's line** reads the core's held-out roots on v3 (`--teacher-version v3`):
+
+| Version | Teacher v3, core held-out | Teacher v2, the same roots (before) |
+|---|---|---|
+| Corp v31 (196 roots) | 0.0579 [0.0459, 0.0719] | 0.0371 [0.0301, 0.0455] |
+| Runner v28 (270 roots) | 0.0591 [0.0494, 0.0675] | 0.0349 [0.0291, 0.0404] |
+
+The two columns are different labellings and are not compared: v3's values are win rates at the game's end, where
+v2's are a 4-turn play-out ending on the pool's fit, so their scales differ. From here every regret on the core is v3.
