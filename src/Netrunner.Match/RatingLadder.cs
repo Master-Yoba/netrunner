@@ -52,7 +52,7 @@ public static partial class RatingLadder
     /// in its own seat, and "hard".
     /// </summary>
     public static IReadOnlyList<string> EntrantOrder { get; } =
-        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard-w3", "standard-c1", "standard-r22", "standard-c26", "standard-r23", "standard-c27", "standard-r24", "standard-c28", "standard-r25", "standard-c29", "standard-prev", "standard", "standard-plan", "standard-plan-fit", "standard-run", "standard-rez", "standard-w4a", "standard-w4b", "standard-arch", "standard-rarch", "standard-rgen", "standard-w4c", "standard-c13", "standard-w4d", "standard-c14", "standard-c15", "standard-c16", "standard-r13", "standard-c17", "standard-c18", "standard-c19", "standard-r14", "standard-c20", "standard-r15", "standard-c21", "standard-r16", "standard-c22", "standard-b3", "standard-c23", "standard-r17", "standard-r18", "standard-c24", "standard-r19", "standard-w5", "standard-r21", "hard-r21", "hard-a9c", "hard-a9d", "hard-a9d-list", "hard-a9d-pins", "glacier", "rush", "asset-spam", "aggressive", "rig-builder", "hard", "hard-wide", "hard-weight", "hard-rez", "hard-model", "hard-set5", "hard-set4-teacher", "hard-value", "hard-set5-value", "hard-set5l-value", "hard-set4l-value", "hard-set5l-value-x1", "hard-set5l-value-x4", "hard-set5l-value-x8", "standard-x1", "standard-x2", "standard-x4", "standard-x8", "standard-x16"];
+        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard-w3", "standard-c1", "standard-r22", "standard-c26", "standard-r23", "standard-c27", "standard-r24", "standard-c28", "standard-r25", "standard-c29", "standard-prev", "standard", "standard-plan", "standard-plan-fit", "standard-run", "standard-rez", "standard-w4a", "standard-w4b", "standard-arch", "standard-rarch", "standard-rgen", "standard-w4c", "standard-c13", "standard-w4d", "standard-c14", "standard-c15", "standard-c16", "standard-r13", "standard-c17", "standard-c18", "standard-c19", "standard-r14", "standard-c20", "standard-r15", "standard-c21", "standard-r16", "standard-c22", "standard-b3", "standard-c23", "standard-r17", "standard-r18", "standard-c24", "standard-r19", "standard-w5", "standard-r21", "hard-r21", "hard-a9c", "hard-a9d", "hard-a9d-list", "hard-a9d-pins", "glacier", "rush", "asset-spam", "aggressive", "rig-builder", "hard", "hard-wide", "hard-weight", "hard-rez", "hard-model", "standard-heuristic", "standard-apprentice", "hard-set5", "hard-set4-teacher", "hard-value", "hard-set5-value", "hard-set5l-value", "hard-set4l-value", "hard-set5l-value-x1", "hard-set5l-value-x4", "hard-set5l-value-x8", "standard-x1", "standard-x2", "standard-x4", "standard-x8", "standard-x16"];
 
     private const double EloScale = 400 / 2.302585092994046;
     private const double Ridge = 0.01;
@@ -107,6 +107,9 @@ public static partial class RatingLadder
             "hard-rez" => Tuned(OfflineMatchFactory.CreateOpponent(definition, other, "hard"), definition,
                 ("run-samples", RunnerPolicyProfiles.RunSamples), ("run-width", 2)),
             "hard-model" => Tuned(OfflineMatchFactory.CreateOpponent(definition, other, "hard"), definition, ("plan-model", 1)),
+            // Bot plan S4.5: the Standard heuristic with no planner, and the same with the apprentice re-ordering its top band.
+            ApprenticeBase => Heuristic(OfflineMatchFactory.CreateOpponent(definition, other, "standard"), definition, apprentice: false),
+            "standard-apprentice" => Heuristic(OfflineMatchFactory.CreateOpponent(definition, other, "standard"), definition, apprentice: true),
             // Bot plan S4.2: Hard planning with set 5 fitted to the teacher, or with set 4's features refitted to it.
             "hard-set5" => Tuned(OfflineMatchFactory.CreateOpponent(definition, other, "hard"), definition, ("plan-evaluation", 5)),
             "hard-set4-teacher" => Tuned(OfflineMatchFactory.CreateOpponent(definition, other, "hard"), definition, ("plan-evaluation", 6)),
@@ -293,6 +296,18 @@ public static partial class RatingLadder
             })],
             current.FeatureVersion);
         return new OfflineAgent(configuration, OfflinePolicies.Create(configuration), new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior));
+    }
+
+    /// <summary>Bot plan S4.5: the entrant the apprentice re-orders, Standard's heuristic with no planner.</summary>
+    public const string ApprenticeBase = "standard-heuristic";
+
+    /// <summary>The same Standard agent with its planner off (the Runner's has none), and with the apprentice when asked.</summary>
+    private static OfflineAgent Heuristic(OfflineAgent agent, FullMatchDefinition definition, bool apprentice)
+    {
+        var settings = new List<(string, int)>();
+        if (agent.Configuration.Parameters.ContainsKey("plan-samples")) settings.AddRange([("plan-samples", 0), ("plan-width", 0)]);
+        if (apprentice) settings.Add((Apprentice.ParameterKey, 1));
+        return settings.Count == 0 ? agent : Tuned(agent, definition, [.. settings]);
     }
 
     /// <summary>The same agent planning <paramref name="multiple"/> times its samples (bot plan S0.3).</summary>

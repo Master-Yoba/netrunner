@@ -26,6 +26,7 @@ public static partial class CliCommands
             {
                 "pairs" => RunPairsFit(args, output, error),
                 "trees" => RunTreesFit(args, output, error),
+                "apprentice" => RunApprenticeFit(args, output, error),
                 _ => RunTeacherFit(args, output, error),
             };
         string content = "both";

@@ -22,6 +22,10 @@
   <ItemGroup Condition="Exists('../../data/ai/evaluation-v4-teacher.json')">
     <EmbeddedResource Include="../../data/ai/evaluation-v4-teacher.json" LogicalName="Netrunner.AI.Data.ai.evaluation-v4-teacher.json" />
   </ItemGroup>
+  <!-- Bot plan S4.5: the apprentice at the root. -->
+  <ItemGroup Condition="Exists('../../data/ai/apprentice-v1.json')">
+    <EmbeddedResource Include="../../data/ai/apprentice-v1.json" LogicalName="Netrunner.AI.Data.ai.apprentice-v1.json" />
+  </ItemGroup>
   <!-- Bot plan S4.2b: sets 5 and 4 fitted where the planner reads the leaf, at the end of the root side's turn. -->
   <ItemGroup Condition="Exists('../../data/ai/evaluation-v5-lines.json')">
     <EmbeddedResource Include="../../data/ai/evaluation-v5-lines.json" LogicalName="Netrunner.AI.Data.ai.evaluation-v5-lines.json" />
