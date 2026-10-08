@@ -1263,7 +1263,7 @@ Pairwise accuracy against the teacher's order (teacher v2 labels), gap-weighted,
 The linear arm is clearly under the teacher's order, so the trees go forward (200 trees, the pairwise gradient of
 S4.2c's `BoostedTreeScorer`): `data/ai/apprentice-v1.json`, embedded, with its report. **Inference:** 101 µs (Corp)
 and 69 µs (Runner) a root on precomputed features, every candidate included; in play, with its feature extraction,
-237 µs a turn-action decision with more than one top-band candidate (`engine-bench --profile-game`, 8 box games, the
+237 µs a turn-action decision it applies to (`engine-bench --profile-game`, 8 box games, the
 `apprentice` segment), against the step's 50 µs target.
 
 **Use.** `apprentice 1` re-orders the heuristic's top priority band of a turn action by `g`; priorities and vetoes are
@@ -1319,8 +1319,8 @@ not the game's end.
 it is more than 0.02 worse than the heuristic at 100 Corp and 100 Runner roots (better at 124 and 143). The Corp's are
 mostly "Gain 1 credit" or a different install where the heuristic installs (40 roots), and installs or advances where
 the heuristic plays an operation; the worst four lose 0.33 to 0.42 a root (an install, an operation, an advance where
-the heuristic plays a card). The Runner's are "Gain 1 credit" where the heuristic plays, draws, runs or installs (37
-roots), and runs on a remote where the heuristic draws.
+the heuristic plays a card). The Runner's are "Gain 1 credit" where the heuristic plays, draws, runs, installs or uses an
+ability (at least 43 roots), and runs on a remote where the heuristic draws.
 
 **Corp Standard's planner stays.** Standard with its 3×3 planner off is below live Standard on both pools (box −44
 [−70, −20], Gateway −97 [−131, −63]), so the planner is worth keeping on Corp Standard.
