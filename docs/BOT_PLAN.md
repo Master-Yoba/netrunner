@@ -167,6 +167,14 @@ observation ──> heuristic (candidate generator: top-K actions with priority 
 
 ### 4.2 Evaluation set 5: a leaf trained by search
 
+> **Outcome (8 October 2026, S4.2 to S4.2c).** Falsified at the turn boundary. Against a reference built from play-outs
+> to the game's end, no static evaluation of an end-of-turn state orders two lines of one root better than about 65% for
+> the Corp and 73% for the Runner: not the shipped fits, not set 5, not value- or rank-fitted, not boosted trees. The
+> information the planner needs is in the play that follows the turn, not in the state where it ends. Set 5 stays as
+> features and the Runner keeps the general fit as its leaf, but no leaf fit is pursued further. What replaces the leaf
+> as the thing search is distilled into is in 4.6 (play at inference, for Hard) and 4.7 (the apprentice at the root,
+> for Standard). The text below is kept as the record of what was tried.
+
 **Features.** Set 4 plus the strategic terms the loops named, each computable from the observing side's view and the run
 model:
 
@@ -254,11 +262,46 @@ implementations above wait until S5's budgets are measured against that.
 | Tier | Decider | Knowledge | Budget |
 |---|---|---|---|
 | Easy | Heuristic | Pool prior, forgetful tracker | None |
-| Standard | Planner | Pool prior, full tracker | Fits 50 ms / 200 ms p95 on the reference box |
-| Hard | Planner | Opponent's decklist, full tracker | 4× Standard's samples; still within the budgets |
+| Standard | Heuristic with the apprentice ranker (4.7), or the heuristic alone if the apprentice does not beat it | Pool prior, full tracker | Fits 50 ms / 200 ms p95 on the reference box |
+| Hard | Play-out planner (4.6) | Opponent's decklist, full tracker | Turn-action decisions up to about 1 s on the reference box (accepted 8 October 2026); every other decision within 200 ms p95 |
 
 The order must hold on the ladder in both seats; the budget-scaling ladder (5.2) is the standing proof that Hard's
-extra compute is worth something.
+extra compute is worth something. A one-second think on its own turn actions is ordinary for a human-facing opponent;
+the UI shows it as thinking, and no other decision waits on it.
+
+### 4.6 Play at inference (Hard)
+
+The teacher ranks because it plays past the turn: 32 play-outs separate versions, found the Petty Cash line the
+turn-end leaf missed, and made the agenda-hold gain visible. Hard is the teacher at a budget it can afford:
+
+- **Horizon.** Lines of the root side's turn (4.1), each played on past the turn's end by the rollout policy for `h`
+  opponent and own turns, then scored by the leaf (the general fit) or, when `h` reaches the game's end, by the result.
+  `h` is chosen by measurement (S4.4): the cheapest horizon and sample count whose ranking of lines, in the planner's
+  view, agrees with the game's-end reference above a set accuracy.
+- **Samples.** Common random numbers across every line of a root, as the teacher uses; the value of a line is its mean
+  over the samples, and the planner compares means.
+- **Budget.** Work units, as before; the wall-clock consequence is Hard's turn-action budget (4.5). S5.0's engine
+  cost cuts buy either more samples or a longer horizon at the same budget, and the S4.4 curve says which is worth more.
+
+### 4.7 The apprentice at the root (Standard)
+
+The regret suite is also a training set: at every root, the teacher's value of every meaningful candidate group. A
+ranker **at the root**, over candidates, is what a cheap policy can learn from it:
+
+- **Input:** the root's features (set 5 from the acting side's view) and each candidate's own (its action kind, the
+  heuristic's priority and score for it, the card's class and cost, the server's protection and contents by the run
+  model, counters and credits it moves).
+- **Target:** pairwise over the groups of one root, weighted by the teacher's value gap, so the ranker learns the
+  teacher's order, not its level.
+- **Use:** it re-orders the heuristic's candidates; the heuristic's priorities and vetoes stay as the generator, so a
+  lethal trap's advance or an illegal play is never ranked up. It costs microseconds, so it fits Standard's budget and
+  Easy can carry a weakened one.
+- **Gate:** the suite's own metric, regret on held-out roots against the live heuristic, with the interval clear, in
+  each seat; then the ladder. This is the model S6's rounds refit, in place of the leaf.
+- **Ceiling.** A root-level ranker averages over the hidden information and the play the teacher sampled; it can
+  learn "hold the agenda when the remote is breakable and HQ is not yet diluted", and it cannot learn what only a
+  play-out from this exact position shows. Where it lands between the heuristic and the teacher is S4.5's measurement,
+  not a promise.
 
 ## 5. Measurement
 
@@ -417,6 +460,12 @@ effects), and any learned dynamics.
   S5; before S4 fits to the labels, the suite is relabelled with it, the change in labels is reported as teacher drift
   is, the certified puzzles are re-certified, and S1.3's separation gate is passed again. The cost falls on S5.0: a
   beam inside 50 ms needs cheaper simulated Apply.
+- **The apprentice reaches the heuristic's level and no further.** A root-level ranker may average away what the
+  teacher sees. Mitigation: S4.5 measures it on the suite's metric before any planner work depends on it; if it lands
+  level, Standard stays the heuristic with blunder-list fixes and the teacher's gains reach players through Hard.
+- **Hard's one-second budget is not enough for the horizon that ranks.** Mitigation: S4.4 measures the curve before
+  S5 commits to a cell; S5.0 moves the cost; if no cell inside a second ranks above the target, Hard takes the best
+  cell that fits and the record says what it gives up against the teacher.
 - **Rollout cost blows the latency budget.** Mitigation: S0 profiles before anything is built on it; the rollout policy
   is designed for cost (4.3); `rollout-budget` is a profile parameter; Standard may plan fewer samples than Hard.
 - **Freezing legacy code doubles the policy source for a while.** Mitigation: the legacy files are never edited; they
