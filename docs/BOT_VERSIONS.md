@@ -1637,3 +1637,27 @@ ranks the Runner's run choices better than the heuristic does, so a play-out at 
 to choose worse. S5.2's Runner Hard keeps Standard's run choices, and its turn actions are Standard's decider too
 (S4.4), so Runner Hard has nothing to plan on this pool: the record for S5.2 is that Runner Hard is Standard's Runner
 until a horizon ranks something.
+
+### S1.8, the rest: the puzzles, the noise floor and the Corp's targeted roots at v3 (8 October 2026)
+
+**Recertification** of the 26 teacher-certified puzzles at 128 samples with teacher v3, the game's end (S1.5's rule:
+the best group passes the puzzle, its standard error is at most 0.04, and every failing group is 0.15 or more behind):
+**7 hold**. Of the 14 gated ones, 6 hold (`teacher-9becf188`, `-acda6263`, `-ad565c84`, `-d031e97d`, `-df4609f1`,
+`-e0d88291`) and 8 fail and move to a new `teacher-v3` split, out of the gate (`ai-puzzles run --split teacher-v3`).
+None fails because its accepted action is no longer the best:
+
+- the lead falls under 0.15 (5): `teacher-4b40e915` (0.148), `-47f84833` (0.141), `-e311a6ac` (0.047), and two where
+  nothing the side does changes the result, `-9316ce82` (the best group wins 1.6%) and `-e5d97a1a` (the best 91.4%,
+  every group within 0.016);
+- the best group's standard error is over 0.04 near an even game (2): `teacher-bfad8833` (0.609 ± 0.043) and
+  `-cb2c69f6` (0.617 ± 0.043);
+- both (1): `teacher-9bcefcf7` (0.477 ± 0.044, lead 0.141).
+
+The split is named for the teacher the puzzles failed, as `teacher-v1` and `teacher-v2` are (the step's text said
+`teacher-v2`, which already names v2's failures). Of the `teacher-v2` puzzles, one holds at v3 (`teacher-b39f5b92`,
+lead 0.164) and stays out of the gate; three have v3's best group failing the puzzle (`teacher-20e668e7`, `-4da9c5de`,
+`-93609fc4`). The two `teacher-v1` puzzles fail again.
+
+**The gated box set is now 29 puzzles** (26 tuning, 3 held out). Standard (Corp v31, Runner v28) passes 28 of them;
+it passed 31 of the 37 before, and five of its six failures are among the eight that moved. The one it still fails,
+`teacher-e0d88291` (held out), holds at v3 with a lead of 0.867. On the `teacher-v3` split Standard passes 3 of 8.
