@@ -156,7 +156,7 @@ public static class RunnerPolicyProfiles
                 "plan-model" => pair.Value is < 0 or > 1,
                 "plan-tracker" => pair.Value is < 0 or > 3,
                 "plan-lines" => pair.Value is < 0 or > 1,
-                Apprentice.ParameterKey => pair.Value is < 0 or > 1,
+                Apprentice.ParameterKey => pair.Value is < 0 or > Apprentice.Latest,
                 "plan-value" => pair.Value is < 0 or > 1,
                 "plan-tie" => pair.Value is < 0 or > 100,
                 "archetype-primary" or "archetype-secondary" => !Enum.IsDefined((RunnerArchetype)pair.Value),

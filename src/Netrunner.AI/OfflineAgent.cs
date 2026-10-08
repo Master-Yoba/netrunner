@@ -188,7 +188,8 @@ public sealed class OfflineAgent : IAgentLifecycle
             if (Apprentice.Applies(Configuration, features))
             {
                 long reordering = ProfileTimings.Start();
-                candidates = Apprentice.Reorder(features, candidates, _checkpoint.Knowledge, _catalog);
+                candidates = Apprentice.Reorder(features, candidates, _checkpoint.Knowledge, _catalog,
+                    Apprentice.DocumentFor(Configuration.Parameters[Apprentice.ParameterKey]));
                 ProfileTimings.Stop("apprentice", reordering);
             }
             candidates = candidates.OrderBy(candidate => candidate.ActionId.Value, StringComparer.Ordinal).ToImmutableArray();
