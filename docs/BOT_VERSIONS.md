@@ -1567,11 +1567,11 @@ No errors and no capped games.
 **What the apprentices do in play** (the box games, `ai-runner-diagnosis` and `ai-lint`):
 
 - **Runner:** it no longer banks credits (8.1 at the game's end against the heuristic's 5.4; S4.5's ended on 15.5), but
-  it runs more (1.16 runs a turn against 0.92) and flatlines itself in breaches 75 times in 1,200 games against 11;
-  0.8 fewer agenda points than the heuristic would score a game (3.6 against 5.0 here). It wins 28% against 48%.
+  it runs more (1.16 runs a turn against 0.92) and flatlines itself in breaches 75 times in 1,200 games against 11,
+  and scores 1.4 fewer agenda points a game (3.6 against 5.0). It wins 28% of its games against the heuristic's 48%.
 - **Corp:** it leaves a central without ICE while its remotes grow in 0.99 lints a game against the heuristic's 0.08,
   protects an empty remote 0.51 times a game against none, and lets Archives be farmed twice as often (0.28 against
-  0.14). It wins 35% against the heuristic's 68%.
+  0.14). It scores 35% across the ladder against the heuristic's 68%.
 
 **Puzzles:** 31/37 and 4/5 (the heuristic 32/37 and 5/5). **Cost:** 416 µs a decision (the apprentice step 344 µs where
 it applies) against the heuristic's 297 µs; within Standard's budgets.
