@@ -695,6 +695,13 @@ the game's end, at k samples, scored in the planner's view against a game's-end 
   roots (the heuristic's regret on them under v3), Runner Hard keeps Standard's run choices too, and the record says so.
 - **Record:** the table and the cell in `docs/BOT_VERSIONS.md`; S5.2's Runner Hard profile follows it.
 
+**Outcome (8 October; the record is in `docs/BOT_VERSIONS.md`).** No cell beats the heuristic's own run choices. On
+the core's 224 Runner run-choice roots, each cell's pick (its best choice on half the samples, scored on the other
+half's game results) is worse than the heuristic's at 4 samples and level at 16, from the run's end (`--horizon run`, 8
+ms a root) to the game's end (744 ms). The game's-end reference separates only 24 pairs of choices over those roots, so
+run choices are mostly level at the game's end. Runner Hard keeps Standard's run choices; with S4.4, Runner Hard is
+Standard's Runner on this pool until a horizon ranks something.
+
 ## S5. Hard plays out; Standard takes the apprentice (L)
 
 **Rewritten 8 October after S4.2c, S4.4 and S4.5.** S5 no longer makes a leaf-scored planner the Standard. Corp Hard
