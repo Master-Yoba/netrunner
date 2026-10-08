@@ -325,6 +325,28 @@ finding for the freeze: the teacher plays the live Hard policies, so a version n
 and Runner v28); a policy bump makes new labels a new version by name.
 
 
+### S1.8 Teacher v3: the game's end (S, plus relabels)
+
+**From 8 October; before any gate is read again.** Teacher v3 is teacher v2's search played to the game's end and
+scored by the result: the line search (beam 5, one-turn screen on a quarter of the samples, two finalists), the live
+Standard opponent, 32 samples, no leaf. The reason is in plan 5.1: two gates where the v2 suite and the ladder
+disagreed, both from v2's leaf at its horizon.
+
+- **The core** already has v3 labels (S4.2c's relabel, 5 hours); they become `labels.jsonl.gz` for the core, with the
+  v2 labels kept as `labels-v2*`. `bot-check`'s regret line reads the core's v3 labels and names them.
+- **Targeted roots** are relabelled at v3 when a comparison needs them (about 1.8 times a v2 labelling: the S1.6
+  Corp roots first, since the Corp's separation gate was read on v2). Until then they keep their v2 labels, marked;
+  `score` never mixes teachers at a root, and a comparison is read on the roots labelled by one teacher.
+- **The 26 certified puzzles** are re-certified at v3 (128 samples, the game's end); failures move to a `teacher-v2`
+  split kept out of the gate, and the stable set (converted tests and loop findings) is unchanged.
+- **The noise floor** is measured again on the core at v3 (the S1 repeat's roots), with the flip cost.
+- **Gate:** the S1.3 table on v3 labels: the Runner's ordering holds (v24 against v25 and v26, v28 over v27), the
+  Corp's holds where its targeted roots have been relabelled, and the Corp's 3×3 planner reads no worse than the
+  heuristic on v3, as the ladder has it; if it still reads worse, the disagreement is recorded and the ladder stays
+  the arbiter for that comparison.
+- **Record:** the label files, the puzzle recertification, the noise floor, and the table, under S1.5's confound note,
+  which closes with this step.
+
 ## S2. Puzzle suite v2 (M)
 
 **Independent of S1 after S1.1's root format exists.**
@@ -577,8 +599,10 @@ Beside each cell, its cost from S0.1 and S0.4: steps per play-out at that horizo
 times the lines a width-5 beam plays at a turn-action root (the teacher's count), on the reference box.
 
 - **Gate (a reading, not a pass):** the table, per seat, with the cheapest cell above 80% in the planner's view marked,
-  and its wall time per turn-action decision. If no cell under one second reaches 80%, mark the best that fits and
-  record its accuracy; S5.0's expected cuts are applied to the costs as a second column.
+  and its wall time per turn-action decision. A cell's k samples are drawn from one half of the recorded samples and
+  its reference is built from the other half, so no cell shares samples with what it is scored against; the design
+  that reuses all 32 for both reads higher and is reported only as such. If no cell under one second reaches 80%,
+  mark the best that fits and record its accuracy; S5.0's expected cuts are applied to the costs as a second column.
 - **Record:** the table and the chosen cell in `docs/BOT_VERSIONS.md`; the S4.3 flat result re-read against it (Hard
   at 3 to 4 samples of the turn-end leaf is the table's weakest cell, which is why more of it changed nothing).
 
@@ -622,12 +646,48 @@ box, −371 on Gateway against the heuristic, 8% of games won); the Corp's is le
 play-out ending on the pool's fit rates a banked credit level with a draw, a run or an install, and the apprentice
 learned that order. Standard with its Corp planner off is below live Standard on both pools, so the 3×3 planner stays.
 
+**Decision (8 October).** The apprentice's failure and the Corp planner's reading are the same fault: teacher v2's
+leaf at its horizon. Teacher v3 (S1.8) replaces it; the apprentice is refitted on v3 (S4.5b); the Runner's run choices
+are measured before Runner Hard spends anything on them (S4.6).
+
+### S4.5b The apprentice on teacher v3 (S)
+
+**After S1.8's core is in place; a 15-minute fit and two ladders.** The same model, rows and use as S4.5, fitted on the
+core's game's-end labels only (the targeted roots are relabelled at v3 as S1.8 reaches them, and the fit is redone on
+the larger set then).
+
+- **Diagnostic first:** at the core's roots, the share where teacher v2 ranks "gain a credit" best against the share
+  where teacher v3 does, per seat. This is the bias the Runner's apprentice learned, stated as a number.
+- **Gate:** as S4.5's, read on v3 labels: regret below the heuristic alone on the core's held-out roots with the
+  interval clear in a seat, then the three-entrant ladders (`standard-heuristic`, `standard-apprentice`, `standard`),
+  400 deals on the box and 240 on Gateway, puzzles and lints not worse, the performance tests within budget. A seat
+  passes only with the ladder; the suite alone promotes nothing (plan section 9).
+- **If the Runner's apprentice still banks credits** on v3 labels, the fault is in the rows, not the teacher: the
+  candidate features cannot express tempo, and the record says which terms were tried before the apprentice is set
+  aside for that seat.
+- **Record:** the diagnostic, the regret table, the ladders, the cost.
+
+### S4.6 Run choices: the Runner's own curve (S)
+
+**Before Runner Hard spends on anything; one recording run on the core's run-choice roots, about an hour.** S4.4 says
+no horizon ranks the Runner's turn lines above the turn-end fit. The Runner's decisions that matter are inside runs:
+continue or jack out, trash or not, and which server to run is a turn action whose value is the run's. The same
+measurement as S4.4 on the suite's run-choice roots: play-outs from each choice to the run's end plus `h` turns, or
+the game's end, at k samples, scored in the planner's view against a game's-end reference; costs beside.
+
+- **Gate (a reading):** the cheapest cell above 80% inside 200 ms (a run choice is a nested decision, not a turn
+  action); if none fits, the best that does, with its accuracy. If no cell beats the heuristic's own choice at these
+  roots (the heuristic's regret on them under v3), Runner Hard keeps Standard's run choices too, and the record says so.
+- **Record:** the table and the cell in `docs/BOT_VERSIONS.md`; S5.2's Runner Hard profile follows it.
+
 ## S5. Hard plays out; Standard takes the apprentice (L)
 
-**Rewritten 8 October after S4.2c.** S5 no longer makes a leaf-scored planner the Standard. Hard becomes the play-out
-planner at the cell S4.4 chose (plan 4.6), inside the one-second turn-action budget; Standard becomes the heuristic
-with the apprentice ranker if S4.5's gate passed in that seat (plan 4.7), otherwise the heuristic. S5.0 and S5.1 serve
-Hard; S5.2 and S5.3 cover both.
+**Rewritten 8 October after S4.2c, S4.4 and S4.5.** S5 no longer makes a leaf-scored planner the Standard. Corp Hard
+becomes the play-out planner over turn lines at the cell S4.4 read (plan 4.6), inside the one-second turn-action
+budget; Runner Hard keeps Standard's decider and adds run-choice play-outs only where S4.6 shows they rank. Standard
+becomes the heuristic with the apprentice ranker where S4.5b's gate passes (plan 4.7), otherwise the heuristic, with
+the Corp's 3×3 planner kept on the ladder's evidence. S5.0 and S5.1 serve Corp Hard; S5.2 and S5.3 cover every tier.
+Nothing in S5 is read on teacher v2 labels: S1.8 comes first.
 
 ### S5.0 Engine cost of simulation
 
@@ -676,10 +736,11 @@ rollout step gets cheaper, and S0.4's trace says the step is mostly simulated `A
 
 ### S5.2 Profiles and tiers
 
-- Standard: the live heuristic with `apprentice 1` where S4.5's gate passed, pool prior, full tracker. Hard: the
-  play-out planner at S4.4's cell (`plan-lines 1`, `plan-value 1`, `plan-horizon h`, `plan-samples k`), decklist, full
-  tracker, modelling the opponent by the live Standard. Easy: heuristic, forgetful tracker (unchanged). Personalities
-  shift the heuristic's named terms as today; for Hard they shift the general fit's terms where the horizon ends on it.
+- Standard: the live heuristic with `apprentice 1` where S4.5b's gate passed, pool prior, full tracker; the Corp keeps
+  its 3×3 planner. Corp Hard: the play-out planner over turn lines at S4.4's cell (`plan-lines 1`, `plan-value 1`,
+  `plan-horizon 4`, `plan-samples k` as S5.0 allows), decklist, full tracker, modelling the opponent by the live
+  Standard. Runner Hard: Standard's decider with the decklist, plus run-choice play-outs at S4.6's cell if one ranks.
+  Easy: heuristic, forgetful tracker (unchanged). Personalities shift the heuristic's named terms as today.
 - `PolicyPerformanceTests` on the reference box: Standard within 50 ms / 200 ms p95; Hard's turn-action decisions
   within about 1 s p95 (the budget accepted on 8 October, recorded in the test), every other decision within 200 ms.
 - Both sides' versions bump (`corp-heuristic-v32`, `runner-heuristic-v29`; v28 is the remote valuation of the S1.5
@@ -730,8 +791,9 @@ the plan is the way to get them, on the user's ask).
 S0 measure ──> S1 regret suite ──> S1.4 all groups, S1.5 line teacher, S1.6 targeted roots ──> S4.1–S4.2c (the leaf: falsified)
            ──> S2 puzzles ──────────────────────────────────────────────────────────────────┘        │
            ──> S3 one live policy (alongside S1.4 to S1.6; before S4) ───────────────────────┘        ▼
-                                       S4.4 horizon × samples (Hard's cell) ──┬──> S5 Hard plays out, Standard takes the apprentice ──> S6 rounds
-                                       S4.5 apprentice at the root (Standard) ┘
+                                       S4.4 horizon × samples (Corp Hard's cell: 4 turns) ─┐
+                                       S4.5 apprentice (not met on teacher v2) ──> S1.8 teacher v3 ──> S4.5b apprentice on v3 ──┼──> S5 ──> S6 rounds
+                                       S4.6 run choices (Runner Hard) ───────────────────────────────────────────────────────┘
 (S5.0, the engine cost of simulation, can run any time after S0 and must land before S5.1; S1.5 raises its stakes)
 ```
 
