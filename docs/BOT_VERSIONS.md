@@ -1234,3 +1234,101 @@ result from an end-of-turn state is a weak signal (55% of per-sample pairs order
 not met in either seat, and the trees do not change that: the limit is what the end-of-turn state says about the game,
 not the model's form. The fallback the step kept in view (one opponent turn played out before the leaf, so the leaf
 scores a state where exposure has been punished or not) is the next lever; it is not built.
+
+### S4.5: the apprentice at the root (8 October 2026)
+
+**Gate not met; Standard stays the heuristic in both seats, and the Corp keeps its 3×3 planner.** The apprentice
+orders the teacher's choices better on held-out roots in both seats, and in play the Runner's apprentice banks credits
+and loses: the teacher it learned from (4 turns and the pool's fit) does not punish that.
+
+**The model.** A scalar scorer `g(root, candidate)` over a candidate's terms (`ApprenticeFeatures`: the action's kind,
+the heuristic's band, score and rank, the card's class, cost and agenda points, the target server and its ICE, credits
+moved and after) and set 5 for the root, with kind × root interactions for the linear arm. Rows are every labelled turn
+root of the suite as the heuristic sees it (`standard-heuristic`, Standard with no planner): 79,827 groups over 6,759
+roots, up to 24 pairs a root weighted by the value gap, game and pruned groups at their values; held out by deal.
+
+```bash
+ai-fit-evaluation --target apprentice --suite data/ai/regret/gateway-elevation --output-dir <dir> --pairs-per-root 24 --trees 200 --workers 12
+```
+
+Pairwise accuracy against the teacher's order (teacher v2 labels), gap-weighted, on held-out pairs:
+
+| Seat, roots | Heuristic | Apprentice, linear | Apprentice, trees | Trees − heuristic |
+|---|---:|---:|---:|---:|
+| Corp, core held-out (121) | 0.616 | 0.642 | 0.684 | +0.067 [+0.029, +0.106] |
+| Corp, every held-out (850) | 0.576 | 0.606 | 0.639 | +0.063 [+0.040, +0.086] |
+| Runner, core held-out (224) | 0.612 | 0.664 | 0.676 | +0.064 [+0.037, +0.092] |
+| Runner, every held-out (711) | 0.617 | 0.661 | 0.684 | +0.066 [+0.050, +0.082] |
+
+The linear arm is clearly under the teacher's order, so the trees go forward (200 trees, the pairwise gradient of
+S4.2c's `BoostedTreeScorer`): `data/ai/apprentice-v1.json`, embedded, with its report. **Inference:** 101 µs (Corp)
+and 69 µs (Runner) a root on precomputed features, every candidate included; in play, with its feature extraction,
+237 µs a turn-action decision with more than one top-band candidate (`engine-bench --profile-game`, 8 box games, the
+`apprentice` segment), against the step's 50 µs target.
+
+**Use.** `apprentice 1` re-orders the heuristic's top priority band of a turn action by `g`; priorities and vetoes are
+untouched. Off in every profile; the entrants are `standard-heuristic` and `standard-apprentice` (`RatingLadder`).
+
+**Regret** (`ai-regret score`, teacher v2 labels, held-out, the pair scored paired; `--extend-pruned` first labelled on
+full samples the 160 pruned Corp groups the two versions chose, so neither is scored on a pruned value; the Runner had
+none). The labels file now carries those 160 groups; no core root had one, so the core's figures are unchanged.
+
+| Seat | Roots | Apprentice | Heuristic | Apprentice − heuristic |
+|---|---|---:|---:|---:|
+| Corp | core held-out (196) | 0.0301 | 0.0329 | −0.0028 [−0.0069, +0.0010] |
+| Corp | core held-out, discordant (60) | | | −0.0091 [−0.0218, +0.0034] |
+| Corp | every held-out (1,112) | 0.0492 | 0.0569 | −0.0077 [−0.0134, −0.0028] |
+| Corp | every held-out, discordant (391) | | | −0.0219 [−0.0381, −0.0080] |
+| Corp | the pair's `diverge` roots (650, 48 games) | | | −0.0077 [−0.0143, −0.0014] |
+| Runner | core held-out (270) | 0.0325 | 0.0349 | −0.0024 [−0.0062, +0.0014] |
+| Runner | core held-out, discordant (140) | | | −0.0047 [−0.0118, +0.0027] |
+| Runner | every held-out (885) | 0.0334 | 0.0369 | −0.0034 [−0.0059, −0.0009] |
+| Runner | every held-out, discordant (466) | | | −0.0065 [−0.0113, −0.0020] |
+| Runner | the pair's `diverge` roots (1,476) | | | −0.0111 [−0.0140, −0.0083] |
+
+Live Standard on the core held-out roots: Corp 0.0371 (the apprentice is below it, −0.0069 [−0.0127, −0.0014]), Runner
+0.0349 (the Runner's Standard is the heuristic). The `diverge` roots were labelled for the pair (1,391 new, 735 reused,
+24 samples, horizon 4, `--decide 8 --record 24 --prune 4`).
+
+**Ladders**, three entrants each against each in both seats (`standard-heuristic`, `standard-apprentice`, `standard`):
+
+| Pool | Seat | Apprentice − heuristic | Heuristic − Standard |
+|---|---|---:|---:|
+| Box, 400 deals (3,600 games, 18 min) | Corp | +24 [−3, +50] | −44 [−70, −20] |
+| Box | Runner | **−248 [−277, −223]** | 0 [−21, +24] |
+| Gateway, 240 deals (2,160 games, 10 min) | Corp | −12 [−45, +20] | −97 [−131, −63] |
+| Gateway | Runner | **−371 [−407, −345]** | 0 [−30, +36] |
+
+The apprentice Runner scores 8% on both pools. No errors and no capped games.
+
+**Puzzles** (`ai-puzzles run --entrant`): the apprentice passes 31/37 on the box set and 4/5 on the NSG set, against the
+heuristic's 32/37 and 5/5 (live Standard: 31/37 and 5/5). It gains run-targeting (5/5 against 3/5, the two teacher
+puzzles the heuristic misses) and loses punisher-risk (7/9 against 9/9) and an economy puzzle; every new failure is
+"Gain 1 credit" or a run into an unknown remote with a grip an ambush flatlines.
+
+**Why the Runner loses: it banks credits.** In 12 sample games against the heuristic (`ai-runner-diagnosis`) the
+apprentice Runner ends on 15.5 credits on average against the heuristic's 3.4, with 0.8 agenda points against 3.3. Its
+discordant choices on the pair's `diverge` roots are mostly "Gain 1 credit" over a draw (189 roots), a run (185), an
+ability (174), a card played (133) or installed (124), and the teacher rates each of those level or slightly better
+(−0.001 to −0.015 a root). The teacher plays out 4 turns and scores the end with the pool's fit; over 4 turns a banked
+credit costs nothing the leaf sees, and the leaf values credits. The apprentice learned the teacher's order faithfully,
+and the order is wrong in this way. This is S4.4's warning made concrete: a 4-turn horizon ending on the pool's fit is
+not the game's end.
+
+**Where the apprentice's order differed from the teacher's most** (its blunder list, for S6): on every held-out root
+it is more than 0.02 worse than the heuristic at 100 Corp and 100 Runner roots (better at 124 and 143). The Corp's are
+mostly "Gain 1 credit" or a different install where the heuristic installs (40 roots), and installs or advances where
+the heuristic plays an operation; the worst four lose 0.33 to 0.42 a root (an install, an operation, an advance where
+the heuristic plays a card). The Runner's are "Gain 1 credit" where the heuristic plays, draws, runs or installs (37
+roots), and runs on a remote where the heuristic draws.
+
+**Corp Standard's planner stays.** Standard with its 3×3 planner off is below live Standard on both pools (box −44
+[−70, −20], Gateway −97 [−131, −63]), so the planner is worth keeping on Corp Standard.
+
+**Cost of a decision** (8 box self-play games each, one thread): live Standard 2,001 µs a decision (the Corp's planner
+1,710 µs of it), the heuristic 297 µs, the apprentice 311 µs. Every Standard budget holds; nothing ships, so
+`PolicyPerformanceTests` are unchanged (they pass in bot-check).
+
+**Next.** The apprentice is only as good as its teacher's order. A refit on the core's game's-end labels (S4.2c's
+recording, 2,050 roots, every line on every sample) would teach it the order that whole games reward; it is not run
+here.
