@@ -13,7 +13,7 @@ public static partial class CliCommands
 {
     /// <summary>
     /// Bot plan S2, the puzzle suite:
-    /// ai-puzzles run SET-DIR [--corp V] [--runner V] [--profile P] [--split all|tuning|held-out|teacher-v1|teacher-v2] [--workers N] [--json]
+    /// ai-puzzles run SET-DIR [--corp V] [--runner V] [--profile P] [--entrant LADDER-ENTRANT] [--split all|tuning|held-out|teacher-v1|teacher-v2] [--workers N] [--json]
     ///   (all is the gate: tuning and held-out)
     /// ai-puzzles import SET-DIR SAVED-GAME-FILE --id ID [--source TEXT]
     /// ai-puzzles show SET-DIR --game ID --sequence N [--play I,J,...] [--teacher SAMPLES] [--horizon game|TURNS] [--lines W] [--json]
@@ -60,6 +60,10 @@ public static partial class CliCommands
         string corp = options.GetValueOrDefault("--corp", CorpHeuristicPolicy.PolicyVersion);
         string runner = options.GetValueOrDefault("--runner", RunnerHeuristicPolicy.PolicyVersion);
         string split = options.GetValueOrDefault("--split", "all");
+        // Bot plan S4.5: a ladder entrant plays both sides instead (standard-apprentice, standard-heuristic).
+        string? entrant = options.GetValueOrDefault("--entrant");
+        if (entrant is not null && !RatingLadder.EntrantOrder.Contains(entrant, StringComparer.Ordinal))
+            throw new ArgumentException($"Unknown entrant '{entrant}'.");
         if (split is not ("all" or "tuning" or "held-out") && !Puzzle.Retired(split))
             throw new ArgumentException("--split requires all, tuning, held-out or teacher-v1.");
         int workers = options.TryGetValue("--workers", out string? count) ? ProfileInt(count, "--workers", 1, 64) : 1;
@@ -69,7 +73,10 @@ public static partial class CliCommands
         var started = System.Diagnostics.Stopwatch.StartNew();
         System.Threading.Tasks.Parallel.For(0, puzzles.Length, new ParallelOptions { MaxDegreeOfParallelism = workers }, index =>
             results[index] = PuzzleRunner.Run(puzzles[index], games[puzzles[index].GameId],
-                (definition, side) => SavedDecision.Agent(definition, side, side == PlayerSide.Corp ? corp : runner, profile, diagnostics: true)));
+                (definition, side) => entrant is null
+                    ? SavedDecision.Agent(definition, side, side == PlayerSide.Corp ? corp : runner, profile, diagnostics: true)
+                    : SavedDecision.Diagnosing(RatingLadder.CreateAgent(entrant, side, definition) as OfflineAgent
+                        ?? throw new ArgumentException($"'{entrant}' is not an offline agent."), definition)));
         var categories = results.GroupBy(result => result.Puzzle.Category).OrderBy(group => Puzzle.Categories.ToList().IndexOf(group.Key))
             .Select(group => new
             {
@@ -105,7 +112,7 @@ public static partial class CliCommands
             return 0;
         }
         output.WriteLine(string.Create(CultureInfo.InvariantCulture,
-            $"ai-puzzles corp={corp} runner={runner} profile={profile} split={split} passed={results.Count(result => result.Passed)}/{results.Length} {started.Elapsed.TotalSeconds:F0}s"));
+            $"ai-puzzles corp={corp} runner={runner} profile={entrant ?? profile} split={split} passed={results.Count(result => result.Passed)}/{results.Length} {started.Elapsed.TotalSeconds:F0}s"));
         foreach (var category in categories)
             output.WriteLine(string.Create(CultureInfo.InvariantCulture,
                 $"  {category.category,-18} {category.passed,3}/{category.total,-3} (negative controls {category.negativeControls})"));

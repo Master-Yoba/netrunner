@@ -40,7 +40,14 @@ public static class SavedDecision
         ArgumentNullException.ThrowIfNull(definition);
         OfflineAgent agent = OfflineMatchFactory.CreateOpponent(definition, side == PlayerSide.Corp ? PlayerSide.Runner : PlayerSide.Corp,
             profile, version);
-        if (!diagnostics) return agent;
+        return diagnostics ? Diagnosing(agent, definition) : agent;
+    }
+
+    /// <summary>The same agent, keeping its diagnostics (a ladder entrant's configuration included).</summary>
+    public static OfflineAgent Diagnosing(OfflineAgent agent, FullMatchDefinition definition)
+    {
+        ArgumentNullException.ThrowIfNull(agent);
+        ArgumentNullException.ThrowIfNull(definition);
         var keeping = new OfflineAgent(agent.Configuration, OfflinePolicies.Create(agent.Configuration),
             new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior), null, captureDiagnostics: true);
         if (agent.Checkpoint.Knowledge.OpponentList is { } list) keeping.KnowOpponentList(list.Select(entry => (entry.DefinitionId, entry.Quantity)));

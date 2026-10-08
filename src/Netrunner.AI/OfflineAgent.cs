@@ -185,7 +185,12 @@ public sealed class OfflineAgent : IAgentLifecycle
                     .SequenceEqual(features.Actions.Select(action => action.Id).OrderBy(id => id.Value, StringComparer.Ordinal)))
                 throw new InvalidOperationException("Policy evaluation must score every issued action exactly once.");
             // Bot plan S4.5: the apprentice re-orders the heuristic's top band (apprentice 1).
-            if (Apprentice.Applies(Configuration, features)) candidates = Apprentice.Reorder(features, candidates, _checkpoint.Knowledge, _catalog);
+            if (Apprentice.Applies(Configuration, features))
+            {
+                long reordering = ProfileTimings.Start();
+                candidates = Apprentice.Reorder(features, candidates, _checkpoint.Knowledge, _catalog);
+                ProfileTimings.Stop("apprentice", reordering);
+            }
             candidates = candidates.OrderBy(candidate => candidate.ActionId.Value, StringComparer.Ordinal).ToImmutableArray();
             int priority = candidates.Max(candidate => candidate.Utility.Priority);
             int best = candidates.Where(candidate => candidate.Utility.Priority == priority).Max(candidate => candidate.Utility.Score);
