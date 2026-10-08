@@ -347,6 +347,13 @@ disagreed, both from v2's leaf at its horizon.
 - **Record:** the label files, the puzzle recertification, the noise floor, and the table, under S1.5's confound note,
   which closes with this step.
 
+**Progress (8 October; the record is in `docs/BOT_VERSIONS.md`).** The core is on v3: `labels.jsonl.gz` holds the
+core's 2,050 roots at v3 and the targeted roots at v2, the v2 files are kept as `labels-v2*`, `score` reads one teacher
+(`--teacher-version`), and `bot-check` reads the core's held-out roots at v3 (Corp v31 0.0579, Runner v28 0.0591). On
+the core at v3 the Runner's ordering holds (v24 below v25 and v26, v28 above v27, each separated), no Corp pair
+separates (as at v2 on the core), and the Corp's 3×3 planner reads level with the heuristic. Still to do: the S1.6 Corp
+roots relabelled at v3, the puzzles re-certified, the noise floor.
+
 ## S2. Puzzle suite v2 (M)
 
 **Independent of S1 after S1.1's root format exists.**
@@ -666,6 +673,14 @@ the larger set then).
   candidate features cannot express tempo, and the record says which terms were tried before the apprentice is set
   aside for that seat.
 - **Record:** the diagnostic, the regret table, the ladders, the cost.
+
+**Outcome (8 October; the record is in `docs/BOT_VERSIONS.md`).** Not met in either seat. Teacher v3 ranks "gain a
+credit" best as often as v2 (Runner 13.0% against 12.2%); v2's bias was putting it level with the best, not first. On
+the core's 1,524 v3 turn roots the refit no longer beats the heuristic's order (Corp −0.0099 [−0.0218, +0.0019], Runner
++0.0030 [−0.0038, +0.0096] on held-out regret), and on the ladder it loses heavily in both seats (Corp −216 and −244,
+Runner −145 and −262): the Corp builds remotes and leaves the centrals open, the Runner runs recklessly. Two apprentices
+level or better on the suite and far worse on the ladder: a per-root suite on the heuristic's states cannot see the
+states a re-ordered policy reaches. The apprentice is set aside in both seats.
 
 ### S4.6 Run choices: the Runner's own curve (S)
 
