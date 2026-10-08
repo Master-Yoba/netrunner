@@ -1647,8 +1647,8 @@ the best group passes the puzzle, its standard error is at most 0.04, and every 
 None fails because its accepted action is no longer the best:
 
 - the lead falls under 0.15 (5): `teacher-4b40e915` (0.148), `-47f84833` (0.141), `-e311a6ac` (0.047), and two where
-  nothing the side does changes the result, `-9316ce82` (the best group wins 1.6%) and `-e5d97a1a` (the best 91.4%,
-  every group within 0.016);
+  the choice barely moves the result, `-9316ce82` (the best group wins 1.6%, the rejected action 0.0%) and `-e5d97a1a`
+  (the best 91.4%, the rejected action 0.016 behind);
 - the best group's standard error is over 0.04 near an even game (2): `teacher-bfad8833` (0.609 ± 0.043) and
   `-cb2c69f6` (0.617 ± 0.043);
 - both (1): `teacher-9bcefcf7` (0.477 ± 0.044, lead 0.141).
