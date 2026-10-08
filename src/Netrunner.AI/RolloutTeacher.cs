@@ -24,7 +24,11 @@ namespace Netrunner.AI;
 /// deciding samples (and any the caller requires) get the recording samples; the rest keep their deciding value, marked
 /// pruned. 0 records every candidate.</param>
 public sealed record TeacherSettings(int Samples, ulong Seed, int HorizonTurns = 0, int Evaluation = 4, int Cap = PlannerProbe.GameRolloutCap,
-    int Lines = 0, int ScreenTurns = 1, int Decide = 0, int ExtendTo = 0, int ExtendStep = 8, int Prune = 0);
+    int Lines = 0, int ScreenTurns = 1, int Decide = 0, int ExtendTo = 0, int ExtendStep = 8, int Prune = 0)
+{
+    /// <summary>Bot plan S4.4: a horizon that stops where the root side's own turn ends, the leaf scoring it there.</summary>
+    public const int TurnEnd = -1000;
+}
 
 /// <summary>
 /// A candidate's teacher value: the mean win probability over its play-outs and the standard error of that mean. Every

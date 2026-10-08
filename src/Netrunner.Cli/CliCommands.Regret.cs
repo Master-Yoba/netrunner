@@ -57,6 +57,8 @@ public static partial class CliCommands
                 "core" => RegretCoreCommand(args[2], options, output),
                 "tag" => RegretTagCommand(args[2], options, output),
                 "leaf-cost" => RegretLeafCostCommand(args[2], options, output),
+                "decision-cost" => RegretDecisionCostCommand(args[2], options, output, args),
+                "horizon-curve" => RegretHorizonCurveCommand(args[2], output, args),
                 "diverge" => RegretDivergeCommand(args[2], options, output, error),
                 "merge" => RegretMergeCommand(args[2], options, output),
                 _ => throw new ArgumentException($"Unknown ai-regret command '{args[1]}'."),
@@ -96,7 +98,13 @@ public static partial class CliCommands
                     // S4.4: "opponent" plays through the opponent's next turn (a horizon in player turns, −1).
                     "--horizon" => options with
                     {
-                        HorizonTurns = Next() switch { "game" => 0, "opponent" => -1, _ => ProfileInt(args[index], "--horizon", 1, 1000) },
+                        HorizonTurns = Next() switch
+                        {
+                            "game" => 0,
+                            "opponent" => -1,
+                            "turn" => TeacherSettings.TurnEnd,
+                            _ => ProfileInt(args[index], "--horizon", 1, 1000),
+                        },
                     },
                     "--evaluation" => options with { Evaluation = Int("--evaluation", 1, 4) },
                     "--labels" => options with { LabelsFile = Next() },
@@ -509,6 +517,62 @@ public static partial class CliCommands
     /// then evaluation set 4's features and set 5's (with the teacher's knowledge), each timed alone on one thread over the
     /// first games of a suite (<c>--turn-roots</c> of them), both sides at every decision.
     /// </summary>
+    /// <summary>
+    /// Bot plan S4.4: the cost of a turn-action decision made by play-outs, by horizon. For each root the --roots file lists
+    /// (turn actions), the teacher (hard-model) values every candidate group as the labelling does (the line search at
+    /// --lines, its screen at --screen-turns, --samples samples), once for each horizon of --horizons (turn, opponent,
+    /// a number of rounds, game); the wall time of each valuation is taken on one thread, the first root uncounted.
+    /// </summary>
+    private static int RegretDecisionCostCommand(string suiteDirectory, RegretOptions options, TextWriter output, string[] args)
+    {
+        string file = options.RootsFile ?? throw new ArgumentException("ai-regret decision-cost needs --roots FILE.");
+        int at = Array.IndexOf(args, "--horizons");
+        string[] horizons = at >= 0 && at + 1 < args.Length ? args[at + 1].Split(',') : ["turn", "opponent", "4", "game"];
+        int Horizon(string name) => name switch
+        {
+            "turn" => TeacherSettings.TurnEnd,
+            "opponent" => -1,
+            "game" => 0,
+            _ => int.Parse(name, CultureInfo.InvariantCulture),
+        };
+        RegretSuite suite = RegretSuite.Load(suiteDirectory);
+        HashSet<string> listed = [.. File.ReadLines(file).Select(line => line.Trim()).Where(line => line.Length > 0)];
+        RegretRoot[] roots = [.. suite.Roots.Where(root => listed.Contains(root.Id) && root.Kind == RegretRoots.TurnKind).OrderBy(root => root.Id, StringComparer.Ordinal)];
+        var seconds = horizons.ToDictionary(name => name, _ => new List<(PlayerSide Side, double Seconds, int Groups)>());
+        foreach ((RegretRoot root, int index) in roots.Select((root, index) => (root, index)))
+        {
+            RegretGame game = suite.Games.First(entry => entry.Id == root.GameId);
+            FullMatchDefinition definition = RegretGames.Definition(game);
+            var teacher = (OfflineAgent)RatingLadder.CreateAgent(RegretLabels.DefaultTeacher, root.Side, definition);
+            GameState? state = null;
+            foreach (RegretPosition position in RegretGames.Positions(game, definition))
+            {
+                AgentLifecycleHost.Observe(teacher, position.State, definition.Behavior);
+                if (position.Sequence == root.Sequence) { state = position.State; break; }
+            }
+            if (state is null) continue;
+            Observation observation = ObservationBuilder.Build(state, root.Side, definition.Behavior, definition.Runtime);
+            ActionId[] candidates = [.. root.Candidates.Select(candidate => new ActionId(candidate.ActionIds[0]))];
+            foreach (string name in horizons)
+            {
+                var settings = new TeacherSettings(options.Samples, options.Seed + (ulong)index, Horizon(name), options.Evaluation,
+                    Lines: options.Lines, ScreenTurns: options.ScreenTurns);
+                long start = System.Diagnostics.Stopwatch.GetTimestamp();
+                RolloutTeacher.Evaluate(teacher, observation, candidates, settings);
+                double elapsed = System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalSeconds;
+                if (index > 0) seconds[name].Add((root.Side, elapsed, candidates.Length));
+            }
+        }
+        foreach (string name in horizons)
+            foreach (IGrouping<PlayerSide, (PlayerSide Side, double Seconds, int Groups)> side in seconds[name].GroupBy(entry => entry.Side).OrderBy(group => group.Key))
+            {
+                double[] sorted = [.. side.Select(entry => entry.Seconds).Order()];
+                output.WriteLine(string.Create(CultureInfo.InvariantCulture,
+                    $"ai-regret decision-cost horizon={name} side={side.Key.ToString().ToLowerInvariant()} roots={sorted.Length} samples={options.Samples} groups={side.Average(entry => entry.Groups):F1} mean={sorted.Average():F3}s p50={sorted[sorted.Length / 2]:F3}s p95={sorted[(int)(sorted.Length * 0.95)]:F3}s"));
+            }
+        return 0;
+    }
+
     private static int RegretLeafCostCommand(string suiteDirectory, RegretOptions options, TextWriter output)
     {
         RegretGame[] games = [.. RegretSuite.Load(suiteDirectory).Games.Where(game => game.Source == "ladder").Take(options.TurnRoots)];

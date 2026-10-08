@@ -283,6 +283,13 @@ public sealed class RegretSuiteTests
             int turn = position.State.Turn.TurnNumber;
             Assert.All(last.Values, state => Assert.True(state.Outcome.Kind != GameOutcomeKind.Ongoing
                 || state.Turn.ActiveSide == side && state.Turn.TurnNumber == turn + 1, $"{side} root at {turn}: stopped at {state.Turn.ActiveSide} {state.Turn.TurnNumber}"));
+            // The turn's-end horizon stops where the opponent's turn begins.
+            var ended = new Dictionary<int, GameState>();
+            RolloutTeacher.Trace(teacher, observation, pending.LegalActions[0].Id, new TeacherSettings(Samples: 3, Seed: 5, HorizonTurns: TeacherSettings.TurnEnd),
+                (sample, state) => ended[sample] = state);
+            (int Number, PlayerSide Side) next = side == PlayerSide.Corp ? (turn, PlayerSide.Runner) : (turn + 1, PlayerSide.Corp);
+            Assert.All(ended.Values, state => Assert.True(state.Outcome.Kind != GameOutcomeKind.Ongoing
+                || (state.Turn.TurnNumber, state.Turn.ActiveSide) == next, $"{side} root at {turn}: turn's end stopped at {state.Turn.ActiveSide} {state.Turn.TurnNumber}"));
             checkedSides++;
         }
         Assert.Equal(2, checkedSides);
