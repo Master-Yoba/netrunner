@@ -347,6 +347,13 @@ disagreed, both from v2's leaf at its horizon.
 - **Record:** the label files, the puzzle recertification, the noise floor, and the table, under S1.5's confound note,
   which closes with this step.
 
+**Progress (8 October; the record is in `docs/BOT_VERSIONS.md`).** The core is on v3: `labels.jsonl.gz` holds the
+core's 2,050 roots at v3 and the targeted roots at v2, the v2 files are kept as `labels-v2*`, `score` reads one teacher
+(`--teacher-version`), and `bot-check` reads the core's held-out roots at v3 (Corp v31 0.0579, Runner v28 0.0591). On
+the core at v3 the Runner's ordering holds (v24 below v25 and v26, v28 above v27, each separated), no Corp pair
+separates (as at v2 on the core), and the Corp's 3×3 planner reads level with the heuristic. Still to do: the S1.6 Corp
+roots relabelled at v3, the puzzles re-certified, the noise floor.
+
 ## S2. Puzzle suite v2 (M)
 
 **Independent of S1 after S1.1's root format exists.**
