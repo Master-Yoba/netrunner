@@ -1591,7 +1591,7 @@ round), not a better teacher alone. Standard stays the heuristic in both seats, 
 **The roots:** the core's 224 Runner run-choice roots (165 continue or jack out, 59 trash or not). **The rows:** the
 existing end-of-line recordings (teacher v3's game's end, S4.2c's 4 turns, S4.4's opponent's turn) and one new recording
 at the run's end (`--horizon run`, new: the play-out stops where the run in progress at the root ends and the pool's fit
-scores that state; 2,050 roots' worth of machinery, 224 roots, under a minute). The turn's end is read from the
+scores that state; 224 roots, under a minute). The turn's end is read from the
 game's-end rows' end-of-turn states, as in S4.4.
 
 ```bash
