@@ -286,7 +286,7 @@ public sealed record TurnState
         Phase = phase;
         TurnNumber = turnNumber;
         Step = step;
-        History = history?.Copy();
+        History = history;
     }
 
     [JsonInclude]
@@ -767,12 +767,40 @@ public sealed class GameState
             throw new ArgumentException("State collections must not contain null entries.", nameof(values));
         }
 
-        Array.Sort(copy, (left, right) =>
+        // A state built from another is already in order: skip the sort when the keys strictly increase, where the
+        // sorted order is the only one (S5.0).
+        if (!StrictlyIncreasing(copy, key))
         {
-            int result = StringComparer.Ordinal.Compare(key(left), key(right));
-            return result != 0 ? result : 0;
-        });
+            Array.Sort(copy, (left, right) =>
+            {
+                int result = StringComparer.Ordinal.Compare(key(left), key(right));
+                return result != 0 ? result : 0;
+            });
+        }
+
         return new ReadOnlyCollection<T>(copy);
+    }
+
+    private static bool StrictlyIncreasing<T>(T[] values, Func<T, string> key)
+    {
+        if (values.Length < 2)
+        {
+            return true;
+        }
+
+        string previous = key(values[0]);
+        for (int index = 1; index < values.Length; index++)
+        {
+            string current = key(values[index]);
+            if (StringComparer.Ordinal.Compare(previous, current) >= 0)
+            {
+                return false;
+            }
+
+            previous = current;
+        }
+
+        return true;
     }
 
     private static ReadOnlyCollection<T> Freeze<T>(IEnumerable<T>? values)

@@ -745,23 +745,6 @@ public sealed record TurnFactsState
             firstXUseKeys: FirstXUseKeys);
     }
 
-    internal TurnFactsState Copy() => New(
-        turnBegan: TurnBegan,
-        mandatoryDrawPerformed: MandatoryDrawPerformed,
-        actionPhaseEnded: ActionPhaseEnded,
-        discardPhaseEnded: DiscardPhaseEnded,
-        clicksLost: ClicksLost,
-        installedCardIds: InstalledCardIds,
-        successfulRun: SuccessfulRun,
-        usedAbilityKeys: UsedAbilityKeys,
-        attemptedRunServerIds: AttemptedRunServerIds,
-        successfulRunServerIds: SuccessfulRunServerIds,
-        accessedCardOccurrenceIds: AccessedCardOccurrenceIds,
-        trashedCardOccurrenceIds: TrashedCardOccurrenceIds,
-        agendaTurnChanges: AgendaTurnChanges,
-        tagTurnChanges: TagTurnChanges,
-        firstXUseKeys: FirstXUseKeys);
-
     private TurnFactsState New(
         bool turnBegan,
         bool mandatoryDrawPerformed,
@@ -831,11 +814,13 @@ public sealed record TurnHistoryState
         TurnFactsState? runnerThisTurn,
         TurnFactsState? runnerLastTurn)
     {
+        // Turn facts are immutable once built (their constructor freezes its own copies), so a history holds them as
+        // given (S5.0: copying them on every state was about 5% of a simulated step).
         Version = version;
-        CorpThisTurn = corpThisTurn?.Copy();
-        CorpLastTurn = corpLastTurn?.Copy();
-        RunnerThisTurn = runnerThisTurn?.Copy();
-        RunnerLastTurn = runnerLastTurn?.Copy();
+        CorpThisTurn = corpThisTurn;
+        CorpLastTurn = corpLastTurn;
+        RunnerThisTurn = runnerThisTurn;
+        RunnerLastTurn = runnerLastTurn;
     }
 
     public TurnHistoryState()
@@ -999,8 +984,6 @@ public sealed record TurnHistoryState
         TurnFactsState current = RequireCurrent(side);
         return ReplaceCurrent(side, current.MarkAbilityUsed(sourceCardId, abilityKey));
     }
-
-    internal TurnHistoryState Copy() => new(Version, CorpThisTurn, CorpLastTurn, RunnerThisTurn, RunnerLastTurn);
 
     internal TurnHistoryState WithDeferredOccurrences(PlayerSide side, IReadOnlyList<DeferredOccurrence> deferred) =>
         ReplaceCurrent(side, RequireCurrent(side).WithDeferredOccurrences(deferred));

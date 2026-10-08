@@ -20,16 +20,16 @@ internal static class BehaviorStaticModifierProjection
         ArgumentNullException.ThrowIfNull(cards);
         ArgumentNullException.ThrowIfNull(zones);
 
-        var zonesById = zones
-            .GroupBy(zone => zone.Id)
-            .ToDictionary(group => group.Key, group => group.First());
+        // Few cards carry a modifier of this kind, so ask the catalog before finding the card's zone (S5.0: a
+        // dictionary of every zone was built on every call).
         long total = 0;
         foreach (CardInstanceState card in cards)
         {
             if (card.OwnerSide != side
-                || !zonesById.TryGetValue(card.ZoneId, out ZoneState? zone)
-                || !(IsActiveInstalled(card, zone, side) || RuntimeCardActivity.IsActive(card, zones))
-                || !catalog.TryGet(card.DefinitionId, out CardBehaviorDefinition? definition))
+                || !catalog.TryGet(card.DefinitionId, out CardBehaviorDefinition? definition)
+                || !HasModifier(definition, kind)
+                || FirstZone(zones, card.ZoneId) is not { } zone
+                || !(IsActiveInstalled(card, zone, side) || RuntimeCardActivity.IsActive(card, zones)))
             {
                 continue;
             }
@@ -49,6 +49,32 @@ internal static class BehaviorStaticModifierProjection
         }
 
         return (int)total;
+    }
+
+    private static bool HasModifier(CardBehaviorDefinition definition, BehaviorStaticModifierKind kind)
+    {
+        foreach (BehaviorStaticModifier modifier in definition.StaticModifiers)
+        {
+            if (modifier.Kind == kind)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static ZoneState? FirstZone(IReadOnlyList<ZoneState> zones, ZoneId id)
+    {
+        foreach (ZoneState zone in zones)
+        {
+            if (zone.Id == id)
+            {
+                return zone;
+            }
+        }
+
+        return null;
     }
 
     private static bool IsActiveInstalled(

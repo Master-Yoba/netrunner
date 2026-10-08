@@ -778,6 +778,9 @@ public static partial class GameEngine
 
     private static IEnumerable<(CardInstanceState Card, ZoneState Zone)> EnumerateAbilitySources(WorkingState working)
     {
+        // The first card with each ID, as a scan of the cards finds it, built once a source zone is reached (S5.0: a
+        // scan per card in Archives and the score areas).
+        Dictionary<CardInstanceId, CardInstanceState>? cardsById = null;
         foreach (ZoneState zone in working.Zones)
         {
             bool runnerRig = zone.Kind == ZoneKind.RunnerRig
@@ -804,10 +807,18 @@ public static partial class GameEngine
                 continue;
             }
 
+            if (cardsById is null && zone.CardIds.Count > 0)
+            {
+                cardsById = new Dictionary<CardInstanceId, CardInstanceState>(working.Cards.Count);
+                foreach (CardInstanceState candidate in working.Cards)
+                {
+                    cardsById.TryAdd(candidate.Id, candidate);
+                }
+            }
+
             foreach (CardInstanceId cardId in zone.CardIds)
             {
-                CardInstanceState? card = working.Cards.FirstOrDefault(candidate => candidate.Id == cardId);
-                if (card is null || card.ZoneId != zone.Id)
+                if (!cardsById!.TryGetValue(cardId, out CardInstanceState? card) || card.ZoneId != zone.Id)
                 {
                     continue;
                 }
