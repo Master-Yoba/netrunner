@@ -351,7 +351,9 @@ internal sealed partial class TurnPlanner
         // turn), which a turn number, counted in rounds, cannot say for a Runner root.
         // TeacherSettings.TurnEnd stops where the root side's own turn ends.
         bool stopAtTurnEnd = horizonTurns == TeacherSettings.TurnEnd;
-        int playerTurns = horizonTurns < 0 && !stopAtTurnEnd ? -horizonTurns : 0, ends = 0;
+        // S4.6: TeacherSettings.RunEnd stops where the run in progress at the root ends.
+        bool stopAtRunEnd = horizonTurns == TeacherSettings.RunEnd;
+        int playerTurns = horizonTurns < 0 && !stopAtTurnEnd && !stopAtRunEnd ? -horizonTurns : 0, ends = 0;
         (int Number, PlayerSide Side) phase = (turn, sample.Turn.ActiveSide);
         void Seen(GameState at)
         {
@@ -365,7 +367,8 @@ internal sealed partial class TurnPlanner
         int stepsAtEnd = 0, played = 0;
         bool Ended(GameState at) => at.Turn.TurnNumber != turn || at.Turn.ActiveSide != side;
         for (int steps = 0; steps < cap && state.Outcome.Kind == GameOutcomeKind.Ongoing && state.PendingDecision is { } pending
-            && state.Turn.TurnNumber < lastTurn && (stopAtTurnEnd ? ends == 0 : playerTurns == 0 || ends <= playerTurns); steps++)
+            && state.Turn.TurnNumber < lastTurn && (stopAtTurnEnd ? ends == 0 : playerTurns == 0 || ends <= playerTurns)
+            && !(stopAtRunEnd && state.RunState is null); steps++)
         {
             played = steps;
             if (turnEnd is null && Ended(state)) (turnEnd, stepsAtEnd) = (state, steps);

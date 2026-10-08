@@ -13,7 +13,7 @@ public static partial class CliCommands
     /// <summary>
     /// Bot plan S1, the regret suite:
     /// ai-regret roots GAMES-DIR --output SUITE-DIR [--turn-roots N] [--run-roots N] [--labelled N] [--seed S] [--workers N]
-    /// ai-regret label SUITE-DIR [--samples N] [--horizon game|TURNS] [--evaluation N] [--lines W] [--seed S] [--workers N]
+    /// ai-regret label SUITE-DIR [--samples N] [--horizon game|opponent|turn|run|TURNS] [--evaluation N] [--lines W] [--seed S] [--workers N]
     ///   [--labels FILE] [--repeat N --repeat-seed S] [--roots FILE] (with --repeat, the roots to repeat)
     ///   [--decide N --record N --extend-to N] (adaptive samples, S1.7: N deciding samples, discarded, choose how many to record)
     ///   [--decide N --record N --prune K] (pruning, S1.6: only the best K groups, and a targeted root's chosen ones, are recorded)
@@ -24,6 +24,7 @@ public static partial class CliCommands
     /// ai-regret score SUITE-DIR --version V[,V...]|latest [--profile P] [--split all|held-out|train] [--labels FILE]
     ///   [--blunders N] [--bootstrap N] [--workers N] [--json] [--discordant A,B] [--label-missing]
     ///   [--teacher-version V] (S1.8: only the roots that teacher labelled; roots labelled by more than one teacher need it)
+    ///   [--choices FILE] (S4.6: every version's choice at every root, one JSON line each, with the version)
     /// ai-regret findings SUITE-DIR --manifest FILE --fixtures DIR --content POOL [--labelled N]
     /// ai-regret dedupe SUITE-DIR
     /// ai-regret extend SUITE-DIR [--labelled N] [--workers N] (every meaningful group at every root, S1.4)
@@ -80,7 +81,7 @@ public static partial class CliCommands
         bool LabelMissing = false, bool ExtendPruned = false, int Lines = 0, string? RootsFile = null, int ScreenTurns = 1, string[]? Discordant = null,
         bool AllRoots = false, string TeacherEntrant = RegretLabels.DefaultTeacher, bool Core = false,
         int CoreRoots = 2000, int Decide = 0, int ExtendTo = 0, string[]? Pair = null, string? From = null, int Prune = 0,
-        PlayerSide? Side = null, int Games = 0, string? EndLines = null, string? RepeatRoots = null, string? TeacherVersion = null)
+        PlayerSide? Side = null, int Games = 0, string? EndLines = null, string? RepeatRoots = null, string? TeacherVersion = null, string? Choices = null)
     {
         public static RegretOptions Parse(string[] args)
         {
@@ -106,6 +107,7 @@ public static partial class CliCommands
                             "game" => 0,
                             "opponent" => -1,
                             "turn" => TeacherSettings.TurnEnd,
+                            "run" => TeacherSettings.RunEnd,
                             _ => ProfileInt(args[index], "--horizon", 1, 1000),
                         },
                     },
@@ -135,6 +137,7 @@ public static partial class CliCommands
                     "--all-roots" => options with { AllRoots = true },
                     "--core" => options with { Core = true },
                     "--teacher-version" => options with { TeacherVersion = Next() },
+                    "--choices" => options with { Choices = Next() },
                     "--versions" => options with
                     {
                         Pair = Next().Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) is { Length: 2 } versions
@@ -324,6 +327,9 @@ public static partial class CliCommands
             return RegretScoreCommand(suiteDirectory, options with { LabelMissing = false }, output);
         if (options.ExtendPruned && ExtendPruned(suiteDirectory, suite, labels, results.SelectMany(result => result.Choices), options, output) > 0)
             return RegretScoreCommand(suiteDirectory, options with { ExtendPruned = false }, output);
+        if (options.Choices is { } choicesFile)
+            File.WriteAllLines(choicesFile, results.SelectMany(result => result.Choices.Select(choice =>
+                System.Text.Json.JsonSerializer.Serialize(new { version = result.Version, choice.RootId, choice.Kind, choice.Chosen, choice.Regret }, RegretSuite.Json))));
         RegretComparison[] comparisons = [.. results.SelectMany((first, index) => results.Skip(index + 1).Where(second => second.Side == first.Side)
             .Select(second => RegretReport.Compare(first.Version, first.Choices, second.Version, second.Choices, options.Bootstrap, options.Seed)))];
         var report = results.Select(result => new
@@ -545,13 +551,14 @@ public static partial class CliCommands
         int Horizon(string name) => name switch
         {
             "turn" => TeacherSettings.TurnEnd,
+            "run" => TeacherSettings.RunEnd,
             "opponent" => -1,
             "game" => 0,
             _ => int.Parse(name, CultureInfo.InvariantCulture),
         };
         RegretSuite suite = RegretSuite.Load(suiteDirectory);
         HashSet<string> listed = [.. File.ReadLines(file).Select(line => line.Trim()).Where(line => line.Length > 0)];
-        RegretRoot[] roots = [.. suite.Roots.Where(root => listed.Contains(root.Id) && root.Kind == RegretRoots.TurnKind).OrderBy(root => root.Id, StringComparer.Ordinal)];
+        RegretRoot[] roots = [.. suite.Roots.Where(root => listed.Contains(root.Id) && root.Kind is RegretRoots.TurnKind or RegretRoots.RunKind).OrderBy(root => root.Id, StringComparer.Ordinal)];
         var seconds = horizons.ToDictionary(name => name, _ => new List<(PlayerSide Side, double Seconds, int Groups)>());
         foreach ((RegretRoot root, int index) in roots.Select((root, index) => (root, index)))
         {

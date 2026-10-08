@@ -28,6 +28,9 @@ public sealed record TeacherSettings(int Samples, ulong Seed, int HorizonTurns =
 {
     /// <summary>Bot plan S4.4: a horizon that stops where the root side's own turn ends, the leaf scoring it there.</summary>
     public const int TurnEnd = -1000;
+
+    /// <summary>Bot plan S4.6: the horizon that stops where the run in progress at the root ends (a run choice's own horizon).</summary>
+    public const int RunEnd = -2000;
 }
 
 /// <summary>
