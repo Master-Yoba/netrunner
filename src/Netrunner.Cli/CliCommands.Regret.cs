@@ -44,7 +44,10 @@ public static partial class CliCommands
             if (args.Length < 3) throw new ArgumentException("ai-regret needs roots, label or score, and a directory.");
             if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode)
                 throw new ArgumentException("The regret suite needs previously provisioned official content embedded at build time.");
-            var options = RegretOptions.Parse(args);
+            // S4.4: the curve reads its own arguments; the cost probe's --horizons is its own.
+            if (args[1] == "horizon-curve") return RegretHorizonCurveCommand(args[2], output, args);
+            int horizons = Array.IndexOf(args, "--horizons");
+            var options = RegretOptions.Parse(args[1] == "decision-cost" && horizons >= 0 ? [.. args[..horizons], .. args[(horizons + 2)..]] : args);
             return args[1] switch
             {
                 "roots" => RegretRootsCommand(args[2], options, output, error),
@@ -58,7 +61,6 @@ public static partial class CliCommands
                 "tag" => RegretTagCommand(args[2], options, output),
                 "leaf-cost" => RegretLeafCostCommand(args[2], options, output),
                 "decision-cost" => RegretDecisionCostCommand(args[2], options, output, args),
-                "horizon-curve" => RegretHorizonCurveCommand(args[2], output, args),
                 "diverge" => RegretDivergeCommand(args[2], options, output, error),
                 "merge" => RegretMergeCommand(args[2], options, output),
                 _ => throw new ArgumentException($"Unknown ai-regret command '{args[1]}'."),
