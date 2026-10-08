@@ -604,6 +604,14 @@ over the meaningful candidate groups of a root, trained on the teacher's values 
   fixes instead.
 - **Record:** held-out pairwise accuracy against the teacher's order, the regret table, the ladders, the cost.
 
+**Outcome (8 October; the record is in `docs/BOT_VERSIONS.md`).** Not met; Standard stays the heuristic in both seats.
+Boosted trees order the teacher's choices about 6.5 points better than the heuristic on held-out pairs in both seats,
+and regret is lower on every held-out root with the interval clear (Corp −0.0077, Runner −0.0034; the core's held-out
+roots lean the same way without clearing). In play the Runner's apprentice banks credits and loses (−248 Elo on the
+box, −371 on Gateway against the heuristic, 8% of games won); the Corp's is level (+24 and −12). The teacher's 4-turn
+play-out ending on the pool's fit rates a banked credit level with a draw, a run or an install, and the apprentice
+learned that order. Standard with its Corp planner off is below live Standard on both pools, so the 3×3 planner stays.
+
 ## S5. Hard plays out; Standard takes the apprentice (L)
 
 **Rewritten 8 October after S4.2c.** S5 no longer makes a leaf-scored planner the Standard. Hard becomes the play-out
