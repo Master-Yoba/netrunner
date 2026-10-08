@@ -1510,3 +1510,76 @@ has it ahead (+36 to +97 Elo); the suite at v3 no longer disagrees, it cannot se
 
 **Still to do in S1.8:** the S1.6 Corp roots relabelled at v3 (about 1.8 times their v2 labelling), the 26 certified
 puzzles re-certified at v3, and the noise floor measured again on the core.
+
+### S4.5b: the apprentice on teacher v3 (8 October 2026)
+
+**Gate not met in either seat; Standard stays the heuristic.** On v3 labels the apprentice no longer beats the
+heuristic's order, and in play it is far worse in both seats: the Corp's builds remotes and leaves the centrals open,
+the Runner's runs recklessly.
+
+**The diagnostic** (the core's turn roots; a choice's value is its 32-sample game result at v3, its 4-turn play-out
+ending on the pool's fit at v2):
+
+| Seat, roots | Teacher | "Gain 1 credit" ranked best | In the top two | Choices ranked above it | Within 1 SE of the best |
+|---|---|---:|---:|---:|---:|
+| Corp, 518 | v2 | 10.0% | 28.4% | 0.376 | 28.6% |
+| Corp, 518 | v3 | 11.4% | 46.5% | 0.283 | 22.4% |
+| Runner, 1,006 | v2 | 12.2% | 27.8% | 0.378 | 52.6% |
+| Runner, 1,006 | v3 | 13.0% | 38.1% | 0.330 | 41.9% |
+
+Teacher v3 does not rank a credit worse than v2 does: it ranks it best as often and higher on average. What v2 did was
+put it level with the best more often (within one standard error at 52.6% of the Runner's roots against 41.9%), which a
+pairwise fit weighted by the gap reads as "no worse". The bias S4.5's Runner learned is that flatness, not a credit
+ranked first.
+
+**The fit** (`ai-fit-evaluation --target apprentice --teacher-version v3 --version 2`): the core's v3 turn roots only,
+1,524 roots and 16,902 rows (S4.5 had 6,759 roots at v2), 90 s. On its held-out pairs:
+
+| Seat | Arm taken forward | Pairwise − heuristic | Top-band regret − heuristic |
+|---|---|---:|---:|
+| Corp | linear | +0.031 [−0.045, +0.094] | −0.0181 [−0.0359, +0.0005] |
+| Runner | trees | +0.000 [−0.025, +0.025] | +0.0036 [−0.0042, +0.0121] |
+
+`data/ai/apprentice-v2.json`, embedded; `apprentice N` now names the document (1 is S4.5's, 2 this one), so
+`standard-apprentice` is the latest and `standard-apprentice-v1` S4.5's.
+
+**Regret** (`ai-regret score`, teacher v3, the core's held-out roots, paired):
+
+| Seat | Apprentice v2 | Heuristic | Apprentice v1 | Standard | v2 − heuristic | Discordant |
+|---|---:|---:|---:|---:|---|---|
+| Corp (196) | 0.0451 | 0.0550 | 0.0474 | 0.0579 | −0.0099 [−0.0218, +0.0019] | −0.0211 [−0.0469, +0.0024] (92) |
+| Runner (270) | 0.0622 | 0.0591 | 0.0578 | 0.0591 | +0.0030 [−0.0038, +0.0096] | +0.0052 [−0.0070, +0.0172] (156) |
+
+S4.5's apprentice reads better than the heuristic on the Corp's v3 roots too (heuristic − v1 +0.0077 [+0.0014,
++0.0139]); neither apprentice is separated from the heuristic in the Runner seat.
+
+**Ladders** (three entrants each against each, both seats):
+
+| Pool | Seat | Apprentice v2 − heuristic | Heuristic − Standard |
+|---|---|---:|---:|
+| Box, 400 deals (3,600 games, 25 min) | Corp | **−216 [−239, −185]** | −36 [−65, −10] |
+| Box | Runner | **−145 [−172, −127]** | 0 [−20, +29] |
+| Gateway, 240 deals (2,160 games, 12 min) | Corp | **−244 [−276, −208]** | −95 [−126, −63] |
+| Gateway | Runner | **−262 [−296, −233]** | 0 [−35, +36] |
+
+No errors and no capped games.
+
+**What the apprentices do in play** (the box games, `ai-runner-diagnosis` and `ai-lint`):
+
+- **Runner:** it no longer banks credits (8.1 at the game's end against the heuristic's 5.4; S4.5's ended on 15.5), but
+  it runs more (1.16 runs a turn against 0.92) and flatlines itself in breaches 75 times in 1,200 games against 11;
+  0.8 fewer agenda points than the heuristic would score a game (3.6 against 5.0 here). It wins 28% against 48%.
+- **Corp:** it leaves a central without ICE while its remotes grow in 0.99 lints a game against the heuristic's 0.08,
+  protects an empty remote 0.51 times a game against none, and lets Archives be farmed twice as often (0.28 against
+  0.14). It wins 35% against the heuristic's 68%.
+
+**Puzzles:** 31/37 and 4/5 (the heuristic 32/37 and 5/5). **Cost:** 416 µs a decision (the apprentice step 344 µs where
+it applies) against the heuristic's 297 µs; within Standard's budgets.
+
+**Reading.** Both apprentices read level or better than the heuristic on the suite and lose heavily on the ladder, in
+different ways each time. The suite asks one question per root, on states the heuristic reached; a policy that
+re-orders the heuristic's top band at every turn reaches states the suite never sampled (a Corp with three remotes and
+open centrals, a Runner on its fourth run of the turn) and compounds small errors there. A per-root regret below the
+heuristic's says nothing about that, whichever teacher labels the roots. The apprentice is set aside in both seats;
+before it returns, the rows would need the apprentice's own states (its games' roots labelled and added, round by
+round), not a better teacher alone. Standard stays the heuristic in both seats, and the Corp keeps its planner.
