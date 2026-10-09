@@ -1463,9 +1463,9 @@ public static partial class StateInvariantValidator
                 && sourceZone is not null
                 && sourceZone.CardIds.Contains(sourceId)
                 && behaviorCatalog.TryGet(source.DefinitionId, out CardBehaviorDefinition? sourceDefinition)
-                && BehaviorRunRules.DefinitionHasStartRunForServer(
-                    sourceDefinition!,
-                    state.Servers.FirstOrDefault(server => server?.Id == run.AttackedServer)?.Kind ?? (ServerKind)(-1));
+                && (state.Servers.FirstOrDefault(server => server?.Id == run.AttackedServer)?.Kind ?? (ServerKind)(-1)) is var attackedKind
+                // As for a run event: the run may have been moved to Archives (Proprionegation).
+                && (BehaviorRunRules.DefinitionHasStartRunForServer(sourceDefinition!, attackedKind) || attackedKind == ServerKind.Archives);
             if (!validInstalledSource)
             {
                 Add(
@@ -2754,9 +2754,9 @@ public static partial class StateInvariantValidator
                 && sourceZone is not null
                 && sourceZone.CardIds.Contains(installedSource)
                 && behaviorCatalog.TryGet(source.DefinitionId, out CardBehaviorDefinition? sourceDefinition)
-                && BehaviorRunRules.DefinitionHasStartRunForServer(
-                    sourceDefinition!,
-                    state.Servers.FirstOrDefault(server => server?.Id == run.AttackedServer)?.Kind ?? (ServerKind)(-1));
+                && (state.Servers.FirstOrDefault(server => server?.Id == run.AttackedServer)?.Kind ?? (ServerKind)(-1)) is var attackedKind
+                // As for a run event: the run may have been moved to Archives (Proprionegation).
+                && (BehaviorRunRules.DefinitionHasStartRunForServer(sourceDefinition!, attackedKind) || attackedKind == ServerKind.Archives);
             if (!validInstalledSource)
             {
                 Add(

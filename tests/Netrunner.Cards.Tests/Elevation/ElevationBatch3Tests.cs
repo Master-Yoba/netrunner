@@ -456,6 +456,32 @@ public sealed class ElevationBatch3Tests
 
     [Fact]
     [Trait("ElevationCard", "35048")]
+    public void AnInstalledSourcesRunMovedByProprionegationGoesOnWithoutItsOwnServersAccess()
+    {
+        // H3 batch 2's box ladder (Magdalene against PT Untaian): a Conduit run on R&D moved to Archives kept Conduit's R&D
+        // access bonus and its R&D-only source, and the engine rejected its own state. The run goes on at Archives; the
+        // bonus, declared for R&D only, does not follow it.
+        const string Conduit = "30024";
+        GameState state = new ElevationBoard(PlayerSide.Runner)
+            .Add("35048", Place.CorpScore, counters: new Dictionary<string, int> { ["agenda"] = 1 })
+            .Add(CorpFillerIce, Place.Ice, server: 1)
+            .Add(CorpFillerIce, Place.Ice, server: 2)
+            .Add(Conduit, Place.Rig, counters: new Dictionary<string, int> { ["virus"] = 2 })
+            .Begin();
+        state = Apply(state, static action => action.Parameters is AbilityActionParameters { AbilityKey: "conduit-run-rnd" }).State;
+        state = PassUntil(state, static value => value.RunState is null || CanUse(value, "proprionegation-move"));
+        Assert.Single(state.RunState!.BreachAccessModifiers ?? []);
+        ApplyResult moved = Apply(state, static action => action.Parameters is AbilityActionParameters { AbilityKey: "proprionegation-move" });
+        Assert.True(moved.Accepted, moved.Rejection?.Message);
+        state = RoundTrip(moved.State);
+
+        Assert.Equal(ElevationBoard.ServerId(state, 2), state.RunState!.AttackedServer);
+        Assert.Empty(state.RunState.BreachAccessModifiers ?? []);
+        Assert.Equal(Card(state, Conduit), state.RunState.InitiatingSource);
+    }
+
+    [Fact]
+    [Trait("ElevationCard", "35048")]
     public void ProprionegationCannotBeUsedOutsideARun()
     {
         GameState state = new ElevationBoard(PlayerSide.Runner)
