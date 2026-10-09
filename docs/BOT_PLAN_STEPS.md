@@ -714,6 +714,10 @@ Standard's Runner on this pool until a horizon ranks something.
 
 ## S5. Hard plays out; Standard takes the apprentice (L)
 
+> **Closed 9 October 2026 (plan section 10), except S5.0, which landed, and S5.1c below.** S4.5b set the apprentice
+> aside and S4.6 left the Runner without play-outs, so S5.1 to S5.3 as written below are not run. The text is kept as
+> the record of what was planned.
+
 **Rewritten 8 October after S4.2c, S4.4 and S4.5.** S5 no longer makes a leaf-scored planner the Standard. Corp Hard
 becomes the play-out planner over turn lines at the cell S4.4 read (plan 4.6), inside the one-second turn-action
 budget; Runner Hard keeps Standard's decider and adds run-choice play-outs only where S4.6 shows they rank. Standard
@@ -805,7 +809,25 @@ twice the budget: S5.1 says which beam Standard searches.
 - **Record:** all of it in `docs/BOT_VERSIONS.md`; the human playtest expectation (Standard feels like it plans) noted
   for the user, not scheduled.
 
+### S5.1c Corp Hard's play-out planner: one ladder decides (S)
+
+**The research's last step, and the only one it leaves open (plan 10.2).** S4.4 found the Corp's turn lines ranked at
+about 81% by play-outs of 4 turns, against about 60% at the turn's end. Whether that ranking wins games has not been
+measured.
+
+- **Build the smallest entrant that answers it:** `hard-playout`, Corp Hard whose turn-action decisions take the
+  teacher's evaluation (lines of the turn, 4 turns played out then the pool's fit, the live Standard opponent) at a
+  reduced count: width 4, 4 samples. Every other decision, and the Runner, is Hard's. No latency budget applies to the
+  entrant; its decision cost is recorded.
+- **Gate:** the box ladder, `hard-playout` against `hard` and `standard` in the Corp seat, 400 deals (or what the
+  entrant's cost allows in two hours, `--stop-when-clear`). Pass: the lower bound against `hard` above zero.
+- **On a pass:** S5.1's pipeline for the Corp only, sized to Hard's one-second budget after S5.0, then S5.3's ladder
+  gates for Hard. **On a fail:** no further search work; Corp Hard stays as it is, and the record says so.
+- **Record:** the ladder, the decision cost, and the decision taken.
+
 ## S6. Expert iteration rounds (M each, repeating)
+
+> **Set aside 9 October 2026 (plan section 10).** It depends on the apprentice, which S4.5 and S4.5b set aside.
 
 A round is one version. It runs when the previous round's gates are met.
 
@@ -827,6 +849,39 @@ Stop condition for a batch of rounds: two consecutive rounds that pass the regre
 means the suite has stopped tracking strength and needs new roots from a stronger or different opponent (section 7 of
 the plan is the way to get them, on the user's ask).
 
+## H. The heuristic track (from 9 October 2026)
+
+Plan section 10.3. The rules are [STRATEGY_FUNDAMENTALS.md](STRATEGY_FUNDAMENTALS.md)'s; a step names the rule IDs it
+works. Branches are `feat/bot-h<n>`. H1 and H2 run in parallel with S5.1c.
+
+### H1 The audit (S)
+
+- **Rules against the code:** a table in `docs/BOT_VERSIONS.md`, one row per base rule ([B]) of either side: encoded,
+  partly, missing, or contradicted, with the term or method (`RunnerValues.Server`,
+  `CorpHeuristicPolicy.ProtectionReserve`, ...) and, where partly, what is missing.
+- **Mistakes as counts:** each row of the guide's "mistakes to punish" tables that a saved game shows (decorative
+  remote, unfunded defense, agenda accumulation, repeated expensive single accesses, trash everything, a turn ended
+  in a lethal line, ...) becomes an `ai-lint` lint where it can be stated over the observation, counted for both bots
+  over the box ladder's saved games, per 1,000 games.
+- **Gate (a reading):** the table and the counts; the gap list ranked by count and by the regret of the matching
+  roots on the core at teacher v3, per seat.
+
+### H2 Deck notes (the user's, S)
+
+A short note per box deck: its plan, its key cards, what it fears, and how to play against it. H3 does not wait on
+it for base rules; archetype and matchup rules ([A], [M]) wait for the deck's note.
+
+### H3 onwards: fix batches (S each, repeating)
+
+- A batch is three to five related gaps from H1's list, the Runner's first, as one policy version
+  (`runner-heuristic-v29`, ...).
+- Each rule gets a puzzle pair under `data/ai/puzzles/` (the same position with the one fact the rule turns on
+  changed, as the guide's last section proposes); each changed term's reason string names its rule ID.
+- **Gate:** the puzzles pass; the lint the batch targets falls; the regret line is not worse; the box ladder (400
+  deals, `--stop-when-clear`) against `standard-prev` with the lower bound above zero, and Gateway (240) level or
+  better. A batch that moves no ladder number is recorded and not shipped as a behaviour change (plan section 6).
+- **Record:** the version, the rules it encodes, the table above, in `docs/BOT_VERSIONS.md`.
+
 ## Timeline and order
 
 ```text
@@ -837,6 +892,14 @@ S0 measure ──> S1 regret suite ──> S1.4 all groups, S1.5 line teacher, S
                                        S4.5 apprentice (not met on teacher v2) ──> S1.8 teacher v3 ──> S4.5b apprentice on v3 ──┼──> S5 ──> S6 rounds
                                        S4.6 run choices (Runner Hard) ───────────────────────────────────────────────────────┘
 (S5.0, the engine cost of simulation, can run any time after S0 and must land before S5.1; S1.5 raises its stakes)
+```
+
+From 9 October 2026 (plan section 10):
+
+```text
+S5.0 (landed) ──> S5.1c Corp Hard play-out ladder ──> pass: S5.1 to S5.3 for Corp Hard only │ fail: search work stops
+H1 audit ──> H3 fix batches, the Runner first ──> ...
+H2 deck notes (the user) ──> the archetype and matchup rules in H3
 ```
 
 Elapsed, one developer with an agent: S0 one week including the ladder speedup; S1, S2 and S3 two to three weeks in

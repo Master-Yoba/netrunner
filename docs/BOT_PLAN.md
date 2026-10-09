@@ -3,6 +3,11 @@
 Status: **authoritative** for all bot (AI opponent) work from 4 October 2026. Written on the user's direction after
 bot loops 1 and 2 and bot strategy 1. The step-by-step implementation plan is [BOT_PLAN_STEPS.md](BOT_PLAN_STEPS.md).
 
+> **The search-first research closed on 9 October 2026** (section 10). Its instruments stay; the leaf, the apprentice
+> and expert iteration are set aside; one bounded experiment decides Corp Hard's play-out planner; the main track is
+> the heuristic, improved concept by concept from [STRATEGY_FUNDAMENTALS.md](STRATEGY_FUNDAMENTALS.md). Sections 1 to
+> 9 are the record of the research and the instruments' definitions.
+
 This plan supersedes, for new work:
 
 | Document | New status |
@@ -494,3 +499,57 @@ effects), and any learned dynamics.
 - **Self-play blind spots.** Mitigation: section 7, and the Core Battle Box as the target pool, where humans play.
 - **The ladder speedup changes results.** Mitigation: the fast mode is validated by replaying a full ladder in both
   modes and comparing results game by game before it is used for a gate.
+
+## 10. After the research (9 October 2026)
+
+### 10.1 What the research found
+
+| Question | Answer | Record |
+|---|---|---|
+| Does more search budget make the planner stronger? | No. ×8 samples is level with ×1 in both seats, on the shipped leaf and on set 5. | S0.3, S4.3 |
+| Can a static evaluation of a turn's end rank the planner's lines? | No. About 65% (Corp) and 73% (Runner) against the game's-end order, whatever the features or the model. | S4.2 to S4.2c |
+| How far must a play-out go to rank lines? | The Corp: 4 turns or the game's end, about 81% at 8 to 16 samples. The Runner: no horizon ranks its turn lines or its run choices better than the turn-end fit or the heuristic. | S4.4, S4.6 |
+| Can a cheap ranker learn the teacher's order? | Not in a way that survives play: v1 lost 250 Elo as the Runner, v2 lost 145 to 262 in both seats. Regret on the heuristic's own states does not predict play once the ranker moves the game off them. | S4.5, S4.5b |
+| How noisy is one root's label? | At teacher v3 two labellings pick different best groups at 62% of roots, and half the roots have a tied best. The suite measures paired differences between versions; it does not say what the right move is at one root. | S1.8 |
+| What made the bots stronger in this period? | A valuation change (Runner v28, a face-down remote card is worth its chance of being an agenda: +44 Elo [11, 81]), and the Corp's small Standard planner, which the ladder keeps (+44 box, +97 Gateway over the heuristic alone). | Runner v28, S4.5 |
+
+The reading: the bots' weakness is mostly missing strategic knowledge in the heuristic, which every rollout, teacher
+and ranker inherits, not a lack of search. Runner v28 fixed knowledge a new player has on the first day, and it moved
+the ladder more than any search step did.
+
+### 10.2 What stays, what is set aside
+
+- **Stays:** the regret suite at teacher v3 (the core in `bot-check`, targeted roots by `diverge`), the puzzle suite,
+  the fast ladder, the Oddity lints, S5.0's engine cuts, the Corp's 3×3 Standard planner, Runner Hard's planner, and
+  every verification tier of section 6.
+- **Set aside:** fitting a leaf (4.2), the apprentice (4.7; `apprentice` stays off in every profile and its models
+  stay loadable for the records), the Runner's play-outs (turn lines and run choices), the Standard tier of S5, and
+  S6's expert iteration. None of these is reopened without a new reason recorded here.
+- **One bounded experiment** (step S5.1c): Corp Hard as the 4-turn play-out planner on the box ladder against
+  Standard. It is the one place the research found search signal (S4.4). It passes with a lower bound above zero and
+  then ships within Hard's one-second budget; otherwise search work stops and Corp Hard stays as it is.
+
+### 10.3 The heuristic track
+
+[STRATEGY_FUNDAMENTALS.md](STRATEGY_FUNDAMENTALS.md) states how to play each side as rules with IDs (R01 to R24, C01 to
+C24), each marked base, matchup, archetype or tuning, plus the mistakes each side should punish. The heuristic is
+improved against it, one concept at a time:
+
+- **Audit before fixing.** Each base rule is mapped to the live policy (encoded, partly, missing, or contradicted,
+  with the code location). Many are already there in some form (R&D freshness, HQ agenda share, rez and access
+  reserves, punisher draws, lethal traps); the gaps are the work.
+- **Count before ranking.** Each "mistake to punish" that is observable in a saved game becomes a count over the box
+  ladder's games (a lint, 5.4), for both bots. A gap is worked in order of how often the bot makes the mistake and
+  what the suite's blunder list says it costs.
+- **General concepts, then cards.** A fix states its rule ID and a condition over the position, not a card name. A
+  card-specific behaviour is fine where the card really is unusual, and goes through the behaviour catalog.
+- **Rule IDs in the reasons.** A changed term's reason string carries its rule ID (`"R16/asset-trash"`), so decision
+  logs, the blunder list and the lints name the rule.
+- **Each fix ships on the ladder.** A batch of related fixes is one policy version with a puzzle per rule (the guide's
+  paired positions: the same position with one fact changed), the regret line, the lint counts, and the box ladder
+  (400 deals) with Gateway (240) for harm, as section 6 already says. The Runner comes first: it wins about a third of
+  its games against the Corp on the box.
+- **Deck notes.** The box pool is seven decks (Nebula Fast Advance, PT Untaian Shell Game, Zwicky Supermodernism, LEO
+  Glacier; Topan, MuslihaT, Magdalene). Only the archetype modules those decks use are worked; a short note per deck
+  (its plan, key cards, what it fears, how to play against it) checks the archetype knobs (`CorpArchetypes`,
+  `RunnerArchetypes`, `AgentPersonalities`) against how the deck should play.
