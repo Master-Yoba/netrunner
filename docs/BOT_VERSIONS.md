@@ -2020,3 +2020,29 @@ versions (`RegretLabels.VersionOf`); the stored v2 and v3 labels keep their name
 **The review of #132.** Codex found that the steal-damage exemption at 5 points ignored one-point agendas (Greenmail takes
 a Runner on 5 to 6, and Phật fires); it now holds only when the Corp's smallest possible agenda would win. The 800-deal
 box ladder repeated after the fix (`standard` − `standard-r28`) reads the same, +30 [+9, +55], cell for cell.
+
+### H3 batch 3: Runner v31, the Nebula note's tags (9 October 2026)
+
+**Not shipped: level after two variants, and a third rule that hurt.** The default stays Runner v30; v31 stays
+constructible (`standard-r31`, variant b below). The notes for the other three box Corps are committed with it:
+[MATCHUP_ZWICKY.md](MATCHUP_ZWICKY.md), [MATCHUP_LEO.md](MATCHUP_LEO.md), [MATCHUP_NEBULA.md](MATCHUP_NEBULA.md).
+
+**Why tags.** H1 counted about 6.5 tagged turn ends a game against Nebula, and the Runner wins 35% there. Before v31 a
+tag was priced at a flat 180 (300 in a run), so removing one (2 credits, about 220) never paid unless a resource was at
+risk: the bot never cleared tags against Nebula.
+
+| Variant | Rule | Runner v31 − v30, box, 400 deals | Against Nebula |
+|---|---|---:|---:|
+| v30 | | | 35% |
+| a | NE17 to NE22: a tag priced by what the Corp's next turn can take for it (`RunnerInference.TagThreat`: an option that reinstalls a scored agenda once the tags reach its points, IP Enforcement; one that takes credits, Bigger Picture, counted twice), with evidence the Corp plays such a card; a run's tags at the cheaper of keeping them and clearing what the turn can (NE25) | −2 [−39, +31] | 34% |
+| b | a, and against a Corp that has shown tag-giving cards (Ping, Funhouse, Doomscroll) clearing a tag beats optional setup (NE17) | 0 [−35, +32] | 34% |
+| c | b, and a successful HQ or R&D run that flips Gemilang Arena back is worth the click the face gives the Corp (NE04 to NE06, 330 a click) | −14 [−49, +21] | **26%** |
+
+Variant a changed only the Nebula games (every other cell repeated v30's exactly): the evidence gate held, and the
+punishers, one copy each, were rarely seen. Tagged turn ends against Nebula fell only from 1,278 to 1,226.
+
+**Reading.** Against the bot Corp, tags do not decide the Nebula matchup: clearing them by default (b) moved nothing.
+The Gemilang flip at 330 a click sent the Runner into central runs it overpaid for; the note's own figure ("a useful
+HQ/R&D run costing roughly 2 to 4 credits") is a preference over optional setup, not a value added to every central run.
+Variant c is removed from v31. What loses the Nebula games is fast advance from HQ: the next attempt reads the losses
+(which agendas are scored from where, against what Runner pressure) before choosing a rule.

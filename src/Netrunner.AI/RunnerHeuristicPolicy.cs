@@ -383,6 +383,8 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
         {
             int tags = context.Self.Tags ?? 0;
             score += (int)(RunnerInference.TagThreat(context, tags) - RunnerInference.TagThreat(context, tags - 1));
+            // NE17: against a Corp that plays tags, end the turn untagged by default: clearing comes before optional setup.
+            if (RunnerInference.TagDeck(context)) score += 2 * context.CreditValue + 40;
         }
         return new(score <= 0 ? 0 : 10, score, "defense/remove-tag");
     }

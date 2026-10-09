@@ -264,7 +264,7 @@ internal static class RunnerInference
     /// </summary>
     public static double TagThreat(HeuristicContext context, int tags) => tags <= 0 ? 0 : context.Memo($"tag-threat/{tags}", () =>
     {
-        if (!Evidence(context, card => card.Behavior is { } behavior && TagPunisher(behavior))) return 0.0;
+        if (!TagDeck(context)) return 0.0;
         IReadOnlyDictionary<string, double> prior = Prior(context);
         double total = prior.Values.Sum();
         int hand = Math.Max(1, context.Features.Board.HiddenZoneCounts.CorpHand);
@@ -282,6 +282,15 @@ internal static class RunnerInference
         }
         return threat;
     });
+
+    /// <summary>
+    /// Runner v31: whether the Corp has shown it plays tags: a card that punishes them, or one that gives them (Ping's rez,
+    /// Funhouse, Doomscroll), on its list or seen. A deck built to tag holds the cards that cash tags in (NE17).
+    /// </summary>
+    public static bool TagDeck(HeuristicContext context) => context.Memo("tag-deck", () => Evidence(context, card =>
+        card.Behavior is { } behavior && (TagPunisher(behavior) || behavior.Triggers.SelectMany(trigger => HeuristicContext.Flatten(trigger.Instructions))
+            .Concat(HeuristicContext.Flatten(behavior.Instructions)).Any(instruction => instruction.Kind == BehaviorInstructionKind.AddTags))
+        || card.Ice?.Subroutines.Any(subroutine => subroutine is GiveTagsSubroutineSpec) == true));
 
     /// <summary>Runner v31: an operation the Corp can play only while the Runner is tagged.</summary>
     private static bool TagPunisher(CardBehaviorDefinition behavior) =>
