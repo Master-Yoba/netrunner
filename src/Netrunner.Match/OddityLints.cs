@@ -116,7 +116,8 @@ public static class OddityLints
         {
             if (state.Outcome is { Kind: GameOutcomeKind.Won, Winner: PlayerSide.Corp, Reason: GameWinReason.Flatline })
                 Report("runner-flatlined", PlayerSide.Runner, state.ActionSequence, state.Turn.TurnNumber,
-                    $"flatlined on turn {state.Turn.TurnNumber} at {Player(state, PlayerSide.Corp).AgendaPoints} to {Player(state, PlayerSide.Runner).AgendaPoints}.");
+                    $"flatlined on turn {state.Turn.TurnNumber} at {Player(state, PlayerSide.Corp).AgendaPoints} to {Player(state, PlayerSide.Runner).AgendaPoints}"
+                    + (_flatlinedBy is { } by ? $", {by}." : "."));
             foreach ((CardInstanceId ice, int installed) in _iceInstalledTurn)
             {
                 CardInstanceState? card = state.Cards.FirstOrDefault(value => value.Id == ice);
@@ -245,6 +246,7 @@ public static class OddityLints
         private int _runnerTurns;
         private bool _ranThisTurn;
         private bool? _corpDealsDamage;
+        private string? _flatlinedBy;
         private readonly Dictionary<CardInstanceId, (ServerId Server, int RunnerTurn)> _remoteAgendas = [];
         private readonly List<(ServerId Server, int RunnerTurn)> _runs = [];
 
@@ -267,6 +269,8 @@ public static class OddityLints
                     Report("runner-runs-on-thin-grip", PlayerSide.Runner, sequence, turn,
                         $"a run on {Server(after, started.AttackedServer)?.Kind} with {grip} cards in the grip.", once: false);
             }
+            if (before.Outcome.Kind == GameOutcomeKind.Ongoing && after.Outcome is { Reason: GameWinReason.Flatline })
+                _flatlinedBy = FlatlineCause(before, chosen, actor);
             PlayerState runner = Player(before, PlayerSide.Runner);
             int hqAgendas = before.GetZone(ZoneKind.CorpHand).CardIds.Count(id => Class(before, id) == RuntimeCardClass.Agenda);
             switch (chosen.Kind)
@@ -331,6 +335,22 @@ public static class OddityLints
                             $"an agenda behind {ice.Count} unrezzed ICE with {credits} credits.", once: false);
                 }
             }
+        }
+
+        /// <summary>What was resolving when the flatline came: an operation in play, the ICE encountered, or the cards accessed.</summary>
+        private static string FlatlineCause(GameState before, LegalAction chosen, PlayerSide actor)
+        {
+            var parts = new List<string> { $"{actor} {chosen.Kind}", $"grip {before.GetZone(ZoneKind.RunnerGrip).CardIds.Count}" };
+            if (before.Zones.FirstOrDefault(zone => zone.Kind == ZoneKind.CorpPlayArea) is { CardIds.Count: > 0 } played)
+                parts.Add("playing " + string.Join(" and ", played.CardIds.Select(id => Title(before, id))));
+            if (before.RunState is { } run)
+            {
+                parts.Add($"run on {Server(before, run.AttackedServer)?.Kind}");
+                if (run.CurrentIceId is { } ice) parts.Add("at " + Title(before, ice));
+                if (run.AccessedCards.Count > 0) parts.Add("accessed " + string.Join(" and ", run.AccessedCards.Select(id => Title(before, id))));
+                if (chosen.Parameters is BreachCandidateParameters { CardId: { } accessing }) parts.Add("accessing " + Title(before, accessing));
+            }
+            return string.Join(", ", parts);
         }
 
         private static bool DealsDamage(CardBehaviorDefinition behavior) =>
