@@ -249,6 +249,9 @@ public static class OddityLints
         private string? _flatlinedBy;
         private readonly Dictionary<CardInstanceId, (ServerId Server, int RunnerTurn)> _remoteAgendas = [];
         private readonly List<(ServerId Server, int RunnerTurn)> _runs = [];
+        // Batch 4: each tracked remote agenda as the Runner's latest turn began: its counters and its server's ICE, rezzed of all.
+        private readonly Dictionary<CardInstanceId, (int Counters, int Rezzed, int Ice)> _agendaAtRunnerTurn = [];
+        private int _runnerCreditsAtTurn;
 
         /// <summary>Bot plan H1: the strategy guide's mistakes (docs/STRATEGY_FUNDAMENTALS.md).</summary>
         private void Guide(GameState before, LegalAction chosen, PlayerSide actor, GameState after, long sequence, int turn)
@@ -257,6 +260,13 @@ public static class OddityLints
             {
                 _runnerTurns++;
                 _ranThisTurn = false;
+                _runnerCreditsAtTurn = Player(after, PlayerSide.Runner).Credits;
+                foreach ((CardInstanceId agenda, (ServerId server, _)) in _remoteAgendas)
+                {
+                    if (RootServer(after, agenda) is null) continue;
+                    IReadOnlyList<CardInstanceId> ice = Zone(after, server, ZoneKind.ServerIce);
+                    _agendaAtRunnerTurn[agenda] = (after.GetCard(agenda).AdvancementCounters, ice.Count(id => after.GetCard(id).Rezzed), ice.Count);
+                }
             }
             if (before.RunState is null && after.RunState is { } started)
             {
@@ -293,8 +303,14 @@ public static class OddityLints
             if (chosen.Parameters is ScoreAgendaParameters score && _remoteAgendas.TryGetValue(score.CardId, out var installed)
                 && _runnerTurns > installed.RunnerTurn
                 && !_runs.Any(run => run.Server == installed.Server && run.RunnerTurn > installed.RunnerTurn))
+            {
+                string ran = string.Join(" ", _runs.Where(run => run.RunnerTurn == _runnerTurns).Select(run => Server(before, run.Server)?.Kind.ToString() ?? "?"));
+                string seen = _agendaAtRunnerTurn.TryGetValue(score.CardId, out var at)
+                    ? $"; at the Runner's last turn: {_runnerCreditsAtTurn} credits, {at.Counters} counters, ICE {at.Rezzed}/{at.Ice} rezzed, ran {(ran.Length == 0 ? "nothing" : ran)}"
+                    : "";
                 Report("remote-scored-uncontested", PlayerSide.Runner, sequence, turn,
-                    $"{Title(before, score.CardId)} scored after {_runnerTurns - installed.RunnerTurn} Runner turns without a run on its remote.", once: false);
+                    $"{Title(before, score.CardId)} scored after {_runnerTurns - installed.RunnerTurn} Runner turns without a run on its remote{seen}.", once: false);
+            }
             if (actor == PlayerSide.Corp && chosen.Parameters is InstallCardParameters { FinalizeSelection: true } install)
             {
                 RuntimeCardClass? installing = Class(before, install.CardId);

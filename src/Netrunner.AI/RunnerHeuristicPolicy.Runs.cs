@@ -30,10 +30,10 @@ public sealed partial class RunnerHeuristicPolicy
         // v31 (MATCHUP_NEBULA.md NE17, NE25): a tag the turn can still clear costs its clearing (a click and 2 credits);
         // one it can't costs what the Corp's next turn can take for it.
         // The review of #133: with the tags a known agenda gives when it is stolen (Tomorrow's Headline), unless the steal wins.
-        int expectedTags = forecast.Tags + (context.Generation >= 26
+        int expectedTags = forecast.Tags + (context.Generation == HeuristicContext.TagGeneration
             && !RunnerInference.StealWins(context.Self.AgendaPoints, RunnerInference.SmallestAgenda(context))
                 ? RunnerInference.StealTags(context, server) : 0);
-        if (context.Generation >= 26 && expectedTags > 0)
+        if (context.Generation == HeuristicContext.TagGeneration && expectedTags > 0)
         {
             int tags = context.Self.Tags ?? 0;
             int clearable = Math.Min(expectedTags, Math.Min(Math.Max(0, context.Self.Clicks - 1 - tollClicks),
