@@ -31,6 +31,18 @@ public static class OddityLints
         new("archives-shuffle-empty", PlayerSide.Corp, "An ability that shuffles Archives into R&D used with Archives empty (Spin Doctor)."),
         new("rd-rerun-top-seen", PlayerSide.Runner, "The Runner ran R&D again in a turn when its top card is the one it already accessed there."),
         new("runner-repeats-known-trap", PlayerSide.Runner, "The Runner accessed the same installed trap (a card that deals damage on access) a second time."),
+        // Bot plan H1: the strategy guide's mistakes (docs/STRATEGY_FUNDAMENTALS.md), each named by its rule.
+        new("runner-banks-credits", PlayerSide.Runner, "R11: the Runner ended a turn on 10 credits or more without starting a run."),
+        new("runner-credit-over-draw-early", PlayerSide.Runner, "R12: in the first three turns, a basic credit with 5 credits or more and 4 cards or fewer in the grip, where a draw was legal."),
+        new("runner-runs-on-thin-grip", PlayerSide.Runner, "R18: a run started with 2 cards or fewer in the grip against a Corp whose deck deals damage."),
+        new("runner-ends-turn-tagged", PlayerSide.Runner, "R19: the Runner ended a turn tagged."),
+        new("runner-flatlined", PlayerSide.Runner, "R18: the Runner lost to a flatline."),
+        new("remote-scored-uncontested", PlayerSide.Runner, "R06: the Corp scored an agenda from a remote the Runner never ran in the turns it was installed."),
+        new("agenda-stolen-from-remote", PlayerSide.Corp, "C01, C02: the Runner stole an agenda from a remote."),
+        new("agenda-score-delayed", PlayerSide.Corp, "C05: the Corp ended its turn with an agenda it could score."),
+        new("draw-into-hq-flood", PlayerSide.Corp, "C13: a basic draw with three agendas or more in HQ."),
+        new("agenda-unprotected-at-turn-end", PlayerSide.Corp, "C02: an agenda in a remote at the end of the Corp's turn with no rezzed ICE and none the Corp can afford to rez."),
+        new("decorative-remote-ice", PlayerSide.Corp, "C08: a second or later ICE installed on a remote holding no agenda and no advanced card, with no agenda in HQ."),
     ];
 
     /// <summary>Replays one saved game and returns what the lints found, in game order.</summary>
@@ -95,12 +107,17 @@ public static class OddityLints
                 _declinedRez = (active.Id, active.AttackedServer);
 
             CountersOnInertCards(before, after, actor, sequence, turn);
+            Guide(before, chosen, actor, after, sequence, turn);
             RunEnded(before, after, sequence, turn);
             if (before.Turn.ActiveSide == PlayerSide.Corp && after.Turn.ActiveSide != PlayerSide.Corp) CorpTurnEnded(after, sequence, turn);
         }
 
         public void End(GameState state)
         {
+            if (state.Outcome is { Kind: GameOutcomeKind.Won, Winner: PlayerSide.Corp, Reason: GameWinReason.Flatline })
+                Report("runner-flatlined", PlayerSide.Runner, state.ActionSequence, state.Turn.TurnNumber,
+                    $"flatlined on turn {state.Turn.TurnNumber} at {Player(state, PlayerSide.Corp).AgendaPoints} to {Player(state, PlayerSide.Runner).AgendaPoints}"
+                    + (_flatlinedBy is { } by ? $", {by}." : "."));
             foreach ((CardInstanceId ice, int installed) in _iceInstalledTurn)
             {
                 CardInstanceState? card = state.Cards.FirstOrDefault(value => value.Id == ice);
@@ -225,6 +242,132 @@ public static class OddityLints
                         key: $"central-open-remotes-grow:{central.Kind}");
         }
 
+        // Bot plan H1: the Runner turns counted so far, when each remote agenda went in, and every run's server and turn.
+        private int _runnerTurns;
+        private bool _ranThisTurn;
+        private bool? _corpDealsDamage;
+        private string? _flatlinedBy;
+        private readonly Dictionary<CardInstanceId, (ServerId Server, int RunnerTurn)> _remoteAgendas = [];
+        private readonly List<(ServerId Server, int RunnerTurn)> _runs = [];
+
+        /// <summary>Bot plan H1: the strategy guide's mistakes (docs/STRATEGY_FUNDAMENTALS.md).</summary>
+        private void Guide(GameState before, LegalAction chosen, PlayerSide actor, GameState after, long sequence, int turn)
+        {
+            if (before.Turn.ActiveSide != PlayerSide.Runner && after.Turn.ActiveSide == PlayerSide.Runner)
+            {
+                _runnerTurns++;
+                _ranThisTurn = false;
+            }
+            if (before.RunState is null && after.RunState is { } started)
+            {
+                _runs.Add((started.AttackedServer, _runnerTurns));
+                _ranThisTurn = true;
+                int grip = before.GetZone(ZoneKind.RunnerGrip).CardIds.Count;
+                _corpDealsDamage ??= before.Cards.Where(card => card.OwnerSide == PlayerSide.Corp).Select(card => card.DefinitionId).Distinct()
+                    .Any(id => DealsDamage(definition.Behavior.TryGet(id, out CardBehaviorDefinition? behavior) ? behavior : null,
+                        definition.Behavior.TryGetIce(id, out IceBehaviorSpec ice) ? ice : null));
+                if (grip <= 2 && _corpDealsDamage == true)
+                    Report("runner-runs-on-thin-grip", PlayerSide.Runner, sequence, turn,
+                        $"a run on {Server(after, started.AttackedServer)?.Kind} with {grip} cards in the grip.", once: false);
+            }
+            if (before.Outcome.Kind == GameOutcomeKind.Ongoing && after.Outcome is { Reason: GameWinReason.Flatline })
+                _flatlinedBy = FlatlineCause(before, chosen, actor);
+            PlayerState runner = Player(before, PlayerSide.Runner);
+            int hqAgendas = before.GetZone(ZoneKind.CorpHand).CardIds.Count(id => Class(before, id) == RuntimeCardClass.Agenda);
+            switch (chosen.Kind)
+            {
+                case ActionKind.GainCredit when actor == PlayerSide.Runner && turn <= 3 && runner.Credits >= 5
+                    && before.GetZone(ZoneKind.RunnerGrip).CardIds.Count <= 4
+                    && before.PendingDecision!.LegalActions.Any(action => action.Kind == ActionKind.DrawCard):
+                    Report("runner-credit-over-draw-early", PlayerSide.Runner, sequence, turn,
+                        $"a credit on {runner.Credits} with {before.GetZone(ZoneKind.RunnerGrip).CardIds.Count} cards.", once: false);
+                    break;
+                case ActionKind.DrawCard when actor == PlayerSide.Corp && hqAgendas >= 3:
+                    Report("draw-into-hq-flood", PlayerSide.Corp, sequence, turn, $"a draw with {hqAgendas} agendas in HQ.", once: false);
+                    break;
+                case ActionKind.EndTurn when actor == PlayerSide.Corp
+                    && before.PendingDecision!.LegalActions.Any(action => action.Kind == ActionKind.ScoreAgenda):
+                    Report("agenda-score-delayed", PlayerSide.Corp, sequence, turn, "the turn ended with a scorable agenda.", once: false);
+                    break;
+            }
+            if (chosen.Parameters is ScoreAgendaParameters score && _remoteAgendas.TryGetValue(score.CardId, out var installed)
+                && _runnerTurns > installed.RunnerTurn
+                && !_runs.Any(run => run.Server == installed.Server && run.RunnerTurn > installed.RunnerTurn))
+                Report("remote-scored-uncontested", PlayerSide.Runner, sequence, turn,
+                    $"{Title(before, score.CardId)} scored after {_runnerTurns - installed.RunnerTurn} Runner turns without a run on its remote.", once: false);
+            if (actor == PlayerSide.Corp && chosen.Parameters is InstallCardParameters { FinalizeSelection: true } install)
+            {
+                RuntimeCardClass? installing = Class(before, install.CardId);
+                ServerState? into = RootServer(after, install.CardId) ?? (install.ServerId is { } id ? Server(after, id) : null);
+                if (installing == RuntimeCardClass.Agenda && RootServer(after, install.CardId) is { Kind: ServerKind.Remote } remote)
+                    _remoteAgendas[install.CardId] = (remote.Id, _runnerTurns);
+                if (installing == RuntimeCardClass.Ice && into is { Kind: ServerKind.Remote } && hqAgendas == 0
+                    && Zone(before, into.Id, ZoneKind.ServerIce).Count >= 1
+                    && !Zone(before, into.Id, ZoneKind.ServerRoot).Any(id => Class(before, id) == RuntimeCardClass.Agenda
+                        || before.GetCard(id).AdvancementCounters > 0))
+                    Report("decorative-remote-ice", PlayerSide.Corp, sequence, turn,
+                        $"{Title(before, install.CardId)} as ICE #{Zone(before, into.Id, ZoneKind.ServerIce).Count + 1} on a remote of {Zone(before, into.Id, ZoneKind.ServerRoot).Count} cards.",
+                        once: false);
+            }
+            foreach (CardInstanceId stolen in after.GetZone(ZoneKind.RunnerScore).CardIds.Except(before.GetZone(ZoneKind.RunnerScore).CardIds))
+                if (RootServer(before, stolen) is { Kind: ServerKind.Remote } remote)
+                    Report("agenda-stolen-from-remote", PlayerSide.Corp, sequence, turn,
+                        $"{Title(before, stolen)} ({before.GetCard(stolen).AdvancementCounters} counters) behind {Zone(before, remote.Id, ZoneKind.ServerIce).Count(id => before.GetCard(id).Rezzed)} rezzed of {Zone(before, remote.Id, ZoneKind.ServerIce).Count} ICE.",
+                        once: false);
+            if (before.Turn.ActiveSide == PlayerSide.Runner && after.Turn.ActiveSide != PlayerSide.Runner)
+            {
+                PlayerState ended = Player(after, PlayerSide.Runner);
+                if (ended.Credits >= 10 && !_ranThisTurn)
+                    Report("runner-banks-credits", PlayerSide.Runner, sequence, turn, $"the turn ended on {ended.Credits} credits without a run.", once: false);
+                if (Tags(after) > 0)
+                    Report("runner-ends-turn-tagged", PlayerSide.Runner, sequence, turn, $"the turn ended with {Tags(after)} tags.", once: false);
+            }
+            if (before.Turn.ActiveSide == PlayerSide.Corp && after.Turn.ActiveSide != PlayerSide.Corp)
+            {
+                int credits = Player(after, PlayerSide.Corp).Credits;
+                foreach (ServerState remote in after.Servers.Where(server => server.Kind == ServerKind.Remote))
+                {
+                    if (!Zone(after, remote.Id, ZoneKind.ServerRoot).Any(id => Class(after, id) == RuntimeCardClass.Agenda)) continue;
+                    IReadOnlyList<CardInstanceId> ice = Zone(after, remote.Id, ZoneKind.ServerIce);
+                    bool defended = ice.Any(id => after.GetCard(id).Rezzed)
+                        || ice.Any(id => definition.Runtime.TryGet(after.GetCard(id).DefinitionId, out CardRuntimeSpec spec) && (spec.RezCost ?? 0) <= credits);
+                    if (!defended)
+                        Report("agenda-unprotected-at-turn-end", PlayerSide.Corp, sequence, turn,
+                            $"an agenda behind {ice.Count} unrezzed ICE with {credits} credits.", once: false);
+                }
+            }
+        }
+
+        /// <summary>What was resolving when the flatline came: an operation in play, the ICE encountered, or the cards accessed.</summary>
+        private static string FlatlineCause(GameState before, LegalAction chosen, PlayerSide actor)
+        {
+            var parts = new List<string> { $"{actor} {chosen.Kind}", $"grip {before.GetZone(ZoneKind.RunnerGrip).CardIds.Count}" };
+            if (before.Zones.FirstOrDefault(zone => zone.Kind == ZoneKind.CorpPlayArea) is { CardIds.Count: > 0 } played)
+                parts.Add("playing " + string.Join(" and ", played.CardIds.Select(id => Title(before, id))));
+            if (before.RunState is { } run)
+            {
+                parts.Add($"run on {Server(before, run.AttackedServer)?.Kind}");
+                if (run.CurrentIceId is { } ice) parts.Add("at " + Title(before, ice));
+                if (run.AccessedCards.Count > 0) parts.Add("accessed " + string.Join(" and ", run.AccessedCards.Select(id => Title(before, id))));
+                if (chosen.Parameters is BreachCandidateParameters { CardId: { } accessing }) parts.Add("accessing " + Title(before, accessing));
+            }
+            return string.Join(", ", parts);
+        }
+
+        private RuntimeCardClass? Class(GameState state, CardInstanceId id) =>
+            definition.Runtime.TryGet(state.GetCard(id).DefinitionId, out CardRuntimeSpec spec) ? spec.CardClass : null;
+
+        private static PlayerState Player(GameState state, PlayerSide side) => state.Players.Single(player => player.Side == side);
+
+        private static int Tags(GameState state) =>
+            state.RulesState?.Players.SingleOrDefault(player => player.PlayerId == Player(state, PlayerSide.Runner).Id)?.Tags ?? 0;
+
+        private static IReadOnlyList<CardInstanceId> Zone(GameState state, ServerId server, ZoneKind kind) =>
+            [.. state.Zones.Where(zone => zone.ServerId == server && zone.Kind == kind).SelectMany(zone => zone.CardIds)];
+
+        private static ServerState? RootServer(GameState state, CardInstanceId id) => state.Zones
+            .FirstOrDefault(zone => zone.Kind == ZoneKind.ServerRoot && zone.CardIds.Contains(id)) is { ServerId: { } server } ? Server(state, server) : null;
+
         private void Report(string lint, PlayerSide side, long sequence, int turn, string detail, bool once = true, string? key = null)
         {
             if (once && !_reported.Add(key ?? lint)) return;
@@ -256,6 +399,19 @@ public static class OddityLints
         private static string Title(GameState state, CardInstanceId id) =>
             CardTitles.TryGetValue(state.GetCard(id).DefinitionId.Value, out string? title) ? title : state.GetCard(id).DefinitionId.Value;
     }
+
+    /// <summary>
+    /// Bot plan H1 (<c>runner-runs-on-thin-grip</c>): whether a Corp card deals damage, by its behavior or, for native
+    /// ICE (Karunā, Tithe, Diviner), by its ICE specification's subroutines, which are not card behaviors.
+    /// </summary>
+    internal static bool DealsDamage(CardBehaviorDefinition? behavior, IceBehaviorSpec? ice) =>
+        behavior is not null && DealsDamage(behavior) || ice?.Subroutines.Any(subroutine => subroutine is DamageSubroutineSpec) == true;
+
+    private static bool DealsDamage(CardBehaviorDefinition behavior) =>
+        behavior.Instructions.Concat(behavior.Triggers.SelectMany(trigger => trigger.Instructions))
+            .Concat(behavior.PaidAbilities.SelectMany(ability => ability.Instructions))
+            .Any(instruction => instruction.Kind == BehaviorInstructionKind.DealDamage
+                || instruction.Choice?.Options.Any(option => option.Instructions.Any(inner => inner.Kind == BehaviorInstructionKind.DealDamage)) == true);
 
     /// <summary>Card titles for readable findings, when the card data is available.</summary>
     private static readonly Dictionary<string, string> CardTitles = LoadTitles();

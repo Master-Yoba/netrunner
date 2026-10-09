@@ -52,7 +52,7 @@ public static partial class RatingLadder
     /// in its own seat, and "hard".
     /// </summary>
     public static IReadOnlyList<string> EntrantOrder { get; } =
-        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard-w3", "standard-c1", "standard-r22", "standard-c26", "standard-r23", "standard-c27", "standard-r24", "standard-c28", "standard-r25", "standard-c29", "standard-prev", "standard", "standard-plan", "standard-plan-fit", "standard-run", "standard-rez", "standard-w4a", "standard-w4b", "standard-arch", "standard-rarch", "standard-rgen", "standard-w4c", "standard-c13", "standard-w4d", "standard-c14", "standard-c15", "standard-c16", "standard-r13", "standard-c17", "standard-c18", "standard-c19", "standard-r14", "standard-c20", "standard-r15", "standard-c21", "standard-r16", "standard-c22", "standard-b3", "standard-c23", "standard-r17", "standard-r18", "standard-c24", "standard-r19", "standard-w5", "standard-r21", "hard-r21", "hard-a9c", "hard-a9d", "hard-a9d-list", "hard-a9d-pins", "glacier", "rush", "asset-spam", "aggressive", "rig-builder", "hard", "hard-wide", "hard-weight", "hard-rez", "hard-model", "standard-heuristic", "standard-apprentice", "standard-apprentice-v1", "hard-set5", "hard-set4-teacher", "hard-value", "hard-set5-value", "hard-set5l-value", "hard-set4l-value", "hard-set5l-value-x1", "hard-set5l-value-x4", "hard-set5l-value-x8", "standard-x1", "standard-x2", "standard-x4", "standard-x8", "standard-x16"];
+        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard-w3", "standard-c1", "standard-r22", "standard-c26", "standard-r23", "standard-c27", "standard-r24", "standard-c28", "standard-r25", "standard-c29", "standard-r29", "standard-prev", "standard", "standard-plan", "standard-plan-fit", "standard-run", "standard-rez", "standard-w4a", "standard-w4b", "standard-arch", "standard-rarch", "standard-rgen", "standard-w4c", "standard-c13", "standard-w4d", "standard-c14", "standard-c15", "standard-c16", "standard-r13", "standard-c17", "standard-c18", "standard-c19", "standard-r14", "standard-c20", "standard-r15", "standard-c21", "standard-r16", "standard-c22", "standard-b3", "standard-c23", "standard-r17", "standard-r18", "standard-c24", "standard-r19", "standard-w5", "standard-r21", "hard-r21", "hard-a9c", "hard-a9d", "hard-a9d-list", "hard-a9d-pins", "glacier", "rush", "asset-spam", "aggressive", "rig-builder", "hard", "hard-wide", "hard-weight", "hard-rez", "hard-model", "hard-playout", "standard-heuristic", "standard-apprentice", "standard-apprentice-v1", "hard-set5", "hard-set4-teacher", "hard-value", "hard-set5-value", "hard-set5l-value", "hard-set4l-value", "hard-set5l-value-x1", "hard-set5l-value-x4", "hard-set5l-value-x8", "standard-x1", "standard-x2", "standard-x4", "standard-x8", "standard-x16"];
 
     private const double EloScale = 400 / 2.302585092994046;
     private const double Ridge = 0.01;
@@ -107,6 +107,12 @@ public static partial class RatingLadder
             "hard-rez" => Tuned(OfflineMatchFactory.CreateOpponent(definition, other, "hard"), definition,
                 ("run-samples", RunnerPolicyProfiles.RunSamples), ("run-width", 2)),
             "hard-model" => Tuned(OfflineMatchFactory.CreateOpponent(definition, other, "hard"), definition, ("plan-model", 1)),
+            // Bot plan S5.1c: Corp Hard whose turn actions are played out as the teacher plays them (lines of the turn, 4 turns
+            // and the leaf, the live Standard opponent) at a beam of 4 and 4 samples; the Runner seat is Hard.
+            "hard-playout" => side == PlayerSide.Corp
+                ? Tuned(OfflineMatchFactory.CreateOpponent(definition, other, "hard"), definition,
+                    ("plan-playout", 4), ("plan-samples", 4), ("plan-width", 4), ("plan-model", 1))
+                : OfflineMatchFactory.CreateOpponent(definition, other, "hard"),
             // Bot plan S4.5: the Standard heuristic with no planner, and the same with the apprentice re-ordering its top band.
             ApprenticeBase => Heuristic(OfflineMatchFactory.CreateOpponent(definition, other, "standard"), definition, 0),
             // S4.5b: standard-apprentice is the latest apprentice (v2, teacher v3); standard-apprentice-v1 is S4.5's (teacher v2).
@@ -192,6 +198,9 @@ public static partial class RatingLadder
             // Corp v29 with the default Runner: the sequencing work measures Corp v30 against it.
             "standard-c29" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
                 side == PlayerSide.Corp ? CorpHeuristicPolicy.V29 : RunnerHeuristicPolicy.PolicyVersion),
+            // Bot plan H3: Runner v29 (the grip cushion) with the default Corp, measured against the live Runner v28.
+            "standard-r29" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
+                side == PlayerSide.Corp ? CorpHeuristicPolicy.PolicyVersion : RunnerHeuristicPolicy.V29),
             // Runner v25 with the default Corp: the self-flatline work measures Runner v26 against it.
             "standard-r25" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
                 side == PlayerSide.Corp ? CorpHeuristicPolicy.PolicyVersion : RunnerHeuristicPolicy.V25),
