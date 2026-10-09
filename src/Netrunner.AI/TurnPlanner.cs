@@ -62,6 +62,13 @@ internal sealed partial class TurnPlanner
     /// </summary>
     public bool Values => _configuration.Parameters.GetValueOrDefault("plan-value") == 1;
 
+    /// <summary>
+    /// plan-playout N (bot plan S5.1c): a turn-action candidate's lines are played on for N turns past the root, as the
+    /// teacher plays them (a one-turn screen, the heuristic's line and the best other played on), and valued as win
+    /// probabilities; 0 (the default) plays them to the turn's end.
+    /// </summary>
+    public int Playout => _configuration.Parameters.GetValueOrDefault("plan-playout");
+
     /// <summary>plan-tie: the margin of value, in thousandths of a win probability, within which candidates tie (default 5).</summary>
     public int Tie => _configuration.Parameters.GetValueOrDefault("plan-tie", 5);
 
@@ -103,6 +110,7 @@ internal sealed partial class TurnPlanner
         var probabilities = planned.ToDictionary(candidate => candidate.ActionId, _ => 0.0);
         double roots = 0;
         OpponentCardPool pool = PoolFor(features.Side, knowledge);
+        if (!run && Playout > 0) return PlayedOut(features, heuristic, planned, knowledge, planning, pool, samples, started);
         if (!run && Lines)
         {
             // Bot plan S1.5: a candidate is valued at its best line of the turn, on the same samples.
@@ -151,6 +159,48 @@ internal sealed partial class TurnPlanner
             }
             : candidate)];
     }
+
+    /// <summary>
+    /// plan-playout (bot plan S5.1c): every planned candidate valued at its best line on the same samples, as
+    /// <see cref="RolloutTeacher"/> values a root at teacher v2's settings (a beam of <see cref="Width"/>, a one-turn screen,
+    /// <see cref="Playout"/> turns, then the leaf), and chosen as plan-value 1 chooses. A sample where a candidate cannot
+    /// be played is dealt again for all, up to twice the samples; with none left the heuristic decides.
+    /// </summary>
+    private ImmutableArray<AgentCandidate> PlayedOut(AgentFeatures features, ImmutableArray<AgentCandidate> heuristic,
+        AgentCandidate[] planned, AgentKnowledge knowledge, PlanningContext planning, OpponentCardPool pool, int samples, long started)
+    {
+        var states = new List<GameState>(samples);
+        for (int dealt = 0; dealt < 2 * samples && states.Count < samples; dealt++)
+        {
+            GameState state = Deal(features.Side, knowledge, pool, planning);
+            if (planned.All(candidate => Playable(state, candidate.ActionId, planning.Determinizer))) states.Add(state);
+        }
+        if (states.Count == 0)
+        {
+            ProfileTimings.Stop("plan", started);
+            return heuristic;
+        }
+        var memo = new Dictionary<string, double>(StringComparer.Ordinal);
+        var screens = new Dictionary<string, double>(StringComparer.Ordinal);
+        var probabilities = new Dictionary<ActionId, double>();
+        foreach (AgentCandidate candidate in planned)
+        {
+            long rolling = ProfileTimings.Start();
+            (double[] values, _) = BestLine(states.Count,
+                (index, ranks) => (PlayLine(states[index], candidate.ActionId, ranks, features.Side, knowledge, planning.Determinizer, 1,
+                    PlayoutEvaluation, PlannerProbe.GameRolloutCap, out int reached, screens) ?? 0, reached),
+                Width,
+                (index, ranks) => (PlayLine(states[index], candidate.ActionId, ranks, features.Side, knowledge, planning.Determinizer, Playout,
+                    PlayoutEvaluation, PlannerProbe.GameRolloutCap, out int reached, memo) ?? 0, reached));
+            probabilities[candidate.ActionId] = values.Sum();
+            ProfileTimings.Stop("plan.playout", rolling);
+        }
+        ProfileTimings.Stop("plan", started);
+        return Valued(heuristic, planned, probabilities, 0, states.Count, run: false);
+    }
+
+    /// <summary>The leaf where a play-out stops short of the game's end: the teacher's (<see cref="TeacherSettings.Evaluation"/>).</summary>
+    private const int PlayoutEvaluation = 4;
 
     /// <summary>
     /// plan-value 1: a planned candidate's score is its value in millionths of a win probability; the top band's

@@ -61,6 +61,49 @@ public sealed class TurnPlannerTests
         Assert.True(checkedPositions > 0, "No position with two planned candidates.");
     }
 
+    /// <summary>
+    /// Bot plan S5.1c (plan-playout): the Corp's lines played on past the turn are valued in win probability, the choice is
+    /// a planned candidate, and hidden-state twins and a repeat get the same plan.
+    /// </summary>
+    [Fact]
+    public async Task PlayoutPlansAreValuedTwinSafeAndRepeatable()
+    {
+        int twins = 0;
+        foreach ((FullMatchDefinition definition, GameState state) in await PositionsAsync(PlayerSide.Corp))
+        {
+            GameState? twin = SwapTwoHiddenCards(state, PlayerSide.Runner);
+            if (twin is null) continue;
+            async Task<(ActionId Action, OfflineAgent Agent)> PlayedOut(GameState at)
+            {
+                OfflineAgent agent = AgentAt(definition, at, PlayerSide.Corp, playout: true);
+                return (await agent.ChooseActionAsync(ObservationBuilder.Build(at, PlayerSide.Corp, definition.Behavior, definition.Runtime)), agent);
+            }
+            (ActionId left, OfflineAgent agent) = await PlayedOut(state);
+            AgentCandidate chosen = agent.LastEvaluation!.Candidates.Single(candidate => candidate.ActionId == left);
+            Assert.True(chosen.Utility.Priority >= TurnPlannerPriority / 2, chosen.Utility.Reason);
+            Assert.Contains("turn-rollout value", chosen.Utility.Reason, StringComparison.Ordinal);
+            Assert.Equal(left, (await PlayedOut(twin)).Action);
+            Assert.Equal(left, (await PlayedOut(state)).Action);
+            if (++twins >= 2) break;
+        }
+        Assert.True(twins > 0, "No twin positions with a planned turn action.");
+    }
+
+    [Fact]
+    public void ThePlayoutEntrantPlaysOutOnlyInTheCorpSeat()
+    {
+        FullMatchDefinition definition = RulesFuzzRunner.CreateDefinition(
+            Official ? RulesFuzzRunner.GatewayElevationContentIds[0] : RulesFuzzRunner.DeveloperContentId, 5);
+        var corp = (OfflineAgent)RatingLadder.CreateAgent("hard-playout", PlayerSide.Corp, definition);
+        Assert.Equal(4, corp.Configuration.Parameters["plan-playout"]);
+        Assert.Equal(4, corp.Configuration.Parameters["plan-samples"]);
+        Assert.Equal(4, corp.Configuration.Parameters["plan-width"]);
+        Assert.Equal(1, corp.Configuration.Parameters["plan-model"]);
+        var runner = (OfflineAgent)RatingLadder.CreateAgent("hard-playout", PlayerSide.Runner, definition);
+        Assert.Equal(((OfflineAgent)RatingLadder.CreateAgent("hard", PlayerSide.Runner, definition)).Configuration.Parameters,
+            runner.Configuration.Parameters);
+    }
+
     [Theory]
     [InlineData(PlayerSide.Runner)]
     [InlineData(PlayerSide.Corp)]
@@ -96,6 +139,11 @@ public sealed class TurnPlannerTests
         current.PolicyVersion, current.ProfileId, current.PolicySeed, current.WorkBudget, current.NearTieTolerance,
         [.. current.Parameters, new KeyValuePair<string, int>(key, 1)], current.FeatureVersion);
 
+    private static OfflineAgentConfiguration With(OfflineAgentConfiguration current, params (string Key, int Value)[] settings) =>
+        OfflineAgentConfiguration.Create(current.Side, current.PolicyVersion, current.ProfileId, current.PolicySeed, current.WorkBudget,
+            current.NearTieTolerance, [.. current.Parameters.Where(pair => settings.All(setting => setting.Key != pair.Key)),
+                .. settings.Select(setting => new KeyValuePair<string, int>(setting.Key, setting.Value))], current.FeatureVersion);
+
     private static bool Official => CardDataResource.EmbeddedMode == CardDataResource.OfficialMode;
 
     private static async Task<(ActionId Action, bool Planned)> ChooseAsync(FullMatchDefinition definition, GameState state, PlayerSide side,
@@ -111,13 +159,18 @@ public sealed class TurnPlannerTests
     /// the live Hard bot searching lines of the turn (plan-lines, bot plan S1.5; the live Runner's Standard does not plan);
     /// with <paramref name="value"/>, the live Hard bot valuing candidates in win probability (plan-value, S4.2).
     /// </summary>
-    private static OfflineAgent AgentAt(FullMatchDefinition definition, GameState state, PlayerSide side, bool lines = false, bool value = false)
+    /// With <paramref name="playout"/>, the live Corp Hard bot playing its lines one turn past the root on 2 samples
+    /// (plan-playout, S5.1c).
+    private static OfflineAgent AgentAt(FullMatchDefinition definition, GameState state, PlayerSide side, bool lines = false, bool value = false,
+        bool playout = false)
     {
-        bool live = lines || value;
+        bool live = lines || value || playout;
         OfflineAgent fresh = OfflineMatchFactory.CreateOpponent(definition, side == PlayerSide.Corp ? PlayerSide.Runner : PlayerSide.Corp,
             live ? "hard" : "standard", live ? Live(side) : Planning(side));
         OfflineAgentConfiguration configuration = lines ? With(fresh.Configuration, "plan-lines")
-            : value ? With(fresh.Configuration, "plan-value") : fresh.Configuration;
+            : value ? With(fresh.Configuration, "plan-value")
+            : playout ? With(fresh.Configuration, ("plan-playout", 1), ("plan-samples", 2), ("plan-width", 2), ("plan-model", 1))
+            : fresh.Configuration;
         // A checkpoint belongs to its configuration, so the switched-on agent starts from its own.
         OfflineAgentCheckpoint start = live ? new OfflineAgent(configuration, OfflinePolicies.Create(configuration),
             new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior)).Checkpoint : fresh.Checkpoint;

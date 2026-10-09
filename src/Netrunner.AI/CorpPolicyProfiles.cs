@@ -108,7 +108,7 @@ public static class CorpPolicyProfiles
     /// Planner settings a Hard profile may add (A6 tuning): rollout weight, run search and the opponent model; and (bot plan
     /// S4.2) the planner's value in win probability and its tie margin.
     /// </summary>
-    internal static readonly string[] HardTuningKeys = ["plan-weight", "run-samples", "run-width", "plan-model", "plan-tracker", "plan-value", "plan-tie"];
+    internal static readonly string[] HardTuningKeys = ["plan-weight", "run-samples", "run-width", "plan-model", "plan-tracker", "plan-value", "plan-tie", "plan-playout"];
 
 
     /// <summary>Whether a version has the A6 tiers: the Hard profile and personalities.</summary>
@@ -181,6 +181,8 @@ public static class CorpPolicyProfiles
                 "plan-value" => pair.Value is < 0 or > 1,
                 "plan-tie" => pair.Value is < 0 or > 100,
                 "plan-evaluation" => pair.Value is < 0 or > 8,
+                // Bot plan S5.1c: turns a line is played on past the root.
+                "plan-playout" => pair.Value is < 0 or > 8,
                 "archetype-primary" or "archetype-secondary" => !Enum.IsDefined((CorpArchetype)pair.Value),
                 AgentPersonalities.ParameterKey => pair.Value == 0 || !AgentPersonalities.IsValid(PlayerSide.Corp, pair.Value),
                 _ => pair.Value is < 25 or > 200,
