@@ -2046,3 +2046,8 @@ The Gemilang flip at 330 a click sent the Runner into central runs it overpaid f
 HQ/R&D run costing roughly 2 to 4 credits") is a preference over optional setup, not a value added to every central run.
 Variant c is removed from v31. What loses the Nebula games is fast advance from HQ: the next attempt reads the losses
 (which agendas are scored from where, against what Runner pressure) before choosing a rule.
+
+**The review of #133.** Codex found two gaps in v31's tag pricing, both fixed with tests: a known agenda's on-steal tag
+(Tomorrow's Headline) now counts toward a run's tags, and every tag choice (Funhouse's take a tag or end the run, its
+pay 4 or take a tag) prices the tag with the punishers' threat through `RunnerValues.TagRisk`. v31 is not the default,
+and its ladders above were read before these fixes; the next attempt measures v31 as it now stands.

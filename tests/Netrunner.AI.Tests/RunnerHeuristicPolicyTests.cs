@@ -131,6 +131,68 @@ public sealed class RunnerHeuristicPolicyTests
     public void AStealWinsOnlyWhenTheSmallestAgendaReachesSeven(int points, int smallest, bool wins) =>
         Assert.Equal(wins, RunnerInference.StealWins(points, smallest));
 
+    /// <summary>
+    /// Runner v31, the review of #133: a known agenda whose ability tags the Runner when stolen (Tomorrow's Headline) adds
+    /// that tag to the run's clean-up; an ability that fires only when the Corp scores it adds none.
+    /// </summary>
+    [Fact]
+    public void AKnownAgendasOnStealTagCountsTowardTheRunsTags()
+    {
+        CardDefinitionId headline = new("test:headline"), scoredOnly = new("test:scored-only");
+        CardBehaviorDefinition Tagging(CardDefinitionId id, PlayerSide? controller) => new(id, PlayerSide.Corp, triggers:
+            [new BehaviorTrigger("tag", OccurrenceKind.AgendaScoredOrStolen, TriggerMode.Mandatory, BehaviorTriggerScope.Self, null,
+                [new BehaviorInstruction(BehaviorInstructionKind.AddTags, 1, recipient: BehaviorPlayerSelector.Runner)],
+                occurrenceControllerSide: controller)]);
+        CardEvaluationDescriptor Agenda(CardDefinitionId id, PlayerSide? controller) =>
+            new(new(id, PlayerSide.Corp, RuntimeCardClass.Agenda, agendaPoints: 2, advancementRequirement: 3), Tagging(id, controller),
+                null, null, null, null, new(id, 2), [], false);
+        var catalog = new ScenarioCatalog(Agenda(headline, null), Agenda(scoredOnly, PlayerSide.Corp));
+        Observation observation = Decision(new LegalAction(new("action:credit"), ActionKind.GainCredit, "ignored", new NoActionParameters()));
+        AgentBoard baseline = ObservationReader.Read(observation).Board;
+        AgentBoard board = baseline with
+        {
+            Servers = [
+                new("server:headline", ServerKind.Remote, [], [new AgentCard { Id = "card:headline", DefinitionId = headline.Value }]),
+                new("server:scored-only", ServerKind.Remote, [], [new AgentCard { Id = "card:scored-only", DefinitionId = scoredOnly.Value }])],
+        };
+        observation = observation with { PublicState = EngineJson.Deserialize<Dictionary<string, object?>>(EngineJson.Serialize(board)) };
+        AgentFeatures features = ObservationReader.Read(observation);
+        var context = new HeuristicContext(features, catalog, RunnerPolicyProfiles.Create("standard", 54, RunnerHeuristicPolicy.V31), 26);
+
+        Assert.Equal(1, RunnerInference.StealTags(context, features.Board.Servers[0]));
+        Assert.Equal(0, RunnerInference.StealTags(context, features.Board.Servers[1]));
+    }
+
+    /// <summary>
+    /// Runner v31, the review of #133: every tag choice (Funhouse's take a tag or end the run) prices the tag with what the
+    /// Corp's punishers can take for it: against a list holding a Bigger Picture-like transfer, a tag on 5 credits costs the
+    /// 5 credits twice over; v30 prices it at the flat risk.
+    /// </summary>
+    [Fact]
+    public void ATagIsPricedByTheCreditsAPunisherTransfers()
+    {
+        CardDefinitionId transfer = new("test:transfer");
+        var choice = new BehaviorChoiceSpec("transfer-mode", BehaviorChooser.Controller, BehaviorChoiceMode.Mode, BehaviorChoiceCardinality.Exactly(1),
+            [new BehaviorChoiceOption("give-tag", [new BehaviorInstruction(BehaviorInstructionKind.AddTags, 1, recipient: BehaviorPlayerSelector.Runner)]),
+            new BehaviorChoiceOption("remove-1",
+                [new BehaviorInstruction(BehaviorInstructionKind.LoseCredits, 5, recipient: BehaviorPlayerSelector.Runner)],
+                condition: BehaviorCondition.RunnerTagsAtLeast(1))]);
+        var catalog = new ScenarioCatalog(new CardEvaluationDescriptor(new(transfer, PlayerSide.Corp, RuntimeCardClass.Operation, playCost: 0),
+            new CardBehaviorDefinition(transfer, PlayerSide.Corp, conditions: [BehaviorCondition.Tagged(PlayerSide.Runner)],
+                instructions: [new BehaviorInstruction(BehaviorInstructionKind.Choose, choice: choice)]),
+            null, null, null, null, null, [], false));
+        Observation observation = Decision(new LegalAction(new("action:credit"), ActionKind.GainCredit, "ignored", new NoActionParameters()));
+        AgentBoard baseline = ObservationReader.Read(observation).Board;
+        AgentBoard board = baseline with { Players = baseline.Players with { Runner = baseline.Players.Runner with { Credits = 5 } } };
+        observation = observation with { PublicState = EngineJson.Deserialize<Dictionary<string, object?>>(EngineJson.Serialize(board)) };
+        AgentFeatures features = ObservationReader.Read(observation);
+        AgentKnowledge knowledge = AgentKnowledge.Empty with { OpponentList = [new AgentListEntry(transfer.Value, 1)] };
+        int Risk(string version, int generation) => RunnerValues.TagRisk(
+            new HeuristicContext(features, catalog, RunnerPolicyProfiles.Create("standard", 54, version), generation) { Knowledge = knowledge });
+
+        Assert.Equal(2 * 5 * 110, Risk(RunnerHeuristicPolicy.V31, 26) - Risk(RunnerHeuristicPolicy.V30, 25));
+    }
+
     private static Observation Decision(params LegalAction[] actions)
     {
         GameState state = GameState.CreateNew(54);

@@ -29,14 +29,18 @@ public sealed partial class RunnerHeuristicPolicy
         int tagCost = forecast.Tags * 300;
         // v31 (MATCHUP_NEBULA.md NE17, NE25): a tag the turn can still clear costs its clearing (a click and 2 credits);
         // one it can't costs what the Corp's next turn can take for it.
-        if (context.Generation >= 26 && forecast.Tags > 0)
+        // The review of #133: with the tags a known agenda gives when it is stolen (Tomorrow's Headline), unless the steal wins.
+        int expectedTags = forecast.Tags + (context.Generation >= 26
+            && !RunnerInference.StealWins(context.Self.AgendaPoints, RunnerInference.SmallestAgenda(context))
+                ? RunnerInference.StealTags(context, server) : 0);
+        if (context.Generation >= 26 && expectedTags > 0)
         {
             int tags = context.Self.Tags ?? 0;
-            int clearable = Math.Min(forecast.Tags, Math.Min(Math.Max(0, context.Self.Clicks - 1 - tollClicks),
+            int clearable = Math.Min(expectedTags, Math.Min(Math.Max(0, context.Self.Clicks - 1 - tollClicks),
                 Math.Max(0, (funds - cost - loss) / 2)));
-            double kept = forecast.Tags * 180 + RunnerInference.TagThreat(context, tags + forecast.Tags) - RunnerInference.TagThreat(context, tags);
-            double cleared = clearable * (ClickCredits + 2) * context.CreditValue + (forecast.Tags - clearable) * 180
-                + RunnerInference.TagThreat(context, tags + forecast.Tags - clearable) - RunnerInference.TagThreat(context, tags);
+            double kept = expectedTags * 180 + RunnerInference.TagThreat(context, tags + expectedTags) - RunnerInference.TagThreat(context, tags);
+            double cleared = clearable * (ClickCredits + 2) * context.CreditValue + (expectedTags - clearable) * 180
+                + RunnerInference.TagThreat(context, tags + expectedTags - clearable) - RunnerInference.TagThreat(context, tags);
             tagCost = (int)Math.Min(kept, cleared);
         }
         // v6: an advanced card the Runner can't identify may be a trap dealing 2 plus

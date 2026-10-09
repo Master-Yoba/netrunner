@@ -376,7 +376,7 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// </summary>
     private static AgentUtility RemoveTag(HeuristicContext context, RemoveTagParameters remove)
     {
-        int score = RunnerValues.TagRisk(context) - remove.CreditCost * context.CreditValue;
+        int score = RunnerValues.TagRisk(context, threat: false) - remove.CreditCost * context.CreditValue;
         // v31 (MATCHUP_NEBULA.md NE17, NE19): a tag removed is the punishment it no longer enables (IP Enforcement's
         // repossession at the stolen agenda's points, Bigger Picture's 5 credits a tag).
         if (context.Generation >= 26)

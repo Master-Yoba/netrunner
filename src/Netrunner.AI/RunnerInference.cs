@@ -292,6 +292,25 @@ internal static class RunnerInference
             .Concat(HeuristicContext.Flatten(behavior.Instructions)).Any(instruction => instruction.Kind == BehaviorInstructionKind.AddTags))
         || card.Ice?.Subroutines.Any(subroutine => subroutine is GiveTagsSubroutineSpec) == true));
 
+    /// <summary>
+    /// Runner v31 (the review of #133): the tags a run's steal gives, for the agendas the Runner knows are in the server's
+    /// root: an ability on the agenda that fires when it is stolen (Tomorrow's Headline's tag), not only when it is scored.
+    /// </summary>
+    public static int StealTags(HeuristicContext context, AgentServer server)
+    {
+        int tags = 0;
+        for (int index = 0; index < server.Root.Length; index++)
+        {
+            if (context.Definition(server.Root[index] ?? context.RememberedRoot(server, index)) is not { Agenda: not null, Behavior: { } behavior }) continue;
+            tags += behavior.Triggers.Where(trigger => trigger.Occurrence == OccurrenceKind.AgendaScoredOrStolen && trigger.Scope == BehaviorTriggerScope.Self
+                    && trigger.OccurrenceControllerSide != PlayerSide.Corp)
+                .SelectMany(trigger => HeuristicContext.Flatten(trigger.Instructions))
+                .Where(instruction => instruction.Kind == BehaviorInstructionKind.AddTags && instruction.Recipient == BehaviorPlayerSelector.Runner)
+                .Sum(instruction => instruction.Amount);
+        }
+        return tags;
+    }
+
     /// <summary>Runner v31: an operation the Corp can play only while the Runner is tagged.</summary>
     private static bool TagPunisher(CardBehaviorDefinition behavior) =>
         behavior.Conditions.Any(condition => condition.Kind == BehaviorConditionKind.Tagged);

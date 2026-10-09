@@ -13,12 +13,19 @@ internal static class RunnerValues
         return value;
     }
 
-    public static int TagRisk(HeuristicContext context, int additional = 1) =>
+    /// <param name="threat">v31: whether the Corp's tag punishers count (<see cref="RunnerInference.TagThreat"/>); removing a
+    /// tag counts what the removal saves itself.</param>
+    public static int TagRisk(HeuristicContext context, int additional = 1, bool threat = true) =>
         180 * additional + (context.Features.Board.RunnerRig.Where(card => context.Definition(card)?.Printed.CardClass == RuntimeCardClass.Resource)
             .Select(card => Card(context, card)).DefaultIfEmpty(0).Max() * (context.Self.Clicks < (context.Self.Tags ?? 0) + additional ? 1 : 0))
             + (context.Self.Clicks == 0 ? 120 : 0)
             // v21 (A9b): the tag punishers it knows the Corp holds (Retribution seen in HQ).
-            + (context.Generation >= 17 ? RunnerInference.KnownTagThreat(context) : 0);
+            + (context.Generation >= 17 ? RunnerInference.KnownTagThreat(context) : 0)
+            // v31 (the review of #133): what the Corp's next turn can take for the tags taken here, in every tag choice
+            // (Funhouse's take a tag or end the run, its pay 4 or take a tag).
+            + (threat && context.Generation >= 26
+                ? (int)(RunnerInference.TagThreat(context, (context.Self.Tags ?? 0) + additional) - RunnerInference.TagThreat(context, context.Self.Tags ?? 0))
+                : 0);
 
     public static AgentServer? Attacked(HeuristicContext context) => context.Features.Board.Servers.FirstOrDefault(server => server.Id == context.Features.Board.Run?.AttackedServer);
     public static bool Winning(HeuristicContext context, AgentServer? server) => server is not null
