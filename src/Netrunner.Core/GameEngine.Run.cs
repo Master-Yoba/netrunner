@@ -819,6 +819,16 @@ public static partial class GameEngine
             .WithLingeringEffects(run.LingeringEffects
                 .Where(effect => effect.Expiry != RunLingeringEffectExpiry.Encounter)
                 .ToArray());
+        // An installed source's access bonus is declared for the server it runs (Conduit: R&D); when the run moves
+        // to another server (Proprionegation: Archives), a bonus the source doesn't declare there doesn't follow.
+        if (moved.BreachAccessModifiers is { Count: > 0 } modifiers)
+        {
+            moved = moved.WithBreachAccessModifiers([.. modifiers.Where(modifier =>
+                modifier.SourceKind != RunBreachAccessModifierSourceKind.InstalledRunSource
+                || working.Cards.FirstOrDefault(card => card.Id == modifier.SourceCardId) is { } source
+                    && working.BehaviorCatalog.TryGet(source.DefinitionId, out CardBehaviorDefinition? definition)
+                    && BehaviorRunRules.HasBreachAccessModifierDeclaration(definition!, server.Kind, modifier.ReasonKey, modifier.Delta))]);
+        }
         SetRunTiming(working, moved.WithTiming(
             RunTimingStep.Approach,
             outermost,
@@ -2349,9 +2359,14 @@ public static partial class GameEngine
         }
 
         ServerState? attackedServer = working.Servers.FirstOrDefault(server => server.Id == run.AttackedServer);
+        // The attacked server may have changed during the run, as the state validator allows: to the event's own redirect
+        // (Maintenance Access: HQ), or to Archives by a Corp move (Proprionegation). Otherwise a moved run would count as
+        // no real turn's run, and a steal there would be judged by the fixtures' three-point win.
         return attackedServer is not null
             && (spec.AllowedTargetServers is null
-                || spec.AllowedTargetServers.Contains(attackedServer.Kind));
+                || spec.AllowedTargetServers.Contains(attackedServer.Kind)
+                || attackedServer.Kind == spec.RedirectApproachTo
+                || attackedServer.Kind == ServerKind.Archives);
     }
 
     private static bool IsValidInstalledRunSource(WorkingState working, RunState run)
@@ -2373,7 +2388,8 @@ public static partial class GameEngine
             && sourceZone.CardIds.Contains(sourceId)
             && server is not null
             && working.BehaviorCatalog.TryGet(source.DefinitionId, out CardBehaviorDefinition? definition)
-            && BehaviorRunRules.DefinitionHasStartRunForServer(definition!, server.Kind);
+            // A run the Corp moved to Archives (Proprionegation) keeps its source, as the state validator allows.
+            && (BehaviorRunRules.DefinitionHasStartRunForServer(definition!, server.Kind) || server.Kind == ServerKind.Archives);
     }
 
     private static void ConsumeRunAction(WorkingState working, ActionKind kind, ActionParameters parameters)

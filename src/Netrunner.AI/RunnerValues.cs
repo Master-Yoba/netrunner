@@ -215,6 +215,13 @@ internal static class RunnerValues
                 .Where(instruction => instruction.Kind == BehaviorInstructionKind.GainCredits).Sum(instruction => instruction.Amount);
             if (card.Rezzed != true && load > 0) return 160 + load * 45;
             if (perTurn > 0) return 160 + perTurn * 120;
+            // v30 (MATCHUP_PT_UNTAIAN.md PT08, the guide's R17): a card whose own triggers damage the Runner, not on access
+            // (Phật Gioan Baotixita on the first agenda of every turn), is an engine to remove before farming agendas.
+            int engine = behavior.Triggers.Where(trigger => trigger.Occurrence != OccurrenceKind.CardAccessed)
+                .SelectMany(trigger => HeuristicContext.Flatten(trigger.Instructions))
+                .Where(instruction => instruction.Kind == BehaviorInstructionKind.DealDamage).Select(instruction => instruction.Amount)
+                .DefaultIfEmpty(0).Max();
+            if (context.Generation >= 25 && engine > 0 && !behavior.CanBeAdvanced) return EngineTrash + engine * 150;
             bool accessTrap = behavior.Triggers.Any(trigger => trigger.Occurrence == OccurrenceKind.CardAccessed
                 && HeuristicContext.Flatten(trigger.Instructions).Any(instruction => instruction.Kind == BehaviorInstructionKind.DealDamage));
             if (accessTrap) return 40;
@@ -227,6 +234,9 @@ internal static class RunnerValues
         }
         return definition.Printed.CardClass == RuntimeCardClass.Asset ? 180 : 50;
     }
+
+    /// <summary>v30: a damage engine's worth before its damage, above an ordinary asset's 180.</summary>
+    private const int EngineTrash = 400;
 
     public static int BreakCost(HeuristicContext context, AgentCard card, IcebreakerBehaviorSpec breaker, bool useIssuedQuote = true)
     {

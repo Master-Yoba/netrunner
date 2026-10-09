@@ -463,14 +463,17 @@ public sealed class RegretSuiteTests
     {
         Assert.Equal("v1", RegretLabels.VersionOf(0, 0, 4, 4, "hard"));
         Assert.Equal("v1-lines", RegretLabels.VersionOf(5, 1, 4, 4, "hard"));
-        Assert.Equal("v2", RegretLabels.VersionOf(5, 1, 4, 4, "hard-model"));
+        // v2 and v3 model the opponent by the live Standard: they are v2 and v3 only while those are Corp v31 and Runner v28
+        // (H3 batch 2 made Runner v30 the default), and a label made since carries the versions in its name.
+        string live = $"{CorpHeuristicPolicy.PolicyVersion}-{RunnerHeuristicPolicy.PolicyVersion}";
+        Assert.Equal($"hard-model-lines5-screen1-horizon4-set4-{live}", RegretLabels.VersionOf(5, 1, 4, 4, "hard-model"));
         // S1.8: v3 is the same search played to the game's end; the leaf's evaluation is recorded but plays no part.
-        Assert.Equal("v3", RegretLabels.VersionOf(5, 1, 0, 4, "hard-model"));
-        Assert.Equal("v3", RegretLabels.VersionOf(5, 1, 0, 5, "hard-model"));
+        Assert.Equal($"hard-model-lines5-screen1-horizon0-set4-{live}", RegretLabels.VersionOf(5, 1, 0, 4, "hard-model"));
         // Other settings are named by them and by the live policies the teacher plays.
-        Assert.Equal($"hard-model-lines5-screen1-horizon8-set4-{CorpHeuristicPolicy.PolicyVersion}-{RunnerHeuristicPolicy.PolicyVersion}",
-            RegretLabels.VersionOf(5, 1, 8, 4, "hard-model"));
-        var label = new RegretLabel("r#1", 32, 4, 4, 1, [new("a|1", 0.5, 0.02, 32), new("b|1", 0.4, 0.02, 32)], 5, 1, "hard-model");
+        Assert.Equal($"hard-model-lines5-screen1-horizon8-set4-{live}", RegretLabels.VersionOf(5, 1, 8, 4, "hard-model"));
+        // A label keeps the name it was tagged with when it was written, whatever the live policies are now.
+        var label = new RegretLabel("r#1", 32, 4, 4, 1, [new("a|1", 0.5, 0.02, 32), new("b|1", 0.4, 0.02, 32)], 5, 1, "hard-model",
+            TeacherVersion: "v2");
         Assert.Equal("v2", label.TeacherName);
         label.EnsureOneTeacher();
         (label with { Values = [.. label.Values, new("c|1", 0.3, 0.02, 32, TeacherVersion: "v2")] }).EnsureOneTeacher();

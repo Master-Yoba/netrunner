@@ -226,6 +226,87 @@ internal static class RunnerInference
             || context.Features.Board.Servers.SelectMany(server => server.Ice.Concat(server.Root)).OfType<AgentCard>().Any(card => Takes(card.DefinitionId));
     }
 
+    /// <summary>
+    /// Runner v30 (bot plan H3, MATCHUP_PT_UNTAIAN.md PT13, PT15): the damage a non-winning steal deals this turn: the
+    /// strongest option the Corp's rezzed cards can choose when an agenda is scored or stolen (Phật Gioan Baotixita's
+    /// 1 to 3 net, by the power counters it holds), and none once an agenda has changed hands this turn, since it fires on
+    /// the first only.
+    /// </summary>
+    public static int StealDamage(HeuristicContext context) => context.Memo("steal-damage", () =>
+    {
+        if (context.Features.Board.TurnFacts?.Runner.ThisTurn?.AgendaTurnChanges.Length > 0) return 0;
+        int most = 0;
+        foreach (AgentCard card in context.Features.Board.Servers.SelectMany(server => server.Root).OfType<AgentCard>().Where(card => card.Rezzed == true))
+        {
+            if (context.Definition(card)?.Behavior is not { } behavior) continue;
+            foreach (BehaviorTrigger trigger in behavior.Triggers.Where(trigger => trigger.Occurrence == OccurrenceKind.AgendaScoredOrStolen))
+                foreach (BehaviorInstruction instruction in trigger.Instructions)
+                {
+                    IEnumerable<IReadOnlyList<BehaviorInstruction>> branches = instruction.Choice is { } choice
+                        ? choice.Options.Where(option => option.Condition is not { Kind: BehaviorConditionKind.CounterAtLeast } condition
+                            || card.Counters.Where(counter => counter.CounterName == condition.Fact).Sum(counter => counter.Count) >= (condition.Value ?? 0))
+                            .Select(option => option.Instructions)
+                        : [[instruction]];
+                    foreach (IReadOnlyList<BehaviorInstruction> branch in branches)
+                        most = Math.Max(most, HeuristicContext.Flatten(branch).Where(value => value.Kind == BehaviorInstructionKind.DealDamage).Sum(value => value.Amount));
+                }
+        }
+        return most;
+    });
+
+    /// <summary>Runner v30: the fewest points among the agendas the Corp may still hold, by the tier's prior; 1 when it knows none.</summary>
+    public static int SmallestAgenda(HeuristicContext context) => context.Memo("smallest-agenda", () =>
+        Prior(context).Where(pair => pair.Value > 0).Select(pair => context.Catalog.TryGet(new CardDefinitionId(pair.Key), out CardEvaluationDescriptor card)
+            ? card.Agenda?.AgendaPoints : null).OfType<int>().DefaultIfEmpty(1).Min());
+
+    /// <summary>Runner v30: whether stealing an agenda of <paramref name="smallest"/> points takes a Runner on <paramref name="points"/> to seven.</summary>
+    internal static bool StealWins(int points, int smallest) => points + smallest >= 7;
+
+    /// <summary>
+    /// Runner v30 (PT04): the damage one unknown piece of ICE is expected to deal, by the same prior and evidence as
+    /// <see cref="UnknownIceDamage"/>: ICE the Corp can rez, of a type no installed breaker breaks.
+    /// </summary>
+    public static double ExpectedIceDamage(HeuristicContext context) => context.Memo("expected-ice-damage", () =>
+    {
+        if (!Evidence(context, card => SubroutineDamage(card) > 0)) return 0.0;
+        IceType[] covered = [.. context.Features.Board.RunnerRig.Select(card => context.Definition(card)?.Icebreaker?.InterfaceType).OfType<IceType>()];
+        return TrackerPrior.Conditional(Prior(context), definition => TrackerPrior.Fits(context.Catalog, definition, "ice"))
+            .Sum(pair => context.Catalog.TryGet(new CardDefinitionId(pair.Key), out CardEvaluationDescriptor card) && card.Ice is { } spec
+                && spec.RezCost <= context.Opponent.Credits && !covered.Contains(IceType.Any) && !covered.Contains(spec.IceType)
+                    ? pair.Value * SubroutineDamage(card) : 0);
+    });
+
+    /// <summary>Runner v30 (PT04): the ambush damage one access in HQ or R&amp;D is expected to deal, by <see cref="CentralAmbush"/>'s prior.</summary>
+    public static double ExpectedAmbushDamage(HeuristicContext context) => context.Memo("expected-ambush-damage", () =>
+    {
+        IReadOnlyDictionary<string, double> prior = Prior(context);
+        double total = prior.Values.Sum();
+        if (total <= 0 || !Evidence(context, card => card.Agenda is null && AccessDamage(card, 0) > 0)) return 0.0;
+        return prior.Sum(pair => context.Catalog.TryGet(new CardDefinitionId(pair.Key), out CardEvaluationDescriptor card) && card.Agenda is null
+            && AmbushCost(card) <= context.Opponent.Credits ? pair.Value * AccessDamage(card, 0) : 0) / total;
+    });
+
+    /// <summary>
+    /// Runner v30: the chance a run's access finds an agenda: HQ's agenda share, R&amp;D's top card, a remote's root cards
+    /// (a known agenda for certain, a face-down card at <see cref="RootAgenda"/>'s chance), and Archives' face-up agendas.
+    /// </summary>
+    public static double AgendaChance(HeuristicContext context, AgentServer server)
+    {
+        switch (server.Kind)
+        {
+            case ServerKind.Headquarters: return HqAgendaShare(context);
+            case ServerKind.RAndD: return RdTopAgenda(context);
+            case ServerKind.Archives: return context.Features.Board.CorpDiscard.Any(card => context.Definition(card)?.Agenda is not null) ? 1 : 0;
+        }
+        double none = 1;
+        for (int index = 0; index < server.Root.Length; index++)
+        {
+            AgentCard? card = server.Root[index] ?? context.RememberedRoot(server, index);
+            none *= card is not null ? context.Definition(card)?.Agenda is not null ? 0 : 1 : 1 - RootAgenda(context, server, index).Chance;
+        }
+        return 1 - none;
+    }
+
     /// <summary>Three copies in a deck of 49: the least chance an access finds an ambush the Runner has seen this game.</summary>
     private const double SeenAmbushShare = 3.0 / 49;
 
