@@ -1788,3 +1788,125 @@ choices valued on 8 samples.
 **S1.5's confound note closes.** Every gate read on the Corp from here is on v3 labels: the core, and the S1.6 Corp
 roots. The remaining v2 labels (the other targeted and finding roots) are relabelled when a comparison needs them, and
 `score` refuses to mix them with v3.
+
+## The heuristic track
+
+### H1: the audit (9 October 2026)
+
+The base rules of [STRATEGY_FUNDAMENTALS.md](STRATEGY_FUNDAMENTALS.md) (revision 2) against the live policies (Corp
+v31, Runner v28), and the guide's mistakes counted as Oddity lints over saved games.
+
+**The games.** The Runner v28 record's box ladder (`artifacts/r28/box-games`, 1,600 games, 400 deals): the Corp is
+v31 (v30's behaviour) in every game, and the Runner is live v28 in 800 of them. No new run was needed.
+
+```bash
+ai-lint artifacts/r28/box-games --workers 3 --json --output lint.json
+ai-runner-diagnosis artifacts/r28/box-games --workers 3
+```
+
+**The Runner's results by matchup** (live v28, 800 games, about 67 a cell):
+
+| Corp | Magdalene | MuslihaT | Topan | All |
+|---|---:|---:|---:|---:|
+| LEO Glacier | 36% | 85% | 52% | 58% |
+| Nebula Fast Advance | 32% | 38% | 41% | 37% |
+| PT Untaian Shell Game | **3%** | **15%** | **6%** | **8%** |
+| Zwicky Supermodernism | 21% | 61% | 18% | 33% |
+
+`ai-runner-diagnosis`: the Runner wins 34%, loses 36% to agendas, 22% to a flatline the Corp deals and 8% to a flatline
+of its own choosing (54 of the 62 by Measured Response's choice, taking the damage).
+
+**The guide's mistakes as lints** (new in `OddityLints`, each named by its rule; per game of the side, live entrants):
+
+| Lint | Rule | Per game | Games with one | Where |
+|---|---|---:|---:|---|
+| `runner-ends-turn-tagged` | R19 | 2.14 | 42% | 1,300 of 1,714 against Nebula |
+| `runner-runs-on-thin-grip` | R18 | 2.08 | 45% | Against Untaian and Zwicky only (the damage decks), most from Topan |
+| `remote-scored-uncontested` | R06 | 1.42 | 72% | Every matchup; least against Untaian and from MuslihaT |
+| `runner-banks-credits` | R11 | 0.85 | 33% | |
+| `draw-into-hq-flood` | C13 | 0.55 | 28% | |
+| `agenda-stolen-from-remote` | C01, C02 | 0.47 | 34% | |
+| `runner-flatlined` | R18 | 0.30 | 30% | 172 of 240 against Untaian: 56 to 60 of each Runner deck's 67 |
+| `agenda-unprotected-at-turn-end` | C02 | 0.12 | 10% | |
+| `decorative-remote-ice` | C08 | 0.08 | 6% | |
+| `runner-credit-over-draw-early` | R12 | 0.05 | 2% | |
+| `agenda-score-delayed` | C05 | 0 | 0% | |
+
+The older lints are unchanged and low (the highest: `advanceable-ice-idle` 0.16, `central-open-remotes-grow` 0.11,
+`archives-farmed` 0.10).
+
+**What a credit is in the heuristic's units.** The guide prices in credits; the heuristic in points. A credit is
+`HeuristicContext.CreditValue`: 140 below 3 credits, 110 below 8, 80 below 15, 45 from 15 (times `credit-scale`). A
+draw is `DrawValue`: for the Runner 230 below 2 cards, 125 below 4, 70 below the hand size, 10 at it. So a guide
+"credit" is about 110 points mid-game, and the guide's "about 0.5 to 1 credit" default preference is 50 to 110.
+
+**The base rules against the code** (encoded, partly, missing, or contradicted):
+
+| Rule | Status | Where, and what is missing |
+|---|---|---|
+| R01 run a fresh open central before optional rig | Partly | `RunnerValues.ServerV2`: a fresh R&D is about 340, a first breaker 730 (`BreakerCoverage`), so early installs win |
+| R02 probe unknown ICE when the outcomes are tolerable | Encoded | `Run`'s unknown-ICE risk, scaled by the Corp's credits and the rig's coverage (v11) |
+| R03 sequence a probe before the second target | Missing | One action at a time; the Runner's Standard does not plan |
+| R04 no run into a known stop without payoff | Encoded | `run/known-unaffordable-or-lethal`, the repeated-run penalty, no aggression on a valueless run (v15) |
+| R05 jack out when the run becomes worse | Partly | `Continue` jacks out only when unaffordable or lethal |
+| R06 contest a likely scoring agenda | Partly | Advanced cards and v28's face-down remote card; the lint finds 1.42 uncontested remote scores a game |
+| R07 HQ when the Corp has drawn without scoring | Encoded | `RunnerInference.HqAgendaShare` once the tracker knows half of HQ (v21) |
+| R08 fresh R&D by default, never a known top again | Encoded | `CentralFreshness`, the tracker's known top; `rd-rerun-top-seen` is 0 |
+| R09 Archives when it has new value | Encoded | `ServerV2`: known agendas and unseen face-down cards |
+| R10 4+ credit central: prepare multi-access | Missing | The run's cost is charged, but nothing prefers waiting for multi-access |
+| R11 fund a purpose, then spend | Partly | No reserve but a valuable root card's trash cost and a breaker saved for; the credit's value falls with the bank. 0.85 banking turns a game |
+| R12 draw over a basic credit early | Contradicted in the values, rare in play | A draw is 70 with four cards against a credit's 110; the lint finds 0.05 a game |
+| R13 burst economy before spending below its threshold | Missing | No ordering within a turn |
+| R14 cheapest adequate answer, defer redundancy | Partly | Duplicate types 150, second copies refused; no payback rule for upgrades |
+| R15 information before irreversible commitments | Partly | Draw before a run with one card or none (v25, v26) |
+| R16 trash cheap early economy | Encoded | `TrashV13`: the income an asset will still make against the trash cost |
+| R17 enablers before income | Partly | Approach-toll upgrades 430; no notion of an enabler |
+| R18 grip cushion of D+1 against damage | Partly | Lethal checks are D > grip, so D cards are "safe"; damage costs a card a point. 0.30 flatlines a game, 2.08 thin-grip runs |
+| R19 keep a click and 2 credits to clear a tag | Partly | `TagRisk` 180 a tag, resources exposed; no reserve. 2.14 tagged turn ends a game |
+| R20 protect the irreplaceable breaker | Partly | Forced losses keep the most valuable card; nothing ahead of the encounter |
+| R21 attack what a scoring commitment leaves open | Missing | |
+| R22 desperation at the Corp's credible win | Partly | Match point on an advanced remote card at 4+ points (v15) |
+| R23 leave harmless subroutines, accept cheap damage | Encoded | The whole-run model chooses what to break and what to let fire (A4a) |
+| R24 graded mulligan | Contradicted | `Mulligan` keeps only economy plus a breaker or tutor, the gate the guide removes |
+| C01 score before the Runner can contest | Encoded | `scoreableNow`, finishing 600, agenda waits for protection (v13, v21) |
+| C02 budget defense and completion | Encoded | `ProtectionReserve`, the agenda's `ready` check. 0.47 remote steals and 0.12 unprotected agendas a game |
+| C03 decline a rez that breaks the critical budget | Encoded | `rez/keep-credits-for-the-agenda-ice` (v13, v20) |
+| C04 follow an expensive check with a scoring threat | Missing | |
+| C05 score as soon as legal | Encoded | `agenda-score-delayed` is 0 |
+| C06 stopping ICE where breaches matter | Encoded | `IcePlacementV11`: HQ holding agendas, central targets |
+| C07 repeat taxes on the attacked central | Partly | ICE the rig cannot break +100; Archives by successful runs |
+| C08 no second ICE on an idle remote | Encoded | Empty-remote ICE −100; `decorative-remote-ice` 0.08 |
+| C09 ICE order by simulated approach | Missing | |
+| C10 rez stopping ICE when the server matters | Encoded | `Rez`: end-the-run force, server value, denial, reserve |
+| C11 save a limited defensive counter | Missing | Not modelled; no box card needs it |
+| C12 burst economy early, engines with short payback | Partly | Asset installs fall with existing economy; no payback horizon |
+| C13 stop optional draw at 3+ agendas in HQ | Missing | `DrawValue` reads only the hand's size. 0.55 flooded draws a game |
+| C14 resolve an HQ flood in order | Partly | v23 and v30: an agenda leaves HQ only when HQ is no safer or most of it is agendas |
+| C15 reassess central protection | Partly | Central ICE targets and score pressure |
+| C16 keep a spare non-agenda for dilution | Partly | v30's dilution test |
+| C17 break an R&D lock | Missing | |
+| C18 two threats the Runner cannot both answer | Missing | |
+| C19 exploit the Runner's observed habits | Missing | |
+| C20 lethal first, then a score over incidental damage | Partly | Trap advancement and kill operations are valued; no lethal search |
+| C21 shorten the game against a growing engine | Missing | |
+| C22 the deck-out deadline | Encoded | Draws and rez draws refused at the deck's end |
+| C23 mulligan for economy and affordable ICE | Partly | Economy (≤ 5) and ICE (rez ≤ 5); no 3+ agenda check |
+| C24 bad publicity | Missing | Not modelled |
+
+**The reading.** The Runner's losses concentrate where the guide is only partly encoded: survival against damage
+(R18, Untaian at 8%), tags against Nebula (R19), and remote contests (R06, 72% of games). The base rules a new player
+learns first are mostly there; what is missing is the margin (D+1, a tag reserve) and the matchup (a kill deck is
+played differently). The Corp's gaps are fewer and smaller: flooded draws (C13) and remote steals (C02).
+
+**The gap list for H3**, by count and consequence (the regret of the matching roots is not read yet; the core's
+held-out roots carry no lint, so it waits for H3's own `diverge` roots):
+
+1. **Survival against damage decks** (R18, with the shell-game and kill modules): the Runner wins 8% against Untaian,
+   loses 172 games of 200 there to flatlines, and starts runs on two cards or fewer 2 times a game against the damage
+   decks. A cushion of D+1, drawing up before runs on unknown cards against a deck that deals damage, and paying rather
+   than taking Measured Response's damage when the grip is short.
+2. **Tags against Nebula** (R19): 1,300 tagged turn ends in 200 games. Whether they cost games is the first question:
+   Nebula rarely kills (32 flatlines in 200), so the reserve may matter less than the clicks the tags cost.
+3. **Remote contests** (R06): 1.42 uncontested remote scores a game, in every matchup.
+4. **The mulligan** (R24): contradicted outright; small in the box decks' openings, but cheap to replace.
+5. **The Corp's HQ flood** (C13): 0.55 flooded draws a game.

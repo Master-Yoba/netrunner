@@ -22,6 +22,33 @@ public sealed class OddityLintsTests
         Assert.Contains(findings, finding => finding.LintId == lint && finding.Detail.Contains(card, StringComparison.Ordinal));
     }
 
+    /// <summary>Bot plan H1: the strategy guide's mistakes, found in the recorded playtest games.</summary>
+    [Theory]
+    [InlineData("playtest-agenda-swap", "gateway-discretion-advised~gateway-stolen-goods", 18095256415510229748UL, "remote-scored-uncontested", 133L,
+        "Luminal Transubstantiation scored after 1 Runner turns without a run on its remote.")]
+    [InlineData("playtest-agenda-swap", "gateway-discretion-advised~gateway-stolen-goods", 18095256415510229748UL, "agenda-stolen-from-remote", 587L,
+        "Send a Message (2 counters) behind 2 rezzed of 2 ICE.")]
+    [InlineData("playtest-spin-doctor", "gateway-hyper-velocity~gateway-stolen-goods", 14438435225079198195UL, "runner-ends-turn-tagged", 62L,
+        "the turn ended with 2 tags.")]
+    [InlineData("playtest-spin-doctor", "gateway-hyper-velocity~gateway-stolen-goods", 14438435225079198195UL, "agenda-stolen-from-remote", 185L,
+        "Orbital Superiority (0 counters) behind 0 rezzed of 1 ICE.")]
+    [InlineData("playtest-runner-bot", "gateway-discretion-advised~gateway-stolen-goods", 3748720965229884459UL, "runner-runs-on-thin-grip", 271L,
+        "a run on Remote with 2 cards in the grip.")]
+    public void AGuideMistakeIsFound(string fixture, string content, ulong seed, string lint, long sequence, string detail)
+    {
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
+        Assert.Contains(Lint(fixture, content, seed), finding => finding.LintId == lint && finding.Sequence == sequence && finding.Detail == detail);
+    }
+
+    [Fact]
+    public void EveryGuideLintNamesItsRule()
+    {
+        string[] guide = ["runner-banks-credits", "runner-credit-over-draw-early", "runner-runs-on-thin-grip", "runner-ends-turn-tagged",
+            "runner-flatlined", "remote-scored-uncontested", "agenda-stolen-from-remote", "agenda-score-delayed", "draw-into-hq-flood",
+            "agenda-unprotected-at-turn-end", "decorative-remote-ice"];
+        Assert.All(guide, id => Assert.Matches(@"^[RC]\d\d(, [RC]\d\d)*: ", OddityLints.All.Single(lint => lint.Id == id).Description));
+    }
+
     [Fact]
     public void EveryLintIsDescribedOnce()
     {
