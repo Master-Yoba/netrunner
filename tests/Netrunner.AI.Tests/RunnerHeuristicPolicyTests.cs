@@ -119,6 +119,18 @@ public sealed class RunnerHeuristicPolicyTests
         Assert.InRange(nakedAfter - nakedBefore, 0, 100);
     }
 
+    /// <summary>
+    /// Runner v30, the review of #132: Phật's damage on a steal is skipped only when the Corp's smallest agenda would win;
+    /// at 5 points a one-pointer (Greenmail) takes the Runner to 6 and the damage fires.
+    /// </summary>
+    [Theory]
+    [InlineData(5, 1, false)]
+    [InlineData(5, 2, true)]
+    [InlineData(6, 1, true)]
+    [InlineData(4, 2, false)]
+    public void AStealWinsOnlyWhenTheSmallestAgendaReachesSeven(int points, int smallest, bool wins) =>
+        Assert.Equal(wins, RunnerInference.StealWins(points, smallest));
+
     private static Observation Decision(params LegalAction[] actions)
     {
         GameState state = GameState.CreateNew(54);

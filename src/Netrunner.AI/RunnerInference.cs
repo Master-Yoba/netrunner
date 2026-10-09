@@ -254,6 +254,14 @@ internal static class RunnerInference
         return most;
     });
 
+    /// <summary>Runner v30: the fewest points among the agendas the Corp may still hold, by the tier's prior; 1 when it knows none.</summary>
+    public static int SmallestAgenda(HeuristicContext context) => context.Memo("smallest-agenda", () =>
+        Prior(context).Where(pair => pair.Value > 0).Select(pair => context.Catalog.TryGet(new CardDefinitionId(pair.Key), out CardEvaluationDescriptor card)
+            ? card.Agenda?.AgendaPoints : null).OfType<int>().DefaultIfEmpty(1).Min());
+
+    /// <summary>Runner v30: whether stealing an agenda of <paramref name="smallest"/> points takes a Runner on <paramref name="points"/> to seven.</summary>
+    internal static bool StealWins(int points, int smallest) => points + smallest >= 7;
+
     /// <summary>
     /// Runner v30 (PT04): the damage one unknown piece of ICE is expected to deal, by the same prior and evidence as
     /// <see cref="UnknownIceDamage"/>: ICE the Corp can rez, of a type no installed breaker breaks.

@@ -126,7 +126,10 @@ public sealed partial class RunnerHeuristicPolicy
         {
             // v30 (MATCHUP_PT_UNTAIAN.md PT13, PT15): a non-winning steal fires the Corp's agenda-event damage (Phật).
             double agenda = RunnerInference.AgendaChance(context, server);
-            int steal = context.Self.AgendaPoints >= 5 ? 0 : RunnerInference.StealDamage(context);
+            // A winning steal ends the game before the damage; a steal of the Corp's smallest agenda must win for none to count
+            // (the review of #132: a one-pointer, Greenmail, takes a Runner on 5 only to 6).
+            int steal = RunnerInference.StealWins(context.Self.AgendaPoints, RunnerInference.SmallestAgenda(context)) ? 0
+                : RunnerInference.StealDamage(context);
             if (steal > 0) risk += Exposure(1, steal > gripAfter ? agenda : 0, steal == gripAfter ? agenda : 0);
             // v30 (PT03, PT04): a card of damage costs about a basic draw to recover, so the damage the run is expected to
             // deal beyond the clicks left after it is a card the turn can't rebuild: dangerous runs go early in the turn.
