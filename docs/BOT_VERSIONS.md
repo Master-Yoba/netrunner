@@ -2016,3 +2016,7 @@ uncontested remote scores 1.41 to 1.62.
 the note's plan does when the deck can run early. The Runner now banks more and contests fewer remotes (R11, R06); the
 next notes and batches start there. A new teacher: labels made from now on model Runner v30 and are named by their
 versions (`RegretLabels.VersionOf`); the stored v2 and v3 labels keep their names.
+
+**The review of #132.** Codex found that the steal-damage exemption at 5 points ignored one-point agendas (Greenmail takes
+a Runner on 5 to 6, and Phật fires); it now holds only when the Corp's smallest possible agenda would win. The 800-deal
+box ladder repeated after the fix (`standard` − `standard-r28`) reads the same, +30 [+9, +55], cell for cell.
