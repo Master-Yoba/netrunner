@@ -176,6 +176,13 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// left to draw it back costs a card each, so dangerous runs go early in the turn (PT03, PT04).
     /// </summary>
     public const string V30 = "runner-heuristic-v30";
+    /// <summary>
+    /// V30 with the tag rules of the Nebula note (bot plan H3 batch 3, docs/MATCHUP_NEBULA.md NE17 to NE22, NE25): a tag is
+    /// priced by what the Corp's next turn can take for it (IP Enforcement's repossession, Bigger Picture's transfer), a run's
+    /// tags by the cheaper of keeping them and clearing those the turn has clicks and credits for, and removing a tag gains
+    /// the punishment it no longer enables.
+    /// </summary>
+    public const string V31 = "runner-heuristic-v31";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
     /// V18 is V15 with only the reinstall fix (no install over its own copy or a second console), a fix that can only remove
@@ -198,27 +205,27 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// with, so the shipped Corp planner plays as it did.
     /// </summary>
     public const string LatestHeuristic = V7;
-    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25, V26, V27, V28, V29, V30];
+    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25, V26, V27, V28, V29, V30, V31];
 
     /// <summary>Whether the version's memory of a face-down root card survives installs in that root (v20).</summary>
-    public static bool KeepsRootMemoryThroughInstalls(string version) => version is V20 or V21 or V22 or V23 or V24 or V25 or V26 or V27 or V28 or V29 or V30;
+    public static bool KeepsRootMemoryThroughInstalls(string version) => version is V20 or V21 or V22 or V23 or V24 or V25 or V26 or V27 or V28 or V29 or V30 or V31;
 
     /// <summary>Whether the version keeps the A9a tracker of the Corp's hidden cards (v21).</summary>
-    public static bool UsesTracker(string version) => version is V21 or V22 or V23 or V24 or V25 or V26 or V27 or V28 or V29 or V30;
+    public static bool UsesTracker(string version) => version is V21 or V22 or V23 or V24 or V25 or V26 or V27 or V28 or V29 or V30 or V31;
 
     public RunnerHeuristicPolicy() : this(PolicyVersion) { }
 
     public RunnerHeuristicPolicy(string version)
     {
-        if (version is not (V27 or V28 or V29 or V30))
-            throw new ArgumentException($"The live Runner policy is {V27} to {V30}; '{version}' is {nameof(LegacyRunnerPolicy)}.", nameof(version));
+        if (version is not (V27 or V28 or V29 or V30 or V31))
+            throw new ArgumentException($"The live Runner policy is {V27} to {V31}; '{version}' is {nameof(LegacyRunnerPolicy)}.", nameof(version));
         Version = version;
-        _contextGeneration = version switch { V30 => 25, V29 => 24, V28 => 23, _ => 22 };
+        _contextGeneration = version switch { V31 => 26, V30 => 25, V29 => 24, V28 => 23, _ => 22 };
     }
 
     /// <summary>
     /// The generation the shared helpers (<see cref="HeuristicContext"/>, RunnerValues, RunModel) switch on: V26's (22) for
-    /// V27, 23 for V28's remote valuation, 24 for V29's grip cushion, and 25 for V30's matchup rules. They keep their switches for <see cref="LegacyRunnerPolicy"/>, and V27 stays
+    /// V27, 23 for V28's remote valuation, 24 for V29's grip cushion, 25 for V30's matchup rules, and 26 for V31's tags. They keep their switches for <see cref="LegacyRunnerPolicy"/>, and V27 stays
     /// constructible so the regret suite can compare the two (<c>ai-regret score --discordant</c>).
     /// </summary>
     private readonly int _contextGeneration;
@@ -370,6 +377,13 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     private static AgentUtility RemoveTag(HeuristicContext context, RemoveTagParameters remove)
     {
         int score = RunnerValues.TagRisk(context) - remove.CreditCost * context.CreditValue;
+        // v31 (MATCHUP_NEBULA.md NE17, NE19): a tag removed is the punishment it no longer enables (IP Enforcement's
+        // repossession at the stolen agenda's points, Bigger Picture's 5 credits a tag).
+        if (context.Generation >= 26)
+        {
+            int tags = context.Self.Tags ?? 0;
+            score += (int)(RunnerInference.TagThreat(context, tags) - RunnerInference.TagThreat(context, tags - 1));
+        }
         return new(score <= 0 ? 0 : 10, score, "defense/remove-tag");
     }
 }

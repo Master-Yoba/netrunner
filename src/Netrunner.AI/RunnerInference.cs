@@ -254,6 +254,65 @@ internal static class RunnerInference
         return most;
     });
 
+    /// <summary>
+    /// Runner v31 (bot plan H3 batch 3; MATCHUP_NEBULA.md NE17 to NE22, MATCHUP_PT_UNTAIAN.md PT23): what the Corp's next
+    /// turn can take from a Runner left with <paramref name="tags"/> tags, by the operations that need it tagged: an option
+    /// that reinstalls one of the Runner's scored agendas of X points once it has X tags (IP Enforcement), worth that
+    /// agenda; an option that makes it lose credits (Bigger Picture's 5 a tag), counted twice, since the Corp gains them.
+    /// Each is weighted by the chance the Corp holds one it can pay for: the tracker's belief of HQ, or the share of the
+    /// Corp's unseen cards over a hand. None without evidence the Corp plays such a card (its list, or one seen).
+    /// </summary>
+    public static double TagThreat(HeuristicContext context, int tags) => tags <= 0 ? 0 : context.Memo($"tag-threat/{tags}", () =>
+    {
+        if (!Evidence(context, card => card.Behavior is { } behavior && TagPunisher(behavior))) return 0.0;
+        IReadOnlyDictionary<string, double> prior = Prior(context);
+        double total = prior.Values.Sum();
+        int hand = Math.Max(1, context.Features.Board.HiddenZoneCounts.CorpHand);
+        int funds = context.Opponent.Credits + 2;
+        double threat = 0;
+        foreach ((string definition, double weight) in prior)
+        {
+            if (weight <= 0 || !context.Catalog.TryGet(new CardDefinitionId(definition), out CardEvaluationDescriptor card)
+                || card.Behavior is not { } behavior || !TagPunisher(behavior) || (card.Printed.PlayCost ?? 0) > funds) continue;
+            double harm = TagHarm(context, behavior, tags, funds - (card.Printed.PlayCost ?? 0));
+            if (harm <= 0) continue;
+            double tracked = Tracker(context)?.Cards.Where(value => value.Place == TrackedPlace.Hand && value.DefinitionId == definition).Sum(value => value.Weight) ?? 0;
+            double held = Math.Max(Math.Min(1, tracked), total <= 0 ? 0 : 1 - Math.Pow(1 - Math.Min(1, weight / total), hand));
+            threat += held * harm;
+        }
+        return threat;
+    });
+
+    /// <summary>Runner v31: an operation the Corp can play only while the Runner is tagged.</summary>
+    private static bool TagPunisher(CardBehaviorDefinition behavior) =>
+        behavior.Conditions.Any(condition => condition.Kind == BehaviorConditionKind.Tagged);
+
+    /// <summary>Runner v31: the most a tag punisher's options can take from a Runner with <paramref name="tags"/> tags.</summary>
+    private static double TagHarm(HeuristicContext context, CardBehaviorDefinition behavior, int tags, int funds)
+    {
+        double most = 0;
+        IEnumerable<(BehaviorCondition? Condition, IReadOnlyList<BehaviorInstruction> Instructions)> options = behavior.Instructions
+            .SelectMany(instruction => instruction.Choice is { } choice
+                ? choice.Options.Select(option => (option.Condition, option.Instructions))
+                : [((BehaviorCondition?)null, (IReadOnlyList<BehaviorInstruction>)[instruction])]);
+        foreach ((BehaviorCondition? condition, IReadOnlyList<BehaviorInstruction> instructions) in options)
+        {
+            if (condition is { Kind: BehaviorConditionKind.RunnerTagsAtLeast } && tags < (condition.Value ?? 0)) continue;
+            double harm = 0;
+            foreach (BehaviorInstruction instruction in HeuristicContext.Flatten(instructions))
+            {
+                if (instruction.Kind == BehaviorInstructionKind.InstallCard && instruction.SourceZone == BehaviorZone.ScoreArea
+                    && instruction.Target?.Filter?.AgendaPoints is int points && points <= funds
+                    && context.Features.Board.RunnerScore.Any(card => context.Definition(card)?.Agenda?.AgendaPoints == points))
+                    harm += 500 + points * 180;
+                if (instruction.Kind == BehaviorInstructionKind.LoseCredits && instruction.Recipient == BehaviorPlayerSelector.Runner)
+                    harm += 2 * Math.Min(instruction.Amount, context.Self.Credits) * context.CreditValue;
+            }
+            most = Math.Max(most, harm);
+        }
+        return most;
+    }
+
     /// <summary>Runner v30: the fewest points among the agendas the Corp may still hold, by the tier's prior; 1 when it knows none.</summary>
     public static int SmallestAgenda(HeuristicContext context) => context.Memo("smallest-agenda", () =>
         Prior(context).Where(pair => pair.Value > 0).Select(pair => context.Catalog.TryGet(new CardDefinitionId(pair.Key), out CardEvaluationDescriptor card)
