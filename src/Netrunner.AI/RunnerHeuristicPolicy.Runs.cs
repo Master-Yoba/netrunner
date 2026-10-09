@@ -122,8 +122,23 @@ public sealed partial class RunnerHeuristicPolicy
         bool armed = context.Features.Board.TurnFacts?.Runner.ThisTurn?.SuccessfulRun == true;
         bool survivableBefore = !armed || need <= context.Features.Hand.Length + context.Self.Clicks;
         if (need > 0 && survivableBefore && need > gripAfter + Math.Max(0, clicksAfter)) risk += chance * PunishedGame;
+        if (context.Generation >= 25)
+        {
+            // v30 (MATCHUP_PT_UNTAIAN.md PT13, PT15): a non-winning steal fires the Corp's agenda-event damage (Phật).
+            double agenda = RunnerInference.AgendaChance(context, server);
+            int steal = context.Self.AgendaPoints >= 5 ? 0 : RunnerInference.StealDamage(context);
+            if (steal > 0) risk += Exposure(1, steal > gripAfter ? agenda : 0, steal == gripAfter ? agenda : 0);
+            // v30 (PT03, PT04): a card of damage costs about a basic draw to recover, so the damage the run is expected to
+            // deal beyond the clicks left after it is a card the turn can't rebuild: dangerous runs go early in the turn.
+            double expected = agenda * steal + unknown * RunnerInference.ExpectedIceDamage(context)
+                + (server.Kind is ServerKind.Headquarters or ServerKind.RAndD ? RunnerInference.ExpectedAmbushDamage(context) : 0);
+            risk += Math.Max(0, expected - Math.Max(0, clicksAfter)) * RecoveryCard;
+        }
         return (int)risk;
     }
+
+    /// <summary>v30 (PT04): a card of damage the turn has no click left to draw back, about a basic draw's worth.</summary>
+    private const int RecoveryCard = 125;
 
     /// <summary>v29: <paramref name="count"/> chances to meet damage that flatlines the Runner or leaves it no card.</summary>
     private static double Exposure(int count, double lethal, double bare) =>
