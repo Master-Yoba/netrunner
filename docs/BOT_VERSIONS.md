@@ -1931,3 +1931,32 @@ hours buy, as the step allows.
 turn into games won at the samples a decision can afford: the lines the planner tells apart are mostly close in value,
 and the decisions where the order matters are too few to move the result. Corp Hard stays the 3×3 planner; `plan-playout`
 and the entrant stay for the record. The decision cost was not profiled separately.
+
+### H3 batch 1: Runner v29, a grip cushion against damage (9 October 2026)
+
+**Not shipped: level on the ladder after three variants.** The default stays Runner v28; v29 stays constructible
+(`standard-r29`) for the next attempt.
+
+**The change (R18).** `Cushion` in `Run`: what a run risks against damage the run model does not know, with the grip
+left after the known damage: unknown ICE whose subroutines would deal more than that grip (6000, as a flatline) or
+exactly it (500), an ambush among HQ's and R&D's cards the Corp can pay for (Byte!; only remote roots were priced
+before), and an operation that punishes the run's success (Measured Response) when the clicks left after the run
+can't draw the grip up to survive it (the chance the Corp holds one, times 4000).
+
+| Variant | Runner v29 − v28, box, 400 deals | Untaian | LEO | Nebula | Zwicky |
+|---|---:|---:|---:|---:|---:|
+| v28 (H1) | | 8% | 58% | 37% | 33% |
+| a: as above | −18 [−48, +15] | 13% | 48% | 40% | 24% |
+| b: each term only with evidence the Corp plays that kind of card (on its list, or seen) | −20 [−56, +12] | 12% | 46% | 41% | 25% |
+| c: b, and unknown ICE only of types the rig can't break (R02) | **+2 [−30, +38]** | 15% | 57% | 36% | 29% |
+
+(The cells are the Runner's win rate against each Corp, 200 games a Corp; the v28 row is the same games, which the
+ladder repeats exactly.) Variant c's lints against v28 on its 1,600 games: flatlines 224 against 240, thin-grip runs
+1.87 against 2.08 a game, banking turns 0.98 against 0.85, uncontested remote scores 1.53 against 1.42.
+
+**Reading.** Survival is priced better and the Runner still loses the Untaian matchup: 15% is twice 8% and still the
+worst cell by far, and the runs v29 declines are paid for elsewhere (fewer remote contests, more banked credits). Variant
+a showed why a Standard Runner can't price this alone: its prior is the whole pool, so every Corp was priced as the one
+that deals damage, and Topan, which pays meat damage for its installs, stopped running against LEO (52% to 24%).
+What the matchup needs is the deck note (H2): against a shell game the Runner plays a different game, not the same
+game with a margin. The next attempt starts from H2's Untaian note and variant c.

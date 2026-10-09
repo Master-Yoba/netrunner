@@ -118,6 +118,7 @@ public sealed partial class RunnerHeuristicPolicy
             risk += Exposure(1, lethal, bare);
         }
         (int need, double chance) = RunnerInference.Punishers(context);
+        if (!RunnerInference.Evidence(context, card => RunnerInference.PunisherDamage(card, 7, 99, 0) > 0)) need = 0;
         bool armed = context.Features.Board.TurnFacts?.Runner.ThisTurn?.SuccessfulRun == true;
         bool survivableBefore = !armed || need <= context.Features.Hand.Length + context.Self.Clicks;
         if (need > 0 && survivableBefore && need > gripAfter + Math.Max(0, clicksAfter)) risk += chance * PunishedGame;

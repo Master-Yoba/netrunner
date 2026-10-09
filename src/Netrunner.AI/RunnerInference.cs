@@ -161,12 +161,15 @@ internal static class RunnerInference
     /// </summary>
     public static (double Lethal, double Bare) UnknownIceDamage(HeuristicContext context, int grip) => context.Memo($"unknown-ice-damage/{grip}", () =>
     {
+        if (!Evidence(context, card => SubroutineDamage(card) > 0)) return (0.0, 0.0);
         Dictionary<string, double> ice = TrackerPrior.Conditional(Prior(context), definition => TrackerPrior.Fits(context.Catalog, definition, "ice"));
+        // R02: only what can fire. ICE of a type an installed breaker breaks is broken, not suffered.
+        IceType[] covered = [.. context.Features.Board.RunnerRig.Select(card => context.Definition(card)?.Icebreaker?.InterfaceType).OfType<IceType>()];
         double lethal = 0, bare = 0;
         foreach ((string definition, double weight) in ice)
         {
             if (!context.Catalog.TryGet(new CardDefinitionId(definition), out CardEvaluationDescriptor card) || card.Ice is not { } spec
-                || spec.RezCost > context.Opponent.Credits) continue;
+                || spec.RezCost > context.Opponent.Credits || covered.Contains(IceType.Any) || covered.Contains(spec.IceType)) continue;
             int damage = SubroutineDamage(card);
             if (damage > grip) lethal += weight;
             else if (damage > 0 && damage == grip) bare += weight;
@@ -194,7 +197,7 @@ internal static class RunnerInference
     {
         IReadOnlyDictionary<string, double> prior = Prior(context);
         double total = prior.Values.Sum();
-        if (total <= 0) return (0.0, 0.0);
+        if (total <= 0 || !Evidence(context, card => card.Agenda is null && AccessDamage(card, 0) > 0)) return (0.0, 0.0);
         double lethal = 0, bare = 0;
         bool Ambush(CardEvaluationDescriptor card) => card.Agenda is null && AccessDamage(card, 0) > 0 && AmbushCost(card) <= context.Opponent.Credits;
         foreach ((string definition, double weight) in prior)
@@ -209,6 +212,19 @@ internal static class RunnerInference
             && Ambush(card)) == true;
         return seen ? (lethal > 0 ? Math.Max(lethal, SeenAmbushShare) : lethal, bare > 0 ? Math.Max(bare, SeenAmbushShare) : bare) : (lethal, bare);
     });
+
+    /// <summary>
+    /// Runner v29 (bot plan H3; the guide marks R18 a matchup rule): whether the Runner has evidence the Corp plays a card
+    /// <paramref name="test"/> takes: one on the Corp's list (Hard knows it), or one it has seen this game. Standard's prior
+    /// is the whole pool, so without evidence every Corp would be priced as the one deck that deals damage.
+    /// </summary>
+    public static bool Evidence(HeuristicContext context, Func<CardEvaluationDescriptor, bool> test)
+    {
+        bool Takes(string definition) => context.Catalog.TryGet(new CardDefinitionId(definition), out CardEvaluationDescriptor card) && test(card);
+        return context.Knowledge?.OpponentList?.Any(entry => Takes(entry.DefinitionId)) == true
+            || context.Knowledge?.Reveals.Any(reveal => Takes(reveal.DefinitionId)) == true
+            || context.Features.Board.Servers.SelectMany(server => server.Ice.Concat(server.Root)).OfType<AgentCard>().Any(card => Takes(card.DefinitionId));
+    }
 
     /// <summary>Three copies in a deck of 49: the least chance an access finds an ambush the Runner has seen this game.</summary>
     private const double SeenAmbushShare = 3.0 / 49;
