@@ -264,7 +264,8 @@ public static class OddityLints
                 _ranThisTurn = true;
                 int grip = before.GetZone(ZoneKind.RunnerGrip).CardIds.Count;
                 _corpDealsDamage ??= before.Cards.Where(card => card.OwnerSide == PlayerSide.Corp).Select(card => card.DefinitionId).Distinct()
-                    .Any(id => definition.Behavior.TryGet(id, out CardBehaviorDefinition? behavior) && DealsDamage(behavior));
+                    .Any(id => DealsDamage(definition.Behavior.TryGet(id, out CardBehaviorDefinition? behavior) ? behavior : null,
+                        definition.Behavior.TryGetIce(id, out IceBehaviorSpec ice) ? ice : null));
                 if (grip <= 2 && _corpDealsDamage == true)
                     Report("runner-runs-on-thin-grip", PlayerSide.Runner, sequence, turn,
                         $"a run on {Server(after, started.AttackedServer)?.Kind} with {grip} cards in the grip.", once: false);
@@ -353,12 +354,6 @@ public static class OddityLints
             return string.Join(", ", parts);
         }
 
-        private static bool DealsDamage(CardBehaviorDefinition behavior) =>
-            behavior.Instructions.Concat(behavior.Triggers.SelectMany(trigger => trigger.Instructions))
-                .Concat(behavior.PaidAbilities.SelectMany(ability => ability.Instructions))
-                .Any(instruction => instruction.Kind == BehaviorInstructionKind.DealDamage
-                    || instruction.Choice?.Options.Any(option => option.Instructions.Any(inner => inner.Kind == BehaviorInstructionKind.DealDamage)) == true);
-
         private RuntimeCardClass? Class(GameState state, CardInstanceId id) =>
             definition.Runtime.TryGet(state.GetCard(id).DefinitionId, out CardRuntimeSpec spec) ? spec.CardClass : null;
 
@@ -404,6 +399,19 @@ public static class OddityLints
         private static string Title(GameState state, CardInstanceId id) =>
             CardTitles.TryGetValue(state.GetCard(id).DefinitionId.Value, out string? title) ? title : state.GetCard(id).DefinitionId.Value;
     }
+
+    /// <summary>
+    /// Bot plan H1 (<c>runner-runs-on-thin-grip</c>): whether a Corp card deals damage, by its behavior or, for native
+    /// ICE (Karunā, Tithe, Diviner), by its ICE specification's subroutines, which are not card behaviors.
+    /// </summary>
+    internal static bool DealsDamage(CardBehaviorDefinition? behavior, IceBehaviorSpec? ice) =>
+        behavior is not null && DealsDamage(behavior) || ice?.Subroutines.Any(subroutine => subroutine is DamageSubroutineSpec) == true;
+
+    private static bool DealsDamage(CardBehaviorDefinition behavior) =>
+        behavior.Instructions.Concat(behavior.Triggers.SelectMany(trigger => trigger.Instructions))
+            .Concat(behavior.PaidAbilities.SelectMany(ability => ability.Instructions))
+            .Any(instruction => instruction.Kind == BehaviorInstructionKind.DealDamage
+                || instruction.Choice?.Options.Any(option => option.Instructions.Any(inner => inner.Kind == BehaviorInstructionKind.DealDamage)) == true);
 
     /// <summary>Card titles for readable findings, when the card data is available.</summary>
     private static readonly Dictionary<string, string> CardTitles = LoadTitles();

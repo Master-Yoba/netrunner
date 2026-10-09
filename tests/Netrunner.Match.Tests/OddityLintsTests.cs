@@ -40,6 +40,22 @@ public sealed class OddityLintsTests
         Assert.Contains(Lint(fixture, content, seed), finding => finding.LintId == lint && finding.Sequence == sequence && finding.Detail == detail);
     }
 
+    /// <summary>
+    /// The review of #131: a deck whose only damage is native ICE (Karunā, Tithe, Diviner: ICE specifications, not card
+    /// behaviors) deals damage for <c>runner-runs-on-thin-grip</c>; a taxing code gate does not.
+    /// </summary>
+    [Theory]
+    [InlineData("30047", true)]
+    [InlineData("30074", false)]
+    public void NativeIceDamageCountsAsTheCorpDealingDamage(string code, bool deals)
+    {
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
+        FullMatchDefinition definition = RulesFuzzRunner.CreateDefinition(RulesFuzzRunner.GatewayElevationContentIds[0], 1);
+        var id = new CardDefinitionId(code);
+        Assert.True(definition.Behavior.TryGetIce(id, out IceBehaviorSpec ice));
+        Assert.Equal(deals, OddityLints.DealsDamage(definition.Behavior.TryGet(id, out CardBehaviorDefinition? behavior) ? behavior : null, ice));
+    }
+
     [Fact]
     public void EveryGuideLintNamesItsRule()
     {
