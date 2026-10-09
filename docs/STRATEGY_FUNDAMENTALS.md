@@ -2,6 +2,8 @@
 
 Research date: 8 October 2026
 
+Revision 2: 9 October 2026 — actionable defaults, spending reserves, and graded mulligans.
+
 This guide describes how to choose plays, allocate resources, and exploit mistakes in asymmetric Netrunner. It is intended for later translation into a bot policy, rather than as a rules reference. It covers general constructed play; archetype modules require the relevant cards to exist in the configured card pool. It is not a claim about the current Standard metagame or ban list.
 
 The main principle is to spend resources to improve the chance of winning within the relevant time horizon. Credits, cards, accesses, installed ICE, and even agenda points are intermediate measures. Their value changes when either side is near a win or a temporary opportunity is about to disappear.
@@ -15,7 +17,7 @@ The main principle is to spend resources to improve the chance of winning within
 
 Rules below are preferences over legal candidate plans, not unconditional commands. A legal win takes priority over economy; a necessary attempt to avoid defeat can take priority over normal risk limits. Evaluate combinations of actions across a turn, not just isolated clicks.
 
-**Research versus synthesis.** The source notes summarize published strategy. Rule IDs, computational definitions, examples, exception handling, and the suggested policy structure are my synthesis for this bot use case. These have not been validated through self-play. Numerical examples illustrate calculations; they are not universal thresholds.
+**Policy stance.** My recommendation is to start with an active Runner and a Corp that converts openings into scores promptly. Prefer making a useful play now over preserving flexibility indefinitely. The defaults below commit to a choice when deeper search has no strong answer. Values marked [T] are my proposed starting settings, not tournament statistics or self-play results. Exact tactical wins, survival requirements, and card effects override them. Sources are retained at the end for traceability; they are not authorities for the proposed numerical settings.
 
 ### State the policy should use
 
@@ -36,109 +38,179 @@ The Runner must not inspect hidden Corp cards. The Corp may use its own HQ and i
 
 ### Early pressure and run selection
 
-Published grounding: *The value of a run* emphasizes opportunity cost, specific possible ICE, and the trade of a click for a rez and information. The Nordic finals analysis illustrates sequencing central attacks to force awkward rez choices. These ideas support probing before complete setup, without making every blind run good. [S1, S18]
-
 | ID | Condition and preferred action | Trade-off and exceptions |
 |---|---|---|
-| R01 [B,M] | If a relevant server is open, or its affordable ICE possibilities are tolerable, consider running before installing a complete rig. | Buy an access, information, or a useful trigger while it is cheap. Compare against the best setup click; an empty or already-known server may offer little. |
-| R02 [B,M] | Before approaching unknown ICE, enumerate plausible identities the Corp can actually rez, including discounts and non-credit costs. Run if the outcome distribution is acceptable for the objective. | “Corp below 3 credits” reduces some risks; it does not establish safety. Cheap ICE, rez modifiers, ambushes, and on-access costs still matter. |
+| R01 [B,M] | If an open central offers a fresh access, run it before optional rig installation. Early, take one such access by default rather than a basic credit. | Do necessary economy sequencing first. Skip when a setup engine needs the click immediately, access punishment is credible, or another server is urgent; this is not a quota of one run every turn. |
+| R02 [B,M] | With at least two clicks left, probe one unrezzed ICE on a relevant server when the plausible affordable outcomes are a stop or minor recoverable tax. Prefer probing to installing speculative coverage. | Do not use Corp credits below 3 as a safety certificate. Defer if affordable possibilities include lethal damage, losing an essential program, or tags you cannot manage. |
 | R03 [B] | If a probe can make the Corp spend money needed to defend a second target, sequence it before the second run. Recalculate after the Corp's rez decision. | The Corp can decline to rez. Evaluate both branches; do not credit the plan with guaranteed denial. |
 | R04 [B] | If a run's only credible outcome is an already-known stop, and it earns no relevant trigger or resource exchange, prefer another action. | A blocked run can still be useful when it consumes a counter, earns money, or changes defenses. Mere activity has no value. |
 | R05 [B,M] | When a non-winning run becomes worse than available alternatives, jack out at the next legal opportunity. | Earlier spending is sunk. Do not assume an escape window exists between revealing ICE and suffering its encounter; use the engine's actual timing. |
 
 ### Follow the agendas
 
-Published grounding: *Flow and locks* describes interrupting agendas on their way from R&D through HQ and remotes. *Agenda density* explains why target value changes with the distribution of remaining agendas and the points required to win. This favors choosing a server from current evidence rather than always attacking R&D. [S3, S4]
-
 | ID | Condition and preferred action | Trade-off and exceptions |
 |---|---|---|
-| R06 [B,M] | If a remote plausibly contains an agenda the Corp can score before your following turn, compare contesting it with your best alternative winning or disruptive line. Strongly favor contesting a likely winning agenda. | Include steal costs, defensive abilities, and trap probability. An early low-impact score can be conceded to gain a stronger position. |
-| R07 [B] | If the Corp has drawn many cards without scoring, exposing agendas, or visibly moving them elsewhere, increase HQ's priority. | This is probabilistic. Hidden remotes, facedown Archives, filtering, and recycling can account for the missing agendas. |
-| R08 [B] | Prefer R&D when its next accesses are fresh and its expected steal value per total cost beats other targets, especially when denying the next agenda draw matters. | If the top card is a known non-agenda and nothing changes it, another identical access has no new agenda chance. Multiaccess can reach beyond it. |
+| R06 [B,M] | Contest a likely scoring agenda by default; steal plus denied Corp progress usually beats a random central access or optional setup. Make stopping a likely winning score the highest non-winning priority. | Concede an early small agenda when the contest consumes most of the next turn as well, and the concession buys a credible stronger position. Trap evidence and scoring abilities can reverse this. |
+| R07 [B] | Choose HQ over equally priced fresh R&D accesses when the Corp has drawn repeatedly without scoring and has no credible outlet for agendas. | Use probabilistic evidence, not a fixed agenda count. Hidden remotes, discards, and recycling can account for points; once HQ looks diluted, switch back. |
+| R08 [B] | With no urgent remote, no HQ concentration evidence, and similar entry costs, choose a fresh R&D access as the central default. Do not pay for the same known non-agenda again. | Run HQ instead when materially cheaper or supported by abilities or multiaccess. If R&D is already covered beyond the next draw, develop or attack elsewhere. |
 | R09 [B,M] | Check Archives when new discards, milling, or observed agenda movement make its contents valuable. | Unprotected Archives can still contain harmful access effects. If its relevant contents are already known and unchanged, do not repeatedly check without another payoff. |
-| R10 [B,A] | If entry is expensive, bundle several useful accesses into that entry when the additional setup cost is justified. | Count distinct cards and their actual stealability. Multiaccess that repeats known cards, or increases damage exposure beyond survivability, may be poor. |
+| R10 [B,A] | For a non-urgent central costing 4 or more credits to enter, default to preparing multiaccess rather than buying one random access [T]. | A likely winning access, dense HQ, run rewards, or a disappearing opening can justify the single access. Do not wait for multiaccess that the deck cannot produce. |
 
 ### Spend and develop with a purpose
 
-Published grounding: *Scoring windows* notes that unspent Runner money can discourage scoring. *Efficient play* recommends planning whole turns and getting useful information early. The tempo articles emphasize that development has to pay off in time to matter. [S5, S6, S7]
-
 | ID | Condition and preferred action | Trade-off and exceptions |
 |---|---|---|
-| R11 [B] | Spend credits when a run, trash, or install improves winning prospects more than holding them. Preserve enough contest capacity if spending would give the Corp a stronger score next turn. | Avoid both hoarding during a winning opportunity and emptying the pool for weak accesses. A credible remote threat can make unused credits productive. |
-| R12 [B,A] | When no immediate defense is needed and the hand lacks useful options, favor drawing if the remaining deck contains affordable economy, needed tools, or strong plays. | Draw is often better than a basic credit early, but a credit that unlocks a strong economy card or a necessary run can be better. Excess cards also risk discard. |
+| R11 [B] | Spend above the reserve defined below. Once safety and the next concrete contest are funded, prefer an affordable useful run, priority trash, or needed tool over more generic money. | No arbitrary 10- or 20-credit savings target. Spend below the reserve to win or prevent defeat; hold more only for a named sequence, not because larger balances always score better. |
+| R12 [B,A] | During turns 1–3, if the hand lacks a useful play, favor drawing over a basic credit while above the next relevant affordability threshold [T]. | Take the credit first if it immediately enables strong economy or a necessary action. Installed high-yield economy, excess hand size, and a known deadline can reverse the preference. |
 | R13 [B] | Play affordable burst economy before another planned spend takes you below its play threshold, unless the order sacrifices a more valuable trigger or opportunity. | Evaluate net gain, not the printed payout. Include the card and click used. Apply the same sequencing check to install discounts. |
-| R14 [B,A] | Install the breaker or tutor access needed for your next important targets before redundant coverage. Add efficiency upgrades when expected future savings exceed their cost before the deadline. | An expensive complete rig can lose to rush. Conversely, a cheap emergency breaker can be correct despite poor long-run efficiency. |
+| R14 [B,A] | Install the cheapest adequate answer to the next important server. Defer redundant breaker types and efficiency upgrades unless they should repay within about three relevant encounters or two turns [T]. | Long glacier games justify longer payback. Against rush, use an inefficient temporary answer now instead of losing points while finding the ideal rig. |
 | R15 [B,M] | If a planned draw or safe information run can change the rest of the turn, take it before irreversible commitments, after any necessary safety preparation. | Preserve clicks for reactions. Do not “run first” when drawing cards or installing protection is necessary to survive that run. |
 
 ### Assets, damage, and disruption
 
-Published grounding: *Should you trash the PAD Campaign?* evaluates asset removal by the relative tempo swing, rather than a blanket requirement to trash economy. *Click Efficiency and Click Waste* stresses combining useful effects. The facechecking discussion highlights keeping recovery clicks and considering which cards or programs are exposed to punishment. [S8, S9, S19]
-
 | ID | Condition and preferred action | Trade-off and exceptions |
 |---|---|---|
-| R16 [B,M] | Trash an economy asset when the future value denied, plus any disruption, exceeds entry, trash, recovery, and lost contest capacity. Favor assets about to pay out or that are the Corp's main recovery source. | Already-earned income is gone. A nearly exhausted asset has little future income to deny. Leaving an asset can be correct if clearing it opens a decisive score elsewhere. |
+| R16 [B,M] | Default to trashing an accessible early economy asset costing at most 3 credits all-in if it should yield at least 4 more credits or is the Corp’s only recovery source [T]. | At 5 or more all-in, default to leaving ordinary drip economy unless denial is your plan or the asset is pivotal. Preserve required contest funds; urgent enabling assets use R17. |
 | R17 [B,M] | Prioritize an asset or upgrade enabling imminent scoring, lethal damage, recursion, or a lock over a modest income asset when removing it breaks the threatening line. | Rank by the enabled line, not by card category or trash cost alone. Re-evaluate if the Corp has redundant copies or immediate recursion. |
-| R18 [B,M] | Before a run with damage risk, ensure the grip and usable prevention cover credible damage through the whole run; preserve recovery for the Corp's response. | Exactly as many cards as damage survives that damage but leaves zero cards. Account for multiple accesses, post-access triggers, core-damage effects, and losing crucial grip cards. |
-| R19 [B,M] | If a run can give tags and the Corp can punish them, reserve the necessary removal resources or a verified alternative survival line before committing. | Late-click runs can remove the chance to recover. Tag-me decks may accept tags, but still need a plan against actual kill and resource destruction. |
+| R18 [B,M] | Before routine unknown accesses against credible damage, draw toward a full grip and reserve a recovery click. For a bounded expected damage sequence D, prefer at least D+1 available grip cards after prevention [T]. | This is a cushion, not a safety guarantee: multiaccess and Corp-turn damage can require more. Exactly D cards survive D damage but leave no margin. A winning run may justify accepting more risk. |
+| R19 [B,M] | If one removable tag is a plausible run outcome and punishment matters, retain at least one click and 2 eligible credits to clear it. Avoid the last-click run by default. | Scale to the actual number of tags and card-specific removal restrictions. Tag-me plans and immediate winning runs override the ordinary cleanup preference. |
 | R20 [B,M] | Against program destruction, protect the irreplaceable breaker or recursion route before taking an encounter that can destroy it. | Losing a cheap redundant program can be an efficient payment; losing the only way through the scoring server can cost the game. |
 | R21 [B,M] | If the Corp is spending heavily to score and the remote is too expensive to contest, attack the central or engine that the scoring commitment leaves vulnerable. | Do not choose compensation if the score itself ends the game. Account for agendas whose abilities restore Corp money or defense immediately. |
 | R22 [B] | If a low-risk development turn permits an unavoidable Corp win, choose the available line with the best chance to win or prevent it, even if normally too risky. | Apply this to a credible deadline, not just a losing board position. Preserve a better long-term line when the loss is not actually imminent. |
-| R23 [B,M] | Break only the subroutines required for the run's objective and an acceptable resulting position. Compare taking a penalty with paying to prevent it. | Letting the Corp gain credits can fund later ICE; accepting a tag or damage can change survival. Evaluate the sequence, not each subroutine in isolation. |
-| R24 [B,A,M] | When deciding a mulligan, compare the opening hand's feasible first turns with a fresh hand from your deck. Favor usable economy and access to the tools needed before the opponent's likely deadline. | Do not require all three breaker types. A hand of expensive tools without money may be worse than economy plus a tutor; a slow engine hand may be acceptable only against a slow plan. |
+| R23 [B,M] | Leave a harmless subroutine unbroken. Against non-kill decks, accept one net damage from a healthy, nonessential grip rather than pay 3 or more credits to prevent it [T]. | Pay instead when damage threatens survival, an irreplaceable card, or future recovery. Break Corp-credit gain when it would fund a later defense; do not minimize the current ICE cost in isolation. |
+| R24 [B,A,M] | Keep strong usable economy even without a breaker or tutor. Mulligan weak economy plus an awkward breaker. Use the graded opening-hand policy below instead of requiring both card categories. | A rush matchup increases the value of timely interaction; a slow matchup increases the value of a durable engine. Printed card types alone do not establish a playable opening. |
+
+## Runner defaults when search has no clear answer
+
+These are my preferred starting biases [T]. They are deliberately opinionated so the bot acts instead of postponing every decision until it has a perfect model.
+
+### R11 in practice — fund a purpose, then spend
+
+**The default is to use money to get points, stop scores, or deny the Corp a productive turn.** Accumulating another five credits after the next useful sequence is funded usually loses to executing that sequence. Reserve money for an identifiable action, not for a generally comfortable balance.
+
+Build the reserve in this order:
+
+1. **Immediate safety:** fund known tag cleanup, necessary prevention, or other survival costs. A future income click cannot pay for an effect that happens before that click.
+2. **Concrete next contest:** if the Corp has a credible remote score next turn, calculate the minimum pool needed at the end of this turn to contest it next turn. Subtract only reliable next-turn income that fits alongside preparation and running. Include restricted funds only where eligible. Include two traversals if defense may require them.
+3. **Economic recovery:** in an otherwise safe state, use **3 pool credits** as a soft fallback floor. Use the actual higher play threshold instead when a strong economy card already in hand needs it. With a usable income engine, **0–2** can be enough; with an unfunded necessary install, reserve its actual cost instead. These are defaults, not hard floors.
+
+Do not add the same money twice. A balance of 5 that both threatens the remote and enables a future economy event satisfies both requirements if their timing is compatible. Costs that must actually be paid sequentially must be funded sequentially. Implement the reserve as the minimum starting balance of a feasible recovery/contest sequence, rather than blindly summing labels.
+
+**Once the reserve is met, spend available surplus before taking another basic credit** if there is a qualifying target:
+
+| Available play | Default decision [T] |
+|---|---|
+| Fresh central access for 0–2 net credits, one run click, no material punishment, no urgent alternative | Run. Prefer it to a basic credit or a speculative spare breaker. |
+| Fresh random single access for 3 credits | Run if it has a useful trigger, improves information for this turn, or the opening is closing. Otherwise develop. |
+| Random single access for 4+ credits | Usually wait for multiaccess, a cheaper route, or better agenda evidence. |
+| Likely agenda in a contestable remote | Spend aggressively to steal it; do not preserve the soft floor merely to stay comfortable. Preserve actual survival requirements. |
+| Essential enabler that will generate a score or dangerous lock | Spend to remove it before buying optional rig improvements. |
+| Ordinary asset with little future payout | Keep the money for a better target. Surplus money is not an instruction to waste it. |
+
+“Net credits” means pool depletion after guaranteed run rewards and eligible temporary funding, not speculative gains from unknown cards. Charge additional setup clicks separately. These price bands assume roughly ordinary agenda density and a non-terminal midgame; a dense HQ or winning agenda changes them sharply.
+
+**Worked choices:**
+
+- **12 credits; a safe fresh central costs 2; next-turn contest reserve is 6:** run rather than click to 13. Ending at 10 still funds the reason for saving.
+- **8 credits; remote contest next turn requires 7 after reliable income; an ordinary asset costs 4 to clear:** leave the asset. Ending at 4 creates the opening the Corp needs.
+- **6 credits; a likely remote agenda costs 5 total to steal; Corp has no credible punishment and your income engine is active:** steal, even though you end at 1. A soft cash floor should not veto productive aggression.
+- **14 credits; no credible scoring remote; safe fresh access costs 2; bot plans four basic credits:** reject that plan by default. Take the access and use remaining clicks on useful draw or development. Banking to 18 needs a named purpose.
+
+My judgment: a beginner bot is more likely to lose by failing to cash in an opening than by ending a productive turn a little short of an arbitrary cash target. Give waiting a concrete justification. Against kill, fast scoring, or expensive repeated remote contests, that justification will often exist.
+
+### R24 in practice — judge the opening, not the card categories
+
+**Remove “must have a breaker or tutor” as a keep requirement.** Money plus draw can find tools; money alone can support early probes and later installation. A breaker that does not answer the likely early problem is much less valuable than it looks.
+
+Use the following as a first implementation [T], for ordinary Runner decks. Evaluate a feasible two-turn opening from the actual starting credits and known identity/setup abilities. Do not count all cards' best effects if they cannot be paid for and played in the same opening. Unknown future draws do not count as already holding their rewards.
+
+| Component | Score | Definition |
+|---|---|---|
+| Economy E | 0 | No meaningful usable economic improvement in the first two turns. |
+| Economy E | 1 | Only weak, delayed, or highly conditional income; the opening remains cash-starved. |
+| Economy E | 2 | A feasible economy package yields at least about 3 net credits by the end of turn two using no more than 3 clicks, with no severe drawback. |
+| Economy E | 3 | At least about 6 net credits using at most 4 economy clicks, or a funded repeatable engine yielding at least 2 credits per activation click by turn two without stranding the rest of the opening. |
+| Card access D | 0 | No useful draw or search in the opening. |
+| Card access D | 1 | A draw effect sees at least 2 additional cards within at most 2 clicks and is affordable in the planned opening. |
+| Card access D | 2 | Affordable draw sees at least 3 additional cards within at most 2 clicks, or a tutor can fetch and fund a relevant breaker by turn two. |
+| Interaction I | 0 | No timely useful tool. Expensive unplayable breakers and support for absent cards count here. |
+| Interaction I | 1 | One affordable tool provides useful expected early coverage or a credible pressure line. |
+| Interaction I | 2 | The opening can fund a broad answer or a particularly strong response to the expected early scoring route. |
+| Clutter W | 0 / 1 / 2 | Subtract 1 for two redundant or opening-dead cards; subtract 2 for three or more. One late-game card is acceptable. |
+
+Use the highest satisfied tier within each component, not their sum. Basic credit clicks are never E-income; include acquisition/install/activation costs in net income. A card may support two components only if the same feasible opening genuinely produces both benefits. If the engine costs so much that no credible interaction or recovery remains, it does not qualify for E=3 merely because its printed activation is efficient.
+
+**Decision order:**
+
+1. **E=0–1: mulligan by default.** Override only for a deck-specific funded plan, such as an identity-backed opening, a particularly strong run economy line, or a combo whose setup genuinely works. Do not call a lucky future draw a plan.
+2. **E=3 and W≤1: keep by default**, including hands with no breaker or tutor. Against a known rush strategy, require either D≥1 or I≥1; otherwise redraw unless the hand has a separate demonstrated way to meet that deadline.
+3. **E=2: keep if `E + D + I - W >= 4`.** Otherwise mulligan. Economy plus one mediocre breaker is not enough to pass automatically.
+4. **E=3 and W=2: keep only if the remaining opening still scores at least 4 and has D≥1 or I≥1.** The point is to reject hands whose apparent wealth is attached to a largely unusable opening.
+
+Once a mulligan is taken, play the resulting hand under the game's rules; this is not a loop that keeps redrawing until the threshold passes. At mulligan time, use only information actually available then—normally identities and permitted deck information, not the Corp's future first turn.
+
+| Representative hand profile | Components | Default |
+|---|---|---|
+| Two usable burst economy cards and useful early support; no breaker/tutor | E3 D0 I0 W0 | **Keep.** Strong money does not need a breaker badge. |
+| One strong burst economy card plus affordable draw-three; no breaker | E2 D2 I0 W0 | **Keep.** Four points; draw gives a reasonable route to tools. |
+| One usable economy card plus an affordable flexible tutor | E2 D2 I0 W0 | **Keep**, provided the tutor and fetched tool really fit the budget. |
+| One usable economy card plus one narrow cheap breaker; no draw | E2 D0 I1 W0 | **Mulligan.** The old category gate would keep this too readily. |
+| Weak slow economy plus an expensive breaker | E1 D0 I0 W0 | **Mulligan.** Neither category fixes the opening. |
+| Three different breakers, console, multiaccess; no usable income | E0 D0 I1 W1 or worse | **Mulligan.** Coverage without funding is not setup. |
+| Funded durable income engine plus affordable useful draw | E3 D1 I0 W0 | **Keep.** No installed breaker is required immediately. |
+| Strong money but no draw or interaction against known fast rush | E3 D0 I0 W0 | **Mulligan** under the rush override. |
+| Strong money plus three genuinely dead opening cards, no draw/tool | E3 D0 I0 W2 | **Mulligan.** The economy does not redeem the whole hand. |
+| Useful early breaker and run event that reliably provide strong income together | E3 D0 I1 W0 | **Keep.** Classify by effects, not by “economy card” labels. |
+
+These examples specify effect profiles rather than exact five-card lists; classify the actual five cards, including their joint affordability. The numeric score is an opinionated fallback, not a substitute for deck knowledge. For a deck with unusual starting resources, adjust the affordability model before changing thresholds.
+
+Later, a better calibration is to score a sample of fresh legal starting hands from the bot's own known deck and compare their average opening value with the current hand. Do not demand a “perfect” combination that the deck rarely draws. Until then, the table above is preferable to a strict economy-plus-breaker gate.
 
 ## Universal Corporation fundamentals
 
 ### Build a scoring plan and budget it
 
-Published grounding: the strategy literature treats scoring windows as temporary advantages in money, tools, time, or information. The older four-archetype model distinguishes plans that exploit early missing breakers, impose later taxes, score from hand, or threaten a kill; it also explicitly recognizes hybrids. [S2, S5, S10]
-
 | ID | Condition and preferred action | Trade-off and exceptions |
 |---|---|---|
-| C01 [B,A] | When holding a scoreable agenda, test whether the Runner can contest it over the entire exposure period. If the window is good and likely to close, score rather than automatically building more infrastructure. | Compare the Runner's full next-turn preparation capacity, not only current credits and installed breakers. Include known tutors, run events, and eligible hosted money. |
+| C01 [B,A] | If an agenda can be scored before the Runner is likely to assemble an affordable contest, start scoring now. Prefer taking that window over a second income installation or a redundant ICE layer. | Use the Runner’s entire upcoming turn, including plausible burst money and tutors. Never treat the currently installed rig as the full answer set. |
 | C02 [B] | Before installing and advancing, budget defense on the next Runner turn and completion on the following Corp turn. Require a feasible sequence for both. | “I can rez the ICE” is insufficient if the agenda then cannot be completed. Conversely, income arriving next turn may fund advancement but cannot fund defense now. |
 | C03 [B] | If spending on an optional rez would prevent defending an imminent score or another critical server, prefer allowing the lower-value run. | Override for a likely game-ending steal, engine destruction, or a larger loss. Score-area abilities may alter the budget. |
-| C04 [B,A] | If an asset, low-impact agenda, or defensive ability can drain the Runner enough to enable a more valuable score, evaluate that two-stage plan. | Calculate whether the Runner can afford both contests. Do not donate the points that let the Runner win, and model their option to ignore the bait. |
+| C04 [B,A] | When an expensive remote check leaves the Runner unable to contest again next turn, follow it with the strongest feasible scoring threat. A useful asset is the default bait before donating an agenda. | Use agenda bait only if the follow-up is credible even after its steal and the donated points do not create an easy Runner finish. |
 | C05 [B] | Once an agenda can legally be scored, normally score it before offering an unnecessary further access opportunity. | Delay only for a concrete ability, scoring sequence, or strategic benefit supported by the exact card text. |
 
 ### Invest in the defenses that matter
 
-Published grounding: *Tactical Runs* distinguishes ICE that stops, taxes, and punishes. *The Primary Aspects of Netrunner* connects economy to what servers can actually be protected, while *What makes Netrunner special?* separates Corp investment in defense from creating threats. [S2, S11, S12]
-
 | ID | Condition and preferred action | Trade-off and exceptions |
 |---|---|---|
-| C06 [B] | Place affordable stopping ICE on the server whose breach currently matters most. When the Runner lacks a relevant breaker, exploit that subtype on a scoring route. | Unrezzable protection may bluff but is not reliable defense. Damage or tags without a stop may allow a Runner to take the agenda anyway. |
-| C07 [B,M] | Add taxing ICE where the Runner is likely to make repeated important runs and their available breakers actually pay a meaningful cost. | Printed strength or rez cost is not the tax. Include bypass, destruction, alternative breakers, and accepting subroutines. |
-| C08 [B] | Before adding another ICE to a remote, identify the score, engine, or forcing threat the layer protects. Prefer another use of the click and money if the layer changes no relevant outcome. | A non-scoring remote can justify heavy protection when it contains a decisive engine or kill piece. “Never ICE an asset” is also wrong. |
+| C06 [B] | For ordinary scoring decks, prioritize affordable stopping ICE on an agenda-bearing HQ or threatened scoring remote. Otherwise protect the cheapest dangerous central attack before building an idle remote. | R&D multiaccess or HQ-triggered denial can outrank current agenda location. Do not count ICE you cannot afford to rez as reliable protection. |
+| C07 [B,M] | Put repeat taxes on a repeatedly attacked central before adding them to an unused remote. Favor ICE that still taxes the Runner’s actual breakers. | Count bypass and accepted subroutines. An extra 1-credit tax rarely justifies a large new expenditure unless it closes a specific scoring window. |
+| C08 [B] | Default to no second ICE on a remote that has neither a planned score nor an essential engine. On an active remote, add a layer only if it changes access feasibility or imposes a meaningful repeat tax. | Protecting a decisive non-agenda asset is a valid purpose. Do not buy layers merely to reach a preferred server size. |
 | C09 [B,M] | Choose ICE order by simulating approaches: make unavoidable taxes occur before a final stop where useful, and preserve protection from known bypass tricks. | There is no universal “sentry outside” rule. Evaluate subtype coverage, on-encounter effects, movement, and the actual breaker suite. |
-| C10 [B,M] | Rez when the prevented payoff or expected future tax justifies the immediate cost. Decline when the Runner is baiting spending that opens something more important. | Include information revealed, on-rez value, and economy thresholds. Rezzing merely because a run approaches is not a plan. |
+| C10 [B,M] | Rez affordable stopping ICE against an unprepared Runner when the server matters and the defense budget survives. Decline a costly rez on low-risk single access if it would break the scoring budget or block usable economy. | As a tie-break, paying 5 or more to tax the Runner only 1 is usually bad without a stop, useful trigger, or many expected reruns [T]. |
 | C11 [B,M] | Save a limited defensive counter if the current breach is tolerable and a later score needs it more; spend it when it stops a decisive steal or wins a useful resource exchange. | It has no end-of-game value unused. Assess the Runner's ability to rerun, not just whether this run ends. |
 
 ### Manage money and agenda exposure
 
-Published grounding: *Agenda density* connects defense priorities to where points remain. *Flow and locks* describes moving agendas out of threatened zones and the danger of interrupted agenda flow. The efficiency articles distinguish productive draw from actions that only increase vulnerability or clutter. [S3, S4, S6, S9]
-
 | ID | Condition and preferred action | Trade-off and exceptions |
 |---|---|---|
-| C12 [B] | Establish income sufficient for the next defense and scoring sequence. Install slower economy when it is likely to survive and pay back before the game's decisive turn. | Burst money can be superior during a temporary scoring window. Extra economy after the Runner has a likely immediate win is too late. |
-| C13 [B] | If optional drawing finds needed ICE, economy, or scoring pieces with acceptable exposure, draw. Reduce optional draw when HQ is already agenda-heavy and there is no safe outlet. | Do not stop drawing mechanically just because HQ has an agenda: the solution to the flood may be in R&D. Evaluate draw, play, and discard together. |
-| C14 [B] | When HQ becomes dangerous, compare scoring, protected installation, legal recycling, and stronger HQ defense. Choose a route that reduces total steal exposure. | Moving agendas to an open remote or Archives simply relocates the problem. Include the Runner's access to the destination and ability to interrupt recycling. |
+| C12 [B] | Play usable burst economy early. Install a durable economy engine before optional defense when it should repay within roughly three Corp turns [T]. | Score first if the window is closing. Do not invest in three-turn payback when the likely game-ending threat is next turn. |
+| C13 [B] | With no usable play and a defensible HQ, draw before clicking for a credit unless that credit unlocks an immediate action. With 3 or more agendas in a normal-sized HQ and no outlet, stop optional draw by default [T]. | Draw to seek a specific flood solution when that is the best escape. Hand-size modifiers, agenda values, and alternative win plans change the threshold. |
+| C14 [B] | Resolve dangerous HQ flood in this default order: safe immediate score, safe scoring window, protected recycling, then better HQ defense. Avoid naked agenda installs as routine flood management. | An urgent attack may make defense come first. Only recycle through a line the Runner cannot interrupt profitably; reassess R&D density afterward. |
 | C15 [B,M] | Reassess HQ, R&D, and Archives protection when agenda distribution, multiaccess, or attack routes change. | Defend against the Runner's actual payoff. A central with no agenda can still enable devastating economy denial or a combo prerequisite. |
-| C16 [B] | Preserve non-agenda cards in HQ when they meaningfully dilute random access and have future uses, but play them when the resulting board or economy is worth more. | Do not deliberately keep useless cards instead of solving a winning threat. The Corp knows HQ composition; the Runner does not. |
+| C16 [B] | Keep a spare non-agenda in HQ rather than installing it in a pointless location when doing so dilutes valuable agendas. Play productive economy or critical defense instead of preserving dilution. | Dilution is a small defensive benefit, not a reason to leave an engine unused. Evaluate actual HQ access effects. |
 | C17 [B,M] | When the Runner inspects R&D faster than you draw, seek legal extra draw, shuffling, alternate agenda movement, or a change in defense that breaks the pattern. | A repeat top-card check is not automatically a complete lock. Identify which unseen cards the Runner can actually cover. |
 
 ### Exploit reactions and finish the game
-
-Published grounding: *Near-Earth Tempo* presents threats that pull the Runner's effort in competing directions. *The Skills of Netrunner* separates efficient resource play from choosing strategically important actions and reading the opponent. [S13, S14]
 
 | ID | Condition and preferred action | Trade-off and exceptions |
 |---|---|---|
 | C18 [B,M] | If the Runner cannot answer two independent threats within their next turn, present both when doing so improves the worst response you expect. | Two expensive cards that can both be ignored are not two threats. Simulate the Runner choosing the cheaper or strategically correct answer. |
 | C19 [B,M] | If observable Runner behavior repeatedly reveals a weakness, exploit it: no remote checks permits hidden agendas; indiscriminate checks permit taxing decoys. | Use evidence across decisions and keep some uncertainty. An opponent can change behavior; do not infer hidden cards with certainty from one pass. |
-| C20 [B,M] | If a tag, damage, or rig-destruction line is available, compare its full effect with scoring. Prefer it when it wins, disables the next contest, or removes more recovery capacity than it costs. | Damage is not automatically progress. Include prevention, replacement cards, recursion, and all costs of landing and exploiting tags. |
+| C20 [B,M] | Take a verified lethal line first. Otherwise prefer a sound score over incidental damage or tags; choose disruption when it disables the next contest or removes an essential tool. | Do not spend a full turn on damage the Runner repairs cheaply. Kill and grinder decks deliberately assign more value to accumulated damage. |
 | C21 [B,A] | If the Runner's installed engine will outgrow your defense and you cannot disrupt it, shorten the game through the best available scoring or kill line. | Continuing to buy marginal defense can make eventual defeat more certain. Some glacier matchups require an early rush plan. |
 | C22 [B] | If R&D is nearly empty, evaluate the draw-loss deadline and any legal recycling before optional draw or a multi-turn plan. | Emptying the Runner's stack does not by itself win; Runner attrition requires preventing safe progress or causing a flatline. |
-| C23 [B,A,M] | When deciding a mulligan, favor a feasible opening plan: usable economy, affordable relevant protection, and a path toward your deck's threats. | Excess agendas or only unaffordable ICE often justify replacing the hand. Low-ICE combo and horizontal decks must use their own opening requirements rather than a mandatory ICE count. |
-| C24 [B,M] | If a play gains money or points at the cost of bad publicity, compare its immediate window with the extra run funding it grants over the expected remaining game. | Bad publicity refreshes its benefit across runs; it can undermine a long taxing plan more than a short rush finish. Use exact payment eligibility from the engine. |
+| C23 [B,A,M] | For ordinary ICE-based scoring decks, keep playable economy plus 1–2 affordable relevant ICE; do not demand an agenda. Default to mulliganing 3+ agendas without a credible escape or a hand whose defenses are all unaffordable [T]. | Horizontal, kill, and combo decks need different opening requirements. An economy-free hand with a very strong affordable rush line can still be a keep. |
+| C24 [B,M] | Accept bad publicity for an immediate strong scoring window more readily than for speculative setup. In a long taxing plan, decline an optional gain if repeated bad-publicity use should give back most of it. | For rough evaluation, one bad publicity used on five future runs gives up to five spendable credits to the Runner. Do not count runs with no eligible spending as full value. |
 
 ## Rough trade-offs for evaluation
 
@@ -146,14 +218,14 @@ These are proposed approximations [T]. Recompute their inputs from the game stat
 
 | Comparison | Starting calculation | Important correction |
 |---|---|---|
-| Basic credit versus draw | Compare one immediate credit with the expected value of cards that can become useful before the deadline. | Draw becomes less attractive with unusable cards or forced discard; a single credit can cross a crucial affordability threshold. |
-| Long-term economy | Expected payouts before disruption or game end minus install and activation costs, compared with spending those clicks elsewhere. | A nominal profit after six turns is irrelevant if a likely winning score arrives in two. |
-| Breaker upgrade | Expected number of relevant future encounters × savings per encounter, versus installation, acquisition, and memory costs. | Example: a 6-credit upgrade saving 2 per encounter needs three encounters just to repay its credit cost; clicks make true break-even later. |
-| Asset removal | Future income and strategic effects denied versus entry, trash, recovery, and sacrificed opportunities. | Example: denying four likely 1-credit payouts for a 3-credit trash and a click is not automatically favorable; the sides' money has different urgency. |
-| Run investment | Expected win or denial value + information + useful triggers, minus all resource and risk costs. | A 5-credit run with three new accesses amortizes entry better than three 5-credit runs with one each, but compare preparation cost and survival too. |
+| Basic credit versus draw | Early with few options and adequate cash, draw wins. Start a credit-equivalent evaluator at 1.5 for a useful unknown draw versus 1 for a basic credit [T]. | This is a tie-break, not an extra reward on top of the simulated cards. Reduce it with clutter; increase the value of a credit that crosses an immediate threshold. |
+| Long-term economy | Prefer an early engine that should repay in 2–3 turns; default against new engines needing 4+ turns unless the matchup is demonstrably slow [T]. | Payback includes install and activation clicks. At an immediate scoring deadline, even two-turn payback may be too slow. |
+| Breaker upgrade | Prefer the existing adequate breaker unless the replacement should repay in roughly 3 encounters or 2 turns [T]. | A 6-credit upgrade saving 2 per encounter needs three encounters just for credit break-even, so normally defer it if only three uses remain. Opening a previously inaccessible server is different. |
+| Asset removal | Early, lean toward spending up to 3 all-in to deny 4+ expected future credits; lean away at 5+ all-in for ordinary drip [T]. | R16 and R17 override for reserve violations, immediate payouts, sole recovery sources, and enabling assets. Do not give this bonus twice. |
+| Run investment | Default yes at 0–2 net credits for one fresh ordinary central access, conditional at 3, usually no at 4+ without extra payoff [T]. | Apply R11’s safety and opportunity filters. Near a win, relevant agenda probability matters more than the ordinary price band. |
 | Repeated remote contest | Count every required traversal and every activation/access cost. | If an ability forces a second run, an apparent 7-credit route may require 14 credits and two run clicks, before other costs. |
-| Damage versus breaking | Compare credits saved with replacement draws, lost valuable cards, prevention use, and increased kill risk. | One net damage is not always “one click”: it can trash a unique answer or consume the only remaining safety margin. |
-| Extra ICE | Expected reduction in breach probability or repeated tax relative to install, rez, card, and opportunity costs. | A layer that costs the Corp 7 to establish but the Runner 1 to pass needs a concrete defensive purpose. |
+| Damage versus breaking | Against non-kill, prefer paying 1 to avoid a random net damage; accept it rather than pay 3+ when the grip is healthy and replaceable [T]. | At 2, let current draw efficiency decide. Do not extend this to core damage, essential grip cards, chained damage, or lethal exposure. |
+| Extra ICE | Reject an optional layer costing about 6+ to establish for only a 1-credit pass tax unless repeated use or a concrete stop justifies it [T]. | Affordable gearchecks in a scoring window get priority even if their later tax is tiny. |
 
 For a uniformly random HQ sample, if HQ has `N` cards including exactly `A` agendas, accessing `k` distinct cards has probability `1 - C(N-A,k)/C(N,k)` of finding at least one agenda. A Runner normally does not know `A`, so average over its belief distribution. Across separate HQ breaches, repeats are possible. Also distinguish “an agenda” from “enough stealable points to win.” This formula and the numeric examples are analytical tools, not sourced empirical performance claims.
 
@@ -174,6 +246,15 @@ Use these as candidate bad-decision labels. Penalize the avoidable strategic err
 | Wasteful rez | Corp rezzes a low-impact defense and cannot also cover your main target. | Switch targets with remaining clicks. | Major. |
 | Predictable installs | Repeated evidence separates agendas and decoys by the Corp's actions. | Reweight remote beliefs and check the likely agendas more selectively. | Moderate to major. |
 
+### Additional decision penalties for the bot [T]
+
+- **Hoarding:** moderate penalty for a basic credit when the R11 reserve is already met and a qualifying affordable target exists; major if it lets a clear opening expire. Do not penalize waiting without a useful target.
+- **False mulligan rejection:** major opening-policy error for rejecting an E3/W0 non-rush hand solely because it has no breaker or tutor.
+- **False mulligan acceptance:** major opening-policy error for keeping weak income and an unaffordable breaker solely because both card categories are present.
+- **Idle defense:** moderate penalty for adding a second layer to an irrelevant remote; major if doing so leaves the active score or central unfunded.
+
+Apply each penalty to the underlying mistake once. Do not also count its mirrored opponent-exploitation label as a second independent loss.
+
 ### Runner mistakes the Corp should punish
 
 | Mistake | Observable condition | Corp exploitation | Default severity |
@@ -189,7 +270,7 @@ Use these as candidate bad-decision labels. Penalize the avoidable strategic err
 
 ## Runner archetype modules
 
-Archetypes overlap. A deck can be a regular toolbox with a denial package or a big rig with a central burst finish. Historical archetype catalogs document these different engines and payoff patterns; they do not establish current card legality. [S15] The condition/action policies below are proposed adaptations.
+Archetypes overlap. A deck can be a regular toolbox with a denial package or a big rig with a central burst finish. Apply the module to change the base defaults, not to suspend interaction while completing a preferred setup.
 
 ### Big rig and late-game remote control [A,M]
 
@@ -246,9 +327,22 @@ Archetypes overlap. A deck can be a regular toolbox with a denial package or a b
 - **Tag-me:** accept tags only when your deck and current position can survive the opponent's available punishment and lost resources. Stop installing vulnerable resources without a near-term return.
 - These are resource and risk overlays, not necessarily independent win plans. **Knobs:** restricted-credit allocation, refresh timing, resource exposure, punishment tolerance.
 
+### Runner archetype overrides to the numeric defaults [T]
+
+| Plan | Default adjustment |
+|---|---|
+| Big rig | Allow 3–4-turn engine payback in a slow matchup; keep the early remote-contest override. Do not save merely to complete every rig slot. |
+| Aggro/run economy | Allow one higher run-cost band when guaranteed triggers make the turn productive; compute net cost first and do not count the same reward twice. |
+| Denial | Spend below the soft floor when the disruption demonstrably leaves the Corp unable to defend the follow-up. Require that follow-up to be available. |
+| Toolbox | Preserve the flexible tutor over installing speculative coverage. With funded economy, treat an affordable tutor as strong mulligan card access. |
+| Central burst | Default to assembling a burst of at least 3 useful accesses before paying a 4+ credit entry fee. An urgent remote still outranks that setup. |
+| Combo | Reserve the actual combo cost only when the key pieces and a plausible execution turn exist. Missing several pieces is not a reason to bank indefinitely. |
+| Mill/sabotage | Inspect changed Archives when credible new value appears; race only when the projected deck clock actually beats the scoring clock. |
+| Stealth/recurring | Prefer running before refresh when eligible credits would otherwise expire and the target qualifies. Unused recurring credits alone do not justify a pointless run. |
+
 ## Corporation archetype modules
 
-Published archetype discussions distinguish rush, glacier, fast advance, kill, horizontal assets, shell games, grinders, prison, and combo, while emphasizing hybrids. [S10, S16, S17] The following modules translate those categories into conditional priorities; use only the modules your card pool supports.
+Choose a primary plan and a fallback. Use only the modules supported by the deck and configured card pool.
 
 ### Rush [A,M]
 
@@ -311,24 +405,38 @@ Published archetype discussions distinguish rush, glacier, fast advance, kill, h
 - **Hybrid:** switch between scoring, fast advance, and kill according to the actual opening; do not switch merely because the last attempt failed.
 - **Punish:** defense focused on only one of your live winning routes. **Avoid:** consuming shared money or counters on a secondary plan that disables a stronger finish. **Knobs:** readiness, fallback strength, shared-resource conflict.
 
+### Corporation archetype overrides to the defaults [T]
+
+| Plan | Default adjustment |
+|---|---|
+| Rush | A valid current scoring window outranks extra economy or optional ICE. Reserve for the next score, not an eventual perfect server. |
+| Glacier | Default to one developed scoring remote. Accept roughly 3-turn defense/economy payback, shortening the horizon against a stronger Runner late game. |
+| Fast advance | Execute an available safe score rather than wait for a remote. Conserve the enabler only when a specific stronger chain or required final score needs it. |
+| Never advance | Favor useful assets as decoys; do not pay heavily for a trap the Runner has no reason to check. |
+| Asset spam | In a quiet turn, favor deployment of a productive asset over an optional ICE layer. Add protection when it preserves an essential enabler, not each asset individually. |
+| Tag-and-bag | Do not initiate an expensive tag line without either affordable punishment or a scoring follow-up enabled by cleanup. |
+| Damage/grinder | Raise the value of damage only as the Runner’s remaining safe contests decline; ordinary damage against abundant draw should not beat a secure score. |
+| Prison/rig control | Once the lock is sufficient, fund the finish before strengthening it further. |
+| Combo/hybrid | Keep shared money and counters for the strongest currently feasible win line; do not split the budget across two unfinished plans. |
+
 ## Translating this into a policy
 
-This is a proposed implementation outline, not a result established by the strategy sources.
+Use these defaults as priors and tie-breaks within the existing evaluator. They are useful precisely where its estimates are weak. Avoid awarding a run both its simulated benefit and a second full heuristic estimate of the same benefit.
 
 1. **Generate legal turn plans and contingent responses.** Let the rules engine determine legality, costs, triggers, and terminal outcomes. Include economy, draw, installation, runs, scoring, and disruption.
 2. **Check tactical wins and avoidable immediate losses.** Search complete lines. A high-value credit action should not outrank a certain win, nor hide an obvious lethal reply.
 3. **Evaluate uncertain plans over plausible hidden states.** Use observable history and card-pool knowledge. Preserve low-probability dangerous outcomes without acting as though every unknown card is the worst possible card.
-4. **Apply the base considerations.** Reward improved win prospects, denied opposing progress, useful information, and reusable capacity. Charge actual resources, exposure, and recovery.
+4. **Apply committed defaults when values are close or uncertain.** Use R11 spending bands, the mulligan decision order, and the archetype overrides. In a credit-equivalent evaluator, a modest default preference can be about 0.5–1 credit [T]; use a 2–3 credit penalty for a clear repeatable inefficiency. Proven tactical losses bypass these small modifiers.
 5. **Adjust for archetype and matchup.** Add urgency for rush windows, reserves against tag punishment, engine priorities against horizontal decks, and so on. Evidence should update matchup beliefs during play.
 6. **Replan after information changes.** A draw, rez, access, trace result, or unexpected defense can invalidate the rest of a turn.
 
-A rule record could contain `id`, `applies_when`, `candidate_action`, `expected_benefit`, `resource_cost`, `risk`, `exceptions`, `archetype_weights`, `matchup_weights`, `confidence`, and `source_ids`. Keep hard legality outside heuristic weights. Prefer probabilistic action selection among similarly valued bluffing lines to a deterministic install pattern the opponent can learn perfectly.
+A rule record could contain `id`, `applies_when`, `default_action`, `preference_strength`, `thresholds`, `override_conditions`, `archetype_weights`, `matchup_weights`, `confidence`, and `source_ids`. Log the default selected and the specific evidence that overrode it. Keep hard legality outside heuristic weights. Prefer probabilistic action selection among similarly valued bluffing lines to a deterministic install pattern the opponent can learn perfectly.
 
 For initial evaluation, create paired positions that differ in one strategically meaningful variable: the Corp can versus cannot afford a rez; a run leaves versus removes remote contest capacity; R&D's next access is fresh versus known; an asset has one versus several payouts left; the Runner has versus lacks tag-removal time. The desired action should change only when the altered fact changes the relevant trade-off. These are suggested policy checks, not tests already performed.
 
 ## Sources and research notes
 
-Sources were consulted for strategic concepts, not for a current tier list. Older lists and card examples may be rotated, banned, or incompatible with the selected format. Some articles make deliberately strong teaching claims; this guide does not adopt claims such as “always force rezzes” or a fixed number of accesses guaranteeing victory.
+The recommendations in the main text are my policy judgments, informed by these sources. The numerical defaults, mulligan score, and illustrative decision penalties are not claims made by those authors. Sources were consulted for strategic concepts, not for a current tier list. Older lists and card examples may be rotated, banned, or incompatible with the selected format. Some articles make deliberately strong teaching claims; this guide does not adopt claims such as “always force rezzes” or a fixed number of accesses guaranteeing victory.
 
 - **S1 — [spike biased: The value of a run](https://qtm-netrunner.gitlab.io/spike/docs/part1/04-run/).** Opportunity costs, facechecking as an informed risk, additional defensive effects.
 - **S2 — [StimHack: Skill Deepdive Tactical 2 — Runs](https://stimhack.com/skill-deepdive-tactical-2-runs/), Elusive with Spencer Dub, 2021.** Rez pressure, ICE roles, defensive budgets, scoring-window considerations.
@@ -349,5 +457,7 @@ Sources were consulted for strategic concepts, not for a current tier list. Olde
 - **S17 — [Sneakdoor Melbourne: Corp Archetypes](https://sneakdoor.wordpress.com/corp-archetypes/).** Historical examples of asset tempo, scoring plans, and combo finishes.
 - **S18 — [StimHack: Netrunner Nordic Championship Finals Game 1 — A Detailed High-Level Analysis](https://stimhack.com/netrunner-nordic-championship-finals-game-1-a-detailed-high-level-analysis/).** Worked examples of sequencing pressure and reading available defenses.
 - **S19 — [Board and Card Games Stack Exchange: Tactics against unrezzed ICE](https://boardgames.stackexchange.com/questions/15589/what-are-some-common-tactics-to-make-runs-against-servers-with-unrezzed-ice-in-n).** Community discussion of facechecking, recovery clicks, and exposure to damage or program destruction; historical faction assumptions should not become hard rules.
+
+- **S20 — [Board and Card Games Stack Exchange: When should I mulligan?](https://boardgames.stackexchange.com/questions/12224/when-should-i-mulligan-in-android-netrunner).** Affordability and opening plans; the discussion specifically challenges treating a missing breaker as an automatic mulligan. Historical blanket advice is not adopted.
 
 Rules-sensitive statements were also cross-checked against the [Null Signal Games comprehensive rules](https://rules.nullsignal.games/). This is a supporting reference for timing and survival, not the organizing framework of the guide. The configured engine and card text should determine each concrete interaction.
