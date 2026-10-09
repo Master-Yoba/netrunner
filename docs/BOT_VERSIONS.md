@@ -1910,3 +1910,25 @@ held-out roots carry no lint, so it waits for H3's own `diverge` roots):
 3. **Remote contests** (R06): 1.42 uncontested remote scores a game, in every matchup.
 4. **The mulligan** (R24): contradicted outright; small in the box decks' openings, but cheap to replace.
 5. **The Corp's HQ flood** (C13): 0.55 flooded draws a game.
+
+### S5.1c: Corp Hard's play-out planner on the ladder (9 October 2026)
+
+**Gate not met; search work stops (plan section 10.2).** `hard-playout` is Corp Hard whose turn actions take the
+teacher's evaluation (`plan-playout 4`: lines of the turn with a one-turn screen, played on 4 turns past the root and
+scored by the leaf, the live Standard opponent) at a beam of 4 and 4 samples; its Runner seat is Hard.
+
+```bash
+scripts/ai-ladder.sh --content gateway-elevation --entrants hard-playout,hard --deals 300 --batch-deals 48 --workers 12 \
+  --verify-replays-every 8 --save-games artifacts/ai-ladder/s51c-box-games
+```
+
+1,200 games, no errors, none capped, about 2 h 40 min (the H1 lint runs shared the machine for part of it). Corp
+`hard-playout` − `hard` = **+6 Elo [−32, 47]**, not separated (score 54% against 53%); the Runner seats are both Hard
+and read 0. `--stop-when-clear` could not stop a ladder whose Runner seats are identical, so it ran the 300 deals two
+hours buy, as the step allows.
+
+**Reading.** S4.4's ranking gain (lines ordered about 81% right at 4 turns against about 60% at the turn's end) does not
+turn into games won at the samples a decision can afford: the lines the planner tells apart are mostly close in value,
+and the decisions where the order matters are too few to move the result. Corp Hard stays the 3×3 planner; `plan-playout`
+and the entrant stay for the record. The decision cost was not profiled separately; the ladder's games took about four
+times as long as Hard's.

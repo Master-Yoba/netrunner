@@ -811,6 +811,9 @@ twice the budget: S5.1 says which beam Standard searches.
 
 ### S5.1c Corp Hard's play-out planner: one ladder decides (S)
 
+> **Outcome (9 October 2026): not met.** `hard-playout` − `hard` = +6 Elo [−32, 47] on 300 box deals. Search work
+> stops; Corp Hard stays as it is (`docs/BOT_VERSIONS.md`, S5.1c).
+
 **The research's last step, and the only one it leaves open (plan 10.2).** S4.4 found the Corp's turn lines ranked at
 about 81% by play-outs of 4 turns, against about 60% at the turn's end. Whether that ranking wins games has not been
 measured.
