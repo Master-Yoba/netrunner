@@ -1930,5 +1930,4 @@ hours buy, as the step allows.
 **Reading.** S4.4's ranking gain (lines ordered about 81% right at 4 turns against about 60% at the turn's end) does not
 turn into games won at the samples a decision can afford: the lines the planner tells apart are mostly close in value,
 and the decisions where the order matters are too few to move the result. Corp Hard stays the 3×3 planner; `plan-playout`
-and the entrant stay for the record. The decision cost was not profiled separately; the ladder's games took about four
-times as long as Hard's.
+and the entrant stay for the record. The decision cost was not profiled separately.
