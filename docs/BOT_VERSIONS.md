@@ -212,6 +212,65 @@ simulation cost is step S5.0 of [BOT_PLAN_STEPS.md](BOT_PLAN_STEPS.md), before S
 about 4 candidates is about 8 s a root, and 8,000 roots about 18 CPU-hours: at the 5.9× the box's 12 workers measured
 in S0.2, about 3 hours, inside S1.2's four.
 
+### S5.0: exact cost out of simulated `Apply` (9 October 2026)
+
+**The trace** (`dotnet-trace` of `engine-bench --profile-plan` at S0.1's two roots, shares of the time under
+`TurnPlanner.Simulate`). The plan's first item is already done: a simulated `Apply` neither hashes its state nor checks
+its invariants (`ApplyMode.Simulation` returns before `StateInvariantValidator.Validate` and `DeterministicHash`), so
+the costs the trace ranked were:
+
+| Cost | Petty Cash #101 | Match Point draw #329 | The cut |
+|---|---:|---:|---|
+| `AddInstallActions`, of it `DeclaredHostedCreditSources` | 18%, 12% | 16%, 7% | find the few cards that declare a hosted-credit use before sorting every card and checking its activity |
+| `WorkingState.Build` | 14–15% | 14–15% | the turn facts and sorted lists below |
+| `TurnFactsState` copies | 8–9% | 8–9% | none: turn facts are deep-frozen when built, so a turn's history shares them |
+| `MaterializeAbilityActionParameters` | 7.5% | 10% | the ability sources' cards looked up by id once, not a scan of every card per source |
+| `BehaviorStaticModifierProjection.Sum` | 4% | 8.5% | the card's definition is checked for the modifier before its zone is found; no zone dictionary per call |
+
+`FreezeSorted` also skips its sort when the list is already in order, which it is for almost every list a step rebuilds.
+Every cut is exact: the same cards in the same order, the same values.
+
+**What is left** (after the cuts, shares under `TurnPlanner.Simulate`): `WorkingState.Build` 11%,
+`BehaviorFrameIdentity.Compute` 7–10% (a JSON serialization and a SHA-256 of a behaviour frame),
+`ValidateBehaviorRuntimeFrame` 5–7% (mostly recomputing that identity), `BuildInstallPlanCore` 7–9% and
+`MaterializeCatalogTriggers` 6–8%. The frame identity and its re-validation are the next cost, and dropping the
+re-validation for simulated states is the same decision as trusting a simulated state's invariants: it is the user's,
+not a step's, and is not taken here.
+
+**Costs** (S0.1's four commands, the box, Release CLI, the machine otherwise idle; `dev` at 56e9ca5 against the cuts, each
+twice, the mean of the two runs):
+
+| Measure | Before | After | Change |
+|---|---:|---:|---:|
+| Simulated `Apply`, per step in a plan (Standard games) | 119 µs | 77 µs | −35% |
+| Simulated `Apply`, per step in a plan (Hard games) | 93 µs | 59 µs | −36% |
+| Whole-game rollout per step (Standard games' turn starts) | 206 µs | 161 µs | −22% |
+| Whole-game rollout per step (Hard games' turn starts) | 220 µs | 169 µs | −23% |
+| A Standard plan in a box game | 25.0 ms | 20.4 ms | −18% |
+| A Hard plan in a box game | 33.3 ms | 25.9 ms | −22% |
+| Hard decision, `strategy1-match-point-draw` #329 (Runner, mid-game) | 43.4 ms | 34.0 ms | −22% |
+| Hard decision, `strategy1-petty-cash` #101 (Corp, early) | 23.4 ms | 22.6 ms | −3% |
+| Authoritative `Apply` (Standard games) | 633 µs | 543 µs | −14% |
+| A Standard box game, per action | 4,542 µs | 3,946 µs | −13% |
+| A Hard box game, per action | 7,362 µs | 6,024 µs | −18% |
+
+The early Corp root gains least: its plan's simulated steps are 75 µs against 88 µs, but there the observation build and
+read (41% of the plan) and the heuristic are most of a step. A simulated step is now about 60 to 77 µs, against S0.1's
+121 µs and S0.4's 99 µs.
+
+**Gate: exact.**
+
+- **The ladder:** the 240-deal box ladder (`--entrants standard-heuristic,standard --seed 1 --verify-replays-every 8`)
+  before and after: all 960 games identical game by game (id, deal seed, score, action count, capped flag, final state
+  hash), 120 replays verified in each, the same ratings; 563 s against 489 s (−13%, both with other work on the machine).
+- **The fuzz** on every pool (`--games-per-pairing 8 --verify-replays-every 8`): official 24 games, Gateway 288,
+  Elevation 1,152, Gateway–Elevation 288, the NSG core sets 2,592; every game ended, every eighth replay verified, no
+  errors.
+
+**For S5.1:** S0.1 put Standard at 8 samples × width 4 at about 2.7 times a Hard plan's rollouts; at the mid-game root
+that is now about 92 ms against 117 ms, still about twice the 50 ms p95. The simulated step alone cannot close it:
+it is now under half of a plan's time at most roots, next to the observation's build and read.
+
 ## The regret suite
 
 ### S1: the Core Battle Box suite (5 October 2026)

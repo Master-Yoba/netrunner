@@ -19,12 +19,28 @@ public static partial class GameEngine
         BehaviorHostedCreditUseKind use,
         CardInstanceState target)
     {
-        foreach (CardInstanceState card in working.Cards.OrderBy(static card => card.Id.Value, StringComparer.Ordinal))
+        // Few cards declare a use, so find them before sorting and before the activity check (S5.0: this ran for every
+        // install candidate and every card).
+        List<(CardInstanceState Card, IReadOnlyList<BehaviorHostedCreditUse> Uses)>? declaring = null;
+        foreach (CardInstanceState card in working.Cards)
         {
-            if (card.OwnerSide != side
-                || !RuntimeCardActivity.IsActive(card, working.Zones)
-                || !working.BehaviorCatalog.TryGet(card.DefinitionId, out CardBehaviorDefinition? definition)
-                || definition.HostedCreditUses is not { } uses
+            if (card.OwnerSide == side
+                && working.BehaviorCatalog.TryGet(card.DefinitionId, out CardBehaviorDefinition? definition)
+                && definition.HostedCreditUses is { } declaredUses)
+            {
+                (declaring ??= []).Add((card, declaredUses));
+            }
+        }
+
+        if (declaring is null)
+        {
+            yield break;
+        }
+
+        foreach ((CardInstanceState card, IReadOnlyList<BehaviorHostedCreditUse> uses) in declaring.OrderBy(
+            static pair => pair.Card.Id.Value, StringComparer.Ordinal))
+        {
+            if (!RuntimeCardActivity.IsActive(card, working.Zones)
                 || !uses.Any(declared => declared.Kind == use && HostedCreditUseMatches(working, card, declared, target)))
             {
                 continue;

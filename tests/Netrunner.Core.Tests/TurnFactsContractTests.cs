@@ -111,14 +111,15 @@ public sealed class TurnFactsContractTests
         Assert.Empty(current.TagTurnChanges);
         Assert.Empty(current.FirstXUseKeys);
         Assert.Equal(2, current.TurnNumber);
-        Assert.NotSame(priorHistory.RunnerThisTurn, last);
+        // The frozen facts move to the last turn as they are.
+        Assert.Same(priorFacts, last);
         Assert.Null(priorHistory.RunnerLastTurn);
         Assert.Equal(priorFacts.SuccessfulRunServerIds, priorHistory.RunnerThisTurn!.SuccessfulRunServerIds);
         Assert.Equal(priorFacts.FirstXUseKeys, priorHistory.RunnerThisTurn.FirstXUseKeys);
     }
 
     [Fact]
-    public void ConstructorAndCopyDeepFreezeTypedListsAndNestedRecords()
+    public void ConstructorDeepFreezesTypedListsAndNestedRecords()
     {
         CardInstanceId card = new("card:facts-copy");
         ServerId server = new("server:facts-copy");
@@ -165,24 +166,17 @@ public sealed class TurnFactsContractTests
         tags.Clear();
         firstX.Clear();
 
-        TurnFactsState copy = facts.Copy();
         Assert.Equal([server], facts.AttemptedRunServerIds);
         Assert.Equal([server], facts.SuccessfulRunServerIds);
         Assert.Equal([card], facts.AccessedCardOccurrenceIds);
         Assert.Single(facts.AgendaTurnChanges);
         Assert.Single(facts.TagTurnChanges);
         Assert.Single(facts.FirstXUseKeys);
-        Assert.NotSame(facts.AttemptedRunServerIds, copy.AttemptedRunServerIds);
-        Assert.NotSame(facts.AgendaTurnChanges, copy.AgendaTurnChanges);
-        Assert.NotSame(facts.AgendaTurnChanges[0], copy.AgendaTurnChanges[0]);
-        Assert.NotSame(facts.TagTurnChanges[0], copy.TagTurnChanges[0]);
-        Assert.NotSame(facts.FirstXUseKeys[0], copy.FirstXUseKeys[0]);
 
+        // The facts are frozen, so a history and a turn hold them as given instead of copying them.
         TurnHistoryState history = new(1, null, null, facts, null);
-        TurnHistoryState historyCopy = history.Copy();
-        Assert.NotSame(history.RunnerThisTurn, historyCopy.RunnerThisTurn);
-        Assert.NotSame(history.RunnerThisTurn!.AgendaTurnChanges, historyCopy.RunnerThisTurn!.AgendaTurnChanges);
-        Assert.NotSame(history.RunnerThisTurn.AgendaTurnChanges[0], historyCopy.RunnerThisTurn.AgendaTurnChanges[0]);
+        Assert.Same(facts, history.RunnerThisTurn);
+        Assert.Same(history, new TurnState(PlayerSide.Runner, history: history).History);
     }
 
     [Fact]
