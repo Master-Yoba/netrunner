@@ -73,6 +73,8 @@ public sealed partial class RunnerHeuristicPolicy
         // v25 (bot loop 2): with one card or none in the grip, unknown ICE that does damage flatlines the Runner, and with a
         // click to spare it draws first; it ran an unknown remote into Empiricist's 3 net damage with one card.
         if (unknown > 0 && context.Features.Hand.Length <= 1 && context.Self.Clicks >= 2) risk += unknown * 250;
+        // v29 (bot plan H3, R18): a cushion against the damage the run may meet that the grip left after it can't absorb.
+        if (context.Generation >= 24) risk += Cushion(context, server, unknown, grip - damage, context.Self.Clicks - 1 - tollClicks);
         if (unknown == 0) extraValue += knownSuccessValue;
         if (matchPoint)
         {
@@ -94,6 +96,43 @@ public sealed partial class RunnerHeuristicPolicy
         bool win = unknown == 0 && RunnerValues.Winning(context, server);
         return new(win ? 100 : 0, score, "run/public-value-protection-and-access-reserve", true, new("run", null, null, null));
     }
+
+    /// <summary>
+    /// v29 (bot plan H3, the strategy guide's R18): what the run risks against the damage it may meet beyond what the
+    /// run model knows, with the grip <paramref name="gripAfter"/> left once the known damage is taken: unknown ICE that
+    /// would deal more than the grip (a flatline) or exactly the grip (no card left), an ambush among HQ's or R&amp;D's cards
+    /// (Byte!), and an operation that punishes a successful run (Measured Response) when the clicks left after the run
+    /// can't draw the grip up to survive it. A run that leaves a card to spare risks none of it.
+    /// </summary>
+    private static int Cushion(HeuristicContext context, AgentServer server, int unknown, int gripAfter, int clicksAfter)
+    {
+        double risk = 0;
+        if (unknown > 0)
+        {
+            (double lethal, double bare) = RunnerInference.UnknownIceDamage(context, gripAfter);
+            risk += Exposure(unknown, lethal, bare);
+        }
+        if (server.Kind is ServerKind.Headquarters or ServerKind.RAndD)
+        {
+            (double lethal, double bare) = RunnerInference.CentralAmbush(context, gripAfter);
+            risk += Exposure(1, lethal, bare);
+        }
+        (int need, double chance) = RunnerInference.Punishers(context);
+        bool armed = context.Features.Board.TurnFacts?.Runner.ThisTurn?.SuccessfulRun == true;
+        bool survivableBefore = !armed || need <= context.Features.Hand.Length + context.Self.Clicks;
+        if (need > 0 && survivableBefore && need > gripAfter + Math.Max(0, clicksAfter)) risk += chance * PunishedGame;
+        return (int)risk;
+    }
+
+    /// <summary>v29: <paramref name="count"/> chances to meet damage that flatlines the Runner or leaves it no card.</summary>
+    private static double Exposure(int count, double lethal, double bare) =>
+        (1 - Math.Pow(1 - lethal, count)) * LethalExposure + (1 - Math.Pow(1 - bare, count)) * BareExposure;
+
+    /// <summary>v29: a flatline, as the trap risk prices one.</summary>
+    private const int LethalExposure = 6000;
+
+    /// <summary>v29: damage that leaves the grip empty: the Runner survives it, and the next damage or punisher does not.</summary>
+    private const int BareExposure = 500;
 
     private static AgentUtility Continue(HeuristicContext context)
     {

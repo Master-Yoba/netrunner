@@ -28,7 +28,7 @@ public static class OfflinePolicies
         {
             (PlayerSide.Corp, CorpHeuristicPolicy.V31) => new CorpHeuristicPolicy(configuration.PolicyVersion),
             (PlayerSide.Corp, _) => new LegacyCorpPolicy(configuration.PolicyVersion),
-            (_, RunnerHeuristicPolicy.V27 or RunnerHeuristicPolicy.V28) => new RunnerHeuristicPolicy(configuration.PolicyVersion),
+            (_, RunnerHeuristicPolicy.V27 or RunnerHeuristicPolicy.V28 or RunnerHeuristicPolicy.V29) => new RunnerHeuristicPolicy(configuration.PolicyVersion),
             _ => new LegacyRunnerPolicy(configuration.PolicyVersion),
         };
     }

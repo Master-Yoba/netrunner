@@ -162,6 +162,13 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// chance its unseen root cards hold one, raised when the remote is protected by ICE, as the Corp protects agendas.
     /// </summary>
     public const string V28 = "runner-heuristic-v28";
+    /// <summary>
+    /// V28 with a grip cushion against the damage a run may meet (bot plan H3, the strategy guide's R18): an ambush the Corp
+    /// can pay for among HQ's and R&amp;D's cards, unknown ICE that deals damage, and an operation that punishes the run's
+    /// success when too few cards and clicks would be left to survive it. Against PT Untaian Shell Game the Runner won 8% of
+    /// its box games, 172 of 200 lost to flatlines.
+    /// </summary>
+    public const string V29 = "runner-heuristic-v29";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
     /// V18 is V15 with only the reinstall fix (no install over its own copy or a second console), a fix that can only remove
@@ -182,27 +189,27 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// with, so the shipped Corp planner plays as it did.
     /// </summary>
     public const string LatestHeuristic = V7;
-    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25, V26, V27, V28];
+    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25, V26, V27, V28, V29];
 
     /// <summary>Whether the version's memory of a face-down root card survives installs in that root (v20).</summary>
-    public static bool KeepsRootMemoryThroughInstalls(string version) => version is V20 or V21 or V22 or V23 or V24 or V25 or V26 or V27 or V28;
+    public static bool KeepsRootMemoryThroughInstalls(string version) => version is V20 or V21 or V22 or V23 or V24 or V25 or V26 or V27 or V28 or V29;
 
     /// <summary>Whether the version keeps the A9a tracker of the Corp's hidden cards (v21).</summary>
-    public static bool UsesTracker(string version) => version is V21 or V22 or V23 or V24 or V25 or V26 or V27 or V28;
+    public static bool UsesTracker(string version) => version is V21 or V22 or V23 or V24 or V25 or V26 or V27 or V28 or V29;
 
     public RunnerHeuristicPolicy() : this(PolicyVersion) { }
 
     public RunnerHeuristicPolicy(string version)
     {
-        if (version is not (V27 or V28))
-            throw new ArgumentException($"The live Runner policy is {V27} or {V28}; '{version}' is {nameof(LegacyRunnerPolicy)}.", nameof(version));
+        if (version is not (V27 or V28 or V29))
+            throw new ArgumentException($"The live Runner policy is {V27}, {V28} or {V29}; '{version}' is {nameof(LegacyRunnerPolicy)}.", nameof(version));
         Version = version;
-        _contextGeneration = version == V28 ? 23 : 22;
+        _contextGeneration = version switch { V29 => 24, V28 => 23, _ => 22 };
     }
 
     /// <summary>
     /// The generation the shared helpers (<see cref="HeuristicContext"/>, RunnerValues, RunModel) switch on: V26's (22) for
-    /// V27, and 23 for V28's remote valuation. They keep their switches for <see cref="LegacyRunnerPolicy"/>, and V27 stays
+    /// V27, 23 for V28's remote valuation, and 24 for V29's grip cushion. They keep their switches for <see cref="LegacyRunnerPolicy"/>, and V27 stays
     /// constructible so the regret suite can compare the two (<c>ai-regret score --discordant</c>).
     /// </summary>
     private readonly int _contextGeneration;
