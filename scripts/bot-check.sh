@@ -44,6 +44,7 @@ done
 
 # Bot plan S2.3, the per-change suites (opt in with BOT_CHECK_SUITES=1): the regret suite's held-out roots and the puzzle
 # sets for the latest versions (or BOT_CHECK_VERSIONS), and the Oddity lints over the saved games in BOT_CHECK_LINT_GAMES.
+# The regret line reads the core's teacher v3 labels (S1.8: the game's end, no leaf).
 if [[ "${BOT_CHECK_SUITES:-0}" == 1 ]]; then
   suites_build="$check_root/.tools/bot-check-cli"
   if ! dotnet build "$check_root/src/Netrunner.Cli" -c Release --artifacts-path "$suites_build" -m:1 --disable-build-servers \
@@ -53,7 +54,7 @@ if [[ "${BOT_CHECK_SUITES:-0}" == 1 ]]; then
     exit 1
   fi
   cli=(dotnet "$suites_build/bin/Netrunner.Cli/release/Netrunner.Cli.dll")
-  if "${cli[@]}" ai-regret score "$check_root/data/ai/regret/gateway-elevation" --version "${BOT_CHECK_VERSIONS:-latest}" --split held-out --core \
+  if "${cli[@]}" ai-regret score "$check_root/data/ai/regret/gateway-elevation" --version "${BOT_CHECK_VERSIONS:-latest}" --split held-out --core --teacher-version v3 \
     --workers 12 --json >"$logs/regret.json" 2>"$logs/regret.err"; then
     python3 - "$logs/regret.json" <<'PY'
 import json, sys

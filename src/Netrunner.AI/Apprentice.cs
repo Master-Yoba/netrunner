@@ -40,7 +40,8 @@ public sealed record ApprenticeDocument(
 }
 
 /// <summary>
-/// The apprentice at the root (bot plan S4.5, behind the profile parameter <c>apprentice 1</c>): at a turn action, the
+/// The apprentice at the root (bot plan S4.5, behind the profile parameter <c>apprentice N</c>, N the document's version:
+/// 1 is S4.5's fit on teacher v2, 2 S4.5b's on teacher v3): at a turn action, the
 /// heuristic's candidates of its top priority band are re-ordered by the apprentice's score; priorities and vetoes are
 /// untouched, so the heuristic stays the generator and never ranks up a vetoed action.
 /// </summary>
@@ -50,16 +51,26 @@ public static class Apprentice
 
     private static readonly JsonSerializerOptions ReadOptions = new() { PropertyNameCaseInsensitive = true };
 
-    private static readonly Lazy<ApprenticeDocument> V1 = new(() =>
+    /// <summary>The latest committed apprentice's version.</summary>
+    public const int Latest = 2;
+
+    private static readonly Lazy<ApprenticeDocument>[] Documents = [.. Enumerable.Range(1, Latest).Select(version =>
+        new Lazy<ApprenticeDocument>(() => Embedded(version)))];
+
+    private static ApprenticeDocument Embedded(int version)
     {
-        const string name = "Netrunner.AI.Data.ai.apprentice-v1.json";
+        string name = $"Netrunner.AI.Data.ai.apprentice-v{version}.json";
         using Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(name)
             ?? throw new InvalidOperationException($"Missing embedded {name}.");
         return Parse(new StreamReader(stream).ReadToEnd());
-    });
+    }
 
-    /// <summary>The committed apprentice.</summary>
-    public static ApprenticeDocument Document => V1.Value;
+    /// <summary>The latest committed apprentice.</summary>
+    public static ApprenticeDocument Document => DocumentFor(Latest);
+
+    /// <summary>The committed apprentice of <paramref name="version"/> (1 to <see cref="Latest"/>).</summary>
+    public static ApprenticeDocument DocumentFor(int version) => version is >= 1 and <= Latest
+        ? Documents[version - 1].Value : throw new ArgumentOutOfRangeException(nameof(version), version, "No such apprentice.");
 
     public static ApprenticeDocument Parse(string json)
     {
@@ -71,7 +82,7 @@ public static class Apprentice
     }
 
     public static bool Applies(OfflineAgentConfiguration configuration, AgentFeatures features) =>
-        configuration.Parameters.GetValueOrDefault(ParameterKey) == 1 && features.Decision?.Kind == DecisionKind.TurnAction
+        configuration.Parameters.GetValueOrDefault(ParameterKey) > 0 && features.Decision?.Kind == DecisionKind.TurnAction
         && features.Actions.Length > 1;
 
     /// <summary>The candidates with the top band's scores replaced by the apprentice's, in millionths, its order kept.</summary>

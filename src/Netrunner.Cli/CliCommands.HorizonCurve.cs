@@ -18,10 +18,13 @@ public static partial class CliCommands
     /// reference, as the step reads it (the game's-end row shares its samples with the reference, so it reads high, and at
     /// k = 32 it is 1 by construction); (b) k drawn from one half of the samples against the reference of the other half
     /// (k up to 16), both halves in turn, which no row can read high. Draws are averaged; intervals resample roots.
+    /// S4.6: [--kind turn|run] keeps one kind of root; [--choices FILE --choice-version V] (from ai-regret score --choices)
+    /// adds, in design (b), each cell's pick regret (its best group on the estimate half, scored on the judging half's game
+    /// results, a group's value its best line) beside the version's own choice on the same halves, paired by root.
     /// </summary>
     private static int RegretHorizonCurveCommand(string suiteDirectory, TextWriter output, string[] args)
     {
-        string? reference = null, destination = null;
+        string? reference = null, destination = null, kind = null, choicesFile = null, choiceVersion = null;
         int draws = 16;
         var horizons = new List<(string Name, string Path)>();
         for (int index = 3; index < args.Length; index++)
@@ -37,13 +40,23 @@ public static partial class CliCommands
                     break;
                 case "--draws": draws = Math.Clamp(int.Parse(Next(), CultureInfo.InvariantCulture), 1, 1000); break;
                 case "--output": destination = Next(); break;
+                case "--kind": kind = Next(); break;
+                case "--choices": choicesFile = Next(); break;
+                case "--choice-version": choiceVersion = Next(); break;
                 default: throw new ArgumentException($"Unsupported ai-regret horizon-curve argument '{args[index]}'.");
             }
         }
         if (reference is null) throw new ArgumentException("ai-regret horizon-curve needs --reference GAME-ROWS.");
         RegretSuite suite = RegretSuite.Load(suiteDirectory);
         Func<string, State[]> load = CoreStates(suite);
-        State[] game = load(reference);
+        Dictionary<string, string> kinds = suite.Roots.ToDictionary(root => root.Id, root => root.Kind, StringComparer.Ordinal);
+        State[] game = [.. load(reference).Where(row => kind is null || kinds[row.RootId] == kind)];
+        // S4.6: the version's choice at each root, by its group.
+        Dictionary<string, string> chosen = choicesFile is null ? new(StringComparer.Ordinal)
+            : File.ReadLines(choicesFile).Select(line => JsonDocument.Parse(line).RootElement)
+                .Where(choice => choiceVersion is null || choice.GetProperty("version").GetString() == choiceVersion)
+                .Where(choice => choice.GetProperty("chosen").ValueKind == JsonValueKind.String)
+                .ToDictionary(choice => choice.GetProperty("rootId").GetString()!, choice => choice.GetProperty("chosen").GetString()!, StringComparer.Ordinal);
         int setFour = EvaluationFeatures.NamesFor(4).Count;
         // Each source: its value of a line on a sample, by root.
         var sources = new List<(string Name, Dictionary<(string Root, string Line, int Sample), double> Values)>();
@@ -83,6 +96,9 @@ public static partial class CliCommands
                 return tally;
             }
             int countedAll = 0, countedHalves = 0;
+            // S4.6: per source and k, each root's pick regret in design (b); and the version's own choice's, on the same halves.
+            var picks = new Dictionary<(int Source, int K), Dictionary<string, Tally>>();
+            var own = new Dictionary<string, Tally>(StringComparer.Ordinal);
             foreach (var root in roots)
             {
                 var random = new DeterministicRandom(RegretRootsHash(root.Id));
@@ -145,6 +161,39 @@ public static partial class CliCommands
                     countedHalves += halfCounted.Count;
                     foreach (int k in ks.Where(k => k <= estimate.Length)) Score("b", halfCounted, estimate, k);
                 }
+                // S4.6: a group's value on some samples is its best line's mean there; a cell picks its best group on the
+                // estimate half, and the judging half's game results score the pick.
+                string[] groups = [.. root.Lines.Select(GroupOf).Distinct(StringComparer.Ordinal)];
+                int[][] members = [.. groups.Select(group => Enumerable.Range(0, root.Lines.Length).Where(at => GroupOf(root.Lines[at]) == group).ToArray())];
+                double GroupValue(double[][] values, int[] lines, IReadOnlyList<int> subset) =>
+                    lines.Select(at => Mean(values[at], subset)).Where(value => !double.IsNaN(value)).DefaultIfEmpty(double.NaN).Max();
+                if (groups.Length < 2) continue;
+                foreach ((int[] estimate, int[] judge) in new[] { (first, second), (second, first) })
+                {
+                    double[] judged = [.. members.Select(lines => GroupValue(root.Values[game_], lines, judge))];
+                    if (judged.All(double.IsNaN)) continue;
+                    double best = judged.Where(value => !double.IsNaN(value)).Max();
+                    if (chosen.TryGetValue(root.Id, out string? choice) && Array.IndexOf(groups, choice) is int at and >= 0 && !double.IsNaN(judged[at]))
+                    {
+                        Tally held = own.GetValueOrDefault(root.Id);
+                        own[root.Id] = new Tally(held.Credit + best - judged[at], held.Weight + 1);
+                    }
+                    for (int source = 0; source < sources.Count; source++)
+                        foreach (int k in ks.Where(k => k <= estimate.Length))
+                            for (int draw = 0; draw < (k == estimate.Length ? 1 : draws); draw++)
+                            {
+                                List<int> subset = [.. estimate];
+                                random.Shuffle(subset);
+                                subset = subset.Take(k).ToList();
+                                double[] estimated = [.. members.Select(lines => GroupValue(root.Values[source], lines, subset))];
+                                int pick = Enumerable.Range(0, groups.Length).Where(index => !double.IsNaN(estimated[index]) && !double.IsNaN(judged[index]))
+                                    .DefaultIfEmpty(-1).MaxBy(index => index < 0 ? double.MinValue : estimated[index]);
+                                if (pick < 0) continue;
+                                if (!picks.TryGetValue((source, k), out var tally)) picks[(source, k)] = tally = new(StringComparer.Ordinal);
+                                Tally seen = tally.GetValueOrDefault(root.Id);
+                                tally[root.Id] = new Tally(seen.Credit + best - judged[pick], seen.Weight + 1);
+                            }
+                }
             }
             string[] ids = [.. roots.Select(root => root.Id)];
             var cells = new List<object>();
@@ -166,13 +215,57 @@ public static partial class CliCommands
                     output.WriteLine($"    {sources[source].Name,-28} " + string.Join("  ", ks.Select((k, at) => string.Create(CultureInfo.InvariantCulture, $"k={k}: {row[at]}"))));
                 }
             }
-            report.Add(new { side = side.ToString().ToLowerInvariant(), roots = ids.Length, countedAll, countedHalves, cells });
+            var pickCells = new List<object>();
+            if (picks.Count > 0)
+            {
+                output.WriteLine("  (b) pick regret: the best group on one half, scored on the other half's game results");
+                string[] owned = [.. ids.Where(own.ContainsKey)];
+                double Own(string id) => own[id].Credit / own[id].Weight;
+                if (owned.Length > 0)
+                {
+                    (double mean, double lower, double upper) = Bootstrap(owned, id => (Own(id), 1));
+                    output.WriteLine(string.Create(CultureInfo.InvariantCulture, $"    {choiceVersion ?? "the version",-28} {mean:0.0000} [{lower:0.0000}, {upper:0.0000}] over {owned.Length} roots"));
+                    pickCells.Add(new { horizon = choiceVersion ?? "the version", k = 0, mean, lower, upper, roots = owned.Length });
+                }
+                for (int source = 0; source < sources.Count; source++)
+                {
+                    var row = new List<string>();
+                    foreach (int k in ks)
+                    {
+                        if (!picks.TryGetValue((source, k), out var tally) || tally.Count == 0) { row.Add("     -      "); continue; }
+                        string[] scored = [.. ids.Where(tally.ContainsKey)];
+                        double Cell(string id) => tally[id].Credit / tally[id].Weight;
+                        (double mean, double lower, double upper) = Bootstrap(scored, id => (Cell(id), 1));
+                        string[] paired = [.. scored.Where(own.ContainsKey)];
+                        (double difference, double low, double high) = paired.Length == 0 ? (double.NaN, double.NaN, double.NaN)
+                            : Bootstrap(paired, id => (Cell(id) - Own(id), 1));
+                        row.Add(string.Create(CultureInfo.InvariantCulture, $"{mean:0.0000} ({difference:+0.0000;-0.0000} [{low:+0.0000;-0.0000}, {high:+0.0000;-0.0000}])"));
+                        pickCells.Add(new
+                        {
+                            horizon = sources[source].Name,
+                            k,
+                            mean,
+                            lower,
+                            upper,
+                            difference = double.IsNaN(difference) ? (double?)null : difference,
+                            differenceLower = double.IsNaN(low) ? (double?)null : low,
+                            differenceUpper = double.IsNaN(high) ? (double?)null : high,
+                            roots = scored.Length
+                        });
+                    }
+                    output.WriteLine($"    {sources[source].Name,-28} " + string.Join("  ", ks.Select((k, at) => string.Create(CultureInfo.InvariantCulture, $"k={k}: {row[at]}"))));
+                }
+            }
+            report.Add(new { side = side.ToString().ToLowerInvariant(), roots = ids.Length, countedAll, countedHalves, cells, picks = pickCells });
         }
         if (destination is not null)
             File.WriteAllText(destination, JsonSerializer.Serialize(new { schemaVersion = 1, reference, horizons = sources.Select(source => source.Name), draws, sides = report },
                 FitJsonOptions) + "\n");
         return 0;
     }
+
+    /// <summary>A line's group: its kind and parameters, without the line's ranks.</summary>
+    private static string GroupOf(string line) => string.Join('|', line.Split('|').Take(2));
 
     /// <summary>A root's seed for its draws: FNV-1a of its id.</summary>
     private static ulong RegretRootsHash(string id)

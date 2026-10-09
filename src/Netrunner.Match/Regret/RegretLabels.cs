@@ -23,7 +23,8 @@ public static class RegretLabels
     /// Bot plan S1.7: the teacher's version, frozen between milestones and named on every label and score. v1 is S1.2's
     /// one-step teacher; v1-lines S1.5's line search with the pinned opponent (Runner v7, Corp v8); v2 the line search
     /// (beam 5, a one-turn screen on a quarter of the samples, two finalists) with the live Standard opponent, a 4-turn
-    /// horizon and set 4 at the leaf. Any other settings are named by them. The teacher is the live Hard bot of each side and,
+    /// horizon and set 4 at the leaf; v3 (S1.8) the same search played to the game's end and scored by the result, with no
+    /// leaf in any label (its evaluation is recorded but unused). Any other settings are named by them. The teacher is the live Hard bot of each side and,
     /// for hard-model, the live Standard of the other, so v2 is v2 only while those are Corp v31 and Runner v28: after a
     /// policy bump the name carries the versions, and a label never claims a teacher it was not made by. Labels are tagged
     /// with their version when written (<c>ai-regret tag</c> for files made before), so a bump never renames old labels.
@@ -35,6 +36,8 @@ public static class RegretLabels
             (5, 1, 4, 4, "hard") => "v1-lines",
             (5, 1, 4, 4, "hard-model") when CorpHeuristicPolicy.PolicyVersion == CorpHeuristicPolicy.V31
                 && RunnerHeuristicPolicy.PolicyVersion == RunnerHeuristicPolicy.V28 => "v2",
+            (5, 1, 0, _, "hard-model") when CorpHeuristicPolicy.PolicyVersion == CorpHeuristicPolicy.V31
+                && RunnerHeuristicPolicy.PolicyVersion == RunnerHeuristicPolicy.V28 => "v3",
             _ => string.Create(CultureInfo.InvariantCulture,
                 $"{teacher}-lines{lines}-screen{screenTurns}-horizon{horizonTurns}-set{evaluation}-{CorpHeuristicPolicy.PolicyVersion}-{RunnerHeuristicPolicy.PolicyVersion}"),
         };

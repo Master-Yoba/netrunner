@@ -13,7 +13,7 @@ public static partial class CliCommands
 {
     /// <summary>
     /// Bot plan S2, the puzzle suite:
-    /// ai-puzzles run SET-DIR [--corp V] [--runner V] [--profile P] [--entrant LADDER-ENTRANT] [--split all|tuning|held-out|teacher-v1|teacher-v2] [--workers N] [--json]
+    /// ai-puzzles run SET-DIR [--corp V] [--runner V] [--profile P] [--entrant LADDER-ENTRANT] [--split all|tuning|held-out|teacher-v1|teacher-v2|teacher-v3] [--workers N] [--json]
     ///   (all is the gate: tuning and held-out)
     /// ai-puzzles import SET-DIR SAVED-GAME-FILE --id ID [--source TEXT]
     /// ai-puzzles show SET-DIR --game ID --sequence N [--play I,J,...] [--teacher SAMPLES] [--horizon game|TURNS] [--lines W] [--json]
@@ -65,7 +65,7 @@ public static partial class CliCommands
         if (entrant is not null && !RatingLadder.EntrantOrder.Contains(entrant, StringComparer.Ordinal))
             throw new ArgumentException($"Unknown entrant '{entrant}'.");
         if (split is not ("all" or "tuning" or "held-out") && !Puzzle.Retired(split))
-            throw new ArgumentException("--split requires all, tuning, held-out or teacher-v1.");
+            throw new ArgumentException("--split requires all, tuning, held-out, teacher-v1, teacher-v2 or teacher-v3.");
         int workers = options.TryGetValue("--workers", out string? count) ? ProfileInt(count, "--workers", 1, 64) : 1;
         var games = set.Games.ToDictionary(game => game.Id);
         Puzzle[] puzzles = [.. set.Puzzles.Where(puzzle => split == "all" ? !Puzzle.Retired(puzzle.Split) : puzzle.Split == split)];

@@ -810,7 +810,7 @@ roots took **2 h 59 min** (10,744 s). Against flat 32-sample labels of 200 targe
 - the pair's regret difference agrees within the intervals: Corp v29 − v30 −0.0016 [−0.0224, 0.0217] pruned, +0.0038
   [−0.0174, 0.0265] flat;
 - noise floor on 200 targeted roots (repeat seed 2): 56% best-group disagreement, median standard error 0.045
-  (`labels-targeted-repeat*`).
+  (`labels-targeted-repeat*`, `labels-v2-targeted-repeat*` since S1.8).
 
 **Verdict: pruning pays on targeted roots** (about half the samples, the comparison unchanged) and is kept for them. It
 biases a root's absolute regret low, so absolute regret is never quoted from targeted roots: it is quoted on the core,
@@ -1448,3 +1448,284 @@ ability (at least 43 roots), and runs on a remote where the heuristic draws.
 **Next.** The apprentice is only as good as its teacher's order. A refit on the core's game's-end labels (S4.2c's
 recording, 2,050 roots, every line on every sample) would teach it the order that whole games reward; it is not run
 here.
+
+### S1.8, the core: teacher v3 is the suite's teacher (8 October 2026)
+
+**Teacher v3** is teacher v2's search played to the game's end and scored by the result: the line search (beam 5,
+a one-turn screen on a quarter of the samples, two finalists), the live Standard opponent (`hard-model`), 32 samples,
+no leaf. `RegretLabels.VersionOf` names it `v3` while the live versions are Corp v31 and Runner v28.
+
+**The files** (`data/ai/regret/gateway-elevation`):
+
+- `labels.jsonl.gz`: the core's 2,050 roots labelled by v3 (S4.2c's game's-end relabel, every group on all 32
+  samples, none pruned), and the 6,855 targeted roots at v2 until S1.8 relabels them, each label naming its teacher.
+- `labels-v2.jsonl.gz`: the whole suite at v2 as it stood (with S4.5's 160 extended Corp groups);
+  `labels-v2-repeat*` and `labels-v2-targeted-repeat*`: v2's noise floors on the core and on targeted roots.
+
+**Scoring reads one teacher.** `ai-regret score` refuses roots labelled by more than one teacher and names them;
+`--teacher-version V` keeps the roots that teacher labelled. A held-out read of the whole suite is therefore either
+the core (v3) or the targeted roots (`--teacher-version v2`) until those are relabelled.
+
+**bot-check's line** reads the core's held-out roots on v3 (`--teacher-version v3`):
+
+| Version | Teacher v3, core held-out | Teacher v2, the same roots (before) |
+|---|---|---|
+| Corp v31 (196 roots) | 0.0579 [0.0459, 0.0719] | 0.0371 [0.0301, 0.0455] |
+| Runner v28 (270 roots) | 0.0591 [0.0494, 0.0675] | 0.0349 [0.0291, 0.0404] |
+
+The two columns are different labellings and are not compared: v3's values are win rates at the game's end, where
+v2's are a 4-turn play-out ending on the pool's fit, so their scales differ. From here every regret on the core is v3.
+
+**S1.3's table on the core at v3** (`--core --teacher-version v3`, all 2,050 core roots; the targeted roots wait for
+their relabel):
+
+| Comparison | Teacher v3, the core |
+|---|---|
+| Runner v24 − v25 | +0.0033 [0.0019, 0.0050] |
+| Runner v24 − v26 | +0.0041 [0.0026, 0.0058] |
+| Runner v27 − v28 | +0.0014 [0.0000, 0.0029] |
+| Runner v26 − v27 | 0.0000 |
+| Corp v28 − v29 | +0.0003 [−0.0005, 0.0010] |
+| Corp v28 − v30 | +0.0004 [−0.0028, 0.0030]; discordant (95) +0.0033 [−0.0257, 0.0303] |
+| Corp v29 − v30 | +0.0001 [−0.0030, 0.0031]; discordant (78) +0.0012 [−0.0317, 0.0296] |
+| Corp v30 − v31 | 0.0000 |
+
+| Version (Standard) | Regret, core | Turn | Run | Held out |
+|---|---|---|---|---|
+| Runner v24 | 0.0696 [0.0653, 0.0736] | 0.0808 | 0.0190 | 0.0692 |
+| Runner v25 | 0.0663 [0.0620, 0.0704] | 0.0768 | 0.0183 | 0.0628 |
+| Runner v26, v27 | 0.0655 [0.0615, 0.0694] | 0.0759 | 0.0183 | 0.0628 |
+| Runner v28 | 0.0640 [0.0598, 0.0677] | 0.0741 | 0.0183 | 0.0591 |
+| Corp v28 | 0.0691 [0.0624, 0.0773] | 0.0934 | 0.0272 | 0.0596 |
+| Corp v29 | 0.0688 [0.0618, 0.0769] | 0.0934 | 0.0265 | 0.0598 |
+| Corp v30, v31 | 0.0687 [0.0618, 0.0760] | 0.0932 | 0.0265 | 0.0579 |
+
+**The Runner's ordering holds at v3**: v24 below v25 and v26, and v28 above v27, each separated, by margins like v2's
+on the core (+0.0033, +0.0038, +0.0011). **The Corp's does not show on the core**, as it did not at v2 (the core holds a
+third of the Corp's discordant roots, S1.7); its gate is read once the S1.6 Corp roots are relabelled at v3.
+
+**The Corp's 3×3 planner on v3** (core held-out roots, S4.5b's run): live Standard against the heuristic alone
++0.0029 [−0.0049, +0.0110] (standard 0.0579, the heuristic 0.0550), level, where v2 had the planner worse. The ladder
+has it ahead (+36 to +97 Elo); the suite at v3 no longer disagrees, it cannot separate the two.
+
+**Still to do in S1.8:** the S1.6 Corp roots relabelled at v3 (about 1.8 times their v2 labelling), the 26 certified
+puzzles re-certified at v3, and the noise floor measured again on the core.
+
+### S4.5b: the apprentice on teacher v3 (8 October 2026)
+
+**Gate not met in either seat; Standard stays the heuristic.** On v3 labels the apprentice no longer beats the
+heuristic's order, and in play it is far worse in both seats: the Corp's builds remotes and leaves the centrals open,
+the Runner's runs recklessly.
+
+**The diagnostic** (the core's turn roots; a choice's value is its 32-sample game result at v3, its 4-turn play-out
+ending on the pool's fit at v2):
+
+| Seat, roots | Teacher | "Gain 1 credit" ranked best | In the top two | Choices ranked above it | Within 1 SE of the best |
+|---|---|---:|---:|---:|---:|
+| Corp, 518 | v2 | 10.0% | 28.4% | 0.376 | 28.6% |
+| Corp, 518 | v3 | 11.4% | 46.5% | 0.283 | 22.4% |
+| Runner, 1,006 | v2 | 12.2% | 27.8% | 0.378 | 52.6% |
+| Runner, 1,006 | v3 | 13.0% | 38.1% | 0.330 | 41.9% |
+
+Teacher v3 does not rank a credit worse than v2 does: it ranks it best as often and higher on average. What v2 did was
+put it level with the best more often (within one standard error at 52.6% of the Runner's roots against 41.9%), which a
+pairwise fit weighted by the gap reads as "no worse". The bias S4.5's Runner learned is that flatness, not a credit
+ranked first.
+
+**The fit** (`ai-fit-evaluation --target apprentice --teacher-version v3 --version 2`): the core's v3 turn roots only,
+1,524 roots and 16,902 rows (S4.5 had 6,759 roots at v2), 90 s. On its held-out pairs:
+
+| Seat | Arm taken forward | Pairwise − heuristic | Top-band regret − heuristic |
+|---|---|---:|---:|
+| Corp | linear | +0.031 [−0.045, +0.094] | −0.0181 [−0.0359, +0.0005] |
+| Runner | trees | +0.000 [−0.025, +0.025] | +0.0036 [−0.0042, +0.0121] |
+
+`data/ai/apprentice-v2.json`, embedded; `apprentice N` now names the document (1 is S4.5's, 2 this one), so
+`standard-apprentice` is the latest and `standard-apprentice-v1` S4.5's.
+
+**Regret** (`ai-regret score`, teacher v3, the core's held-out roots, paired):
+
+| Seat | Apprentice v2 | Heuristic | Apprentice v1 | Standard | v2 − heuristic | Discordant |
+|---|---:|---:|---:|---:|---|---|
+| Corp (196) | 0.0451 | 0.0550 | 0.0474 | 0.0579 | −0.0099 [−0.0218, +0.0019] | −0.0211 [−0.0469, +0.0024] (92) |
+| Runner (270) | 0.0622 | 0.0591 | 0.0578 | 0.0591 | +0.0030 [−0.0038, +0.0096] | +0.0052 [−0.0070, +0.0172] (156) |
+
+S4.5's apprentice reads better than the heuristic on the Corp's v3 roots too (heuristic − v1 +0.0077 [+0.0014,
++0.0139]); neither apprentice is separated from the heuristic in the Runner seat.
+
+**Ladders** (three entrants each against each, both seats):
+
+| Pool | Seat | Apprentice v2 − heuristic | Heuristic − Standard |
+|---|---|---:|---:|
+| Box, 400 deals (3,600 games, 25 min) | Corp | **−216 [−239, −185]** | −36 [−65, −10] |
+| Box | Runner | **−145 [−172, −127]** | 0 [−20, +29] |
+| Gateway, 240 deals (2,160 games, 12 min) | Corp | **−244 [−276, −208]** | −95 [−126, −63] |
+| Gateway | Runner | **−262 [−296, −233]** | 0 [−35, +36] |
+
+No errors and no capped games.
+
+**What the apprentices do in play** (the box games, `ai-runner-diagnosis` and `ai-lint`):
+
+- **Runner:** it no longer banks credits (8.1 at the game's end against the heuristic's 5.4; S4.5's ended on 15.5), but
+  it runs more (1.16 runs a turn against 0.92) and flatlines itself in breaches 75 times in 1,200 games against 11,
+  and scores 1.4 fewer agenda points a game (3.6 against 5.0). It wins 28% of its games against the heuristic's 48%.
+- **Corp:** it leaves a central without ICE while its remotes grow in 0.99 lints a game against the heuristic's 0.08,
+  protects an empty remote 0.51 times a game against none, and lets Archives be farmed twice as often (0.28 against
+  0.14). It scores 35% across the ladder against the heuristic's 68%.
+
+**Puzzles:** 31/37 and 4/5 (the heuristic 32/37 and 5/5). **Cost:** 416 µs a decision (the apprentice step 344 µs where
+it applies) against the heuristic's 297 µs; within Standard's budgets.
+
+**Reading.** Both apprentices read level or better than the heuristic on the suite and lose heavily on the ladder, in
+different ways each time. The suite asks one question per root, on states the heuristic reached; a policy that
+re-orders the heuristic's top band at every turn reaches states the suite never sampled (a Corp with three remotes and
+open centrals, a Runner on its fourth run of the turn) and compounds small errors there. A per-root regret below the
+heuristic's says nothing about that, whichever teacher labels the roots. The apprentice is set aside in both seats;
+before it returns, the rows would need the apprentice's own states (its games' roots labelled and added, round by
+round), not a better teacher alone. Standard stays the heuristic in both seats, and the Corp keeps its planner.
+
+### S4.6: run choices, the Runner's own curve (8 October 2026)
+
+**Reading: no cell beats the heuristic's own run choices; Runner Hard keeps Standard's run choices.**
+
+**The roots:** the core's 224 Runner run-choice roots (165 continue or jack out, 59 trash or not). **The rows:** the
+existing end-of-line recordings (teacher v3's game's end, S4.2c's 4 turns, S4.4's opponent's turn) and one new recording
+at the run's end (`--horizon run`, new: the play-out stops where the run in progress at the root ends and the pool's fit
+scores that state; 224 roots, under a minute). The turn's end is read from the
+game's-end rows' end-of-turn states, as in S4.4.
+
+```bash
+ai-regret label data/ai/regret/gateway-elevation --samples 32 --horizon run --lines 5 --screen-turns 1 --roots run-roots.txt \
+  --labels labels-run.jsonl.gz --end-lines end-lines-run.jsonl.gz --workers 12
+ai-regret score data/ai/regret/gateway-elevation --version runner-heuristic-v28 --side runner --core --teacher-version v3 --choices choices.jsonl
+ai-regret horizon-curve data/ai/regret/gateway-elevation --reference end-lines-game.jsonl.gz --kind run --horizon "run's end=end-lines-run.jsonl.gz" \
+  --horizon "opponent's turn=end-lines-opponent.jsonl.gz" --horizon "4 turns=end-lines.jsonl.gz" --choices choices.jsonl --choice-version runner-heuristic-v28
+```
+
+**The planner's-view accuracy is nearly unreadable here:** the game's-end reference separates 17 pairs of choices over
+the 224 roots on all 32 samples, and 24 on halves. Run choices are mostly level at the game's end. On those pairs, design
+(b): the turn's end 0.66 to 0.75, the run's end 0.63 to 0.65, the opponent's turn 0.64 to 0.73, 4 turns 0.64 to 0.66,
+the game's end 0.57 to 0.65, every interval about ±0.18. No cell reaches 80%.
+
+**Pick regret** (`--choices`, new: each cell picks its best choice on one half of the samples and the other half's game
+results score the pick, against the heuristic's own choice scored on the same halves, paired by root; design (b)):
+
+| Cell | k = 4 | k = 8 | k = 16 |
+|---|---|---|---|
+| The heuristic's choice (Runner v28) | 0.0275 [0.0218, 0.0332] | | |
+| Run's end | +0.0047 [+0.0004, +0.0095] | +0.0037 [−0.0007, +0.0085] | +0.0035 [−0.0011, +0.0085] |
+| Turn's end, general fit | +0.0056 [+0.0010, +0.0103] | +0.0043 [−0.0002, +0.0089] | +0.0021 [−0.0024, +0.0066] |
+| Opponent's turn | +0.0056 [+0.0013, +0.0099] | +0.0049 [+0.0005, +0.0093] | +0.0025 [−0.0022, +0.0071] |
+| 4 turns | +0.0068 [+0.0022, +0.0117] | +0.0058 [+0.0009, +0.0109] | +0.0052 [−0.0004, +0.0109] |
+| Game's end | +0.0054 [+0.0006, +0.0104] | +0.0050 [−0.0003, +0.0106] | +0.0056 [−0.0011, +0.0128] |
+
+(The cells are each one's regret minus the heuristic's: positive is worse.) Every cell is worse than the heuristic at 4
+samples and none is better at 16.
+
+**Cost** (`ai-regret decision-cost`, 40 of the roots, 4 samples, one thread; 2.0 choices a root):
+
+| Horizon | Mean | p95 |
+|---|---:|---:|
+| Run's end | 8 ms | 26 ms |
+| Turn's end | 35 ms | 73 ms |
+| Opponent's turn | 74 ms | 133 ms |
+| 4 turns | 291 ms | 572 ms |
+| Game's end | 744 ms | 1,479 ms |
+
+Inside 200 ms: the run's end, the turn's end, and the opponent's turn at 4 samples (about 8 at the mean). None of them
+ranks the Runner's run choices better than the heuristic does, so a play-out at a run choice would spend Hard's time
+to choose worse. S5.2's Runner Hard keeps Standard's run choices, and its turn actions are Standard's decider too
+(S4.4), so Runner Hard has nothing to plan on this pool: the record for S5.2 is that Runner Hard is Standard's Runner
+until a horizon ranks something.
+
+### S1.8, the rest: the puzzles, the noise floor and the Corp's targeted roots at v3 (8 and 9 October 2026)
+
+**Recertification** of the 26 teacher-certified puzzles at 128 samples with teacher v3, the game's end (S1.5's rule:
+the best group passes the puzzle, its standard error is at most 0.04, and every failing group is 0.15 or more behind):
+**7 hold**. Of the 14 gated ones, 6 hold (`teacher-9becf188`, `-acda6263`, `-ad565c84`, `-d031e97d`, `-df4609f1`,
+`-e0d88291`) and 8 fail and move to a new `teacher-v3` split, out of the gate (`ai-puzzles run --split teacher-v3`).
+None fails because its accepted action is no longer the best:
+
+- the lead falls under 0.15 (5): `teacher-4b40e915` (0.148), `-47f84833` (0.141), `-e311a6ac` (0.047), and two where
+  the choice barely moves the result, `-9316ce82` (the best group wins 1.6%, the rejected action 0.0%) and `-e5d97a1a`
+  (the best 91.4%, the rejected action 0.016 behind);
+- the best group's standard error is over 0.04 near an even game (2): `teacher-bfad8833` (0.609 ± 0.043) and
+  `-cb2c69f6` (0.617 ± 0.043);
+- both (1): `teacher-9bcefcf7` (0.477 ± 0.044, lead 0.141).
+
+The split is named for the teacher the puzzles failed, as `teacher-v1` and `teacher-v2` are (the step's text said
+`teacher-v2`, which already names v2's failures). Of the `teacher-v2` puzzles, one holds at v3 (`teacher-b39f5b92`,
+lead 0.164) and stays out of the gate; three have v3's best group failing the puzzle (`teacher-20e668e7`, `-4da9c5de`,
+`-93609fc4`). The two `teacher-v1` puzzles fail again.
+
+**The gated box set is now 29 puzzles** (26 tuning, 3 held out). Standard (Corp v31, Runner v28) passes 28 of them;
+it passed 31 of the 37 before, and five of its six failures are among the eight that moved. The one it still fails,
+`teacher-e0d88291` (held out), holds at v3 with a lead of 0.867. On the `teacher-v3` split Standard passes 3 of 8.
+
+**The noise floor at v3** (`labels-v3-repeat.jsonl.gz`, 200 core roots: the 44 of the S1 repeat's roots in the core and
+156 drawn at random, labelled again with repeat seed 2; 58 minutes):
+
+| Teacher, roots | Best group differs | Tied best shared counts as agreeing | Flip cost: mean, median, 90th | Spread | Median SE |
+|---|---:|---:|---|---:|---:|
+| v3, 200 core roots | 62% | 47.5% | 0.048, 0.031, 0.125 | 0.163 | 0.070 |
+| v3, the 44 S1 repeat roots | | 65.9% | 0.055, 0.031, 0.125 | 0.168 | 0.074 |
+| v2, the same 44 roots | | 65.9% | 0.023, 0.011, 0.060 | 0.129 | 0.034 |
+| v2, the S1 repeat's 145 roots | 61% | 60.0% | 0.025, 0.009, 0.071 | 0.122 | 0.032 |
+
+(The flip cost is the first labelling's best minus its value of the second's best, over every root, agreeing ones at
+zero; the spread is a root's best minus its worst group in the first labelling. The first column is
+`ai-regret label --repeat`'s count, which breaks ties; the second counts two labellings that share a tied best group as
+agreeing.) A v3 value is a win rate over 32 games, a multiple of 1/32, so half the roots have a tied best group and a
+group's standard error is about twice v2's. On the roots both teachers repeated, the best group moves as often under
+either, and a flip costs about a third of a root's spread under v3 against a fifth under v2. The floor is the same
+size as v2's for agreement and larger in value: a single root's best group under v3 says little on its own, and
+regret, compared paired on the same labels over many roots, is what v3 is read through, as before.
+
+
+**The Corp's targeted roots at v3** (`labels.jsonl.gz`): the 2,518 S1.6 Corp roots relabelled by teacher v3 with
+their v2 labelling's adaptive settings (8 deciding samples, 24 recording for the best three and both chosen groups,
+pruned otherwise) and the same seeds, played to the game's end: 5 h 44 min on 12 workers, about 1.9 times their v2
+labelling. Their v2 labels are replaced; the suite is now 4,568 roots at v3 (the core's 2,050 and these) and 4,337 at
+v2 (the other targeted and finding roots, 1,609 of them the Corp's). The 190 pruned groups the Corp's heuristic alone
+chose were then labelled on their roots' recording samples (`score --extend-pruned`), so no comparison below reads a
+pruned value; no Corp version's regret moved with them.
+
+**S1.3's table for the Corp at v3** (`score --teacher-version v3`, the 3,336 Corp roots v3 labels, Standard):
+
+| Comparison | Discordant roots | Over the discordant roots, v3 | Every Corp root at v3 (3,336) | v2 over the discordant roots (S1.6) |
+|---|---:|---|---|---|
+| Corp v29 − v30 | 2,107 | +0.0019 [−0.0052, 0.0090] | +0.0012 [−0.0035, 0.0058] | +0.0180 [0.0120, 0.0243] (2,198) |
+| Corp v28 − v30 | 2,613 | **+0.0125 [0.0060, 0.0193]** | **+0.0098 [0.0044, 0.0151]** | +0.0231 [0.0176, 0.0287] (2,717) |
+| Corp v28 − v29 | 506 | **+0.0568 [0.0414, 0.0726]** | **+0.0086 [0.0063, 0.0110]** | +0.0451 [0.0332, 0.0593] (519) |
+| Corp v30 − v31 | 0 | | 0.0000 | |
+
+**The agenda-hold rule at v3** (S1.6's split of the v29 − v30 discordant roots by whether each choice installs an
+agenda in a remote):
+
+| Discordant roots (v29 − v30) | Roots | Teacher v3 | v30 better / v29 better | Teacher v2 (S1.6) |
+|---|---:|---|---|---|
+| v29 installs an agenda in a remote, v30 holds it | 1,163 | −0.0027 [−0.0147, 0.0092] | 431 / 458 | +0.0241 [0.0141, 0.0340] (1,201) |
+| No agenda install | 896 | +0.0073 [−0.0002, 0.0156] | 335 / 281 | +0.0112 [0.0063, 0.0167] (945) |
+| Both install an agenda | 36 | −0.0191 [−0.0729, 0.0417] | 12 / 18 | −0.0126 [−0.0683, 0.0398] (39) |
+| v30 installs one, v29 does not | 12 | +0.1007 [0.0035, 0.2014] | 6 / 4 | +0.0356 [−0.0286, 0.0990] (13) |
+
+**Reading.** Corp v29's run fix (not spending LEO's end-the-run ability where the ICE ahead stops the run anyway)
+holds at v3, larger than at v2, and so does v28 against v30. **v30's agenda hold does not:** played to the game's end,
+holding the agenda where v29 installs it is level (−0.0027, with v29 better at slightly more roots), where v2 had it
+worth +0.024 a decision. That is S1.5's confound: v2 scored the fourth turn's position with the pool's fit, so its value
+of holding an agenda was what that fit makes of an agenda left in a remote four turns on, not what the rest of the game
+does with it. The ladder, which has no leaf, had v30 over v29 by +50 Elo [10, 96] (S1's table); v3 reads the pair
+level, not reversed, so the suite no longer contradicts the ladder but cannot separate the two, and the ladder stays
+the arbiter for v29 against v30. The Corp's gate at v3 is therefore partly met: v28's ordering against v29 and v30
+holds, and v29 − v30 does not separate.
+
+**The Corp's 3×3 planner at v3** (the 3,336 Corp roots, the heuristic's pruned choices labelled): live Standard
+against the heuristic alone −0.0020 [−0.0040, 0.0002] over every root, −0.0090 [−0.0191, 0.0009] over the 735 roots
+where they choose differently. The planner reads ahead, just short of separating, where v2 had it worse and the
+core's held-out roots at v3 had it level (+0.0029 [−0.0049, 0.0110]); the ladder has it ahead (+36 to +97 Elo). Before
+the pruned choices were labelled the gap read −0.0041 [−0.0062, −0.0019]: half of it was the heuristic's 190 pruned
+choices valued on 8 samples.
+
+**S1.5's confound note closes.** Every gate read on the Corp from here is on v3 labels: the core, and the S1.6 Corp
+roots. The remaining v2 labels (the other targeted and finding roots) are relabelled when a comparison needs them, and
+`score` refuses to mix them with v3.

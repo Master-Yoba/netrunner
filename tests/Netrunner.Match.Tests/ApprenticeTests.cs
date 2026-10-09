@@ -48,9 +48,13 @@ public sealed class ApprenticeTests
             checkedPositions++;
         }
         Assert.True(checkedPositions >= 4, $"Only {checkedPositions} positions.");
-        Assert.Equal(1, ((OfflineAgent)RatingLadder.CreateAgent("standard-apprentice", PlayerSide.Runner,
-            RulesFuzzRunner.CreateDefinition(Official ? RulesFuzzRunner.OfficialContentIds[0] : RulesFuzzRunner.DeveloperContentId, 41)))
+        // S4.5b: the parameter names the apprentice's version; standard-apprentice is the latest, -v1 is S4.5's.
+        FullMatchDefinition dealt = RulesFuzzRunner.CreateDefinition(Official ? RulesFuzzRunner.OfficialContentIds[0] : RulesFuzzRunner.DeveloperContentId, 41);
+        Assert.Equal(Apprentice.Latest, ((OfflineAgent)RatingLadder.CreateAgent("standard-apprentice", PlayerSide.Runner, dealt))
             .Configuration.Parameters[Apprentice.ParameterKey]);
+        Assert.Equal(1, ((OfflineAgent)RatingLadder.CreateAgent("standard-apprentice-v1", PlayerSide.Runner, dealt))
+            .Configuration.Parameters[Apprentice.ParameterKey]);
+        Assert.All(Enumerable.Range(1, Apprentice.Latest), version => Assert.Equal($"apprentice-v{version}", Apprentice.DocumentFor(version).Version));
     }
 
     private static bool Official => CardDataResource.EmbeddedMode == CardDataResource.OfficialMode;

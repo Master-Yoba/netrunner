@@ -74,13 +74,15 @@ public sealed record Puzzle(string Id, string Title, string Category, string Kin
     /// <summary>
     /// Bot plan S1.5 and its follow-up: teacher-certified puzzles a later teacher no longer certifies, kept out of the gate
     /// (<c>ai-puzzles run --split teacher-v1</c> runs them). <c>teacher-v1</c> failed the line teacher (v1-lines);
-    /// <c>teacher-v2</c> failed teacher v2, the line teacher with the live opponent.
+    /// <c>teacher-v2</c> failed teacher v2, the line teacher with the live opponent; <c>teacher-v3</c> failed teacher v3,
+    /// the line search played to the game's end.
     /// </summary>
     public const string RetiredSplit = "teacher-v1";
     public const string RetiredSplitV2 = "teacher-v2";
+    public const string RetiredSplitV3 = "teacher-v3";
 
     /// <summary>Whether a split is out of the gate.</summary>
-    public static bool Retired(string split) => split is RetiredSplit or RetiredSplitV2;
+    public static bool Retired(string split) => split is RetiredSplit or RetiredSplitV2 or RetiredSplitV3;
 
     /// <summary>The ten categories of the plan's 5.3.</summary>
     public static IReadOnlyList<string> Categories { get; } =

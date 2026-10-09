@@ -295,6 +295,32 @@ public sealed class RegretSuiteTests
         Assert.Equal(2, checkedSides);
     }
 
+    /// <summary>Bot plan S4.6: the run's-end horizon stops where the run in progress at the root ends.</summary>
+    [Fact]
+    public void TheRunHorizonStopsWhereTheRootsRunEnds()
+    {
+        if (!Official) return;
+        (LadderSavedGame saved, FullMatchDefinition definition) = Saved();
+        RegretGame game = RegretGames.FromSaved(saved, definition, "held-out", "finding");
+        RegretPosition position = RegretGames.Positions(game, definition).First(position => position.State.RunState is not null
+            && position.State.PendingDecision is { } pending && position.State.GetPlayer(pending.Owner).Side == PlayerSide.Runner
+            && pending.LegalActions.Count > 1);
+        OfflineAgent teacher = (OfflineAgent)RatingLadder.CreateAgent("hard", PlayerSide.Runner, definition);
+        foreach (RegretPosition earlier in RegretGames.Positions(game, definition))
+        {
+            AgentLifecycleHost.Observe(teacher, earlier.State, definition.Behavior);
+            if (earlier.Sequence == position.Sequence) break;
+        }
+        Observation observation = ObservationBuilder.Build(position.State, PlayerSide.Runner, definition.Behavior, definition.Runtime);
+        var last = new Dictionary<int, GameState>();
+        int played = RolloutTeacher.Trace(teacher, observation, position.State.PendingDecision!.LegalActions[0].Id,
+            new TeacherSettings(Samples: 3, Seed: 5, HorizonTurns: TeacherSettings.RunEnd), (sample, state) => last[sample] = state);
+        Assert.True(played > 0);
+        Assert.All(last.Values, state => Assert.True(state.Outcome.Kind != GameOutcomeKind.Ongoing
+            || state.RunState is null && (state.Turn.TurnNumber, state.Turn.ActiveSide) == (position.State.Turn.TurnNumber, position.State.Turn.ActiveSide),
+            $"stopped at {state.Turn.ActiveSide} {state.Turn.TurnNumber}, run {(state.RunState is null ? "over" : "on")}"));
+    }
+
     [Fact]
     public void TheDiscordantViewComparesTwoVersionsWhereTheyChooseDifferently()
     {
@@ -438,6 +464,9 @@ public sealed class RegretSuiteTests
         Assert.Equal("v1", RegretLabels.VersionOf(0, 0, 4, 4, "hard"));
         Assert.Equal("v1-lines", RegretLabels.VersionOf(5, 1, 4, 4, "hard"));
         Assert.Equal("v2", RegretLabels.VersionOf(5, 1, 4, 4, "hard-model"));
+        // S1.8: v3 is the same search played to the game's end; the leaf's evaluation is recorded but plays no part.
+        Assert.Equal("v3", RegretLabels.VersionOf(5, 1, 0, 4, "hard-model"));
+        Assert.Equal("v3", RegretLabels.VersionOf(5, 1, 0, 5, "hard-model"));
         // Other settings are named by them and by the live policies the teacher plays.
         Assert.Equal($"hard-model-lines5-screen1-horizon8-set4-{CorpHeuristicPolicy.PolicyVersion}-{RunnerHeuristicPolicy.PolicyVersion}",
             RegretLabels.VersionOf(5, 1, 8, 4, "hard-model"));

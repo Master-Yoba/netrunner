@@ -12,18 +12,19 @@ public static partial class CliCommands
 {
     /// <summary>
     /// Bot plan S4.5: ai-fit-evaluation --target apprentice --suite SUITE-DIR --output-dir DIR [--pairs-per-root N] [--trees N]
-    /// [--workers N]. The apprentice at the root, from every labelled turn-action root of the suite: one example per pair of
+    /// [--workers N] [--teacher-version V] [--version N]. The apprentice at the root, from every labelled turn-action root of the suite: one example per pair of
     /// a root's candidate groups, the sign of their teacher values' difference the target and its size the weight, held out
     /// by deal. Fits a linear ranker over <see cref="ApprenticeFeatures.Combine"/>'s terms and boosted scalar trees over the
     /// candidate's and the root's terms, and reads both beside the heuristic's own order on the held-out roots (the core's
     /// first): gap-weighted pairwise accuracy against the teacher's order, and the regret of each one's pick among the
     /// heuristic's top band (what <c>apprentice 1</c> re-orders), paired against the heuristic's pick. Writes
-    /// apprentice-v1.json (the better of the two on held-out pairs) and its report.
+    /// apprentice-vN.json (the better of the two on held-out pairs) and its report. S4.5b: --teacher-version V fits on the roots
+    /// that teacher labelled only, so the rows never mix teachers.
     /// </summary>
     private static int RunApprenticeFit(string[] args, TextWriter output, TextWriter error)
     {
-        string? suiteDirectory = null, destination = null;
-        int perRoot = 24, trees = 200, workers = 1;
+        string? suiteDirectory = null, destination = null, teacher = null;
+        int perRoot = 24, trees = 200, workers = 1, version = 1;
         try
         {
             for (int index = 1; index < args.Length; index++)
@@ -37,6 +38,8 @@ public static partial class CliCommands
                     case "--pairs-per-root": perRoot = Math.Clamp(int.Parse(Next(), CultureInfo.InvariantCulture), 1, 10_000); break;
                     case "--trees": trees = Math.Clamp(int.Parse(Next(), CultureInfo.InvariantCulture), 1, 5_000); break;
                     case "--workers": workers = Math.Clamp(int.Parse(Next(), CultureInfo.InvariantCulture), 1, 64); break;
+                    case "--teacher-version": teacher = Next(); break;
+                    case "--version": version = Math.Clamp(int.Parse(Next(), CultureInfo.InvariantCulture), 1, 99); break;
                     default: throw new ArgumentException($"Unsupported ai-fit-evaluation --target apprentice argument '{args[index]}'.");
                 }
             }
@@ -50,7 +53,9 @@ public static partial class CliCommands
             return 2;
         }
         RegretSuite suite = RegretSuite.Load(suiteDirectory);
-        var labels = suite.Labels.ToDictionary(label => label.RootId);
+        var labels = suite.Labels.Where(label => teacher is null || label.TeacherName == teacher).ToDictionary(label => label.RootId);
+        if (labels.Values.Select(label => label.TeacherName).Distinct(StringComparer.Ordinal).Count() > 1)
+            throw new InvalidDataException("The suite's labels come from more than one teacher; choose one with --teacher-version.");
         var byGame = suite.Roots.Where(root => labels.ContainsKey(root.Id)).GroupBy(root => root.GameId)
             .ToDictionary(group => group.Key, group => group.Select(root => (root, labels[root.Id])).ToList());
         RegretGame[] games = [.. suite.Games.Where(game => byGame.ContainsKey(game.Id))];
@@ -215,11 +220,12 @@ public static partial class CliCommands
         }
         Directory.CreateDirectory(destination);
         string provenance = string.Create(CultureInfo.InvariantCulture,
-            $"Fitted by ai-fit-evaluation --target apprentice (bot plan S4.5) on the labelled turn-action roots of {Path.GetFileName(Path.GetFullPath(suiteDirectory))} (training deals): pairs of a root's candidate groups (at most {perRoot} a root) by the sign of their teacher values' difference, weighted by its size; read with the Standard heuristic's utilities, no planner.");
-        File.WriteAllText(Path.Combine(destination, "apprentice-v1.json"), JsonSerializer.Serialize(new ApprenticeDocument(1, "apprentice-v1",
+            $"Fitted by ai-fit-evaluation --target apprentice (bot plan S4.5) on the turn-action roots of {Path.GetFileName(Path.GetFullPath(suiteDirectory))} labelled by teacher {labels.Values.FirstOrDefault()?.TeacherName} (training deals): pairs of a root's candidate groups (at most {perRoot} a root) by the sign of their teacher values' difference, weighted by its size; read with the Standard heuristic's utilities, no planner.");
+        string name = string.Create(CultureInfo.InvariantCulture, $"apprentice-v{version}");
+        File.WriteAllText(Path.Combine(destination, name + ".json"), JsonSerializer.Serialize(new ApprenticeDocument(1, name,
             ApprenticeFeatures.Names, sides[PlayerSide.Corp], sides[PlayerSide.Runner], provenance), FitJsonOptions) + "\n");
-        File.WriteAllText(Path.Combine(destination, "apprentice-v1.report.json"), JsonSerializer.Serialize(
-            new { schemaVersion = 1, target = "apprentice", suite = suiteDirectory, pairsPerRoot = perRoot, trees, sides = report }, FitJsonOptions) + "\n");
+        File.WriteAllText(Path.Combine(destination, name + ".report.json"), JsonSerializer.Serialize(
+            new { schemaVersion = 1, target = "apprentice", suite = suiteDirectory, teacher = labels.Values.FirstOrDefault()?.TeacherName, pairsPerRoot = perRoot, trees, sides = report }, FitJsonOptions) + "\n");
         output.WriteLine($"ai-fit-evaluation apprentice rows={rows.Length} output={destination}");
         return 0;
     }
