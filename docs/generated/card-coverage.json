@@ -3209,6 +3209,7 @@
       "reviewer": "architect",
       "registered": true,
       "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.AnInstalledSourcesRunMovedByProprionegationGoesOnWithoutItsOwnServersAccess",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.ARunEventsExtraAccessFollowsTheRunnerMovedByProprionegation",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.ProprionegationCannotBeUsedOutsideARun",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.ProprionegationMovesTheRunnerFromAServerWithNoIce",

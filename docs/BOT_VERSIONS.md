@@ -1960,3 +1960,59 @@ a showed why a Standard Runner can't price this alone: its prior is the whole po
 that deals damage, and Topan, which pays meat damage for its installs, stopped running against LEO (52% to 24%).
 What the matchup needs is the deck note (H2): against a shell game the Runner plays a different game, not the same
 game with a margin. The next attempt starts from H2's Untaian note and variant c.
+
+### H3 batch 2: Runner v30, the PT Untaian note (9 October 2026)
+
+**Shipped: Runner v30 is the default.** The rules come from the user's matchup note
+([MATCHUP_PT_UNTAIAN.md](MATCHUP_PT_UNTAIAN.md), the first H2 note) and build on v29 variant c:
+
+- **PT08, R17 (engine removal).** A card whose own triggers damage the Runner, other than on access, is an engine:
+  `RunnerValues.TrashV13` values it at 400 plus 150 a point of its largest damage. Phật Gioan Baotixita (1 to 3 net on
+  the first agenda each turn) was worth less than its trash cost of 3, and the Runner never trashed it.
+- **PT13, PT15 (steal damage).** `Cushion` adds the damage a non-winning steal deals (`RunnerInference.StealDamage`:
+  the strongest choice the Corp's rezzed cards can make on an agenda scored or stolen, by the counters they hold; none
+  once an agenda has changed hands this turn) at the chance the access finds an agenda (`AgendaChance`).
+- **PT03, PT04 (recovery clicks).** Each card of damage the run is expected to deal beyond the clicks left after it
+  costs 125, about a basic draw: dangerous runs move early in the turn.
+
+H1's flatline breakdown had 50 deaths "accessing" an Untaian agenda that it could not attribute; the note named the
+cause (Phật).
+
+**An engine fix the ladder found.** The first 400-deal ladder had 2 errors, one deal (Magdalene against Untaian): a
+Conduit run on R&D moved to Archives by Proprionegation kept Conduit's R&D access bonus and its R&D-only source, and the
+engine rejected its own state. A moved run now keeps its installed source, a bonus its source declares only for the old
+server does not follow it, and the engine's own run checks take the validator's Archives allowance; without it a moved
+run counted as no real turn's run, and a steal there was judged by the fixtures' three-point win. Regression test
+`AnInstalledSourcesRunMovedByProprionegationGoesOnWithoutItsOwnServersAccess` (fails before the fix); per-slice fuzz on
+every pool (`--games-per-pairing 8 --verify-replays-every 8`): official 24, Gateway 288, Elevation 1,152,
+Gateway–Elevation 288, NSG core sets 2,592 games, every one terminal, 543 replays verified.
+
+**Ladders** (`standard-r30` against `standard`, then Runner v28; after the fix, no errors, none capped):
+
+| Pool | Deals | Runner v30 − v28 |
+|---|---:|---:|
+| Core Battle Box | 800 | **+30 Elo [+9, +55]**, separated |
+| Gateway | 240 | −3 [−42, +29], level |
+
+The Corp seats are the same policy and read 0. Anchors: `standard` (Runner v30) − `standard-m5` on 240 box deals, Corp
++128 [68, 201], Runner +332 [273, 417].
+
+| Runner's win rate, 800 deals | Magdalene | MuslihaT | Topan | All, v30 | All, v28 |
+|---|---:|---:|---:|---:|---:|
+| LEO Glacier | 35% | 82% | 52% | 56% | 57% |
+| Nebula Fast Advance | 19% | 36% | 46% | 34% | 35% |
+| PT Untaian Shell Game | 10% | 63% | 16% | **30%** | **11%** |
+| Zwicky Supermodernism | 17% | 49% | 25% | 30% | 30% |
+
+**How the Runner loses** (`ai-runner-diagnosis`, 1,600 games each): wins 33% to 38%; flatlines dealt by the Corp 21% to
+11%, its own 9% to 11%, agendas 37% to 40%. Lints a game, v28 against v30: flatlined 0.30 to 0.22, thin-grip runs 4.09 to
+3.92 (counted since #131's review with native ICE damage), banking turns 0.75 to 0.94, tagged turn ends 2.19 to 2.30,
+uncontested remote scores 1.41 to 1.62.
+
+**Regret** (bot-check, core held-out, teacher v3): Runner v30 0.0563 [0.0458, 0.0640] against v28's 0.0591. **Puzzles**:
+28/29 box, 5/5 NSG core sets, as before.
+
+**What is left.** Untaian is still the worst matchup for Magdalene and Topan (10% and 16%); MuslihaT's 63% shows what
+the note's plan does when the deck can run early. The Runner now banks more and contests fewer remotes (R11, R06); the
+next notes and batches start there. A new teacher: labels made from now on model Runner v30 and are named by their
+versions (`RegretLabels.VersionOf`); the stored v2 and v3 labels keep their names.
