@@ -27,6 +27,22 @@ public sealed partial class RunnerHeuristicPolicy
         // clicks.
         int tollClicks = forecast.Clicks;
         int tagCost = forecast.Tags * 300;
+        // v31 (MATCHUP_NEBULA.md NE17, NE25): a tag the turn can still clear costs its clearing (a click and 2 credits);
+        // one it can't costs what the Corp's next turn can take for it.
+        // The review of #133: with the tags a known agenda gives when it is stolen (Tomorrow's Headline), unless the steal wins.
+        int expectedTags = forecast.Tags + (context.Generation >= 26
+            && !RunnerInference.StealWins(context.Self.AgendaPoints, RunnerInference.SmallestAgenda(context))
+                ? RunnerInference.StealTags(context, server) : 0);
+        if (context.Generation >= 26 && expectedTags > 0)
+        {
+            int tags = context.Self.Tags ?? 0;
+            int clearable = Math.Min(expectedTags, Math.Min(Math.Max(0, context.Self.Clicks - 1 - tollClicks),
+                Math.Max(0, (funds - cost - loss) / 2)));
+            double kept = expectedTags * 180 + RunnerInference.TagThreat(context, tags + expectedTags) - RunnerInference.TagThreat(context, tags);
+            double cleared = clearable * (ClickCredits + 2) * context.CreditValue + (expectedTags - clearable) * 180
+                + RunnerInference.TagThreat(context, tags + expectedTags - clearable) - RunnerInference.TagThreat(context, tags);
+            tagCost = (int)Math.Min(kept, cleared);
+        }
         // v6: an advanced card the Runner can't identify may be a trap dealing 2 plus
         // its counters on access (Urtica Cipher); with too few cards in the grip that's a flatline.
         // v21 (A9b): each face-down root card is a trap as likely as the tracker says (an Urtica Cipher seen in HQ, now in a
