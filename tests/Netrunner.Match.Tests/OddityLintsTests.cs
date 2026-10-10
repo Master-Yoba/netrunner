@@ -27,11 +27,11 @@ public sealed class OddityLintsTests
     [InlineData("playtest-agenda-swap", "gateway-discretion-advised~gateway-stolen-goods", 18095256415510229748UL, "remote-scored-uncontested", 133L,
         "Luminal Transubstantiation scored after 1 Runner turns without a run on its remote; at the Runner's last turn: 8 credits, 0 counters, ICE 0/2 rezzed, ran Archives.")]
     [InlineData("playtest-agenda-swap", "gateway-discretion-advised~gateway-stolen-goods", 18095256415510229748UL, "agenda-stolen-from-remote", 587L,
-        "Send a Message (2 counters) behind 2 rezzed of 2 ICE.")]
+        "Send a Message (2 counters) behind 2 rezzed of 2 ICE; installed 1 Runner turns before; the Corp had 24 credits as the run began, 0 ICE left unrezzed, 0 of them affordable.")]
     [InlineData("playtest-spin-doctor", "gateway-hyper-velocity~gateway-stolen-goods", 14438435225079198195UL, "runner-ends-turn-tagged", 62L,
         "the turn ended with 2 tags.")]
     [InlineData("playtest-spin-doctor", "gateway-hyper-velocity~gateway-stolen-goods", 14438435225079198195UL, "agenda-stolen-from-remote", 185L,
-        "Orbital Superiority (0 counters) behind 0 rezzed of 1 ICE.")]
+        "Orbital Superiority (0 counters) behind 0 rezzed of 1 ICE; installed 1 Runner turns before; the Corp had 4 credits as the run began, 1 ICE left unrezzed, 1 of them affordable.")]
     [InlineData("playtest-runner-bot", "gateway-discretion-advised~gateway-stolen-goods", 3748720965229884459UL, "runner-runs-on-thin-grip", 271L,
         "a run on Remote with 2 cards in the grip.")]
     public void AGuideMistakeIsFound(string fixture, string content, ulong seed, string lint, long sequence, string detail)
@@ -81,6 +81,21 @@ public sealed class OddityLintsTests
             "..", "..", "..", "Fixtures", "saved-games", "unique-beside-copy")));
         OddityFinding finding = Assert.Single(OddityLints.Run(saved, definition), value => value.LintId == "unique-replaces-own-copy");
         Assert.Equal((296L, "Malapert Data Vault beside its own installed copy."), (finding.Sequence, finding.Detail));
+    }
+
+    /// <summary>
+    /// The review of #136: an agenda a card's effect puts in a remote (Humanoid Resources, LEO Glacier) is tracked from then
+    /// on, so its steal says how long it sat there.
+    /// </summary>
+    [Fact]
+    public void AnAgendaInstalledByAnEffectIsTrackedToItsSteal()
+    {
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
+        (LadderSavedGame saved, FullMatchDefinition definition) = Assert.Single(LadderGameArchive.Read(Path.Combine(AppContext.BaseDirectory,
+            "..", "..", "..", "Fixtures", "saved-games", "agenda-installed-by-effect")));
+        OddityFinding steal = Assert.Single(OddityLints.Run(saved, definition), value => value.LintId == "agenda-stolen-from-remote" && value.Sequence == 131);
+        Assert.Contains("Send a Message", steal.Detail, StringComparison.Ordinal);
+        Assert.Contains("Runner turns before", steal.Detail, StringComparison.Ordinal);
     }
 
     [Fact]

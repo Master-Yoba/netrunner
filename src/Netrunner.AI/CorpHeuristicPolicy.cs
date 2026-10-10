@@ -184,6 +184,13 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     /// Every earlier version is <see cref="LegacyCorpPolicy"/>, frozen.
     /// </summary>
     public const string V31 = "corp-heuristic-v31";
+    /// <summary>
+    /// V31 with an agenda that can't be scored this turn kept in HQ whenever the Runner can get into its server next turn,
+    /// unless HQ is full (bot plan H3 batch 6; the guide's C14: moving an agenda out of a flooded HQ into a breakable remote
+    /// relocates the problem). 54% of the remote steals were behind one rezzed ICE, 83% on the Runner's first turn after
+    /// the install, and V31 let an agenda out of an HQ holding two whenever HQ was no safer.
+    /// </summary>
+    public const string V32 = "corp-heuristic-v32";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
     /// V23 fixes V22's faults the reviews of batch 4's losses to Codex found (1 October: known traps advanced, two agendas
@@ -199,16 +206,17 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     public const string PolicyVersion = V31;
     /// <summary>The latest version that never plans: the planner's model of the Corp.</summary>
     public const string LatestHeuristic = V8;
-    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25, V26, V27, V28, V29, V30, V31];
+    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25, V26, V27, V28, V29, V30, V31, V32];
 
     /// <summary>Whether the version keeps the A9 tracker of the Runner's hidden cards (v26).</summary>
-    public static bool UsesTracker(string version) => version is V26 or V27 or V28 or V29 or V30 or V31;
+    public static bool UsesTracker(string version) => version is V26 or V27 or V28 or V29 or V30 or V31 or V32;
 
     public CorpHeuristicPolicy() : this(PolicyVersion) { }
 
     public CorpHeuristicPolicy(string version)
     {
-        if (version != V31) throw new ArgumentException($"The live Corp policy is {V31}; '{version}' is {nameof(LegacyCorpPolicy)}.", nameof(version));
+        if (version is not (V31 or V32))
+            throw new ArgumentException($"The live Corp policy is {V31} or {V32}; '{version}' is {nameof(LegacyCorpPolicy)}.", nameof(version));
         Version = version;
     }
 

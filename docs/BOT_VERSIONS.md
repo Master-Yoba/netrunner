@@ -2147,3 +2147,38 @@ games at 800 deals is not evidence on its own; only the ladder's interval decide
 **The review of #135.** Codex found that a campaign's payout when the Corp's turn begins (Nico Campaign, Anthill
 Excavation Contract) was not read as its next withdrawal, so v33 still counted all its credits as deniable; it now is,
 with a test. v33 is not the default, and its ladders above were read before this fix.
+
+### H3 batch 6: the Corp side, Corp v32 (10 October 2026)
+
+**Not shipped: worse.** The default stays Corp v31; v32 stays constructible (`standard-c32`) for the record.
+
+**The diagnosis.** `agenda-stolen-from-remote` now records what protected the remote, how long the agenda sat there and
+the ICE the Corp left unrezzed though it could pay for it. Over batch 5's 800-deal games (Corp v31 throughout, 1,083
+remote steals in 1,600 Corp games):
+
+| At the steal | Share |
+|---|---:|
+| One ICE on the remote, rezzed | 54% |
+| Two ICE, both rezzed | 24% |
+| No unrezzed ICE the Corp could have paid for | 95% |
+| Stolen on the Runner's first turn after the install | 83% |
+| The Corp had 10 credits or more as the run began | 43% |
+
+Inspecting the installs (LEO Glacier on 16 credits putting Offworld Office behind one Flyswatter, with two agendas in a
+three-card HQ) showed v31's flood clause at work: with two agendas or more in HQ, an agenda goes into a remote the Runner
+can break whenever HQ is no safer and agendas are most of it.
+
+**The change** (Corp v32; the guide's C14): an agenda that can't be scored this turn waits in HQ whenever the Runner
+gets into its server next turn, unless HQ is full.
+
+**The result**, box, 800 deals: Corp v31 − v32 = **+50 Elo [+29, +74]**, v32 worse. The loss is in Nebula (two of its
+three pairings, about −0.27 a deal) and Zwicky (−0.11 and −0.16); LEO and PT Untaian are level.
+
+**Reading.** The remote steals are the price of the Corp's scoring tempo, not a free mistake: an agenda held in HQ is
+not scored, and the faster decks lose more by holding than the remote steals cost them. v23's flood clause, which let
+agendas out, was right for this Corp bot. A better Corp rule here protects the scoring server rather than delays the
+install (C01, C02: a second layer when the Corp is rich, as LEO was); that is the next attempt.
+
+**The review of #136.** Codex found that an agenda a card's effect puts in a remote (Humanoid Resources, in the LEO and
+Zwicky lists) was never tracked, so its steal had no residence time (the 3.5% of steals without one above); the lint now
+tracks every agenda that reaches a remote's root, with a saved-game test (`agenda-installed-by-effect`).
