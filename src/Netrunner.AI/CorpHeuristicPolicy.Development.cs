@@ -47,6 +47,10 @@ public sealed partial class CorpHeuristicPolicy
             if (FreeIceInstalls(context) >= context.Features.Hand.Count(card => context.Definition(card)?.Ice is not null))
                 score -= 100 + install.CreditCost * context.CreditValue;
             if (context.Self.Credits - install.CreditCost < ice.RezCost) score -= 200;
+            // v33 (C01, C02): the layer an agenda waiting in HQ is waiting for, on the empty remote the Runner gets into.
+            if (context.Configuration.PolicyVersion == V33 && !install.CreateNewRemote && server is { Kind: ServerKind.Remote, Root.Length: 0 }
+                && context.AgendaCount > 0 && context.Self.Credits - install.CreditCost >= ice.RezCost && RunnerGetsIn(context, server, 0))
+                score += ProtectionBonus;
         }
         else if (definition.Agenda is not null)
         {
@@ -108,6 +112,13 @@ public sealed partial class CorpHeuristicPolicy
                     // taken outright, so HQ is the safer place until agendas fill most of it (Off the Books behind a
                     // lone Kessleroid against Principia, two agendas in a hand of five).
                     || context.AgendaCount * 10 < context.Features.Hand.Length * 6);
+            // v33 (bot plan H3 batch 7, the guide's C01, C02): a flooded HQ still lets an agenda out, but not into a server the
+            // Runner gets into while the Corp holds ICE it can put there and rez: the ICE goes in this turn and the agenda
+            // behind it the next (54% of the remote steals were behind one rezzed ICE, often from a Corp on 10 credits or more).
+            if (!agendaWaits && context.Configuration.PolicyVersion == V33 && !scoreableNow && !nakedAgenda && server is not null
+                && ProtectionInHand(context, server)
+                && RunnerGetsIn(context, server, install.CreditCost + definition.Printed.AdvancementRequirement))
+                agendaWaits = true;
         }
         else if (definition.Printed.CardClass == RuntimeCardClass.Asset)
         {
@@ -133,6 +144,13 @@ public sealed partial class CorpHeuristicPolicy
             return new(-1, score, "development/archives-protects-nothing", true, new("install", null, null, install.CardId.Value));
         return Value(score, "development/destination-minus-replacement-value", approximate: true, objective: new("install", null, null, install.CardId.Value));
     }
+
+    /// <summary>v33: whether HQ holds ICE the Corp can install on <paramref name="server"/> now and still rez.</summary>
+    private static bool ProtectionInHand(HeuristicContext context, AgentServer server) => context.Self.Clicks >= 1
+        && context.Features.Hand.Any(card => context.Definition(card)?.Ice is { } ice && context.Self.Credits >= server.Ice.Length + ice.RezCost);
+
+    /// <summary>v33: what the layer an agenda waits for is worth, above an ordinary remote ICE's place.</summary>
+    private const int ProtectionBonus = 300;
 
     /// <summary>
     /// v8: how well a server protects an agenda, from the whole-run model (A4a) run

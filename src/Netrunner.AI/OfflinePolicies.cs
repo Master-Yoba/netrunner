@@ -26,7 +26,7 @@ public static class OfflinePolicies
         // Bot plan S3: one live policy a side; every earlier version is frozen legacy code.
         return (configuration.Side, configuration.PolicyVersion) switch
         {
-            (PlayerSide.Corp, CorpHeuristicPolicy.V31 or CorpHeuristicPolicy.V32) => new CorpHeuristicPolicy(configuration.PolicyVersion),
+            (PlayerSide.Corp, CorpHeuristicPolicy.V31 or CorpHeuristicPolicy.V32 or CorpHeuristicPolicy.V33) => new CorpHeuristicPolicy(configuration.PolicyVersion),
             (PlayerSide.Corp, _) => new LegacyCorpPolicy(configuration.PolicyVersion),
             (_, RunnerHeuristicPolicy.V27 or RunnerHeuristicPolicy.V28 or RunnerHeuristicPolicy.V29 or RunnerHeuristicPolicy.V30 or RunnerHeuristicPolicy.V31 or RunnerHeuristicPolicy.V32 or RunnerHeuristicPolicy.V33) => new RunnerHeuristicPolicy(configuration.PolicyVersion),
             _ => new LegacyRunnerPolicy(configuration.PolicyVersion),
