@@ -273,7 +273,9 @@ public sealed class RunnerHeuristicPolicyTests
         AgentFeatures features = ObservationReader.Read(Decision(new LegalAction(new("action:credit"), ActionKind.GainCredit, "ignored", new NoActionParameters())));
         var card = new AgentCard
         {
-            Id = "card:campaign", DefinitionId = campaign.Value, Rezzed = true,
+            Id = "card:campaign",
+            DefinitionId = campaign.Value,
+            Rezzed = true,
             Counters = [new AgentCounter("credit", CardCounterPurpose.HostedCredit, hosted, null)],
         };
 
