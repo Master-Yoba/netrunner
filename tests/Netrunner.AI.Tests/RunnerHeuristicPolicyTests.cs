@@ -224,6 +224,36 @@ public sealed class RunnerHeuristicPolicyTests
         Assert.Equal(190 + (int)((860 - 190) * 1.5), Value(RunnerHeuristicPolicy.V32, 27));
     }
 
+    /// <summary>
+    /// Runner v32, the review of #134: what the tracker believes of the slot counts as it stands, and the prior covers only the
+    /// rest: a slot half believed to be a known trap (an Urtica seen in HQ) has half the agenda chance of an untracked one.
+    /// </summary>
+    [Fact]
+    public void AnAdvancedRemoteCardsAgendaChanceTakesTheTrackersBeliefOfTheSlot()
+    {
+        CardDefinitionId agenda = new("test:agenda"), trap = new("test:trap");
+        var catalog = new ScenarioCatalog(
+            new CardEvaluationDescriptor(new(agenda, PlayerSide.Corp, RuntimeCardClass.Agenda, agendaPoints: 2, advancementRequirement: 3),
+                null, null, null, null, null, new(agenda, 2), [], false),
+            new CardEvaluationDescriptor(new(trap, PlayerSide.Corp, RuntimeCardClass.Asset, rezCost: 0, trashCost: 2),
+                new CardBehaviorDefinition(trap, PlayerSide.Corp, canBeAdvanced: true), null, null, null, null, null, [], false));
+        Observation observation = Decision(new LegalAction(new("action:credit"), ActionKind.GainCredit, "ignored", new NoActionParameters()));
+        AgentBoard baseline = ObservationReader.Read(observation).Board;
+        AgentBoard board = baseline with { Servers = [new("server:remote", ServerKind.Remote, [], [null])] };
+        observation = observation with { PublicState = EngineJson.Deserialize<Dictionary<string, object?>>(EngineJson.Serialize(board)) };
+        AgentFeatures features = ObservationReader.Read(observation);
+        double Chance(CardTracker? tracker) => RunnerInference.AdvancedRootAgenda(
+            new HeuristicContext(features, catalog, RunnerPolicyProfiles.Create("standard", 54, RunnerHeuristicPolicy.V32), 27)
+            {
+                Knowledge = AgentKnowledge.Empty with { Tracker = tracker },
+            }, features.Board.Servers[0], 0).Chance;
+
+        double untracked = Chance(null);
+        var halfTrap = new CardTracker([new TrackedCard(trap.Value, TrackedPlace.Slot, 0.5, 1, ServerId: "server:remote", Zone: "root", Index: 0)], null);
+        Assert.InRange(untracked, 0.01, 0.99);
+        Assert.Equal(0.5 * untracked, Chance(halfTrap), 6);
+    }
+
     private static Observation Decision(params LegalAction[] actions)
     {
         GameState state = GameState.CreateNew(54);

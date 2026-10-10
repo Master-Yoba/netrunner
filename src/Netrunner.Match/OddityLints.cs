@@ -252,6 +252,7 @@ public static class OddityLints
         // Batch 4: each tracked remote agenda as the Runner's latest turn began: its counters and its server's ICE, rezzed of all.
         private readonly Dictionary<CardInstanceId, (int Counters, int Rezzed, int Ice)> _agendaAtRunnerTurn = [];
         private int _runnerCreditsAtTurn;
+        private bool _snapshotPending;
 
         /// <summary>Bot plan H1: the strategy guide's mistakes (docs/STRATEGY_FUNDAMENTALS.md).</summary>
         private void Guide(GameState before, LegalAction chosen, PlayerSide actor, GameState after, long sequence, int turn)
@@ -260,12 +261,20 @@ public static class OddityLints
             {
                 _runnerTurns++;
                 _ranThisTurn = false;
-                _runnerCreditsAtTurn = Player(after, PlayerSide.Runner).Credits;
+                _snapshotPending = true;
+            }
+            // The review of #134: what the Runner faces is read at its first turn action, after its turn-begin income
+            // (Smartware Distributor, Open Market) and the window before the turn, where ICE may still be rezzed.
+            if (_snapshotPending && actor == PlayerSide.Runner && before.Turn.ActiveSide == PlayerSide.Runner
+                && before.PendingDecision?.Kind == DecisionKind.TurnAction)
+            {
+                _snapshotPending = false;
+                _runnerCreditsAtTurn = Player(before, PlayerSide.Runner).Credits;
                 foreach ((CardInstanceId agenda, (ServerId server, _)) in _remoteAgendas)
                 {
-                    if (RootServer(after, agenda) is null) continue;
-                    IReadOnlyList<CardInstanceId> ice = Zone(after, server, ZoneKind.ServerIce);
-                    _agendaAtRunnerTurn[agenda] = (after.GetCard(agenda).AdvancementCounters, ice.Count(id => after.GetCard(id).Rezzed), ice.Count);
+                    if (RootServer(before, agenda) is null) continue;
+                    IReadOnlyList<CardInstanceId> ice = Zone(before, server, ZoneKind.ServerIce);
+                    _agendaAtRunnerTurn[agenda] = (before.GetCard(agenda).AdvancementCounters, ice.Count(id => before.GetCard(id).Rezzed), ice.Count);
                 }
             }
             if (before.RunState is null && after.RunState is { } started)

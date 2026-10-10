@@ -82,7 +82,7 @@ internal static class RunnerValues
             // v32 (bot plan H3 batch 4, ZW05, LE15): an advanced one is worth the agenda an advanced card likely is; the Corp
             // scored 85% of the remotes the Runner let through with counters already showing.
             root += card is null && advancement > 0 && server.Kind == ServerKind.Remote && context.Generation >= 27
-                ? 190 + (int)(inference * RunnerInference.AdvancedRootAgenda(context) switch { var (chance, value) => chance * Math.Max(0, value - 190) }
+                ? 190 + (int)(inference * RunnerInference.AdvancedRootAgenda(context, server, index) switch { var (chance, value) => chance * Math.Max(0, value - 190) }
                     // R06: a steal also denies the Corp the score an advanced card is a turn from; half an agenda's worth again.
                     * AdvancedDenial)
                 : card is null && advancement == 0 && server.Kind == ServerKind.Remote && context.Generation >= 23
