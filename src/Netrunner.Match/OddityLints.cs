@@ -323,12 +323,16 @@ public static class OddityLints
                 Report("remote-scored-uncontested", PlayerSide.Runner, sequence, turn,
                     $"{Title(before, score.CardId)} scored after {_runnerTurns - installed.RunnerTurn} Runner turns without a run on its remote{seen}.", once: false);
             }
+            // The review of #136: every agenda that reaches a remote's root, by an install action or a card's effect (Humanoid
+            // Resources), from when it got there.
+            foreach (ServerState remote in after.Servers.Where(server => server.Kind == ServerKind.Remote))
+                foreach (CardInstanceId card in Zone(after, remote.Id, ZoneKind.ServerRoot))
+                    if (!_remoteAgendas.ContainsKey(card) && Class(after, card) == RuntimeCardClass.Agenda)
+                        _remoteAgendas[card] = (remote.Id, _runnerTurns);
             if (actor == PlayerSide.Corp && chosen.Parameters is InstallCardParameters { FinalizeSelection: true } install)
             {
                 RuntimeCardClass? installing = Class(before, install.CardId);
                 ServerState? into = RootServer(after, install.CardId) ?? (install.ServerId is { } id ? Server(after, id) : null);
-                if (installing == RuntimeCardClass.Agenda && RootServer(after, install.CardId) is { Kind: ServerKind.Remote } remote)
-                    _remoteAgendas[install.CardId] = (remote.Id, _runnerTurns);
                 if (installing == RuntimeCardClass.Ice && into is { Kind: ServerKind.Remote } && hqAgendas == 0
                     && Zone(before, into.Id, ZoneKind.ServerIce).Count >= 1
                     && !Zone(before, into.Id, ZoneKind.ServerRoot).Any(id => Class(before, id) == RuntimeCardClass.Agenda

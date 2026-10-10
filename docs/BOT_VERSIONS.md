@@ -2178,3 +2178,7 @@ three pairings, about −0.27 a deal) and Zwicky (−0.11 and −0.16); LEO and 
 not scored, and the faster decks lose more by holding than the remote steals cost them. v23's flood clause, which let
 agendas out, was right for this Corp bot. A better Corp rule here protects the scoring server rather than delays the
 install (C01, C02: a second layer when the Corp is rich, as LEO was); that is the next attempt.
+
+**The review of #136.** Codex found that an agenda a card's effect puts in a remote (Humanoid Resources, in the LEO and
+Zwicky lists) was never tracked, so its steal had no residence time (the 3.5% of steals without one above); the lint now
+tracks every agenda that reaches a remote's root, with a saved-game test (`agenda-installed-by-effect`).

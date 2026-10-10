@@ -83,6 +83,21 @@ public sealed class OddityLintsTests
         Assert.Equal((296L, "Malapert Data Vault beside its own installed copy."), (finding.Sequence, finding.Detail));
     }
 
+    /// <summary>
+    /// The review of #136: an agenda a card's effect puts in a remote (Humanoid Resources, LEO Glacier) is tracked from then
+    /// on, so its steal says how long it sat there.
+    /// </summary>
+    [Fact]
+    public void AnAgendaInstalledByAnEffectIsTrackedToItsSteal()
+    {
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
+        (LadderSavedGame saved, FullMatchDefinition definition) = Assert.Single(LadderGameArchive.Read(Path.Combine(AppContext.BaseDirectory,
+            "..", "..", "..", "Fixtures", "saved-games", "agenda-installed-by-effect")));
+        OddityFinding steal = Assert.Single(OddityLints.Run(saved, definition), value => value.LintId == "agenda-stolen-from-remote" && value.Sequence == 131);
+        Assert.Contains("Send a Message", steal.Detail, StringComparison.Ordinal);
+        Assert.Contains("Runner turns before", steal.Detail, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void ASavedGameReadsBackAndLintsTheSame()
     {
