@@ -2065,7 +2065,7 @@ the 1,600 v30 games of batch 2's repeated ladder (2,584 such scores):
 | The agenda showed advancement counters (1: 46%, 2: 29%, 3 or more: 10%) | 85% |
 | The Runner made no run at all that turn | 50% |
 | The remote had a single unrezzed ICE | 32% |
-| The Runner had 0 to 4 credits / 5 to 9 / 10 or more | 58% / 26% / 16% |
+| The Runner had 0 to 4 credits / 5 to 9 / 10 or more | 57% / 26% / 16% |
 
 v30 valued an advanced face-down card in a remote at 190 and 200 a counter (390 at one), against 860 for a known
 two-point agenda, though in three of the four box decks the only advanceable card in a remote is an agenda
@@ -2102,3 +2102,11 @@ Anchors (240 box deals): `standard` (Runner v32) − `standard-m5`, Corp +128 [6
 (bot-check, core held-out, teacher v3): Runner v32 0.0576 [0.0479, 0.0653] against v30's 0.0563, level within its
 interval; the suite's roots hold few advanced remotes for v32 to change. Puzzles: 28/29 box, 5/5 NSG core sets, as
 before.
+
+**The review of #134.** Codex found two gaps, both fixed with tests. v32's agenda chance ignored what the tracker believes of
+the slot (a known Urtica half believed to be there still read at the pool's agenda share); it now takes the slot's
+belief as it stands and the prior for the rest, as `RootAgenda` does. And the lint read the Runner's state as its turn
+began, before its turn-begin income and the window where ICE may be rezzed; it now reads it at the Runner's first turn
+action (the playtest fixture's Runner had 8 credits there, not 6; the diagnosis table above is re-read, and only the
+credit split moved). After the fixes, the 1,600-deal box ladder (`standard` − `standard-r30`): Runner v32 **+19 [+2, +37]**
+over v30, separated; no errors.
