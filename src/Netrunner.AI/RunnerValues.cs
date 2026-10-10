@@ -114,6 +114,10 @@ internal static class RunnerValues
             ? server.Kind switch
             {
                 ServerKind.Headquarters when RunnerInference.HqKnownShare(context) >= 0.5 => Math.Min(3, RunnerInference.HqAgendaShare(context) / unseen),
+                // v33 (bot plan H3 batch 5, NE12): the Corp bots hold their agendas in HQ, and HqAgendaShare's untracked part
+                // already carries the pool's fitted HQ factor, so it is read however little of HQ the tracker knows (HQ held an
+                // agenda in 80% of the Runner's turns against Nebula, and it ran HQ in 13% of those).
+                ServerKind.Headquarters when context.Generation >= 28 => Math.Min(3, RunnerInference.HqAgendaShare(context) / unseen),
                 ServerKind.RAndD when RunnerInference.Tracker(context)?.DeckTopAt(0) is { } top =>
                     context.Catalog.TryGet(new CardDefinitionId(top), out CardEvaluationDescriptor card) && card.Agenda is not null ? 3 : 0.3,
                 _ => null,
@@ -217,6 +221,17 @@ internal static class RunnerValues
     private static int TrashV13(HeuristicContext context, AgentCard card, CardEvaluationDescriptor definition)
     {
         int hosted = HeuristicContext.Hosted(card);
+        // v33 (bot plan H3 batch 5, MATCHUP_NEBULA.md NE15): the Corp takes its next withdrawal before the Runner is back,
+        // so a trash denies only the credits after it (Regolith's last 3 deny nothing); the Runner paid 4.3 a game against
+        // Nebula to trash accessed cards, against 2.9 against LEO.
+        if (hosted > 0 && context.Generation >= 28)
+        {
+            int take = definition.Behavior?.PaidAbilities.SelectMany(ability => ability.Instructions)
+                .Where(instruction => instruction.Kind is BehaviorInstructionKind.TakeHostedCredits or BehaviorInstructionKind.TakeUpToHostedCredits)
+                .Select(instruction => instruction.Amount).DefaultIfEmpty(0).Max() ?? 0;
+            int left = take > 0 ? Math.Max(0, hosted - take) : hosted;
+            return left == 0 ? 60 : 160 + left * 90;
+        }
         if (hosted > 0) return 160 + hosted * 90;
         if (definition.Behavior is { } behavior)
         {
