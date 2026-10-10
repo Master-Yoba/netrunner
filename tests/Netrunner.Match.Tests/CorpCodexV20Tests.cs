@@ -182,6 +182,25 @@ public sealed class CorpCodexV20Tests
         CardDataResource.LoadEmbedded().Cards.Single(card => card.Code == state.GetCard(id).DefinitionId.Value).Title;
 
     /// <summary>The Corp version's choice at the recorded decision <paramref name="sequence"/>, having watched the game to it.</summary>
+    /// <summary>
+    /// Bot plan H3 batch 7 (the guide's C01, C02): a flooded HQ lets an agenda into a remote the Runner gets into, unless HQ
+    /// holds ICE the Corp can put there and rez; v33 installs that ICE first. A box ladder game, LEO Glacier against
+    /// Magdalene, where v31 put the agenda behind one ICE and the Runner stole it.
+    /// </summary>
+    [Theory]
+    [InlineData(CorpHeuristicPolicy.V31, RuntimeCardClass.Agenda)]
+    [InlineData(CorpHeuristicPolicy.V33, RuntimeCardClass.Ice)]
+    public async Task TheScoringServerIsProtectedBeforeTheAgendaGoesIn(string version, RuntimeCardClass installs)
+    {
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
+        (LegalAction chosen, GameState state) = await ChooseAtAsync("corp-protects-scoring-server", version, 722);
+        (_, FullMatchDefinition definition) = SavedDecision.ReadSaved(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "Fixtures",
+            "saved-games", "corp-protects-scoring-server"));
+        RuntimeCardClass? installed = chosen.Parameters is InstallCardParameters install
+            && definition.Runtime.TryGet(state.GetCard(install.CardId).DefinitionId, out CardRuntimeSpec spec) ? spec.CardClass : null;
+        Assert.True(installed == installs, $"{version} chose {chosen.Kind} {chosen.Description}.");
+    }
+
     private static async Task<(LegalAction Chosen, GameState State)> ChooseAtAsync(string fixture, string version, long sequence)
     {
         (ReplayArtifact replay, FullMatchDefinition definition) = SavedDecision.ReadSaved(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "Fixtures", "saved-games", fixture));
