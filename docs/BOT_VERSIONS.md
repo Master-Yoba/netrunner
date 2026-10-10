@@ -2182,3 +2182,28 @@ install (C01, C02: a second layer when the Corp is rich, as LEO was); that is th
 **The review of #136.** Codex found that an agenda a card's effect puts in a remote (Humanoid Resources, in the LEO and
 Zwicky lists) was never tracked, so its steal had no residence time (the 3.5% of steals without one above); the lint now
 tracks every agenda that reaches a remote's root, with a saved-game test (`agenda-installed-by-effect`).
+
+### H3 batch 7: Corp v33, the scoring server protected first (11 October 2026)
+
+**Shipped: Corp v33 is the default.** It is built on Corp v31, not v32 (batch 6, worse).
+
+**The change** (the guide's C01, C02; `CorpHeuristicPolicy.Install`). v31's flood clause still lets an agenda out of an
+HQ holding two or more, but not into a server the Runner gets into next turn while HQ holds ICE the Corp can put there
+and rez (`ProtectionInHand`); that agenda waits a turn, and the ICE on the empty remote the Runner gets into gains 300
+(`ProtectionBonus`), so the protection it waits for goes in. Without such ICE, v31's tempo stands. Batch 6 had shown
+that delaying the agenda alone (v32) loses 50 Elo; this delays it only when the layer can go in now.
+
+| | Corp v33 − v31 |
+|---|---:|
+| Box, 800 deals | **+26 Elo [+5, +48]**, separated; 9 of the 12 Corp pairings lean v33's way |
+| Gateway, 240 deals | +16 [−19, +54], level |
+| Remote steals, 1,600 Corp games each | 1,268 to 1,082 (−15%) |
+| Anchors (240 box deals, `standard` − `standard-m5`) | Corp +152 [52, 258], Runner +333 [233, 446] |
+| Regret (bot-check, core held-out, teacher v3) | 0.0579 to 0.0569, level within the interval |
+| Puzzles | 28/29 box, 5/5 NSG core sets, as before |
+
+**Test:** `CorpCodexV20Tests.TheScoringServerIsProtectedBeforeTheAgendaGoesIn`, from a box ladder game (LEO Glacier
+against Magdalene, action 722): v31 installs the agenda behind one ICE, v33 installs ICE.
+
+A new teacher, as with Runner v30: labels made from now on model Corp v33 and are named by their versions; the stored v2
+and v3 labels keep their names.
