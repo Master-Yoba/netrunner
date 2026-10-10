@@ -193,6 +193,37 @@ public sealed class RunnerHeuristicPolicyTests
         Assert.Equal(2 * 5 * 110, Risk(RunnerHeuristicPolicy.V31, 26) - Risk(RunnerHeuristicPolicy.V30, 25));
     }
 
+    /// <summary>
+    /// Runner v32 (bot plan H3 batch 4, ZW05, LE15): an advanced face-down card in a remote is worth the agenda an advanced card
+    /// likely is, with the score its steal denies (R06): where the only advanceable card is a 2-point agenda (500 and 180 a
+    /// point), 190 + 670 × 1.5; v30 valued it at 190 and 200 a counter.
+    /// </summary>
+    [Fact]
+    public void AnAdvancedRemoteCardIsWorthTheAgendaItLikelyIs()
+    {
+        CardDefinitionId agenda = new("test:agenda"), asset = new("test:asset");
+        // An asset beside it, which can't be advanced, keeps the face-down card's identity unknown.
+        var catalog = new ScenarioCatalog(
+            new CardEvaluationDescriptor(new(agenda, PlayerSide.Corp, RuntimeCardClass.Agenda, agendaPoints: 2, advancementRequirement: 3),
+                null, null, null, null, null, new(agenda, 2), [], false),
+            new CardEvaluationDescriptor(new(asset, PlayerSide.Corp, RuntimeCardClass.Asset, rezCost: 1, trashCost: 2),
+                null, null, null, null, null, null, [], false));
+        Observation observation = Decision(new LegalAction(new("action:credit"), ActionKind.GainCredit, "ignored", new NoActionParameters()));
+        AgentBoard baseline = ObservationReader.Read(observation).Board;
+        AgentBoard board = baseline with { Servers = [new("server:remote", ServerKind.Remote, [], [null])] };
+        observation = observation with { PublicState = EngineJson.Deserialize<Dictionary<string, object?>>(EngineJson.Serialize(board)) };
+        AgentFeatures read = ObservationReader.Read(observation);
+        AgentFeatures features = read with
+        {
+            Board = read.Board with { HiddenAdvancements = [new AgentHiddenAdvancement("server:remote", "root", 0, 1)] },
+        };
+        int Value(string version, int generation) => RunnerValues.Server(
+            new HeuristicContext(features, catalog, RunnerPolicyProfiles.Create("standard", 54, version), generation), features.Board.Servers[0]);
+
+        Assert.Equal(190 + 200, Value(RunnerHeuristicPolicy.V30, 25));
+        Assert.Equal(190 + (int)((860 - 190) * 1.5), Value(RunnerHeuristicPolicy.V32, 27));
+    }
+
     private static Observation Decision(params LegalAction[] actions)
     {
         GameState state = GameState.CreateNew(54);

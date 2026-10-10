@@ -38,10 +38,10 @@ public sealed class PolicyVersionTests
         {
             IOfflinePolicy policy = OfflinePolicies.Create(OfflinePolicies.Configure(side, "standard", 7, version));
             Assert.Equal(version, policy.Version);
-            // Runner v27 stays live beside v28, so the regret suite can compare them (S1.5 follow-up); v28 and v29 (bot plan H3)
-            // beside v30, the default since H3 batch 2.
+            // Runner v27 stays live beside v28, so the regret suite can compare them (S1.5 follow-up); v28 to v31 (bot plan H3)
+            // beside v32, the default since H3 batch 4.
             Type expected = version == live || side == PlayerSide.Runner
-                && version is RunnerHeuristicPolicy.V27 or RunnerHeuristicPolicy.V28 or RunnerHeuristicPolicy.V29 or RunnerHeuristicPolicy.V31 or RunnerHeuristicPolicy.V32
+                && version is RunnerHeuristicPolicy.V27 or RunnerHeuristicPolicy.V28 or RunnerHeuristicPolicy.V29 or RunnerHeuristicPolicy.V30 or RunnerHeuristicPolicy.V31
                 ? side == PlayerSide.Corp ? typeof(CorpHeuristicPolicy) : typeof(RunnerHeuristicPolicy)
                 : side == PlayerSide.Corp ? typeof(LegacyCorpPolicy) : typeof(LegacyRunnerPolicy);
             Assert.IsType(expected, policy);
@@ -100,7 +100,7 @@ public sealed class PolicyVersionTests
     [Fact]
     public void LatestVersionsAreTheDefaultsAndUnknownVersionsFail()
     {
-        Assert.Equal(RunnerHeuristicPolicy.V30, OfflinePolicies.Configure(PlayerSide.Runner, "standard", 1).PolicyVersion);
+        Assert.Equal(RunnerHeuristicPolicy.V32, OfflinePolicies.Configure(PlayerSide.Runner, "standard", 1).PolicyVersion);
         Assert.Equal(CorpHeuristicPolicy.V31, OfflinePolicies.Configure(PlayerSide.Corp, "standard", 1).PolicyVersion);
         Assert.Throws<ArgumentException>(() => new LegacyRunnerPolicy("runner-heuristic-v33"));
         Assert.Throws<ArgumentException>(() => OfflinePolicies.Configure(PlayerSide.Runner, "standard", 1, "runner-heuristic-v33"));

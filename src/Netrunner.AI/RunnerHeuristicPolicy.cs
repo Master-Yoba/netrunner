@@ -203,9 +203,10 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// default loop 2 played against. V25 (bot loop 2, 4 October) was the default until V26. V27 (bot plan S3) is V26 as the
     /// live policy, identical game by game. V28 values a protected face-down remote card as the agenda it likely is. V29 (the
     /// grip cushion) was level and is not the default. V30 (bot plan H3 batch 2, the PT Untaian note) is: +30 Elo [9, 55] over
-    /// V28 on 800 Core Battle Box deals, 11% to 30% against PT Untaian, level on Gateway.
+    /// V28 on 800 Core Battle Box deals, 11% to 30% against PT Untaian, level on Gateway. V31 (tags) was level. V32 (bot plan
+    /// H3 batch 4, advanced remote cards as agendas) is: +23 Elo [6, 40] over V30 on 1,600 box deals.
     /// </remarks>
-    public const string PolicyVersion = V30;
+    public const string PolicyVersion = V32;
     /// <summary>
     /// The planner's model of the Runner. It stays V7, which Corp v9 was measured
     /// with, so the shipped Corp planner plays as it did.
