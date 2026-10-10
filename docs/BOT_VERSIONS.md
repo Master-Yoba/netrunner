@@ -2110,3 +2110,40 @@ began, before its turn-begin income and the window where ICE may be rezzed; it n
 action (the playtest fixture's Runner had 8 credits there, not 6; the diagnosis table above is re-read, and only the
 credit split moved). After the fixes, the 1,600-deal box ladder (`standard` − `standard-r30`): Runner v32 **+19 [+2, +37]**
 over v30, separated; no errors.
+
+### H3 batch 5: Runner v33, the Nebula losses (10 October 2026)
+
+**Not shipped: level at 1,600 deals.** The default stays Runner v32; v33 stays constructible (`standard-r33`, variant b).
+
+**The diagnosis** (a throwaway replay of the ~400 games each Runner deck played as v32 against each Corp, batch 4's
+800-deal ladder; not committed):
+
+| Against | Runner's credits at its first action | Central runs a turn | HQ holds an agenda (turns) | Steals from HQ |
+|---|---:|---:|---:|---:|
+| Nebula | **4.1** | 0.49 | 80% | 250 |
+| LEO | 6.1 | 0.58 | 78% | 364 |
+| Zwicky | 6.0 | 0.50 | 82% | 284 |
+| PT Untaian | 4.8 | 0.42 | 84% | 250 |
+
+The bot Nebula mostly does not fast advance: 778 of its 1,140 scores came from agendas installed on an earlier turn.
+Against Nebula the Runner spent, a game, 5.7 credits (and about 3 clicks) clearing tags against 0.4 against LEO, 4.3
+trashing accessed cards against 2.9, and lost 1.6 to the Corp (Bigger Picture 1.0, Whitespace 0.6).
+
+**The change** (v33, on v32): an asset holding credits is worth only the withdrawals after the Corp's next one
+(`RunnerValues.TrashV13`; NE15: Regolith's last 3 deny nothing), and HQ is valued by `HqAgendaShare` (which carries the
+pool's fitted HQ factor) however little of HQ the tracker knows (NE12); variant b withholds that from a Corp with access
+ambushes or a live steal-damage engine (PT09).
+
+| Variant | Deals | Runner v33 − v32 | Nebula, v33 against v32 |
+|---|---:|---:|---:|
+| a | 800 | +8 [−16, +30] | 45% against 37% |
+| b | 800 | +9 [−13, +28] | 45% against 37% |
+| b | 1,600 | **+1 [−17, +17]** | level in every Nebula pairing |
+
+**Reading.** The 800-deal Nebula gain was noise: one cell (MuslihaT against Nebula, about 200 games) carried it, and the
+1,600-deal ladder, which repeats those deals and adds as many, put every Nebula pairing level. A cell of a few hundred
+games at 800 deals is not evidence on its own; only the ladder's interval decides.
+
+**The review of #135.** Codex found that a campaign's payout when the Corp's turn begins (Nico Campaign, Anthill
+Excavation Contract) was not read as its next withdrawal, so v33 still counted all its credits as deniable; it now is,
+with a test. v33 is not the default, and its ladders above were read before this fix.
