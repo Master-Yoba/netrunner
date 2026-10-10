@@ -117,7 +117,11 @@ internal static class RunnerValues
                 // v33 (bot plan H3 batch 5, NE12): the Corp bots hold their agendas in HQ, and HqAgendaShare's untracked part
                 // already carries the pool's fitted HQ factor, so it is read however little of HQ the tracker knows (HQ held an
                 // agenda in 80% of the Runner's turns against Nebula, and it ran HQ in 13% of those).
-                ServerKind.Headquarters when context.Generation >= 28 => Math.Min(3, RunnerInference.HqAgendaShare(context) / unseen),
+                // Not against an ambush in HQ or a live steal-damage engine (MATCHUP_PT_UNTAIAN.md PT09: blind central farming
+                // while Phật is active pays its damage; Byte! waits in HQ).
+                ServerKind.Headquarters when context.Generation >= 28 && RunnerInference.StealDamage(context) == 0
+                    && !RunnerInference.Evidence(context, card => card.Agenda is null && RunnerInference.AccessDamage(card, 0) > 0)
+                    => Math.Min(3, RunnerInference.HqAgendaShare(context) / unseen),
                 ServerKind.RAndD when RunnerInference.Tracker(context)?.DeckTopAt(0) is { } top =>
                     context.Catalog.TryGet(new CardDefinitionId(top), out CardEvaluationDescriptor card) && card.Agenda is not null ? 3 : 0.3,
                 _ => null,
