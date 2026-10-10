@@ -106,6 +106,50 @@ internal static class RunnerInference
     /// point, as a known one). What the tracker believes of the slot counts as it stands; the rest is the unseen root cards'
     /// agenda share, moved by whether ICE protects the remote.
     /// </summary>
+    /// <summary>
+    /// Runner v32 (bot plan H3 batch 4; MATCHUP_ZWICKY.md ZW05, ZW07, MATCHUP_LEO.md LE15): the chance an advanced face-down
+    /// card in a remote is an agenda, and an agenda's value there: the agendas' share of the root cards that can be advanced
+    /// (agendas, and traps such as Urtica Cipher and Clearinghouse), by the tier's prior. In three of the four box decks the
+    /// only advanceable remote card is an agenda.
+    /// </summary>
+    public static (double Chance, double Value) AdvancedRootAgenda(HeuristicContext context, AgentServer server, int index)
+    {
+        (double share, double unseenValue) = AdvancedAgendaShare(context);
+        // The review of #134: what the tracker believes of the slot counts as it stands (an Urtica seen in HQ, now possibly
+        // here), and the prior covers only the rest, as RootAgenda does.
+        if (Tracker(context) is not { } tracker) return (share, unseenValue);
+        double tracked = 0, trackedWorth = 0, believed = 0;
+        foreach ((string definition, double probability) in tracker.SlotBelief(server.Id, "root", index))
+        {
+            believed += probability;
+            if (context.Catalog.TryGet(new CardDefinitionId(definition), out CardEvaluationDescriptor card) && card.Agenda is not null)
+            {
+                tracked += probability;
+                trackedWorth += probability * (500 + card.Agenda.AgendaPoints * 180);
+            }
+        }
+        double residual = Math.Max(0, 1 - believed);
+        double total = tracked + residual * share;
+        return total <= 0 ? (0, unseenValue) : (total, (trackedWorth + residual * share * unseenValue) / total);
+    }
+
+    private static (double Share, double Value) AdvancedAgendaShare(HeuristicContext context) => context.Memo("advanced-root-agenda", () =>
+    {
+        double agendas = 0, others = 0, worth = 0;
+        foreach ((string definition, double weight) in Prior(context))
+        {
+            if (weight <= 0 || !context.Catalog.TryGet(new CardDefinitionId(definition), out CardEvaluationDescriptor card)
+                || !TrackerPrior.Fits(context.Catalog, definition, "root")) continue;
+            if (card.Agenda is not null)
+            {
+                agendas += weight;
+                worth += weight * (500 + card.Agenda.AgendaPoints * 180);
+            }
+            else if (card.Behavior?.CanBeAdvanced == true) others += weight;
+        }
+        return agendas <= 0 ? (0.0, 0.0) : (agendas / (agendas + others), worth / agendas);
+    });
+
     public static (double Chance, double Value) RootAgenda(HeuristicContext context, AgentServer server, int index)
     {
         static double Worth(CardEvaluationDescriptor card) => 500 + card.Agenda!.AgendaPoints * 180;

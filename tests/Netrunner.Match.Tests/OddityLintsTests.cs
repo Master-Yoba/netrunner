@@ -25,7 +25,7 @@ public sealed class OddityLintsTests
     /// <summary>Bot plan H1: the strategy guide's mistakes, found in the recorded playtest games.</summary>
     [Theory]
     [InlineData("playtest-agenda-swap", "gateway-discretion-advised~gateway-stolen-goods", 18095256415510229748UL, "remote-scored-uncontested", 133L,
-        "Luminal Transubstantiation scored after 1 Runner turns without a run on its remote.")]
+        "Luminal Transubstantiation scored after 1 Runner turns without a run on its remote; at the Runner's last turn: 8 credits, 0 counters, ICE 0/2 rezzed, ran Archives.")]
     [InlineData("playtest-agenda-swap", "gateway-discretion-advised~gateway-stolen-goods", 18095256415510229748UL, "agenda-stolen-from-remote", 587L,
         "Send a Message (2 counters) behind 2 rezzed of 2 ICE.")]
     [InlineData("playtest-spin-doctor", "gateway-hyper-velocity~gateway-stolen-goods", 14438435225079198195UL, "runner-ends-turn-tagged", 62L,

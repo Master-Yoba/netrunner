@@ -23,7 +23,7 @@ internal static class RunnerValues
             + (context.Generation >= 17 ? RunnerInference.KnownTagThreat(context) : 0)
             // v31 (the review of #133): what the Corp's next turn can take for the tags taken here, in every tag choice
             // (Funhouse's take a tag or end the run, its pay 4 or take a tag).
-            + (threat && context.Generation >= 26
+            + (threat && context.Generation == HeuristicContext.TagGeneration
                 ? (int)(RunnerInference.TagThreat(context, (context.Self.Tags ?? 0) + additional) - RunnerInference.TagThreat(context, context.Self.Tags ?? 0))
                 : 0);
 
@@ -79,7 +79,13 @@ internal static class RunnerValues
             // v21 (A9b): or one it's confident of from what it saw (an upgrade it left in HQ).
             if (context.Generation >= 17) card ??= RunnerInference.Believed(context, server, "root", index);
             // v28: an unadvanced face-down card in a remote is worth the agenda it may be (the Corp protects its agendas).
-            root += card is null && advancement == 0 && server.Kind == ServerKind.Remote && context.Generation >= 23
+            // v32 (bot plan H3 batch 4, ZW05, LE15): an advanced one is worth the agenda an advanced card likely is; the Corp
+            // scored 85% of the remotes the Runner let through with counters already showing.
+            root += card is null && advancement > 0 && server.Kind == ServerKind.Remote && context.Generation >= 27
+                ? 190 + (int)(inference * RunnerInference.AdvancedRootAgenda(context, server, index) switch { var (chance, value) => chance * Math.Max(0, value - 190) }
+                    // R06: a steal also denies the Corp the score an advanced card is a turn from; half an agenda's worth again.
+                    * AdvancedDenial)
+                : card is null && advancement == 0 && server.Kind == ServerKind.Remote && context.Generation >= 23
                 ? UnknownRemoteRoot(context, server, index, inference)
                 : card is null
                 ? 190 + (int)(inference * advancement * 200)
@@ -241,6 +247,9 @@ internal static class RunnerValues
         }
         return definition.Printed.CardClass == RuntimeCardClass.Asset ? 180 : 50;
     }
+
+    /// <summary>v32 (R06): an advanced remote agenda's worth with the score its steal denies the Corp.</summary>
+    private const double AdvancedDenial = 1.5;
 
     /// <summary>v30: a damage engine's worth before its damage, above an ordinary asset's 180.</summary>
     private const int EngineTrash = 400;

@@ -217,6 +217,12 @@ internal sealed class HeuristicContext
     }
 
     /// <summary>Score-race pressure from the opponent's points: 1 below 5, rising to 1.6 at 6 or more.</summary>
+    /// <summary>
+    /// Runner v31's generation: its tag rules (bot plan H3 batch 3) were level on the ladder and are v31's alone, not carried
+    /// into later versions.
+    /// </summary>
+    public const int TagGeneration = 26;
+
     public double OpponentScorePressure => Opponent.AgendaPoints switch
     {
         >= 6 => 1.6,
