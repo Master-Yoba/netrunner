@@ -254,6 +254,32 @@ public sealed class RunnerHeuristicPolicyTests
         Assert.Equal(0.5 * untracked, Chance(halfTrap), 6);
     }
 
+    /// <summary>
+    /// Runner v33 (NE15) and the review of #135: an asset holding credits is worth only what it holds after its next payout, a
+    /// campaign's at the Corp's turn begin as much as a paid withdrawal: on its last 3 nothing is denied; on 9, the 6 after it.
+    /// </summary>
+    [Theory]
+    [InlineData(3, 60)]
+    [InlineData(9, 160 + 6 * 90)]
+    public void AHostedCreditAssetIsWorthWhatItHoldsAfterItsNextPayout(int hosted, int worth)
+    {
+        CardDefinitionId campaign = new("test:campaign");
+        var catalog = new ScenarioCatalog(new CardEvaluationDescriptor(
+            new(campaign, PlayerSide.Corp, RuntimeCardClass.Asset, rezCost: 1, trashCost: 2),
+            new CardBehaviorDefinition(campaign, PlayerSide.Corp, triggers:
+                [new BehaviorTrigger("payout", OccurrenceKind.TurnBegin, TriggerMode.Mandatory, BehaviorTriggerScope.Controller, null,
+                    [new BehaviorInstruction(BehaviorInstructionKind.TakeHostedCredits, 3)])]),
+            null, null, null, null, null, [], false));
+        AgentFeatures features = ObservationReader.Read(Decision(new LegalAction(new("action:credit"), ActionKind.GainCredit, "ignored", new NoActionParameters())));
+        var card = new AgentCard
+        {
+            Id = "card:campaign", DefinitionId = campaign.Value, Rezzed = true,
+            Counters = [new AgentCounter("credit", CardCounterPurpose.HostedCredit, hosted, null)],
+        };
+
+        Assert.Equal(worth, RunnerValues.Trash(new HeuristicContext(features, catalog, RunnerPolicyProfiles.Create("standard", 54, RunnerHeuristicPolicy.V33), 28), card));
+    }
+
     private static Observation Decision(params LegalAction[] actions)
     {
         GameState state = GameState.CreateNew(54);

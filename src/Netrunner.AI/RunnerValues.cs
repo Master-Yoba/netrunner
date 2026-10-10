@@ -230,9 +230,15 @@ internal static class RunnerValues
         // Nebula to trash accessed cards, against 2.9 against LEO.
         if (hosted > 0 && context.Generation >= 28)
         {
-            int take = definition.Behavior?.PaidAbilities.SelectMany(ability => ability.Instructions)
-                .Where(instruction => instruction.Kind is BehaviorInstructionKind.TakeHostedCredits or BehaviorInstructionKind.TakeUpToHostedCredits)
-                .Select(instruction => instruction.Amount).DefaultIfEmpty(0).Max() ?? 0;
+            // The review of #135: a campaign's payout when the Corp's turn begins (Nico Campaign, Anthill Excavation Contract)
+            // is its next withdrawal as much as a paid one is (Regolith).
+            int take = definition.Behavior is { } payouts
+                ? payouts.PaidAbilities.SelectMany(ability => ability.Instructions)
+                    .Concat(payouts.Triggers.Where(trigger => trigger.Occurrence == OccurrenceKind.TurnBegin)
+                        .SelectMany(trigger => HeuristicContext.Flatten(trigger.Instructions)))
+                    .Where(instruction => instruction.Kind is BehaviorInstructionKind.TakeHostedCredits or BehaviorInstructionKind.TakeUpToHostedCredits)
+                    .Select(instruction => instruction.Amount).DefaultIfEmpty(0).Max()
+                : 0;
             int left = take > 0 ? Math.Max(0, hosted - take) : hosted;
             return left == 0 ? 60 : 160 + left * 90;
         }

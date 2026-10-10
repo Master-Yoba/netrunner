@@ -2143,3 +2143,7 @@ ambushes or a live steal-damage engine (PT09).
 **Reading.** The 800-deal Nebula gain was noise: one cell (MuslihaT against Nebula, about 200 games) carried it, and the
 1,600-deal ladder, which repeats those deals and adds as many, put every Nebula pairing level. A cell of a few hundred
 games at 800 deals is not evidence on its own; only the ladder's interval decides.
+
+**The review of #135.** Codex found that a campaign's payout when the Corp's turn begins (Nico Campaign, Anthill
+Excavation Contract) was not read as its next withdrawal, so v33 still counted all its credits as deniable; it now is,
+with a test. v33 is not the default, and its ladders above were read before this fix.
