@@ -2051,3 +2051,54 @@ Variant c is removed from v31. What loses the Nebula games is fast advance from 
 (Tomorrow's Headline) now counts toward a run's tags, and every tag choice (Funhouse's take a tag or end the run, its
 pay 4 or take a tag) prices the tag with the punishers' threat through `RunnerValues.TagRisk`. v31 is not the default,
 and its ladders above were read before these fixes; the next attempt measures v31 as it now stands.
+
+### H3 batch 4: Runner v32, advanced remote cards as agendas (10 October 2026)
+
+**Shipped: Runner v32 is the default.** It is built on v30, not v31: v31's tag rules (batch 3, level) are v31's alone
+(`HeuristicContext.TagGeneration`).
+
+**The diagnosis.** `remote-scored-uncontested` now records what the Runner faced at its last turn before the score. Over
+the 1,600 v30 games of batch 2's repeated ladder (2,584 such scores):
+
+| At the Runner's last turn before the score | Share |
+|---|---:|
+| The agenda showed advancement counters (1: 46%, 2: 29%, 3 or more: 10%) | 85% |
+| The Runner made no run at all that turn | 50% |
+| The remote had a single unrezzed ICE | 32% |
+| The Runner had 0 to 4 credits / 5 to 9 / 10 or more | 58% / 26% / 16% |
+
+v30 valued an advanced face-down card in a remote at 190 and 200 a counter (390 at one), against 860 for a known
+two-point agenda, though in three of the four box decks the only advanceable card in a remote is an agenda
+(MATCHUP_ZWICKY.md ZW07).
+
+**The change** (`RunnerValues.ServerV2`, `RunnerInference.AdvancedRootAgenda`; ZW05, LE15, R06). An advanced face-down
+card in a remote is worth 190 plus the chance an advanced card is an agenda (the agendas' share of the root cards that
+can be advanced: agendas, Urtica Cipher, Clearinghouse, by the tier's prior) times an agenda's worth over that, and
+variant b counts the score the steal denies the Corp: half that worth again (`AdvancedDenial` 1.5).
+
+| Variant | Box deals | Runner v32 − v30 |
+|---|---:|---:|
+| a: the agenda's worth | 400 | +14 [−21, +46] |
+| a | 800 | +15 [−7, +39] |
+| b: with the denied score | 800 | +24 [−1, +47] |
+| b | 1,600 | **+23 [+6, +40]**, separated |
+| b, Gateway | 240 | +16 [−27, +60], level |
+
+The 1,600-deal ladder was decided on before it ran (ship if its interval cleared zero), after the 800-deal one missed by
+one point; extending a ladder after a near miss raises the chance of a false gain somewhat, and the record says so. Its
+first 800 deals are the 800-deal ladder's, so the two are not independent. No errors in any of them.
+
+| Runner's win rate, 800 deals | Magdalene | MuslihaT | Topan | All, v32 | All, v30 |
+|---|---:|---:|---:|---:|---:|
+| LEO Glacier | 44% | 85% | 56% | **62%** | 56% |
+| Nebula Fast Advance | 21% | 45% | 46% | 37% | 34% |
+| PT Untaian Shell Game | 16% | 70% | 18% | 35% | 30% |
+| Zwicky Supermodernism | 21% | 48% | 24% | 31% | 30% |
+
+Lints a game, v30 against v32b on the 800-deal games: uncontested remote scores 1.62 to 1.39, banking turns 0.94 to 0.87,
+flatlines 0.22 to 0.20.
+
+Anchors (240 box deals): `standard` (Runner v32) − `standard-m5`, Corp +128 [66, 202], Runner +366 [304, 438]. Regret
+(bot-check, core held-out, teacher v3): Runner v32 0.0576 [0.0479, 0.0653] against v30's 0.0563, level within its
+interval; the suite's roots hold few advanced remotes for v32 to change. Puzzles: 28/29 box, 5/5 NSG core sets, as
+before.
