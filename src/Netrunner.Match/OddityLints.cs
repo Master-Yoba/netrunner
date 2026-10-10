@@ -253,6 +253,8 @@ public static class OddityLints
         private readonly Dictionary<CardInstanceId, (int Counters, int Rezzed, int Ice)> _agendaAtRunnerTurn = [];
         private int _runnerCreditsAtTurn;
         private bool _snapshotPending;
+        // Batch 6: the Corp's credits as the current run began.
+        private int _corpCreditsAtRun;
 
         /// <summary>Bot plan H1: the strategy guide's mistakes (docs/STRATEGY_FUNDAMENTALS.md).</summary>
         private void Guide(GameState before, LegalAction chosen, PlayerSide actor, GameState after, long sequence, int turn)
@@ -281,6 +283,7 @@ public static class OddityLints
             {
                 _runs.Add((started.AttackedServer, _runnerTurns));
                 _ranThisTurn = true;
+                _corpCreditsAtRun = Player(before, PlayerSide.Corp).Credits;
                 int grip = before.GetZone(ZoneKind.RunnerGrip).CardIds.Count;
                 _corpDealsDamage ??= before.Cards.Where(card => card.OwnerSide == PlayerSide.Corp).Select(card => card.DefinitionId).Distinct()
                     .Any(id => DealsDamage(definition.Behavior.TryGet(id, out CardBehaviorDefinition? behavior) ? behavior : null,
@@ -336,9 +339,19 @@ public static class OddityLints
             }
             foreach (CardInstanceId stolen in after.GetZone(ZoneKind.RunnerScore).CardIds.Except(before.GetZone(ZoneKind.RunnerScore).CardIds))
                 if (RootServer(before, stolen) is { Kind: ServerKind.Remote } remote)
+                {
+                    // Batch 6: how long it sat, and the ICE the Corp left unrezzed though it could pay for it as the run began.
+                    IReadOnlyList<CardInstanceId> ice = Zone(before, remote.Id, ZoneKind.ServerIce);
+                    int[] unrezzed = [.. ice.Where(id => !before.GetCard(id).Rezzed)
+                        .Select(id => definition.Runtime.TryGet(before.GetCard(id).DefinitionId, out CardRuntimeSpec spec) ? spec.RezCost ?? 0 : 0).Order()];
+                    int funds = _corpCreditsAtRun, affordable = 0;
+                    foreach (int cost in unrezzed)
+                        if (cost <= funds) { funds -= cost; affordable++; }
+                    string sat = _remoteAgendas.TryGetValue(stolen, out var placed) ? $"; installed {_runnerTurns - placed.RunnerTurn} Runner turns before" : "";
                     Report("agenda-stolen-from-remote", PlayerSide.Corp, sequence, turn,
-                        $"{Title(before, stolen)} ({before.GetCard(stolen).AdvancementCounters} counters) behind {Zone(before, remote.Id, ZoneKind.ServerIce).Count(id => before.GetCard(id).Rezzed)} rezzed of {Zone(before, remote.Id, ZoneKind.ServerIce).Count} ICE.",
+                        $"{Title(before, stolen)} ({before.GetCard(stolen).AdvancementCounters} counters) behind {ice.Count(id => before.GetCard(id).Rezzed)} rezzed of {ice.Count} ICE{sat}; the Corp had {_corpCreditsAtRun} credits as the run began, {unrezzed.Length} ICE left unrezzed, {affordable} of them affordable.",
                         once: false);
+                }
             if (before.Turn.ActiveSide == PlayerSide.Runner && after.Turn.ActiveSide != PlayerSide.Runner)
             {
                 PlayerState ended = Player(after, PlayerSide.Runner);
