@@ -344,6 +344,58 @@ public sealed class RunnerHeuristicPolicyTests
         Assert.Equal(flooded, CorpHeuristicPolicy.FloodedDraw(context) > 0);
     }
 
+    /// <summary>
+    /// Bot plan H3 batch 10: a punishing operation in the Corp identity's faction is evidence of one (Measured Response in a
+    /// Weyland deck); a neutral card, or one of another faction, isn't.
+    /// </summary>
+    [Theory]
+    [InlineData("weyland-consortium", "weyland-consortium", true)]
+    [InlineData("jinteki", "weyland-consortium", false)]
+    [InlineData("neutral-corp", "neutral-corp", false)]
+    public void ACardOfTheCorpIdentitysFactionIsInFaction(string identityFaction, string cardFaction, bool inFaction)
+    {
+        CardDefinitionId identity = new("test:identity");
+        CardDefinitionId operation = new("test:operation");
+        var catalog = new ScenarioCatalog(
+            new CardEvaluationDescriptor(new(identity, PlayerSide.Corp, RuntimeCardClass.Identity), null, null, null, null, null, null, [], false)
+            { Faction = identityFaction },
+            new CardEvaluationDescriptor(new(operation, PlayerSide.Corp, RuntimeCardClass.Operation, playCost: 5), null, null, null, null, null, null, [], false)
+            { Faction = cardFaction });
+        AgentFeatures read = ObservationReader.Read(Decision(new LegalAction(new("action:credit"), ActionKind.GainCredit, "ignored", new NoActionParameters())));
+        AgentFeatures features = read with { Board = read.Board with { CorpIdentity = [new AgentCard { Id = "card:identity", DefinitionId = identity.Value }] } };
+        var context = new HeuristicContext(features, catalog, RunnerPolicyProfiles.Create("standard", 54, RunnerHeuristicPolicy.V34), HeuristicContext.FactionGeneration);
+
+        catalog.TryGet(operation, out CardEvaluationDescriptor card);
+        Assert.Equal(inFaction, RunnerInference.InCorpFaction(context, card));
+    }
+
+    /// <summary>
+    /// Bot plan H3 batch 10: three different damage-dealing Corp cards seen make a damage deck, which may splash a punishing
+    /// operation (PT Untaian's Measured Response, out of faction); one or two are common in any deck.
+    /// </summary>
+    [Theory]
+    [InlineData(2, false)]
+    [InlineData(3, true)]
+    public void ThreeDamageCardsSeenMakeADamageDeck(int seen, bool damageDeck)
+    {
+        CardEvaluationDescriptor[] ice = [.. Enumerable.Range(0, 4).Select(index => new CardDefinitionId($"test:damage-ice-{index}")).Select(id =>
+            new CardEvaluationDescriptor(new(id, PlayerSide.Corp, RuntimeCardClass.Ice, rezCost: 2), null,
+                new(id, 0, IceType.Sentry, 2, [new DamageSubroutineSpec(DamageKind.Net, 1)], []), null, null, null, null, [], false))];
+        var catalog = new ScenarioCatalog(ice);
+        AgentFeatures read = ObservationReader.Read(Decision(new LegalAction(new("action:credit"), ActionKind.GainCredit, "ignored", new NoActionParameters())));
+        AgentFeatures features = read with
+        {
+            Board = read.Board with
+            {
+                Servers = [new("server:hq", ServerKind.Headquarters,
+                    [.. ice.Take(seen).Select((card, index) => new AgentCard { Id = $"card:ice-{index}", DefinitionId = card.Printed.DefinitionId.Value, Rezzed = true })], [])],
+            },
+        };
+        var context = new HeuristicContext(features, catalog, RunnerPolicyProfiles.Create("standard", 54, RunnerHeuristicPolicy.V34), HeuristicContext.FactionGeneration);
+
+        Assert.Equal(damageDeck, RunnerInference.DamageDeck(context));
+    }
+
     private static Observation Decision(params LegalAction[] actions)
     {
         GameState state = GameState.CreateNew(54);

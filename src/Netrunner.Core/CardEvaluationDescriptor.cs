@@ -26,4 +26,11 @@ public sealed record CardEvaluationDescriptor(
     AssetBehaviorSpec? Asset,
     AgendaBehaviorSpec? Agenda,
     IReadOnlyList<BehaviorInstructionKind> EffectKinds,
-    bool RequiresApproximateEvaluation);
+    bool RequiresApproximateEvaluation)
+{
+    /// <summary>
+    /// The printed faction (bot plan H3 batch 10), public on every card like its cost: a Runner reads the Corp's identity
+    /// and knows which of the pool's cards its deck is built around. Null where the catalog has no card data for it.
+    /// </summary>
+    public string? Faction { get; init; }
+}

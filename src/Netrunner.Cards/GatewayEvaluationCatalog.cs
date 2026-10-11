@@ -38,7 +38,8 @@ public sealed class GatewayEvaluationCatalog : ICardEvaluationCatalog
                 .Concat(definition.PaidAbilities.SelectMany(ability => ability.Instructions)))
                 .Select(instruction => instruction.Kind).Distinct().Order().ToArray();
             cards.Add(id, new(printed, definition, ice, breaker, runEvent, Copy(asset), Copy(agenda), Array.AsReadOnly(effects),
-                RequiresApproximateEvaluation: true));
+                RequiresApproximateEvaluation: true)
+            { Faction = Factions.Value.GetValueOrDefault(id.Value) });
         }
         _cards = new ReadOnlyDictionary<CardDefinitionId, CardEvaluationDescriptor>(cards);
         DefinitionIds = Array.AsReadOnly(cards.Keys.ToArray());
@@ -56,6 +57,14 @@ public sealed class GatewayEvaluationCatalog : ICardEvaluationCatalog
     public string Fingerprint { get; }
     public IReadOnlyCollection<CardDefinitionId> DefinitionIds { get; }
     public bool TryGet(CardDefinitionId definitionId, out CardEvaluationDescriptor descriptor) => _cards.TryGetValue(definitionId, out descriptor!);
+
+    /// <summary>The embedded cards' printed factions by code; empty where no card data is embedded.</summary>
+    private static readonly Lazy<IReadOnlyDictionary<string, string>> Factions = new(() =>
+        CardDataResource.TryLoadEmbedded(out _, out _)
+            ? CardDataResource.LoadEmbeddedPool().Cards.GroupBy(card => card.Code, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.First().Faction, StringComparer.Ordinal)
+            : new Dictionary<string, string>(StringComparer.Ordinal),
+        LazyThreadSafetyMode.ExecutionAndPublication);
 
     private static T? Copy<T>(T? value) where T : class => value is null ? null : EngineJson.Deserialize<T>(EngineJson.Serialize(value));
 

@@ -195,6 +195,13 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// there however little of it the tracker knows (NE12).
     /// </summary>
     public const string V33 = "runner-heuristic-v33";
+    /// <summary>
+    /// V32 (not V33, level) against the first Measured Response (bot plan H3 batch 10; MATCHUP_PT_UNTAIAN.md PT16 to PT20): 92%
+    /// of the Runner's flatlines to it came from a copy it hadn't seen, so its grip guard never woke. A punishing operation in
+    /// the Corp identity's faction is now evidence, as likely as a seen copy; and a run whose steal would raise the threat
+    /// level to arm one pays for it.
+    /// </summary>
+    public const string V34 = "runner-heuristic-v34";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
     /// V18 is V15 with only the reinstall fix (no install over its own copy or a second console), a fix that can only remove
@@ -218,22 +225,22 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// with, so the shipped Corp planner plays as it did.
     /// </summary>
     public const string LatestHeuristic = V7;
-    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25, V26, V27, V28, V29, V30, V31, V32, V33];
+    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25, V26, V27, V28, V29, V30, V31, V32, V33, V34];
 
     /// <summary>Whether the version's memory of a face-down root card survives installs in that root (v20).</summary>
-    public static bool KeepsRootMemoryThroughInstalls(string version) => version is V20 or V21 or V22 or V23 or V24 or V25 or V26 or V27 or V28 or V29 or V30 or V31 or V32 or V33;
+    public static bool KeepsRootMemoryThroughInstalls(string version) => version is V20 or V21 or V22 or V23 or V24 or V25 or V26 or V27 or V28 or V29 or V30 or V31 or V32 or V33 or V34;
 
     /// <summary>Whether the version keeps the A9a tracker of the Corp's hidden cards (v21).</summary>
-    public static bool UsesTracker(string version) => version is V21 or V22 or V23 or V24 or V25 or V26 or V27 or V28 or V29 or V30 or V31 or V32 or V33;
+    public static bool UsesTracker(string version) => version is V21 or V22 or V23 or V24 or V25 or V26 or V27 or V28 or V29 or V30 or V31 or V32 or V33 or V34;
 
     public RunnerHeuristicPolicy() : this(PolicyVersion) { }
 
     public RunnerHeuristicPolicy(string version)
     {
-        if (version is not (V27 or V28 or V29 or V30 or V31 or V32 or V33))
-            throw new ArgumentException($"The live Runner policy is {V27} to {V33}; '{version}' is {nameof(LegacyRunnerPolicy)}.", nameof(version));
+        if (version is not (V27 or V28 or V29 or V30 or V31 or V32 or V33 or V34))
+            throw new ArgumentException($"The live Runner policy is {V27} to {V34}; '{version}' is {nameof(LegacyRunnerPolicy)}.", nameof(version));
         Version = version;
-        _contextGeneration = version switch { V33 => 28, V32 => 27, V31 => 26, V30 => 25, V29 => 24, V28 => 23, _ => 22 };
+        _contextGeneration = version switch { V34 => HeuristicContext.FactionGeneration, V33 => HeuristicContext.NebulaGeneration, V32 => 27, V31 => 26, V30 => 25, V29 => 24, V28 => 23, _ => 22 };
     }
 
     /// <summary>
@@ -297,7 +304,7 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
         return features.Actions.Select(action => new AgentCandidate(action.Id,
             !preferredIds.Contains(action.Id) ? new(int.MinValue, 0, "payment/prefer-expiring-run-credits")
             : encounter.TryGetValue(action.Id, out AgentUtility? plan) ? plan
-            : budget.TrySpend(8 + features.VisibleCards().Count() * 2) ? Evaluate(context, action)
+            : budget.TrySpend(8 + features.VisibleCards().Count() * 2) ? GripFloor(context, action, Evaluate(context, action))
             : Fallback(features, action))).ToImmutableArray();
     }
 
@@ -357,6 +364,33 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
         if (context.Features.Board.TurnFacts?.Runner.ThisTurn?.SuccessfulRun != true) return 0;
         (int grip, double chance) = RunnerInference.Punishers(context);
         return grip > context.Features.Hand.Length ? (int)Math.Min(700, chance * PunishedGame) : 0;
+    }
+
+    /// <summary>
+    /// v34 (bot plan H3 batch 10; MATCHUP_PT_UNTAIAN.md PT05, PT17): after a successful run, a card played or installed from
+    /// the grip that leaves it, with the clicks left to draw, below what the Corp's punishing operation needs pays for the
+    /// risk; v26 only rewarded the draw, so the Runner drew to four and then played the fourth card away.
+    /// </summary>
+    private static AgentUtility GripFloor(HeuristicContext context, AgentAction action, AgentUtility utility)
+    {
+        if (context.Generation < HeuristicContext.FactionGeneration || context.Features.Decision?.Kind != DecisionKind.TurnAction
+            || context.Features.Board.TurnFacts?.Runner.ThisTurn?.SuccessfulRun != true) return utility;
+        string? card = action.Parameters switch
+        {
+            PlayCardParameters play => play.CardId.Value,
+            InstallCardParameters install => install.CardId.Value,
+            _ => null,
+        };
+        if (card is null || !context.Features.Hand.Any(held => held.Id == card) || !RunnerInference.PunisherEvidence(context)) return utility;
+        (int need, double chance) = RunnerInference.Punishers(context);
+        int hand = context.Features.Hand.Length;
+        // A card that also loses clicks (Creative Commission) leaves fewer to draw with.
+        int lost = context.Definition(context.Features.Hand.First(held => held.Id == card))?.Behavior is { } behavior
+            ? HeuristicContext.Flatten(behavior.Instructions).Where(instruction => instruction.Kind == BehaviorInstructionKind.LoseClicks).Sum(instruction => instruction.Amount)
+            : 0;
+        int clicksAfter = Math.Max(0, context.Self.Clicks - 1 - lost);
+        if (need == 0 || need > hand + context.Self.Clicks || need <= hand - 1 + clicksAfter) return utility;
+        return utility with { Score = utility.Score - (int)Math.Min(1200, chance * PunishedGame), Reason = utility.Reason + "+grip-floor" };
     }
 
     /// <summary>v26: what a flatline to a punishing operation costs, before the chance the Corp holds one.</summary>
