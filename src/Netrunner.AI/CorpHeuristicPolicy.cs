@@ -208,10 +208,10 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     /// Hard it was level with V25 on the bot ladder. V27 (bot loop 1, 3 October) is the default while the loop measures it.
     /// V28 (loop 1's deferred fixes, 4 October) is the default loop 2 played against. V29 (bot loop 2, 4 October) is the
     /// default until V30. V31 (bot plan S3) is V30 as the live policy, identical game by game. V32 (agendas held in a flooded
-    /// HQ) was 50 Elo worse. V33 (bot plan H3 batch 7, the scoring server protected first) is: +26 Elo [5, 48] over V31 on
-    /// 800 Core Battle Box deals.
+    /// HQ) was 50 Elo worse. V33 (bot plan H3 batch 7, the scoring server protected first) is not: +16 Elo [-2, 30] over V31
+    /// on 1,600 Core Battle Box deals once the review of #137's fixes were in.
     /// </remarks>
-    public const string PolicyVersion = V33;
+    public const string PolicyVersion = V31;
     /// <summary>The latest version that never plans: the planner's model of the Corp.</summary>
     public const string LatestHeuristic = V8;
     public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25, V26, V27, V28, V29, V30, V31, V32, V33];

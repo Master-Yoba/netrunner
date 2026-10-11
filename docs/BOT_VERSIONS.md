@@ -2185,7 +2185,8 @@ tracks every agenda that reaches a remote's root, with a saved-game test (`agend
 
 ### H3 batch 7: Corp v33, the scoring server protected first (11 October 2026)
 
-**Shipped: Corp v33 is the default.** It is built on Corp v31, not v32 (batch 6, worse).
+**Not shipped: level once the review's fixes were in** (see the review below). The default stays Corp v31; v33 stays
+constructible (`standard-c33`). It is built on Corp v31, not v32 (batch 6, worse).
 
 **The change** (the guide's C01, C02; `CorpHeuristicPolicy.Install`). v31's flood clause still lets an agenda out of an
 HQ holding two or more, but not into a server the Runner gets into next turn while HQ holds ICE the Corp can put there
@@ -2205,5 +2206,23 @@ that delaying the agenda alone (v32) loses 50 Elo; this delays it only when the 
 **Test:** `CorpCodexV20Tests.TheScoringServerIsProtectedBeforeTheAgendaGoesIn`, from a box ladder game (LEO Glacier
 against Magdalene, action 722): v31 installs the agenda behind one ICE, v33 installs ICE.
 
-A new teacher, as with Runner v30: labels made from now on model Corp v33 and are named by their versions; the stored v2
-and v3 labels keep their names.
+
+**The review of #137.** Codex found four gaps, all valid:
+
+- v33's affordability check read the ICE's printed rez cost, not what the cards in play add to it (Fransofia Ward's +1);
+  it now counts them, with a test (`AnIceRezModifierInPlayCounts`).
+- The agenda waited for any remote the Runner gets into, but the layer's bonus went only to an empty root, so a remote
+  holding an upgrade (LEO's Manegarm, Mercia, Anoetic Void) got the delay without the layer; the bonus now covers every
+  remote without an agenda in its root.
+- A bot behaviour change needs the per-slice fuzz on every pool, and a new policy version the budget-scaling ladder
+  (AGENTS.md); both had been skipped here and, before, for Runner v32 (batch 4). They now ran on the current defaults
+  (Corp v33, Runner v32): the fuzz, `--games-per-pairing 8 --verify-replays-every 8`, every game terminal on every pool
+  (official 24, Gateway 288, Elevation 1,152, Gateway–Elevation 288, NSG core sets 2,592; 543 replays verified); the
+  budget-scaling ladder, `standard-x4` − `standard-x1` on 240 box deals, Corp −11 [−49, +31], Runner +21 [−21, +65], flat
+  as in S0.3.
+
+With the fixes, Corp v33 − v31 on the box: **+11 [−10, +37]** at 800 deals, and **+16 [−2, +30]** at 1,600 (the rule,
+decided before the run, was to keep v33 the default only if that interval cleared zero). It did not, so the default went
+back to Corp v31. The measured gain was the pre-fix v33's (+26 [+5, +48] at 800), and that version carried the
+upgrade-remote bug; it is not shipped knowingly. The direction holds (remote steals fell 15%), and the next attempt
+starts from the fixed v33.
