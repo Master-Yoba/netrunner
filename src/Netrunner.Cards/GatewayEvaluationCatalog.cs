@@ -38,8 +38,7 @@ public sealed class GatewayEvaluationCatalog : ICardEvaluationCatalog
                 .Concat(definition.PaidAbilities.SelectMany(ability => ability.Instructions)))
                 .Select(instruction => instruction.Kind).Distinct().Order().ToArray();
             cards.Add(id, new(printed, definition, ice, breaker, runEvent, Copy(asset), Copy(agenda), Array.AsReadOnly(effects),
-                RequiresApproximateEvaluation: true)
-            { Faction = Factions.Value.GetValueOrDefault(id.Value) });
+                RequiresApproximateEvaluation: true));
         }
         _cards = new ReadOnlyDictionary<CardDefinitionId, CardEvaluationDescriptor>(cards);
         DefinitionIds = Array.AsReadOnly(cards.Keys.ToArray());
@@ -57,6 +56,7 @@ public sealed class GatewayEvaluationCatalog : ICardEvaluationCatalog
     public string Fingerprint { get; }
     public IReadOnlyCollection<CardDefinitionId> DefinitionIds { get; }
     public bool TryGet(CardDefinitionId definitionId, out CardEvaluationDescriptor descriptor) => _cards.TryGetValue(definitionId, out descriptor!);
+    public string? FactionOf(CardDefinitionId definitionId) => _cards.ContainsKey(definitionId) ? Factions.Value.GetValueOrDefault(definitionId.Value) : null;
 
     /// <summary>The embedded cards' printed factions by code; empty where no card data is embedded.</summary>
     private static readonly Lazy<IReadOnlyDictionary<string, string>> Factions = new(() =>

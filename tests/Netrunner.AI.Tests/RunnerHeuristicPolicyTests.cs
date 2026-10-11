@@ -357,10 +357,11 @@ public sealed class RunnerHeuristicPolicyTests
         CardDefinitionId identity = new("test:identity");
         CardDefinitionId operation = new("test:operation");
         var catalog = new ScenarioCatalog(
-            new CardEvaluationDescriptor(new(identity, PlayerSide.Corp, RuntimeCardClass.Identity), null, null, null, null, null, null, [], false)
-            { Faction = identityFaction },
-            new CardEvaluationDescriptor(new(operation, PlayerSide.Corp, RuntimeCardClass.Operation, playCost: 5), null, null, null, null, null, null, [], false)
-            { Faction = cardFaction });
+            new CardEvaluationDescriptor(new(identity, PlayerSide.Corp, RuntimeCardClass.Identity), null, null, null, null, null, null, [], false),
+            new CardEvaluationDescriptor(new(operation, PlayerSide.Corp, RuntimeCardClass.Operation, playCost: 5), null, null, null, null, null, null, [], false))
+        {
+            Factions = { [identity.Value] = identityFaction, [operation.Value] = cardFaction },
+        };
         AgentFeatures read = ObservationReader.Read(Decision(new LegalAction(new("action:credit"), ActionKind.GainCredit, "ignored", new NoActionParameters())));
         AgentFeatures features = read with { Board = read.Board with { CorpIdentity = [new AgentCard { Id = "card:identity", DefinitionId = identity.Value }] } };
         var context = new HeuristicContext(features, catalog, RunnerPolicyProfiles.Create("standard", 54, RunnerHeuristicPolicy.V34), HeuristicContext.FactionGeneration);
@@ -421,5 +422,7 @@ public sealed class RunnerHeuristicPolicyTests
         public IReadOnlyCollection<CardDefinitionId> DefinitionIds => _definitions.Keys;
         public bool TryGet(CardDefinitionId definitionId, out CardEvaluationDescriptor descriptor) =>
             _definitions.TryGetValue(definitionId, out descriptor!);
+        public Dictionary<string, string> Factions { get; } = [];
+        public string? FactionOf(CardDefinitionId definitionId) => Factions.GetValueOrDefault(definitionId.Value);
     }
 }

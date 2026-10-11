@@ -488,8 +488,10 @@ internal static class RunnerInference
     public static bool InCorpFaction(HeuristicContext context, CardEvaluationDescriptor card)
     {
         ArgumentNullException.ThrowIfNull(card);
-        string? faction = context.Features.Board.CorpIdentity.Select(identity => context.Definition(identity)?.Faction).FirstOrDefault(value => value is not null);
-        return faction is not null && !faction.StartsWith("neutral", StringComparison.Ordinal) && string.Equals(card.Faction, faction, StringComparison.Ordinal);
+        string? faction = context.Features.Board.CorpIdentity.Select(identity => context.Catalog.FactionOf(new CardDefinitionId(identity.DefinitionId)))
+            .FirstOrDefault(value => value is not null);
+        return faction is not null && !faction.StartsWith("neutral", StringComparison.Ordinal)
+            && string.Equals(context.Catalog.FactionOf(card.Printed.DefinitionId), faction, StringComparison.Ordinal);
     }
 
     /// <summary>
