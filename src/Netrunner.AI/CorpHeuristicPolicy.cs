@@ -343,10 +343,11 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     /// <summary>
     /// v34 (bot plan H3 batch 8, the guide's C13): with three agendas or more in a normal-sized HQ, an optional draw only
     /// thickens the flood a Runner's HQ access feeds on, so it falls below a basic credit (the Corp drew into a flooded HQ
-    /// 0.55 times a game).
+    /// 0.55 times a game). A larger HQ raises the threshold by its extra size (C13's hand-size modifiers).
     /// </summary>
-    private static int FloodedDraw(HeuristicContext context) =>
-        context.Configuration.PolicyVersion == V34 && context.AgendaCount >= 3 ? context.DrawValue + context.CreditValue : 0;
+    internal static int FloodedDraw(HeuristicContext context) =>
+        context.Configuration.PolicyVersion == V34 && context.AgendaCount >= 3 + Math.Max(0, (context.Self.MaximumHandSize ?? 5) - 5)
+            ? context.DrawValue + context.CreditValue : 0;
 
     private static AgentUtility Mulligan(HeuristicContext context, NumberChoiceParameters choice)
     {

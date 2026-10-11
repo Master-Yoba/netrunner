@@ -311,6 +311,39 @@ public sealed class RunnerHeuristicPolicyTests
             CorpPolicyProfiles.Create("standard", 54, CorpHeuristicPolicy.V33), 25)));
     }
 
+    /// <summary>
+    /// The review of #138: Corp v34's flood threshold is three agendas in a five-card HQ, and a larger HQ (Precision Design,
+    /// Superconducting Hub) raises it by its extra size.
+    /// </summary>
+    [Theory]
+    [InlineData(5, 3, true)]
+    [InlineData(6, 3, false)]
+    [InlineData(6, 4, true)]
+    [InlineData(7, 4, false)]
+    public void TheFloodedDrawThresholdFollowsTheHqSize(int maximumHandSize, int agendas, bool flooded)
+    {
+        CardDefinitionId agendaId = new("test:agenda");
+        var catalog = new ScenarioCatalog(new CardEvaluationDescriptor(
+            new(agendaId, PlayerSide.Corp, RuntimeCardClass.Agenda, agendaPoints: 2, advancementRequirement: 3),
+            null, null, null, null, null, new(agendaId, 2), [], false));
+        AgentFeatures read = ObservationReader.Read(Decision(new LegalAction(new("action:draw"), ActionKind.DrawCard, "ignored", new NoActionParameters())));
+        AgentFeatures features = read with
+        {
+            Side = PlayerSide.Corp,
+            PrivateCards = new AgentPrivateCards
+            {
+                Hand = [.. Enumerable.Range(0, agendas).Select(index => new AgentCard { Id = $"card:agenda-{index}", DefinitionId = agendaId.Value })],
+            },
+            Board = read.Board with
+            {
+                Players = read.Board.Players with { Corp = read.Board.Players.Corp with { MaximumHandSize = maximumHandSize } },
+            },
+        };
+
+        var context = new HeuristicContext(features, catalog, CorpPolicyProfiles.Create("standard", 54, CorpHeuristicPolicy.V34), 25);
+        Assert.Equal(flooded, CorpHeuristicPolicy.FloodedDraw(context) > 0);
+    }
+
     private static Observation Decision(params LegalAction[] actions)
     {
         GameState state = GameState.CreateNew(54);
