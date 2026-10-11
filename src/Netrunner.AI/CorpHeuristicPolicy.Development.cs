@@ -47,6 +47,14 @@ public sealed partial class CorpHeuristicPolicy
             if (FreeIceInstalls(context) >= context.Features.Hand.Count(card => context.Definition(card)?.Ice is not null))
                 score -= 100 + install.CreditCost * context.CreditValue;
             if (context.Self.Credits - install.CreditCost < ice.RezCost) score -= 200;
+            // v33 (C01, C02): the layer an agenda waiting in HQ is waiting for, on the empty remote the Runner gets into.
+            // The review of #137: on any remote without an agenda in its root (an upgrade may be there), the destinations the
+            // agenda waits for, and only while its rez, modifiers included, is affordable.
+            if (context.Configuration.PolicyVersion == V33 && !install.CreateNewRemote && server is { Kind: ServerKind.Remote }
+                && !server.Root.Any(value => context.Definition(value)?.Agenda is not null)
+                && context.AgendaCount > 0 && context.Self.Credits - install.CreditCost >= ice.RezCost + IceRezModifier(context)
+                && RunnerGetsIn(context, server, 0))
+                score += ProtectionBonus;
         }
         else if (definition.Agenda is not null)
         {
@@ -108,6 +116,13 @@ public sealed partial class CorpHeuristicPolicy
                     // taken outright, so HQ is the safer place until agendas fill most of it (Off the Books behind a
                     // lone Kessleroid against Principia, two agendas in a hand of five).
                     || context.AgendaCount * 10 < context.Features.Hand.Length * 6);
+            // v33 (bot plan H3 batch 7, the guide's C01, C02): a flooded HQ still lets an agenda out, but not into a server the
+            // Runner gets into while the Corp holds ICE it can put there and rez: the ICE goes in this turn and the agenda
+            // behind it the next (54% of the remote steals were behind one rezzed ICE, often from a Corp on 10 credits or more).
+            if (!agendaWaits && context.Configuration.PolicyVersion == V33 && !scoreableNow && !nakedAgenda && server is not null
+                && ProtectionInHand(context, server)
+                && RunnerGetsIn(context, server, install.CreditCost + definition.Printed.AdvancementRequirement))
+                agendaWaits = true;
         }
         else if (definition.Printed.CardClass == RuntimeCardClass.Asset)
         {
@@ -133,6 +148,24 @@ public sealed partial class CorpHeuristicPolicy
             return new(-1, score, "development/archives-protects-nothing", true, new("install", null, null, install.CardId.Value));
         return Value(score, "development/destination-minus-replacement-value", approximate: true, objective: new("install", null, null, install.CardId.Value));
     }
+
+    /// <summary>v33: whether HQ holds ICE the Corp can install on <paramref name="server"/> now and still rez.</summary>
+    private static bool ProtectionInHand(HeuristicContext context, AgentServer server) => context.Self.Clicks >= 1
+        && context.Features.Hand.Any(card => context.Definition(card)?.Ice is { } ice
+            && context.Self.Credits >= server.Ice.Length + ice.RezCost + IceRezModifier(context));
+
+    /// <summary>
+    /// v33 (the review of #137): what the cards in play add to an ICE's rez cost (Fransofia Ward's +1), the rezzed Corp cards'
+    /// and the Runner's installed ones' modifiers, so a layer is counted affordable only if its rez is.
+    /// </summary>
+    internal static int IceRezModifier(HeuristicContext context) => context.Features.Board.Servers.SelectMany(server => server.Root.Concat(server.Ice))
+        .OfType<AgentCard>().Where(card => card.Rezzed == true)
+        .Concat(context.Features.Board.RunnerRig).Concat(context.Features.Board.RunnerIdentity).Concat(context.Features.Board.CorpIdentity)
+        .SelectMany(card => context.Definition(card)?.Behavior?.CostModifiers ?? [])
+        .Where(modifier => modifier.Kind == BehaviorCostModifierKind.IceRezCreditCost).Sum(modifier => modifier.Delta);
+
+    /// <summary>v33: what the layer an agenda waits for is worth, above an ordinary remote ICE's place.</summary>
+    private const int ProtectionBonus = 300;
 
     /// <summary>
     /// v8: how well a server protects an agenda, from the whole-run model (A4a) run

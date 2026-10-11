@@ -2182,3 +2182,47 @@ install (C01, C02: a second layer when the Corp is rich, as LEO was); that is th
 **The review of #136.** Codex found that an agenda a card's effect puts in a remote (Humanoid Resources, in the LEO and
 Zwicky lists) was never tracked, so its steal had no residence time (the 3.5% of steals without one above); the lint now
 tracks every agenda that reaches a remote's root, with a saved-game test (`agenda-installed-by-effect`).
+
+### H3 batch 7: Corp v33, the scoring server protected first (11 October 2026)
+
+**Not shipped: level once the review's fixes were in** (see the review below). The default stays Corp v31; v33 stays
+constructible (`standard-c33`). It is built on Corp v31, not v32 (batch 6, worse).
+
+**The change** (the guide's C01, C02; `CorpHeuristicPolicy.Install`). v31's flood clause still lets an agenda out of an
+HQ holding two or more, but not into a server the Runner gets into next turn while HQ holds ICE the Corp can put there
+and rez (`ProtectionInHand`); that agenda waits a turn, and the ICE on the empty remote the Runner gets into gains 300
+(`ProtectionBonus`), so the protection it waits for goes in. Without such ICE, v31's tempo stands. Batch 6 had shown
+that delaying the agenda alone (v32) loses 50 Elo; this delays it only when the layer can go in now.
+
+| | Corp v33 − v31 |
+|---|---:|
+| Box, 800 deals | **+26 Elo [+5, +48]**, separated; 9 of the 12 Corp pairings lean v33's way |
+| Gateway, 240 deals | +16 [−19, +54], level |
+| Remote steals, 1,600 Corp games each | 1,268 to 1,082 (−15%) |
+| Anchors (240 box deals, `standard` − `standard-m5`) | Corp +152 [52, 258], Runner +333 [233, 446] |
+| Regret (bot-check, core held-out, teacher v3) | 0.0579 to 0.0569, level within the interval |
+| Puzzles | 28/29 box, 5/5 NSG core sets, as before |
+
+**Test:** `CorpCodexV20Tests.TheScoringServerIsProtectedBeforeTheAgendaGoesIn`, from a box ladder game (LEO Glacier
+against Magdalene, action 722): v31 installs the agenda behind one ICE, v33 installs ICE.
+
+
+**The review of #137.** Codex found four gaps, all valid:
+
+- v33's affordability check read the ICE's printed rez cost, not what the cards in play add to it (Fransofia Ward's +1);
+  it now counts them, with a test (`AnIceRezModifierInPlayCounts`).
+- The agenda waited for any remote the Runner gets into, but the layer's bonus went only to an empty root, so a remote
+  holding an upgrade (LEO's Manegarm, Mercia, Anoetic Void) got the delay without the layer; the bonus now covers every
+  remote without an agenda in its root.
+- A bot behaviour change needs the per-slice fuzz on every pool, and a new policy version the budget-scaling ladder
+  (AGENTS.md); both had been skipped here and, before, for Runner v32 (batch 4). They now ran on the current defaults
+  (Corp v33, Runner v32): the fuzz, `--games-per-pairing 8 --verify-replays-every 8`, every game terminal on every pool
+  (official 24, Gateway 288, Elevation 1,152, Gateway–Elevation 288, NSG core sets 2,592; 543 replays verified); the
+  budget-scaling ladder, `standard-x4` − `standard-x1` on 240 box deals, Corp −11 [−49, +31], Runner +21 [−21, +65], flat
+  as in S0.3.
+
+With the fixes, Corp v33 − v31 on the box: **+11 [−10, +37]** at 800 deals, and **+16 [−2, +30]** at 1,600 (the rule,
+decided before the run, was to keep v33 the default only if that interval cleared zero). It did not, so the default went
+back to Corp v31. The measured gain was the pre-fix v33's (+26 [+5, +48] at 800), and that version carried the
+upgrade-remote bug; it is not shipped knowingly. The direction holds (remote steals fell 15%), and the next attempt
+starts from the fixed v33.
