@@ -2256,3 +2256,8 @@ the obvious next step.
 pool (official 24, Gateway 288, Elevation 1,152, Gateway–Elevation 288, NSG core sets 2,592; 543 replays verified). The
 budget-scaling ladder, `standard-x4` − `standard-x1` on 240 box deals: Corp −20 [−53, +21], Runner +15 [−19, +61], flat as
 in S0.3 and batch 7.
+
+**The review of #138.** Codex found one gap, valid: the flood threshold was three agendas whatever the HQ's size, where
+the guide's C13 says hand-size modifiers change it. A larger HQ (Precision Design, Superconducting Hub) now raises it by
+its extra size, with a test (`TheFloodedDrawThresholdFollowsTheHqSize`). Only the NSG core-sets decks hold those cards,
+so the box and Gateway ladders above are unchanged; the NSG core-sets fuzz ran again on the fix.
