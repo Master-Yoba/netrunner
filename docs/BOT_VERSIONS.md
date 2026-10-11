@@ -2261,3 +2261,78 @@ in S0.3 and batch 7.
 the guide's C13 says hand-size modifiers change it. A larger HQ (Precision Design, Superconducting Hub) now raises it by
 its extra size, with a test (`TheFloodedDrawThresholdFollowsTheHqSize`). Only the NSG core-sets decks hold those cards,
 so the box and Gateway ladders above are unchanged; the NSG core-sets fuzz ran again on the fix.
+
+### H3 batch 9: Corp v35, the planner's flooded draws (11 October 2026)
+
+**Not shipped: level.** The default stays Corp v34; v35 stays constructible (`standard-c35`).
+
+**The change.** v34 still drew into a flooded HQ 458 times in 3,200 box games. At those decisions the heuristic ranked
+the draw below a credit (−45 against +45 at both probed decisions), but the turn planner's rollouts, whose end-of-turn evaluation values a card
+in HQ and can't see the flood, lifted it about 120 points above the credit. v35 puts the flooded draw a priority band
+below every other choice (`economy/no-draw-into-flooded-hq`), so the planner can no longer prefer it; it stays the choice
+of last resort, and a draw from a near-empty R&D keeps its own guard.
+
+| | Corp v35 − v34 |
+|---|---:|
+| Box, 1,600 deals | **+3 Elo [−11, +20]**, level; Corp wins 62% each |
+| Basic draws with 3+ agendas in HQ, 3,200 Corp games each | 532 to 102 (−81%) |
+| Remote steals, 3,200 Corp games each | 2,282 to 2,264, level |
+
+The rule, decided before the run, was to ship v35 only if the interval cleared zero; it did not. The planner's extra
+draws weren't costing games measurably; at both decisions probed the Corp was rich (a credit worth only 45), where a
+card in HQ is about as good as a credit.
+
+**Test:** `CorpCodexV20Tests.ThePlannerDrawsNoMoreCardsIntoAFloodedHq`, from a box ladder game (LEO Glacier against
+Muslihat, actions 103 and 182): v34's planner draws with three agendas in HQ, v35 doesn't.
+
+**Lint (C23).** `corp-keeps-flooded-opening`, the Corp keeping a first hand with three agendas or more: 16 in 3,200 box
+games (0.5%), too rare for a policy change to show on a ladder, so the guide's C23 stays unencoded.
+
+### H3 batch 10: Runner v34, the first Measured Response (12 October 2026)
+
+**Not shipped: level.** The default stays Runner v32; v34 stays constructible (`standard-r34`).
+
+**The diagnosis.** `ai-runner-diagnosis` put 7% of the Runner's games (234 of 3,200, v32 on the box) down to a flatline
+to Measured Response (4 meat damage unless the Runner pays 8, at threat 4). A replay of all 468 (both seats' Runners):
+
+| How the threat reached 4 | Deaths | Measured Response seen before |
+|---|---:|---:|
+| Already at 4 when the Runner's turn began | 292 | 24 |
+| The Runner's own steal that turn (PT16) | 132 | 14 |
+| The Corp scored to 4 before playing it | 44 | 0 |
+
+In 430 of them (92%) it was the first copy the Runner met, and v26's grip guard (`Cushion`, the end-of-turn draw) only
+wakes on evidence: the list (Hard) or a seen copy. Zwicky (Weyland) dealt 264 of the deaths, PT Untaian (Jinteki,
+splashing two) 204; at death the Runner held 3 cards or fewer with under 8 credits in all but a few.
+
+**The change** (MATCHUP_PT_UNTAIAN.md PT05, PT16, PT17):
+
+- The evaluation catalog answers each card's printed faction (`FactionOf`, outside its fingerprint), public like its cost. A punishing operation in the Corp
+  identity's faction is evidence, as likely as a seen copy (Zwicky's).
+- A Corp that has shown three different damage-dealing cards is a damage deck, evidence too (Untaian has ten such cards;
+  LEO two, Nebula one).
+- After a successful run, a card played or installed from the grip that leaves it, with the clicks left to draw, below
+  what the operation needs pays for the risk (v26 only rewarded the draw: a Zwicky game drew to four, then played
+  Creative Commission, which also loses the last click).
+- A run whose steal would raise the threat level to arm the operation pays for it, weighted by the steal's chance.
+
+| | Runner v34 − v32 |
+|---|---:|
+| Box, 1,600 deals | **+6 Elo [−11, +24]**, level; Runner wins 38% to 39% |
+| Flatlines to Measured Response, 3,200 Runner games each | 232 to 168 (−28%) |
+| Losses to agendas | 42% to 44% |
+| Untaian / Zwicky win rate, 800 games each | 30.0% to 32.2% / 29.8% to 31.1% |
+
+The rule, decided before the run, was to ship v34 only if the interval cleared zero; it did not. The deaths it saved
+mostly became agenda losses: at threat 4 the Corp is usually a score from winning, so the flatline was how a lost game
+ended, not why. The damage-deck evidence also comes late against Untaian, whose early deaths (turns 2 to 4) precede
+three damage cards.
+
+**Tests:** `RunnerPunisherV34Tests.TheGripStaysAboveMeasuredResponseInAWeylandGame` (a box ladder game, Zwicky against
+Magdalene, action 379: v32 plays Creative Commission and dies, v34 doesn't); `ACardOfTheCorpIdentitysFactionIsInFaction`;
+`ThreeDamageCardsSeenMakeADamageDeck`.
+
+**The review of #139.** Codex found one gap, valid: the grip floor priced every played card as one card fewer, so a draw
+event (VRcation's four, Ritual) that refills the grip could be refused as a card spent. It now counts what a played card
+draws as well as the clicks it loses, with a test (`TheGripFloorCountsAPlayedCardsDrawsAndLostClicks`). v34 isn't the
+default, so its ladder wasn't run again.

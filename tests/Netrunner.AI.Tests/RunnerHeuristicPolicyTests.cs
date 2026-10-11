@@ -344,6 +344,87 @@ public sealed class RunnerHeuristicPolicyTests
         Assert.Equal(flooded, CorpHeuristicPolicy.FloodedDraw(context) > 0);
     }
 
+    /// <summary>
+    /// Bot plan H3 batch 10: a punishing operation in the Corp identity's faction is evidence of one (Measured Response in a
+    /// Weyland deck); a neutral card, or one of another faction, isn't.
+    /// </summary>
+    [Theory]
+    [InlineData("weyland-consortium", "weyland-consortium", true)]
+    [InlineData("jinteki", "weyland-consortium", false)]
+    [InlineData("neutral-corp", "neutral-corp", false)]
+    public void ACardOfTheCorpIdentitysFactionIsInFaction(string identityFaction, string cardFaction, bool inFaction)
+    {
+        CardDefinitionId identity = new("test:identity");
+        CardDefinitionId operation = new("test:operation");
+        var catalog = new ScenarioCatalog(
+            new CardEvaluationDescriptor(new(identity, PlayerSide.Corp, RuntimeCardClass.Identity), null, null, null, null, null, null, [], false),
+            new CardEvaluationDescriptor(new(operation, PlayerSide.Corp, RuntimeCardClass.Operation, playCost: 5), null, null, null, null, null, null, [], false))
+        {
+            Factions = { [identity.Value] = identityFaction, [operation.Value] = cardFaction },
+        };
+        AgentFeatures read = ObservationReader.Read(Decision(new LegalAction(new("action:credit"), ActionKind.GainCredit, "ignored", new NoActionParameters())));
+        AgentFeatures features = read with { Board = read.Board with { CorpIdentity = [new AgentCard { Id = "card:identity", DefinitionId = identity.Value }] } };
+        var context = new HeuristicContext(features, catalog, RunnerPolicyProfiles.Create("standard", 54, RunnerHeuristicPolicy.V34), HeuristicContext.FactionGeneration);
+
+        catalog.TryGet(operation, out CardEvaluationDescriptor card);
+        Assert.Equal(inFaction, RunnerInference.InCorpFaction(context, card));
+    }
+
+    /// <summary>
+    /// Bot plan H3 batch 10: three different damage-dealing Corp cards seen make a damage deck, which may splash a punishing
+    /// operation (PT Untaian's Measured Response, out of faction); one or two are common in any deck.
+    /// </summary>
+    [Theory]
+    [InlineData(2, false)]
+    [InlineData(3, true)]
+    public void ThreeDamageCardsSeenMakeADamageDeck(int seen, bool damageDeck)
+    {
+        CardEvaluationDescriptor[] ice = [.. Enumerable.Range(0, 4).Select(index => new CardDefinitionId($"test:damage-ice-{index}")).Select(id =>
+            new CardEvaluationDescriptor(new(id, PlayerSide.Corp, RuntimeCardClass.Ice, rezCost: 2), null,
+                new(id, 0, IceType.Sentry, 2, [new DamageSubroutineSpec(DamageKind.Net, 1)], []), null, null, null, null, [], false))];
+        var catalog = new ScenarioCatalog(ice);
+        AgentFeatures read = ObservationReader.Read(Decision(new LegalAction(new("action:credit"), ActionKind.GainCredit, "ignored", new NoActionParameters())));
+        AgentFeatures features = read with
+        {
+            Board = read.Board with
+            {
+                Servers = [new("server:hq", ServerKind.Headquarters,
+                    [.. ice.Take(seen).Select((card, index) => new AgentCard { Id = $"card:ice-{index}", DefinitionId = card.Printed.DefinitionId.Value, Rezzed = true })], [])],
+            },
+        };
+        var context = new HeuristicContext(features, catalog, RunnerPolicyProfiles.Create("standard", 54, RunnerHeuristicPolicy.V34), HeuristicContext.FactionGeneration);
+
+        Assert.Equal(damageDeck, RunnerInference.DamageDeck(context));
+    }
+
+    /// <summary>
+    /// The review of #139: Runner v34's grip floor counts what a played card draws and the clicks it loses, so a draw event
+    /// (VRcation's four) isn't priced as a card spent, and Creative Commission's lost click isn't a click to draw with.
+    /// </summary>
+    [Theory]
+    [InlineData(BehaviorInstructionKind.Draw, 4, true, 6, 2)]
+    [InlineData(BehaviorInstructionKind.LoseClicks, 1, true, 2, 1)]
+    [InlineData(BehaviorInstructionKind.Draw, 4, false, 2, 2)]
+    public void TheGripFloorCountsAPlayedCardsDrawsAndLostClicks(BehaviorInstructionKind kind, int amount, bool played, int grip, int clicks)
+    {
+        CardDefinitionId eventId = new("test:event");
+        var catalog = new ScenarioCatalog(new CardEvaluationDescriptor(new(eventId, PlayerSide.Runner, RuntimeCardClass.Event, playCost: 0),
+            new CardBehaviorDefinition(eventId, PlayerSide.Runner, instructions: [new BehaviorInstruction(kind, amount: amount)]),
+            null, null, null, null, null, [], false));
+        AgentFeatures read = ObservationReader.Read(Decision(new LegalAction(new("action:credit"), ActionKind.GainCredit, "ignored", new NoActionParameters())));
+        AgentFeatures features = read with
+        {
+            PrivateCards = new AgentPrivateCards
+            {
+                Grip = [new AgentCard { Id = "card:event", DefinitionId = eventId.Value }, new AgentCard { Id = "card:a", DefinitionId = "test:a" }, new AgentCard { Id = "card:b", DefinitionId = "test:b" }],
+            },
+            Board = read.Board with { Players = read.Board.Players with { Runner = read.Board.Players.Runner with { Clicks = 3 } } },
+        };
+        var context = new HeuristicContext(features, catalog, RunnerPolicyProfiles.Create("standard", 54, RunnerHeuristicPolicy.V34), HeuristicContext.FactionGeneration);
+
+        Assert.Equal((grip, clicks), RunnerHeuristicPolicy.AfterPlaying(context, "card:event", played));
+    }
+
     private static Observation Decision(params LegalAction[] actions)
     {
         GameState state = GameState.CreateNew(54);
@@ -369,5 +450,7 @@ public sealed class RunnerHeuristicPolicyTests
         public IReadOnlyCollection<CardDefinitionId> DefinitionIds => _definitions.Keys;
         public bool TryGet(CardDefinitionId definitionId, out CardEvaluationDescriptor descriptor) =>
             _definitions.TryGetValue(definitionId, out descriptor!);
+        public Dictionary<string, string> Factions { get; } = [];
+        public string? FactionOf(CardDefinitionId definitionId) => Factions.GetValueOrDefault(definitionId.Value);
     }
 }

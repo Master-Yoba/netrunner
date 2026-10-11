@@ -223,6 +223,15 @@ internal sealed class HeuristicContext
     /// </summary>
     public const int TagGeneration = 26;
 
+    /// <summary>
+    /// Runner v33's generation: its Nebula rules (bot plan H3 batch 5) were level on the ladder and are v33's alone; v34 builds
+    /// on v32.
+    /// </summary>
+    public const int NebulaGeneration = 28;
+
+    /// <summary>Runner v34 (bot plan H3 batch 10): the Corp's faction is evidence of its punishing operations.</summary>
+    public const int FactionGeneration = 29;
+
     public double OpponentScorePressure => Opponent.AgendaPoints switch
     {
         >= 6 => 1.6,

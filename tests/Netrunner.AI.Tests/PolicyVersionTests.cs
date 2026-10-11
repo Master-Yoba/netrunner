@@ -42,8 +42,8 @@ public sealed class PolicyVersionTests
             // beside v32, the default since H3 batch 4.
             // Corp v31 to v33 (bot plan H3) are live beside v34, the default since H3 batch 8.
             Type expected = version == live || side == PlayerSide.Runner
-                && version is RunnerHeuristicPolicy.V27 or RunnerHeuristicPolicy.V28 or RunnerHeuristicPolicy.V29 or RunnerHeuristicPolicy.V30 or RunnerHeuristicPolicy.V31 or RunnerHeuristicPolicy.V33
-                || side == PlayerSide.Corp && version is CorpHeuristicPolicy.V31 or CorpHeuristicPolicy.V32 or CorpHeuristicPolicy.V33
+                && version is RunnerHeuristicPolicy.V27 or RunnerHeuristicPolicy.V28 or RunnerHeuristicPolicy.V29 or RunnerHeuristicPolicy.V30 or RunnerHeuristicPolicy.V31 or RunnerHeuristicPolicy.V33 or RunnerHeuristicPolicy.V34
+                || side == PlayerSide.Corp && version is CorpHeuristicPolicy.V31 or CorpHeuristicPolicy.V32 or CorpHeuristicPolicy.V33 or CorpHeuristicPolicy.V35
                 ? side == PlayerSide.Corp ? typeof(CorpHeuristicPolicy) : typeof(RunnerHeuristicPolicy)
                 : side == PlayerSide.Corp ? typeof(LegacyCorpPolicy) : typeof(LegacyRunnerPolicy);
             Assert.IsType(expected, policy);
@@ -54,9 +54,11 @@ public sealed class PolicyVersionTests
         if (side == PlayerSide.Runner) Assert.Throws<ArgumentException>(() => new LegacyRunnerPolicy(RunnerHeuristicPolicy.V29));
         if (side == PlayerSide.Runner) Assert.Throws<ArgumentException>(() => new LegacyRunnerPolicy(RunnerHeuristicPolicy.V30));
         if (side == PlayerSide.Runner) Assert.Throws<ArgumentException>(() => new LegacyRunnerPolicy(RunnerHeuristicPolicy.V31));
+        if (side == PlayerSide.Runner) Assert.Throws<ArgumentException>(() => new LegacyRunnerPolicy(RunnerHeuristicPolicy.V34));
         if (side == PlayerSide.Corp) Assert.Throws<ArgumentException>(() => new LegacyCorpPolicy(CorpHeuristicPolicy.V32));
         if (side == PlayerSide.Corp) Assert.Throws<ArgumentException>(() => new LegacyCorpPolicy(CorpHeuristicPolicy.V33));
         if (side == PlayerSide.Corp) Assert.Throws<ArgumentException>(() => new LegacyCorpPolicy(CorpHeuristicPolicy.V34));
+        if (side == PlayerSide.Corp) Assert.Throws<ArgumentException>(() => new LegacyCorpPolicy(CorpHeuristicPolicy.V35));
     }
 
     /// <summary>
@@ -107,8 +109,8 @@ public sealed class PolicyVersionTests
     {
         Assert.Equal(RunnerHeuristicPolicy.V32, OfflinePolicies.Configure(PlayerSide.Runner, "standard", 1).PolicyVersion);
         Assert.Equal(CorpHeuristicPolicy.V34, OfflinePolicies.Configure(PlayerSide.Corp, "standard", 1).PolicyVersion);
-        Assert.Throws<ArgumentException>(() => new LegacyRunnerPolicy("runner-heuristic-v34"));
-        Assert.Throws<ArgumentException>(() => OfflinePolicies.Configure(PlayerSide.Runner, "standard", 1, "runner-heuristic-v34"));
+        Assert.Throws<ArgumentException>(() => new LegacyRunnerPolicy("runner-heuristic-v35"));
+        Assert.Throws<ArgumentException>(() => OfflinePolicies.Configure(PlayerSide.Runner, "standard", 1, "runner-heuristic-v35"));
         Assert.Throws<ArgumentException>(() => OfflinePolicies.Configure(PlayerSide.Corp, "standard", 1, "corp-heuristic-v1"));
         // A v1 Runner profile can't claim the v3 features it doesn't read.
         OfflineAgentConfiguration v1 = RunnerPolicyProfiles.Create("standard", 1, RunnerHeuristicPolicy.V1);

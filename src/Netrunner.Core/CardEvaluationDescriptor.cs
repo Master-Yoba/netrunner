@@ -10,6 +10,13 @@ public interface ICardEvaluationCatalog
 
     /// <summary>A7: the behavior-registry version of the pool these cards play in, where the catalog knows it.</summary>
     string? BehaviorVersion => null;
+
+    /// <summary>
+    /// A card's printed faction (bot plan H3 batch 10), public like its cost: a Runner reads the Corp's identity and knows
+    /// which of the pool's cards its deck is built around. Null where the catalog has no card data for it. It comes from the
+    /// card data, whose checksum benchmark manifests pin already, so it stays out of <see cref="Fingerprint"/>.
+    /// </summary>
+    string? FactionOf(CardDefinitionId definitionId) => null;
 }
 
 /// <summary>

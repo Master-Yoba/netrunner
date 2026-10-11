@@ -134,7 +134,8 @@ public sealed partial class RunnerHeuristicPolicy
             risk += Exposure(1, lethal, bare);
         }
         (int need, double chance) = RunnerInference.Punishers(context);
-        if (!RunnerInference.Evidence(context, card => RunnerInference.PunisherDamage(card, 7, 99, 0) > 0)) need = 0;
+        bool evidence = RunnerInference.PunisherEvidence(context);
+        if (!evidence) need = 0;
         bool armed = context.Features.Board.TurnFacts?.Runner.ThisTurn?.SuccessfulRun == true;
         bool survivableBefore = !armed || need <= context.Features.Hand.Length + context.Self.Clicks;
         if (need > 0 && survivableBefore && need > gripAfter + Math.Max(0, clicksAfter)) risk += chance * PunishedGame;
@@ -147,6 +148,13 @@ public sealed partial class RunnerHeuristicPolicy
             int steal = RunnerInference.StealWins(context.Self.AgendaPoints, RunnerInference.SmallestAgenda(context)) ? 0
                 : RunnerInference.StealDamage(context);
             if (steal > 0) risk += Exposure(1, steal > gripAfter ? agenda : 0, steal == gripAfter ? agenda : 0);
+            // v34 (PT16): a steal that raises the threat level arms the Corp's punishing operation for its next turn.
+            if (context.Generation >= HeuristicContext.FactionGeneration && evidence && need == 0 && agenda > 0
+                && !RunnerInference.StealWins(context.Self.AgendaPoints, RunnerInference.SmallestAgenda(context)))
+            {
+                double arms = RunnerInference.StealArms(context, gripAfter, Math.Max(0, clicksAfter), out double held);
+                risk += agenda * arms * held * PunishedGame;
+            }
             // v30 (PT03, PT04): a card of damage costs about a basic draw to recover, so the damage the run is expected to
             // deal beyond the clicks left after it is a card the turn can't rebuild: dangerous runs go early in the turn.
             double expected = agenda * steal + unknown * RunnerInference.ExpectedIceDamage(context)

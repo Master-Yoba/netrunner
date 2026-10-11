@@ -214,6 +214,22 @@ public sealed class CorpCodexV20Tests
         Assert.True((chosen.Kind == ActionKind.DrawCard) == draws, $"{version} chose {chosen.Kind} {chosen.Description}.");
     }
 
+    /// <summary>
+    /// Bot plan H3 batch 9: v34's heuristic ranked the flooded draw below a credit, but the turn planner's rollouts value a
+    /// card in HQ and drew anyway; v35 keeps the draw below the planner's other choices. A box ladder game, LEO Glacier
+    /// against Muslihat, where v34 drew with three agendas in HQ on turns 3 and 4.
+    /// </summary>
+    [Theory]
+    [InlineData(CorpHeuristicPolicy.V34, 103, true)]
+    [InlineData(CorpHeuristicPolicy.V35, 103, false)]
+    [InlineData(CorpHeuristicPolicy.V35, 182, false)]
+    public async Task ThePlannerDrawsNoMoreCardsIntoAFloodedHq(string version, long sequence, bool draws)
+    {
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
+        (LegalAction chosen, _) = await ChooseAtAsync("corp-planner-flooded-draw", version, sequence);
+        Assert.True((chosen.Kind == ActionKind.DrawCard) == draws, $"{version} chose {chosen.Kind} {chosen.Description}.");
+    }
+
     /// <summary>The Corp version's choice at the recorded decision <paramref name="sequence"/>, having watched the game to it.</summary>
     private static async Task<(LegalAction Chosen, GameState State)> ChooseAtAsync(string fixture, string version, long sequence)
     {

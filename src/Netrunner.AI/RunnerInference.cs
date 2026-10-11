@@ -449,9 +449,15 @@ internal static class RunnerInference
     /// operations' share of the Corp's unseen cards over a hand of them, and at least one in three once the Runner has seen
     /// one of them this game. Grip 0 when there is none.
     /// </summary>
-    public static (int Grip, double Chance) Punishers(HeuristicContext context) => context.Memo("punishers", () =>
+    public static (int Grip, double Chance) Punishers(HeuristicContext context) =>
+        Punishers(context, Math.Max(context.Self.AgendaPoints, context.Opponent.AgendaPoints));
+
+    /// <summary>
+    /// <see cref="Punishers(HeuristicContext)"/> at a threat level of <paramref name="threat"/>: Runner v34 asks it at the level a
+    /// steal would raise the threat to. From v34 a punishing operation in the Corp identity's faction counts as one seen.
+    /// </summary>
+    public static (int Grip, double Chance) Punishers(HeuristicContext context, int threat) => context.Memo($"punishers-{threat}", () =>
     {
-        int threat = Math.Max(context.Self.AgendaPoints, context.Opponent.AgendaPoints);
         IReadOnlyDictionary<string, double> prior = Prior(context);
         int need = 0;
         double copies = 0;
@@ -465,7 +471,8 @@ internal static class RunnerInference
             if (damage == 0) continue;
             need = Math.Max(need, damage);
             copies += weight;
-            seen |= context.Knowledge?.Reveals.Any(reveal => reveal.DefinitionId == definition) == true;
+            seen |= context.Knowledge?.Reveals.Any(reveal => reveal.DefinitionId == definition) == true
+                || context.Generation >= HeuristicContext.FactionGeneration && (InCorpFaction(context, card) || DamageDeck(context));
         }
         if (need == 0) return (0, 0.0);
         double total = prior.Values.Sum();
@@ -473,6 +480,72 @@ internal static class RunnerInference
         double chance = total <= 0 ? 0 : 1 - Math.Pow(1 - Math.Min(1, copies / total), hand);
         return (need, seen ? Math.Max(chance, 1.0 / 3) : chance);
     });
+
+    /// <summary>
+    /// Runner v34 (bot plan H3 batch 10): whether a card is of the Corp identity's faction, which its deck is built around
+    /// (Measured Response in a Weyland deck). Neutral cards and cards without a known faction aren't.
+    /// </summary>
+    public static bool InCorpFaction(HeuristicContext context, CardEvaluationDescriptor card)
+    {
+        ArgumentNullException.ThrowIfNull(card);
+        string? faction = context.Features.Board.CorpIdentity.Select(identity => context.Catalog.FactionOf(new CardDefinitionId(identity.DefinitionId)))
+            .FirstOrDefault(value => value is not null);
+        return faction is not null && !faction.StartsWith("neutral", StringComparison.Ordinal)
+            && string.Equals(context.Catalog.FactionOf(card.Printed.DefinitionId), faction, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Runner v29's evidence that the Corp plays an operation that punishes a successful run: its list or a seen copy, and
+    /// from v34 one in the Corp identity's faction.
+    /// </summary>
+    public static bool PunisherEvidence(HeuristicContext context) =>
+        Evidence(context, card => PunisherDamage(card, 7, 99, 0) > 0)
+        || context.Generation >= HeuristicContext.FactionGeneration && (DamageDeck(context) || Prior(context).Keys.Any(definition =>
+            context.Catalog.TryGet(new CardDefinitionId(definition), out CardEvaluationDescriptor card)
+            && PunisherDamage(card, 7, 99, 0) > 0 && InCorpFaction(context, card)));
+
+    /// <summary>
+    /// Runner v34: a Corp that has shown three different cards that deal damage is built around damage, and may splash an
+    /// operation that punishes a run (PT Untaian's Measured Response, out of faction). One or two such cards are common in
+    /// any deck (LEO's Tithe and Bumi 1.0, Nebula's Doomscroll).
+    /// </summary>
+    public static bool DamageDeck(HeuristicContext context) => context.Memo("damage-deck", () =>
+        (context.Knowledge?.Reveals.Select(reveal => reveal.DefinitionId) ?? [])
+            .Concat(context.Features.Board.Servers.SelectMany(server => server.Ice.Concat(server.Root)).OfType<AgentCard>().Select(card => card.DefinitionId))
+            .Where(definition => definition is not null).Distinct(StringComparer.Ordinal)
+            .Count(definition => context.Catalog.TryGet(new CardDefinitionId(definition!), out CardEvaluationDescriptor card)
+                && card.Printed.Side == PlayerSide.Corp && DealsDamage(card)) >= 3);
+
+    /// <summary>Whether a card's subroutines, effects, triggers or abilities deal damage.</summary>
+    public static bool DealsDamage(CardEvaluationDescriptor card)
+    {
+        ArgumentNullException.ThrowIfNull(card);
+        return SubroutineDamage(card) > 0 || card.Behavior is { } behavior && HeuristicContext.Flatten(behavior.Instructions
+            .Concat(behavior.Triggers.SelectMany(trigger => trigger.Instructions))
+            .Concat(behavior.PaidAbilities.SelectMany(ability => ability.Instructions)))
+            .Any(instruction => instruction.Kind == BehaviorInstructionKind.DealDamage);
+    }
+
+    /// <summary>
+    /// Runner v34 (MATCHUP_PT_UNTAIAN.md PT16): the share of the agendas a steal may find whose points would raise the threat
+    /// level to arm a punishing operation the grip can't survive: <paramref name="gripAfter"/> cards and
+    /// <paramref name="clicksAfter"/> clicks to draw more once the run is over.
+    /// </summary>
+    public static double StealArms(HeuristicContext context, int gripAfter, int clicksAfter, out double chance)
+    {
+        chance = 0;
+        double arming = 0, total = 0;
+        foreach ((string definition, double copies) in Prior(context))
+        {
+            if (copies <= 0 || !context.Catalog.TryGet(new CardDefinitionId(definition), out CardEvaluationDescriptor card) || card.Agenda is null) continue;
+            total += copies;
+            (int need, double held) = Punishers(context, Math.Max(context.Self.AgendaPoints + card.Agenda.AgendaPoints, context.Opponent.AgendaPoints));
+            if (need <= gripAfter + clicksAfter) continue;
+            arming += copies;
+            chance = Math.Max(chance, held);
+        }
+        return total <= 0 ? 0 : arming / total;
+    }
 
     /// <summary>
     /// The damage an operation that punishes a successful run deals, which the Runner can't pay its way out of with
