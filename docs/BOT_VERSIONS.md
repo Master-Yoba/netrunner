@@ -2284,3 +2284,50 @@ card in HQ is about as good as a credit.
 
 **Test:** `CorpCodexV20Tests.ThePlannerDrawsNoMoreCardsIntoAFloodedHq`, from a box ladder game (LEO Glacier against
 Muslihat, actions 103 and 182): v34's planner draws with three agendas in HQ, v35 doesn't.
+
+**Lint (C23).** `corp-keeps-flooded-opening`, the Corp keeping a first hand with three agendas or more: 16 in 3,200 box
+games (0.5%), too rare for a policy change to show on a ladder, so the guide's C23 stays unencoded.
+
+### H3 batch 10: Runner v34, the first Measured Response (12 October 2026)
+
+**Not shipped: level.** The default stays Runner v32; v34 stays constructible (`standard-r34`).
+
+**The diagnosis.** `ai-runner-diagnosis` put 7% of the Runner's games (234 of 3,200, v32 on the box) down to a flatline
+to Measured Response (4 meat damage unless the Runner pays 8, at threat 4). A replay of all 468 (both seats' Runners):
+
+| How the threat reached 4 | Deaths | Measured Response seen before |
+|---|---:|---:|
+| Already at 4 when the Runner's turn began | 292 | 24 |
+| The Runner's own steal that turn (PT16) | 132 | 14 |
+| The Corp scored to 4 before playing it | 44 | 0 |
+
+In 430 of them (92%) it was the first copy the Runner met, and v26's grip guard (`Cushion`, the end-of-turn draw) only
+wakes on evidence: the list (Hard) or a seen copy. Zwicky (Weyland) dealt 264 of the deaths, PT Untaian (Jinteki,
+splashing two) 204; at death the Runner held 3 cards or fewer with under 8 credits in all but a few.
+
+**The change** (MATCHUP_PT_UNTAIAN.md PT05, PT16, PT17):
+
+- The evaluation catalog carries each card's printed faction, public like its cost. A punishing operation in the Corp
+  identity's faction is evidence, as likely as a seen copy (Zwicky's).
+- A Corp that has shown three different damage-dealing cards is a damage deck, evidence too (Untaian has ten such cards;
+  LEO two, Nebula one).
+- After a successful run, a card played or installed from the grip that leaves it, with the clicks left to draw, below
+  what the operation needs pays for the risk (v26 only rewarded the draw: a Zwicky game drew to four, then played
+  Creative Commission, which also loses the last click).
+- A run whose steal would raise the threat level to arm the operation pays for it, weighted by the steal's chance.
+
+| | Runner v34 − v32 |
+|---|---:|
+| Box, 1,600 deals | **+6 Elo [−11, +24]**, level; Runner wins 38% to 39% |
+| Flatlines to Measured Response, 3,200 Runner games each | 232 to 168 (−28%) |
+| Losses to agendas | 42% to 44% |
+| Untaian / Zwicky win rate, 800 games each | 30.0% to 32.2% / 29.8% to 31.1% |
+
+The rule, decided before the run, was to ship v34 only if the interval cleared zero; it did not. The deaths it saved
+mostly became agenda losses: at threat 4 the Corp is usually a score from winning, so the flatline was how a lost game
+ended, not why. The damage-deck evidence also comes late against Untaian, whose early deaths (turns 2 to 4) precede
+three damage cards.
+
+**Tests:** `RunnerPunisherV34Tests.TheGripStaysAboveMeasuredResponseInAWeylandGame` (a box ladder game, Zwicky against
+Magdalene, action 379: v32 plays Creative Commission and dies, v34 doesn't); `ACardOfTheCorpIdentitysFactionIsInFaction`;
+`ThreeDamageCardsSeenMakeADamageDeck`.
