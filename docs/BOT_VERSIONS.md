@@ -2261,3 +2261,26 @@ in S0.3 and batch 7.
 the guide's C13 says hand-size modifiers change it. A larger HQ (Precision Design, Superconducting Hub) now raises it by
 its extra size, with a test (`TheFloodedDrawThresholdFollowsTheHqSize`). Only the NSG core-sets decks hold those cards,
 so the box and Gateway ladders above are unchanged; the NSG core-sets fuzz ran again on the fix.
+
+### H3 batch 9: Corp v35, the planner's flooded draws (11 October 2026)
+
+**Not shipped: level.** The default stays Corp v34; v35 stays constructible (`standard-c35`).
+
+**The change.** v34 still drew into a flooded HQ 458 times in 3,200 box games. At those decisions the heuristic ranked
+the draw below a credit (−45 against +45 at both probed decisions), but the turn planner's rollouts, whose end-of-turn evaluation values a card
+in HQ and can't see the flood, lifted it about 120 points above the credit. v35 puts the flooded draw a priority band
+below every other choice (`economy/no-draw-into-flooded-hq`), so the planner can no longer prefer it; it stays the choice
+of last resort, and a draw from a near-empty R&D keeps its own guard.
+
+| | Corp v35 − v34 |
+|---|---:|
+| Box, 1,600 deals | **+3 Elo [−11, +20]**, level; Corp wins 62% each |
+| Basic draws with 3+ agendas in HQ, 3,200 Corp games each | 532 to 102 (−81%) |
+| Remote steals, 3,200 Corp games each | 2,282 to 2,264, level |
+
+The rule, decided before the run, was to ship v35 only if the interval cleared zero; it did not. The planner's extra
+draws weren't costing games measurably; at both decisions probed the Corp was rich (a credit worth only 45), where a
+card in HQ is about as good as a credit.
+
+**Test:** `CorpCodexV20Tests.ThePlannerDrawsNoMoreCardsIntoAFloodedHq`, from a box ladder game (LEO Glacier against
+Muslihat, actions 103 and 182): v34's planner draws with three agendas in HQ, v35 doesn't.
