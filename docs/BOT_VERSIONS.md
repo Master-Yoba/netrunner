@@ -2226,3 +2226,33 @@ decided before the run, was to keep v33 the default only if that interval cleare
 back to Corp v31. The measured gain was the pre-fix v33's (+26 [+5, +48] at 800), and that version carried the
 upgrade-remote bug; it is not shipped knowingly. The direction holds (remote steals fell 15%), and the next attempt
 starts from the fixed v33.
+
+### H3 batch 8: Corp v34, v33 and no optional draw into a flooded HQ (11 October 2026)
+
+**Shipped: Corp v34 is the default.** It is the fixed v33 (batch 7, the scoring server protected first) with the guide's
+C13: with three or more agendas in HQ, the Corp doesn't click to draw (`FloodedDraw` takes the draw's value and a
+credit's off it, so the heuristic ranks the draw below a credit). Card effects that draw are unchanged.
+
+| | Corp v34 − v31 |
+|---|---:|
+| Box, 1,600 deals | **+18 Elo [+0.2, +33]**; Corp wins 59% to 62%; 8 of the 12 Corp pairings lean v34's way |
+| Gateway, 240 deals | 0 [−39, +43], level (no harm) |
+| Basic draws with 3+ agendas in HQ, 3,200 Corp games each | 1,856 to 458 (−75%) |
+| Remote steals, 3,200 Corp games each | 2,572 to 2,288 (−11%) |
+| Anchors (240 box deals, `standard` − `standard-m5`) | Corp +152 [38, 249], Runner +333 [231, 444] |
+| Regret (bot-check, core held-out, teacher v3) | 0.0579 to 0.0568 [0.0456, 0.0711], level within the interval |
+| Puzzles | 28/29 box, 5/5 NSG core sets, as before |
+
+The rule, decided before the run, was to ship v34 only if the 1,600-deal interval cleared zero. It does, narrowly; the
+ladder's `separated=false` is its expected order (v34 below v31), not the interval. Most of the gain is likely v33's
+(+16 [−2, +30] alone); the flood rule adds a few points on top. The 458 flooded draws left are the turn planner's:
+it plays out the heuristic's top candidates and can pick the draw over its ranking. Gating the planner's draws too is
+the obvious next step.
+
+**Test:** `CorpCodexV20Tests.AFloodedHqDrawsNoMoreCards`, from a box ladder game (LEO Glacier against Magdalene, action
+55, turn 2): v31 draws with three agendas in HQ, v34 doesn't.
+
+**Verification.** The per-slice fuzz, `--games-per-pairing 8 --verify-replays-every 8`, every game terminal on every
+pool (official 24, Gateway 288, Elevation 1,152, Gateway–Elevation 288, NSG core sets 2,592; 543 replays verified). The
+budget-scaling ladder, `standard-x4` − `standard-x1` on 240 box deals: Corp −20 [−53, +21], Runner +15 [−19, +61], flat as
+in S0.3 and batch 7.
