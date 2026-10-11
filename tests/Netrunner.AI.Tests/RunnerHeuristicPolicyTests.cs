@@ -282,6 +282,35 @@ public sealed class RunnerHeuristicPolicyTests
         Assert.Equal(worth, RunnerValues.Trash(new HeuristicContext(features, catalog, RunnerPolicyProfiles.Create("standard", 54, RunnerHeuristicPolicy.V33), 28), card));
     }
 
+    /// <summary>
+    /// Corp v33, the review of #137: the layer an agenda waits for counts as affordable only with what the cards in play add
+    /// to its rez (Fransofia Ward's +1): a rezzed upgrade raising ICE rez costs counts, an unrezzed one does not.
+    /// </summary>
+    [Theory]
+    [InlineData(true, 1)]
+    [InlineData(false, 0)]
+    public void AnIceRezModifierInPlayCounts(bool rezzed, int modifier)
+    {
+        CardDefinitionId ward = new("test:ward");
+        var catalog = new ScenarioCatalog(new CardEvaluationDescriptor(
+            new(ward, PlayerSide.Corp, RuntimeCardClass.Upgrade, rezCost: 1, trashCost: 2),
+            new CardBehaviorDefinition(ward, PlayerSide.Corp,
+                costModifiers: [new BehaviorCostModifier(BehaviorCostModifierKind.IceRezCreditCost, 1, null, "ward")]),
+            null, null, null, null, null, [], false));
+        Observation observation = Decision(new LegalAction(new("action:credit"), ActionKind.GainCredit, "ignored", new NoActionParameters()));
+        AgentFeatures read = ObservationReader.Read(observation);
+        AgentFeatures features = read with
+        {
+            Board = read.Board with
+            {
+                Servers = [new("server:remote", ServerKind.Remote, [], [new AgentCard { Id = "card:ward", DefinitionId = ward.Value, Rezzed = rezzed }])],
+            },
+        };
+
+        Assert.Equal(modifier, CorpHeuristicPolicy.IceRezModifier(new HeuristicContext(features, catalog,
+            CorpPolicyProfiles.Create("standard", 54, CorpHeuristicPolicy.V33), 25)));
+    }
+
     private static Observation Decision(params LegalAction[] actions)
     {
         GameState state = GameState.CreateNew(54);

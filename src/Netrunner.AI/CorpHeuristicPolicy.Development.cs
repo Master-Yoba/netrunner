@@ -48,8 +48,12 @@ public sealed partial class CorpHeuristicPolicy
                 score -= 100 + install.CreditCost * context.CreditValue;
             if (context.Self.Credits - install.CreditCost < ice.RezCost) score -= 200;
             // v33 (C01, C02): the layer an agenda waiting in HQ is waiting for, on the empty remote the Runner gets into.
-            if (context.Configuration.PolicyVersion == V33 && !install.CreateNewRemote && server is { Kind: ServerKind.Remote, Root.Length: 0 }
-                && context.AgendaCount > 0 && context.Self.Credits - install.CreditCost >= ice.RezCost && RunnerGetsIn(context, server, 0))
+            // The review of #137: on any remote without an agenda in its root (an upgrade may be there), the destinations the
+            // agenda waits for, and only while its rez, modifiers included, is affordable.
+            if (context.Configuration.PolicyVersion == V33 && !install.CreateNewRemote && server is { Kind: ServerKind.Remote }
+                && !server.Root.Any(value => context.Definition(value)?.Agenda is not null)
+                && context.AgendaCount > 0 && context.Self.Credits - install.CreditCost >= ice.RezCost + IceRezModifier(context)
+                && RunnerGetsIn(context, server, 0))
                 score += ProtectionBonus;
         }
         else if (definition.Agenda is not null)
@@ -147,7 +151,18 @@ public sealed partial class CorpHeuristicPolicy
 
     /// <summary>v33: whether HQ holds ICE the Corp can install on <paramref name="server"/> now and still rez.</summary>
     private static bool ProtectionInHand(HeuristicContext context, AgentServer server) => context.Self.Clicks >= 1
-        && context.Features.Hand.Any(card => context.Definition(card)?.Ice is { } ice && context.Self.Credits >= server.Ice.Length + ice.RezCost);
+        && context.Features.Hand.Any(card => context.Definition(card)?.Ice is { } ice
+            && context.Self.Credits >= server.Ice.Length + ice.RezCost + IceRezModifier(context));
+
+    /// <summary>
+    /// v33 (the review of #137): what the cards in play add to an ICE's rez cost (Fransofia Ward's +1), the rezzed Corp cards'
+    /// and the Runner's installed ones' modifiers, so a layer is counted affordable only if its rez is.
+    /// </summary>
+    internal static int IceRezModifier(HeuristicContext context) => context.Features.Board.Servers.SelectMany(server => server.Root.Concat(server.Ice))
+        .OfType<AgentCard>().Where(card => card.Rezzed == true)
+        .Concat(context.Features.Board.RunnerRig).Concat(context.Features.Board.RunnerIdentity).Concat(context.Features.Board.CorpIdentity)
+        .SelectMany(card => context.Definition(card)?.Behavior?.CostModifiers ?? [])
+        .Where(modifier => modifier.Kind == BehaviorCostModifierKind.IceRezCreditCost).Sum(modifier => modifier.Delta);
 
     /// <summary>v33: what the layer an agenda waits for is worth, above an ordinary remote ICE's place.</summary>
     private const int ProtectionBonus = 300;
