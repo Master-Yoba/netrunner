@@ -61,7 +61,7 @@ public sealed class OddityLintsTests
     {
         string[] guide = ["runner-banks-credits", "runner-credit-over-draw-early", "runner-runs-on-thin-grip", "runner-ends-turn-tagged",
             "runner-flatlined", "remote-scored-uncontested", "agenda-stolen-from-remote", "agenda-score-delayed", "draw-into-hq-flood",
-            "agenda-unprotected-at-turn-end", "decorative-remote-ice"];
+            "agenda-unprotected-at-turn-end", "decorative-remote-ice", "corp-keeps-flooded-opening"];
         Assert.All(guide, id => Assert.Matches(@"^[RC]\d\d(, [RC]\d\d)*: ", OddityLints.All.Single(lint => lint.Id == id).Description));
     }
 

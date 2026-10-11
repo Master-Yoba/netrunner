@@ -43,6 +43,7 @@ public static class OddityLints
         new("draw-into-hq-flood", PlayerSide.Corp, "C13: a basic draw with three agendas or more in HQ."),
         new("agenda-unprotected-at-turn-end", PlayerSide.Corp, "C02: an agenda in a remote at the end of the Corp's turn with no rezzed ICE and none the Corp can afford to rez."),
         new("decorative-remote-ice", PlayerSide.Corp, "C08: a second or later ICE installed on a remote holding no agenda and no advanced card, with no agenda in HQ."),
+        new("corp-keeps-flooded-opening", PlayerSide.Corp, "C23: the Corp kept a first hand holding three agendas or more where it could mulligan."),
     ];
 
     /// <summary>Replays one saved game and returns what the lints found, in game order.</summary>
@@ -306,6 +307,11 @@ public static class OddityLints
                     break;
                 case ActionKind.DrawCard when actor == PlayerSide.Corp && hqAgendas >= 3:
                     Report("draw-into-hq-flood", PlayerSide.Corp, sequence, turn, $"a draw with {hqAgendas} agendas in HQ.", once: false);
+                    break;
+                case ActionKind.ChooseNumber when actor == PlayerSide.Corp && before.PendingDecision!.Kind == DecisionKind.Setup
+                    && chosen.Parameters is NumberChoiceParameters { Value: 0 } && hqAgendas >= 3
+                    && before.PendingDecision.LegalActions.Any(action => action.Parameters is NumberChoiceParameters { Value: 1 }):
+                    Report("corp-keeps-flooded-opening", PlayerSide.Corp, sequence, turn, $"kept a first hand with {hqAgendas} agendas.", once: false);
                     break;
                 case ActionKind.EndTurn when actor == PlayerSide.Corp
                     && before.PendingDecision!.LegalActions.Any(action => action.Kind == ActionKind.ScoreAgenda):
