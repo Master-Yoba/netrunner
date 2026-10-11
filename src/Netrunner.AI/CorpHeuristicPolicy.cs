@@ -197,6 +197,11 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     /// the Corp can put there and rez; that ICE goes in first.
     /// </summary>
     public const string V33 = "corp-heuristic-v33";
+    /// <summary>
+    /// V33 with no optional draw into a flooded HQ (bot plan H3 batch 8, the guide's C13): with three agendas or more in HQ an
+    /// optional draw falls below a basic credit. Two Corp fixes measured together, each too small for the ladder alone.
+    /// </summary>
+    public const string V34 = "corp-heuristic-v34";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
     /// V23 fixes V22's faults the reviews of batch 4's losses to Codex found (1 October: known traps advanced, two agendas
@@ -214,17 +219,17 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     public const string PolicyVersion = V31;
     /// <summary>The latest version that never plans: the planner's model of the Corp.</summary>
     public const string LatestHeuristic = V8;
-    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25, V26, V27, V28, V29, V30, V31, V32, V33];
+    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25, V26, V27, V28, V29, V30, V31, V32, V33, V34];
 
     /// <summary>Whether the version keeps the A9 tracker of the Runner's hidden cards (v26).</summary>
-    public static bool UsesTracker(string version) => version is V26 or V27 or V28 or V29 or V30 or V31 or V32 or V33;
+    public static bool UsesTracker(string version) => version is V26 or V27 or V28 or V29 or V30 or V31 or V32 or V33 or V34;
 
     public CorpHeuristicPolicy() : this(PolicyVersion) { }
 
     public CorpHeuristicPolicy(string version)
     {
-        if (version is not (V31 or V32 or V33))
-            throw new ArgumentException($"The live Corp policy is {V31}, {V32} or {V33}; '{version}' is {nameof(LegacyCorpPolicy)}.", nameof(version));
+        if (version is not (V31 or V32 or V33 or V34))
+            throw new ArgumentException($"The live Corp policy is {V31} to {V34}; '{version}' is {nameof(LegacyCorpPolicy)}.", nameof(version));
         Version = version;
     }
 
@@ -287,7 +292,7 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
         {
             ActionKind.GainCredit => Value(context.CreditValue + (context.Self.Credits < ProtectionReserve(context) ? 150 : 0),
                 "economy/basic-credit-and-rez-reserve"),
-            ActionKind.DrawCard => Value(features.Board.HiddenZoneCounts.CorpDeck > 1 ? context.DrawValue : -10000, "economy/draw-reserve"),
+            ActionKind.DrawCard => Value(features.Board.HiddenZoneCounts.CorpDeck > 1 ? context.DrawValue - FloodedDraw(context) : -10000, "economy/draw-reserve"),
             ActionKind.PlayCard => Play(context, Require<PlayCardParameters>(action)),
             ActionKind.InstallCard when action.Parameters is BehaviorInstallChoiceParameters behaviorInstall =>
                 behaviorInstall.Choice is { } chosen
@@ -333,6 +338,14 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
         _ = Require<NoActionParameters>(action);
         return Value(score, reason);
     }
+
+    /// <summary>
+    /// v34 (bot plan H3 batch 8, the guide's C13): with three agendas or more in a normal-sized HQ, an optional draw only
+    /// thickens the flood a Runner's HQ access feeds on, so it falls below a basic credit (the Corp drew into a flooded HQ
+    /// 0.55 times a game).
+    /// </summary>
+    private static int FloodedDraw(HeuristicContext context) =>
+        context.Configuration.PolicyVersion == V34 && context.AgendaCount >= 3 ? context.DrawValue + context.CreditValue : 0;
 
     private static AgentUtility Mulligan(HeuristicContext context, NumberChoiceParameters choice)
     {
