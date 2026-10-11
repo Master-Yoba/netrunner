@@ -202,6 +202,12 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     /// optional draw falls below a basic credit. Two Corp fixes measured together, each too small for the ladder alone.
     /// </summary>
     public const string V34 = "corp-heuristic-v34";
+    /// <summary>
+    /// V34 with its flooded draw kept below every other choice when the turn planner re-scores them (bot plan H3 batch 9):
+    /// V34's draw ranked below a credit, but the planner's rollouts value a card in HQ and picked the draw anyway (458 times
+    /// in 3,200 box games), so the flooded draw drops a priority band and stays only the choice of last resort.
+    /// </summary>
+    public const string V35 = "corp-heuristic-v35";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
     /// V23 fixes V22's faults the reviews of batch 4's losses to Codex found (1 October: known traps advanced, two agendas
@@ -220,17 +226,17 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     public const string PolicyVersion = V34;
     /// <summary>The latest version that never plans: the planner's model of the Corp.</summary>
     public const string LatestHeuristic = V8;
-    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25, V26, V27, V28, V29, V30, V31, V32, V33, V34];
+    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25, V26, V27, V28, V29, V30, V31, V32, V33, V34, V35];
 
     /// <summary>Whether the version keeps the A9 tracker of the Runner's hidden cards (v26).</summary>
-    public static bool UsesTracker(string version) => version is V26 or V27 or V28 or V29 or V30 or V31 or V32 or V33 or V34;
+    public static bool UsesTracker(string version) => version is V26 or V27 or V28 or V29 or V30 or V31 or V32 or V33 or V34 or V35;
 
     public CorpHeuristicPolicy() : this(PolicyVersion) { }
 
     public CorpHeuristicPolicy(string version)
     {
-        if (version is not (V31 or V32 or V33 or V34))
-            throw new ArgumentException($"The live Corp policy is {V31} to {V34}; '{version}' is {nameof(LegacyCorpPolicy)}.", nameof(version));
+        if (version is not (V31 or V32 or V33 or V34 or V35))
+            throw new ArgumentException($"The live Corp policy is {V31} to {V35}; '{version}' is {nameof(LegacyCorpPolicy)}.", nameof(version));
         Version = version;
     }
 
@@ -293,7 +299,9 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
         {
             ActionKind.GainCredit => Value(context.CreditValue + (context.Self.Credits < ProtectionReserve(context) ? 150 : 0),
                 "economy/basic-credit-and-rez-reserve"),
-            ActionKind.DrawCard => Value(features.Board.HiddenZoneCounts.CorpDeck > 1 ? context.DrawValue - FloodedDraw(context) : -10000, "economy/draw-reserve"),
+            ActionKind.DrawCard => FloodedDraw(context) > 0 && context.Configuration.PolicyVersion == V35 && features.Board.HiddenZoneCounts.CorpDeck > 1
+                ? new(-1, context.DrawValue - FloodedDraw(context), "economy/no-draw-into-flooded-hq")
+                : Value(features.Board.HiddenZoneCounts.CorpDeck > 1 ? context.DrawValue - FloodedDraw(context) : -10000, "economy/draw-reserve"),
             ActionKind.PlayCard => Play(context, Require<PlayCardParameters>(action)),
             ActionKind.InstallCard when action.Parameters is BehaviorInstallChoiceParameters behaviorInstall =>
                 behaviorInstall.Choice is { } chosen
@@ -346,7 +354,7 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     /// 0.55 times a game). A larger HQ raises the threshold by its extra size (C13's hand-size modifiers).
     /// </summary>
     internal static int FloodedDraw(HeuristicContext context) =>
-        context.Configuration.PolicyVersion == V34 && context.AgendaCount >= 3 + Math.Max(0, (context.Self.MaximumHandSize ?? 5) - 5)
+        context.Configuration.PolicyVersion is V34 or V35 && context.AgendaCount >= 3 + Math.Max(0, (context.Self.MaximumHandSize ?? 5) - 5)
             ? context.DrawValue + context.CreditValue : 0;
 
     private static AgentUtility Mulligan(HeuristicContext context, NumberChoiceParameters choice)
