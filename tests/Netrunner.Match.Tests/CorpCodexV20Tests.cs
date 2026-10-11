@@ -181,7 +181,6 @@ public sealed class CorpCodexV20Tests
     private static string Title(GameState state, CardInstanceId id) =>
         CardDataResource.LoadEmbedded().Cards.Single(card => card.Code == state.GetCard(id).DefinitionId.Value).Title;
 
-    /// <summary>The Corp version's choice at the recorded decision <paramref name="sequence"/>, having watched the game to it.</summary>
     /// <summary>
     /// Bot plan H3 batch 7 (the guide's C01, C02): a flooded HQ lets an agenda into a remote the Runner gets into, unless HQ
     /// holds ICE the Corp can put there and rez; v33 installs that ICE first. A box ladder game, LEO Glacier against
@@ -201,6 +200,21 @@ public sealed class CorpCodexV20Tests
         Assert.True(installed == installs, $"{version} chose {chosen.Kind} {chosen.Description}.");
     }
 
+    /// <summary>
+    /// Bot plan H3 batch 8 (the guide's C13): with three agendas in HQ the Corp doesn't click to draw a fourth; v34 takes the
+    /// credit. A box ladder game, LEO Glacier against Magdalene, where v31 drew with three agendas in HQ on turn 2.
+    /// </summary>
+    [Theory]
+    [InlineData(CorpHeuristicPolicy.V31, true)]
+    [InlineData(CorpHeuristicPolicy.V34, false)]
+    public async Task AFloodedHqDrawsNoMoreCards(string version, bool draws)
+    {
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
+        (LegalAction chosen, _) = await ChooseAtAsync("corp-flooded-hq-draw", version, 55);
+        Assert.True((chosen.Kind == ActionKind.DrawCard) == draws, $"{version} chose {chosen.Kind} {chosen.Description}.");
+    }
+
+    /// <summary>The Corp version's choice at the recorded decision <paramref name="sequence"/>, having watched the game to it.</summary>
     private static async Task<(LegalAction Chosen, GameState State)> ChooseAtAsync(string fixture, string version, long sequence)
     {
         (ReplayArtifact replay, FullMatchDefinition definition) = SavedDecision.ReadSaved(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "Fixtures", "saved-games", fixture));

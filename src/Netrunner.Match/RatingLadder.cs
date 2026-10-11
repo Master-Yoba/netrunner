@@ -198,7 +198,7 @@ public static partial class RatingLadder
             // Corp v29 with the default Runner: the sequencing work measures Corp v30 against it.
             "standard-c29" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
                 side == PlayerSide.Corp ? CorpHeuristicPolicy.V29 : RunnerHeuristicPolicy.PolicyVersion),
-            // Corp v31 with the default Runner: the Corp before H3 batch 7 made v33 the default.
+            // Corp v31 with the default Runner: the Corp before H3 batch 8 made v34 the default.
             "standard-c31" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
                 side == PlayerSide.Corp ? CorpHeuristicPolicy.V31 : RunnerHeuristicPolicy.PolicyVersion),
             // Bot plan H3 batch 8: Corp v34 (v33 and no optional draw into a flooded HQ) with the default Runner.
