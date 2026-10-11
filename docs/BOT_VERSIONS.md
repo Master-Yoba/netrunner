@@ -2307,7 +2307,7 @@ splashing two) 204; at death the Runner held 3 cards or fewer with under 8 credi
 
 **The change** (MATCHUP_PT_UNTAIAN.md PT05, PT16, PT17):
 
-- The evaluation catalog carries each card's printed faction, public like its cost. A punishing operation in the Corp
+- The evaluation catalog answers each card's printed faction (`FactionOf`, outside its fingerprint), public like its cost. A punishing operation in the Corp
   identity's faction is evidence, as likely as a seen copy (Zwicky's).
 - A Corp that has shown three different damage-dealing cards is a damage deck, evidence too (Untaian has ten such cards;
   LEO two, Nebula one).
