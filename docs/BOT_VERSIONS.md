@@ -2331,3 +2331,8 @@ three damage cards.
 **Tests:** `RunnerPunisherV34Tests.TheGripStaysAboveMeasuredResponseInAWeylandGame` (a box ladder game, Zwicky against
 Magdalene, action 379: v32 plays Creative Commission and dies, v34 doesn't); `ACardOfTheCorpIdentitysFactionIsInFaction`;
 `ThreeDamageCardsSeenMakeADamageDeck`.
+
+**The review of #139.** Codex found one gap, valid: the grip floor priced every played card as one card fewer, so a draw
+event (VRcation's four, Ritual) that refills the grip could be refused as a card spent. It now counts what a played card
+draws as well as the clicks it loses, with a test (`TheGripFloorCountsAPlayedCardsDrawsAndLostClicks`). v34 isn't the
+default, so its ladder wasn't run again.

@@ -397,6 +397,34 @@ public sealed class RunnerHeuristicPolicyTests
         Assert.Equal(damageDeck, RunnerInference.DamageDeck(context));
     }
 
+    /// <summary>
+    /// The review of #139: Runner v34's grip floor counts what a played card draws and the clicks it loses, so a draw event
+    /// (VRcation's four) isn't priced as a card spent, and Creative Commission's lost click isn't a click to draw with.
+    /// </summary>
+    [Theory]
+    [InlineData(BehaviorInstructionKind.Draw, 4, true, 6, 2)]
+    [InlineData(BehaviorInstructionKind.LoseClicks, 1, true, 2, 1)]
+    [InlineData(BehaviorInstructionKind.Draw, 4, false, 2, 2)]
+    public void TheGripFloorCountsAPlayedCardsDrawsAndLostClicks(BehaviorInstructionKind kind, int amount, bool played, int grip, int clicks)
+    {
+        CardDefinitionId eventId = new("test:event");
+        var catalog = new ScenarioCatalog(new CardEvaluationDescriptor(new(eventId, PlayerSide.Runner, RuntimeCardClass.Event, playCost: 0),
+            new CardBehaviorDefinition(eventId, PlayerSide.Runner, instructions: [new BehaviorInstruction(kind, amount: amount)]),
+            null, null, null, null, null, [], false));
+        AgentFeatures read = ObservationReader.Read(Decision(new LegalAction(new("action:credit"), ActionKind.GainCredit, "ignored", new NoActionParameters())));
+        AgentFeatures features = read with
+        {
+            PrivateCards = new AgentPrivateCards
+            {
+                Grip = [new AgentCard { Id = "card:event", DefinitionId = eventId.Value }, new AgentCard { Id = "card:a", DefinitionId = "test:a" }, new AgentCard { Id = "card:b", DefinitionId = "test:b" }],
+            },
+            Board = read.Board with { Players = read.Board.Players with { Runner = read.Board.Players.Runner with { Clicks = 3 } } },
+        };
+        var context = new HeuristicContext(features, catalog, RunnerPolicyProfiles.Create("standard", 54, RunnerHeuristicPolicy.V34), HeuristicContext.FactionGeneration);
+
+        Assert.Equal((grip, clicks), RunnerHeuristicPolicy.AfterPlaying(context, "card:event", played));
+    }
+
     private static Observation Decision(params LegalAction[] actions)
     {
         GameState state = GameState.CreateNew(54);

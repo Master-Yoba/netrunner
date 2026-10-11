@@ -383,14 +383,22 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
         };
         if (card is null || !context.Features.Hand.Any(held => held.Id == card) || !RunnerInference.PunisherEvidence(context)) return utility;
         (int need, double chance) = RunnerInference.Punishers(context);
-        int hand = context.Features.Hand.Length;
-        // A card that also loses clicks (Creative Commission) leaves fewer to draw with.
-        int lost = context.Definition(context.Features.Hand.First(held => held.Id == card))?.Behavior is { } behavior
-            ? HeuristicContext.Flatten(behavior.Instructions).Where(instruction => instruction.Kind == BehaviorInstructionKind.LoseClicks).Sum(instruction => instruction.Amount)
-            : 0;
-        int clicksAfter = Math.Max(0, context.Self.Clicks - 1 - lost);
-        if (need == 0 || need > hand + context.Self.Clicks || need <= hand - 1 + clicksAfter) return utility;
+        (int gripAfter, int clicksAfter) = AfterPlaying(context, card, action.Kind == ActionKind.PlayCard);
+        if (need == 0 || need > context.Features.Hand.Length + context.Self.Clicks || need <= gripAfter + clicksAfter) return utility;
         return utility with { Score = utility.Score - (int)Math.Min(1200, chance * PunishedGame), Reason = utility.Reason + "+grip-floor" };
+    }
+
+    /// <summary>
+    /// v34: the grip and clicks left once a card from the grip is played or installed: one card and one click fewer, plus
+    /// what a played card draws (VRcation, Ritual; the review of #139) and less the clicks it loses (Creative Commission).
+    /// </summary>
+    internal static (int Grip, int Clicks) AfterPlaying(HeuristicContext context, string cardId, bool played)
+    {
+        BehaviorInstruction[] effects = played && context.Definition(context.Features.Hand.FirstOrDefault(held => held.Id == cardId))?.Behavior is { } behavior
+            ? [.. HeuristicContext.Flatten(behavior.Instructions)] : [];
+        int drawn = effects.Where(instruction => instruction.Kind == BehaviorInstructionKind.Draw).Sum(instruction => instruction.Amount);
+        int lost = effects.Where(instruction => instruction.Kind == BehaviorInstructionKind.LoseClicks).Sum(instruction => instruction.Amount);
+        return (context.Features.Hand.Length - 1 + drawn, Math.Max(0, context.Self.Clicks - 1 - lost));
     }
 
     /// <summary>v26: what a flatline to a punishing operation costs, before the chance the Corp holds one.</summary>
