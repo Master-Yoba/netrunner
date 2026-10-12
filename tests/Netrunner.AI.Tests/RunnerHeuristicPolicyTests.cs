@@ -497,6 +497,39 @@ public sealed class RunnerHeuristicPolicyTests
         Assert.Equal(worth, CorpHeuristicPolicy.FastAdvance(context, nano, 4, "card:nano-0"));
     }
 
+    /// <summary>
+    /// Corp v37 (the guide's C13 exception): three agendas in HQ stop the optional draw only while HQ holds ICE to protect
+    /// one with; with none, drawing for protection is the escape. v34 stops it either way.
+    /// </summary>
+    [Theory]
+    [InlineData(CorpHeuristicPolicy.V34, false, true)]
+    [InlineData(CorpHeuristicPolicy.V34, true, true)]
+    [InlineData(CorpHeuristicPolicy.V37, false, false)]
+    [InlineData(CorpHeuristicPolicy.V37, true, true)]
+    public void AFloodedHqDrawsForIceWhenItHoldsNone(string version, bool holdsIce, bool stopsDrawing)
+    {
+        CardDefinitionId agendaId = new("test:agenda");
+        CardDefinitionId iceId = new("test:ice");
+        var catalog = new ScenarioCatalog(
+            new CardEvaluationDescriptor(new(agendaId, PlayerSide.Corp, RuntimeCardClass.Agenda, agendaPoints: 2, advancementRequirement: 3),
+                null, null, null, null, null, new(agendaId, 2), [], false),
+            new CardEvaluationDescriptor(new(iceId, PlayerSide.Corp, RuntimeCardClass.Ice, rezCost: 2), null,
+                new(iceId, 0, IceType.Barrier, 2, [new EndRunSubroutineSpec()], []), null, null, null, null, [], false));
+        AgentFeatures read = ObservationReader.Read(Decision(new LegalAction(new("action:draw"), ActionKind.DrawCard, "ignored", new NoActionParameters())));
+        AgentFeatures features = read with
+        {
+            Side = PlayerSide.Corp,
+            PrivateCards = new AgentPrivateCards
+            {
+                Hand = [.. Enumerable.Range(0, 3).Select(index => new AgentCard { Id = $"card:agenda-{index}", DefinitionId = agendaId.Value }),
+                    .. holdsIce ? [new AgentCard { Id = "card:ice", DefinitionId = iceId.Value }] : Array.Empty<AgentCard>()],
+            },
+        };
+        var context = new HeuristicContext(features, catalog, CorpPolicyProfiles.Create("standard", 54, version), 25);
+
+        Assert.Equal(stopsDrawing, CorpHeuristicPolicy.FloodedDraw(context) > 0);
+    }
+
     private static Observation Decision(params LegalAction[] actions)
     {
         GameState state = GameState.CreateNew(54);
