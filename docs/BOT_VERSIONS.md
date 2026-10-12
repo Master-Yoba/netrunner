@@ -2531,3 +2531,8 @@ holds none.
 v37 becomes the default only if that interval clears zero.
 
 **Test:** `AFloodedHqDrawsForIceWhenItHoldsNone`.
+
+**Result (seed 4, 1,600 box deals): +1 Elo [−6, +9], level**, paired score +0.0013 [−0.0094, +0.0131], 265 deals changed
+and 82 results; v37 is not shipped and the default stays Corp v34. Drawing out of the flood for ICE finds protection
+about as often as it finds more agendas: it changes many games and wins none on balance. So the draw stop isn't what
+leaves those agendas exposed; what to do with a flooded, ICE-less HQ stays open.
