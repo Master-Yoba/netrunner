@@ -55,6 +55,11 @@ public sealed partial class RunnerHeuristicPolicy
                 upfrontCost: ability.Costs.Where(cost => cost.Kind == BehaviorCostKind.Credits).Sum(cost => cost.Amount));
         }
         int benefit = Effects(context, declaration.Instructions, card, PlayerSide.Runner);
+        // v35 (bot plan H3 batch 11): hosting on a console whose cards don't play from the grip (Madani) only saves the
+        // clicks of the programs past the first, which its once-a-turn free install brings out later.
+        if (context.Generation >= HeuristicContext.ConsoleGeneration && context.Definition(card)?.Behavior is { HostedCardsPlayAsGrip: false }
+            && HeuristicContext.Flatten(declaration.Instructions).Any(instruction => instruction.Kind == BehaviorInstructionKind.HostFaceUp))
+            benefit = 100 * (context.Features.Hand.Count(held => context.Definition(held)?.Printed.CardClass == RuntimeCardClass.Program) - 1);
         // v19 (Codex review, 1 October): credits the ability puts in the wallet now are worth what as many basic credits are,
         // saving for a breaker included (Pennyshaver's 2 lost to a basic credit's 1). Only v19: it lost to Codex where v18
         // won, and v20 leaves it out.

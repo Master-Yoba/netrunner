@@ -472,7 +472,7 @@ internal static class RunnerInference
             need = Math.Max(need, damage);
             copies += weight;
             seen |= context.Knowledge?.Reveals.Any(reveal => reveal.DefinitionId == definition) == true
-                || context.Generation >= HeuristicContext.FactionGeneration && (InCorpFaction(context, card) || DamageDeck(context));
+                || context.Generation == HeuristicContext.FactionGeneration && (InCorpFaction(context, card) || DamageDeck(context));
         }
         if (need == 0) return (0, 0.0);
         double total = prior.Values.Sum();
@@ -500,7 +500,7 @@ internal static class RunnerInference
     /// </summary>
     public static bool PunisherEvidence(HeuristicContext context) =>
         Evidence(context, card => PunisherDamage(card, 7, 99, 0) > 0)
-        || context.Generation >= HeuristicContext.FactionGeneration && (DamageDeck(context) || Prior(context).Keys.Any(definition =>
+        || context.Generation == HeuristicContext.FactionGeneration && (DamageDeck(context) || Prior(context).Keys.Any(definition =>
             context.Catalog.TryGet(new CardDefinitionId(definition), out CardEvaluationDescriptor card)
             && PunisherDamage(card, 7, 99, 0) > 0 && InCorpFaction(context, card)));
 
