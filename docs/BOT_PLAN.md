@@ -107,7 +107,8 @@ These are better than most hobby engines have and are not up for redesign:
 - **Determinism.** Every decision is a function of the observation, the checkpoint and `DeterministicRandom`; agents
   resume from checkpoints; replays verify.
 - **Decision logs, saved games, saved-decision regression tests** (`BotLoop1Tests`, `BotLoop2Tests`,
-  `BotStrategy1Tests`), the Oddity lints (`ai-lint`), `ai-runner-diagnosis`, `ai-belief`, `ai-style`.
+  `BotStrategy1Tests`), the Oddity lints (`ai-lint`), `ai-runner-diagnosis`, `ai-belief`, `ai-style`, and `ai-ladder-diff`
+  (each paired game's first departure from its baseline, grouped by kind, with `--reasons`; after chiriboga's replay diff).
 - **The whole-run model** (`RunModel`, `RunnerEncounterPlanner`) and **the tracker** (`CardTracker`), which beats its
   prior on every tier.
 - **The paired-deal ladder** (`RatingLadder`) with the bootstrap interval and `--stop-when-clear`.
