@@ -237,9 +237,10 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// V28 on 800 Core Battle Box deals, 11% to 30% against PT Untaian, level on Gateway. V31 (tags) was level. V32 (bot plan
     /// H3 batch 4, advanced remote cards as agendas) is: +23 Elo [6, 40] over V30 on 1,600 box deals. V33 and V34 were level.
     /// V35 (bot plan H3 batch 11, Madani's hosting priced at the clicks it saves) is: +27 Elo [10, 43] over V32 on 1,600 box
-    /// deals, Magdalene 24% to 36%.
+    /// deals, Magdalene 24% to 36%. V36 was level. V37 (V35 with V34's rules against the first Measured Response) is: +8 Elo
+    /// [1, 15] over V35 on 1,600 fresh box deals, judged by the ladder's deal-paired bootstrap.
     /// </remarks>
-    public const string PolicyVersion = V35;
+    public const string PolicyVersion = V37;
     /// <summary>
     /// The planner's model of the Runner. It stays V7, which Corp v9 was measured
     /// with, so the shipped Corp planner plays as it did.
