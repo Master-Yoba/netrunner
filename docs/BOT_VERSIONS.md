@@ -2408,3 +2408,34 @@ evidence would need a rule decided before a run that measures that deck, which t
 (front-side Nebula on 17 credits, three Nanomanagements, Next Big Thing) never started. The other click-gaining operations
 in HQ now count, cheapest first and as far as the credits go, with a test (`ChainedNanomanagementsCountTowardTheScore`).
 v36 isn't the default, so its ladders weren't run again.
+
+### H3 batch 13: Runner v36, a draw engine over the turns left (12 October 2026)
+
+**Not shipped: level.** The default stays Runner v35; v36 stays constructible (`standard-r36`).
+
+**The diagnosis.** A replay of the actions each side was offered and took, per deck (1,600 box games), looked first at
+LEO Glacier, the weakest Corp (36% to 40%). Its upgrades looked idle (Manegarm Skunkworks offered a rez 36 times a game,
+rezzed 0.4) but weren't: in the window that matters, the Runner past all ICE on the upgrade's own server, LEO rezzed
+Manegarm Skunkworks 0.37 of 0.5 times a game and Anoetic Void 0.37 of 0.4; the other offers were windows where a rez does
+nothing. Topan (30%) left Verbal Plasticity in the grip: offered 4.3 installs a game, taken 0.38, from three copies, while
+it took a basic draw nearly every turn. v6 valued its extra card on the first basic draw at three turns' worth, less
+than a basic draw.
+
+**The change** (`RunnerHeuristicPolicy.Install`): a better basic draw is worth its extra card over the turns the game
+likely has left (13 less the turn, two to ten) at eight basic draws in ten turns.
+
+| | Runner v36 − v35 |
+|---|---:|
+| Box, 1,600 deals | **−1 Elo [−18, +16]**, level |
+| Magdalene / MuslihaT / Topan | 35.6% to 36.2% / 59.7% game for game / 30.5% to 29.4% |
+
+The rule, decided before the run, was to ship v36 only if the interval cleared zero; it did not. Where v35 passed Verbal
+Plasticity over early, v36 installed it at 7 of 40 such decisions, and the cards it drew didn't change Topan's games.
+
+**Test:** `RunnerDrawEngineV36Tests.VerbalPlasticityIsInstalledEarly` (a box ladder game, LEO Glacier against Topan,
+action 80 on turn 2: v35 passes it over, v36 installs it).
+
+**The review of #142.** Codex asked for the per-slice fuzz and the budget-scaling ladder (AGENTS.md). Both play the
+default policies (the fuzz's agents, `standard-x1` and `standard-x4`), which a version that isn't shipped leaves
+unchanged, so they would exercise none of v36's code; they run when a version becomes the default, as they did for
+Runner v35 (batch 11). The same holds for the other versions left constructible (Corp v35 and v36, Runner v33 and v34).

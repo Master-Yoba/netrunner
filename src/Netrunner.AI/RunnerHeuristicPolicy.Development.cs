@@ -83,8 +83,11 @@ public sealed partial class RunnerHeuristicPolicy
             // (Fermenter) is income too, about two turns' worth; it was worth less than a click for a credit and never installed.
             income += GrowingIncome(definition);
             value = 180 + income * 45;
-            // v6: a better basic draw pays off over the coming turns (Verbal Plasticity).
-            value += (definition.Behavior?.FirstBasicDrawReplacements ?? []).Sum(replacement => (replacement.DrawCount - 1) * context.DrawValue * 3);
+            // v6: a better basic draw pays off over the coming turns (Verbal Plasticity). v36 (bot plan H3 batch 13): over the
+            // turns the game likely has left, at the Runner's usual basic draw a turn; three turns' worth lost to a draw, and
+            // Topan installed it 0.4 times a game from three copies.
+            value += (definition.Behavior?.FirstBasicDrawReplacements ?? []).Sum(replacement => (int)((replacement.DrawCount - 1) * context.DrawValue
+                * (context.Generation >= HeuristicContext.DrawEngineGeneration ? DrawEngineTurns(context) : 3)));
             if (definition.Printed.Console) value += 180;
             if (context.Self.UsedMemory >= context.Self.MemoryLimit && definition.Printed.CardClass == RuntimeCardClass.Hardware) value += 170;
         }
@@ -98,6 +101,13 @@ public sealed partial class RunnerHeuristicPolicy
         return new(0, value - install.CreditCost * context.CreditValue - replacement, "rig/coverage-minus-issued-cost-and-replacement", true,
             new("install", null, null, install.CardId.Value));
     }
+
+    /// <summary>
+    /// v36: the turns a draw engine installed now likely pays for: a box game lasts about 13 turns, so the turns left, two to
+    /// ten, at eight basic draws in ten turns.
+    /// </summary>
+    internal static double DrawEngineTurns(HeuristicContext context) =>
+        Math.Clamp(13 - context.Features.Board.Turn.TurnNumber, 2, 10) * 0.8;
 
     private static AgentUtility Trash(HeuristicContext context, RunCardPaymentParameters payment)
     {

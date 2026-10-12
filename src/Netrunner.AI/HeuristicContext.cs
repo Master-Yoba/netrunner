@@ -238,6 +238,9 @@ internal sealed class HeuristicContext
     /// <summary>Runner v35 (bot plan H3 batch 11): hosting on a console whose cards don't play from the grip (Madani).</summary>
     public const int ConsoleGeneration = 30;
 
+    /// <summary>Runner v36 (bot plan H3 batch 13): a better basic draw is worth it over the turns left.</summary>
+    public const int DrawEngineGeneration = 31;
+
     public double OpponentScorePressure => Opponent.AgendaPoints switch
     {
         >= 6 => 1.6,
