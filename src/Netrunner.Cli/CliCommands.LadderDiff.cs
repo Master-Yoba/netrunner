@@ -53,10 +53,20 @@ public static partial class CliCommands
         Dictionary<string, string> titles = CardTitles();
         string Title(CardDefinitionId definition) => titles.GetValueOrDefault(definition.Value, definition.Value);
         var byId = games.ToDictionary(entry => entry.Game.Game.Id, entry => entry, StringComparer.Ordinal);
-        output.WriteLine($"ai-ladder-diff games={games.Count} directory={directory}");
-        foreach (PlayerSide side in new[] { PlayerSide.Corp, PlayerSide.Runner })
+        LadderDivergenceReport[] reports = [.. new[] { PlayerSide.Corp, PlayerSide.Runner }
+            .Select(side => LadderDivergences.Compare(games, side, baseline, candidate, Title))];
+        // The review of #145: a misspelled or absent entrant pairs nothing, which must not pass for a change that changed nothing.
+        if (reports.All(report => report.Pairs == 0))
         {
-            LadderDivergenceReport report = LadderDivergences.Compare(games, side, baseline, candidate, Title);
+            string present = string.Join(", ", games.SelectMany(entry => new[] { entry.Game.Game.Corp, entry.Game.Game.Runner })
+                .Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal));
+            error.WriteLine($"ai-ladder-diff failed: no game of {candidate} pairs with one of {baseline} in either seat; the archive holds {present}.");
+            return 2;
+        }
+        output.WriteLine($"ai-ladder-diff games={games.Count} directory={directory}");
+        foreach (LadderDivergenceReport report in reports)
+        {
+            PlayerSide side = report.Side;
             if (report.Pairs == 0) continue;
             int better = report.Divergences.Count(divergence => divergence.SeatScoreChange > 0);
             int worse = report.Divergences.Count(divergence => divergence.SeatScoreChange < 0);

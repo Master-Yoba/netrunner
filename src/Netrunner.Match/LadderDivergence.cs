@@ -26,7 +26,9 @@ public static partial class LadderDivergences
 {
     /// <summary>
     /// Pairs the saved games of <paramref name="candidate"/> and <paramref name="baseline"/> in <paramref name="side"/> that
-    /// played the same deal against the same opponent entrant, and finds each pair's first departure.
+    /// played the same content and seed against the same opponent entrant, and finds each pair's first departure. Both
+    /// ladder plans pair this way: a deal plan gives every pairing a deal's seed, and a seed-per-pairing plan (no deal
+    /// numbers) gives every pairing the same seeds (the review of #145).
     /// </summary>
     public static LadderDivergenceReport Compare(IEnumerable<(LadderSavedGame Game, FullMatchDefinition Definition)> games, PlayerSide side,
         string baseline, string candidate, Func<CardDefinitionId, string>? title = null)
@@ -34,18 +36,19 @@ public static partial class LadderDivergences
         ArgumentNullException.ThrowIfNull(games);
         string Seat(LadderGame game) => side == PlayerSide.Corp ? game.Corp : game.Runner;
         string Opponent(LadderGame game) => side == PlayerSide.Corp ? game.Runner : game.Corp;
-        var all = games.Where(entry => entry.Game.Game.Deal >= 0).ToArray();
+        var all = games.ToArray();
         var baselines = all.Where(entry => Seat(entry.Game.Game) == baseline)
-            .ToDictionary(entry => (entry.Game.Game.Deal, Opponent(entry.Game.Game)), entry => entry);
+            .ToDictionary(entry => (entry.Game.Game.ContentId, entry.Game.Game.GameSeed, Opponent(entry.Game.Game)), entry => entry);
         var divergences = new List<LadderDivergence>();
         int pairs = 0;
         // Two opponent entrants of one policy play a deal's games identically; such a repeat counts once.
-        var seen = new HashSet<(int, string?, string?)>();
-        foreach (var mine in all.Where(entry => Seat(entry.Game.Game) == candidate).OrderBy(entry => entry.Game.Game.Deal)
-            .ThenBy(entry => Opponent(entry.Game.Game), StringComparer.Ordinal))
+        var seen = new HashSet<(string, ulong, string?, string?)>();
+        foreach (var mine in all.Where(entry => Seat(entry.Game.Game) == candidate).OrderBy(entry => entry.Game.Game.ContentId, StringComparer.Ordinal)
+            .ThenBy(entry => entry.Game.Game.GameSeed).ThenBy(entry => Opponent(entry.Game.Game), StringComparer.Ordinal))
         {
-            if (!baselines.TryGetValue((mine.Game.Game.Deal, Opponent(mine.Game.Game)), out var theirs)) continue;
-            if (!seen.Add((mine.Game.Game.Deal, mine.Game.Replay.ExpectedFinalStateHash, theirs.Game.Replay.ExpectedFinalStateHash))) continue;
+            LadderGame game = mine.Game.Game;
+            if (!baselines.TryGetValue((game.ContentId, game.GameSeed, Opponent(game)), out var theirs)) continue;
+            if (!seen.Add((game.ContentId, game.GameSeed, mine.Game.Replay.ExpectedFinalStateHash, theirs.Game.Replay.ExpectedFinalStateHash))) continue;
             pairs++;
             if (First(mine.Game, theirs.Game, mine.Definition, side, baseline, candidate, title) is { } divergence) divergences.Add(divergence);
         }
