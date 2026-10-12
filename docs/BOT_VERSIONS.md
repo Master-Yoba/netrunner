@@ -2452,7 +2452,7 @@ judged by them without dilution: the unchanged deals add nothing to the differen
 
 The same ladder results, rescored (a re-reading, not a ship decision; each was decided by the rule declared for it):
 
-| Ladder (1,600 box deals unless noted) | Interval as reported | Rescored by deal | Deals changed |
+| Ladder (1,600 box deals unless noted) | Interval as reported | Rescored by deal | Deals whose result changed |
 |---|---:|---:|---:|
 | Corp v36 − v34, 3,200 deals (seed 2) | +8 [−2, +20] | +8 [+3, +14] | 170 |
 | Corp v36 − v34 (seed 1) | +10 [−4, +28] | +10 [+3, +18] | 77 |
@@ -2480,7 +2480,7 @@ If both Corp versions pass, they are combined and the combination is measured ag
 
 **The re-tests (seed 3, 1,600 box deals each), judged by the rule declared above:**
 
-| Candidate | Deal-paired interval | Paired score difference | Deals changed | Outcome |
+| Candidate | Deal-paired interval | Paired score difference | Deals whose result changed | Outcome |
 |---|---:|---:|---:|---|
 | Corp v36 − v34 | +5 Elo [−2, +14] | +0.0075 [−0.0025, +0.0207] | 88 | not shipped |
 | Corp v35 − v34 | +2 [−3, +8] | +0.0038 [−0.0038, +0.0125] | 48 | not shipped |
@@ -2498,3 +2498,9 @@ budget-scaling ladder, `standard-x4` − `standard-x1` on 240 box deals: Corp �
 Anchors (`standard` − `standard-m5`, stopped clear at 48 deals): Corp +191 [105, 277], Runner +380 [309, 478].
 `BOT_CHECK_SUITES=1 make bot-check`: every suite passes; regret Runner v37 0.0576, as v35; puzzles 28/29 box, 5/5 NSG core
 sets.
+
+**The review of #143.** Codex found one gap, valid: the count of changed deals came from each deal's averaged
+difference, so changes against two opponents that cancel, or a different game with the same result, counted as
+unchanged. Both counts now come game by game, before averaging: `changed` (a matched game's final state differs) and
+`results-changed` (its result differs), with a test (`ChangedDealsAreCountedGameByGame`). The counts above are of deals
+whose result changed; in those ladders both opponents were one policy, so nothing cancelled.

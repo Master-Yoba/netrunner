@@ -186,10 +186,39 @@ public sealed class RatingLadderTests
             comparison => comparison.Side == PlayerSide.Corp);
         Assert.Equal(400, paired.Deals);
         Assert.Equal(20, paired.ChangedDeals);
+        Assert.Equal(20, paired.ResultChangedDeals);
         Assert.Equal(0.05, paired.ScoreDifference, 6);
         Assert.True(paired.Clear && paired.Lower > 0, $"[{paired.Lower}, {paired.Upper}]");
         LadderDifference gap = Assert.Single(RatingLadder.Rate(results, bootstrap: 200).Differences, difference => difference.Side == PlayerSide.Corp);
         Assert.True(gap.Separated, $"{gap.Elo} [{gap.Lower}, {gap.Upper}]");
+    }
+
+    /// <summary>
+    /// The review of #143: a deal's changes are counted game by game before its games are averaged. On deal 0 the candidate
+    /// wins against one opponent and loses against the other (the mean difference is zero); on deal 1 it plays a different
+    /// game to the same result. Both deals changed; only deal 0's results did.
+    /// </summary>
+    [Fact]
+    public void ChangedDealsAreCountedGameByGame()
+    {
+        LadderGameResult Game(int deal, string corp, string runner, double score, string hash) =>
+            new(new LadderGame($"{corp}-{runner}-{deal}", "box", (ulong)deal, corp, runner, deal), score, false, 100, null, hash);
+        LadderGameResult[] results =
+        [
+            Game(0, "easy", "easy", 0, "a"), Game(0, "standard", "easy", 1, "b"),
+            Game(0, "easy", "standard", 1, "c"), Game(0, "standard", "standard", 0, "d"),
+            Game(1, "easy", "easy", 1, "e"), Game(1, "standard", "easy", 1, "f"),
+            Game(1, "easy", "standard", 1, "g"), Game(1, "standard", "standard", 1, "g"),
+            Game(2, "easy", "easy", 0, "h"), Game(2, "standard", "easy", 0, "h"),
+            Game(2, "easy", "standard", 0, "i"), Game(2, "standard", "standard", 0, "i"),
+        ];
+
+        LadderPairedComparison corp = Assert.Single(RatingLadder.ComparePaired(results, "easy", "standard", bootstrap: 50),
+            comparison => comparison.Side == PlayerSide.Corp);
+
+        Assert.Equal(0, corp.ScoreDifference, 6);
+        Assert.Equal(2, corp.ChangedDeals);
+        Assert.Equal(1, corp.ResultChangedDeals);
     }
 
     [Fact]

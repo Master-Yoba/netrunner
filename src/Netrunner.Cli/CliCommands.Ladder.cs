@@ -245,7 +245,7 @@ public static partial class CliCommands
                 output.WriteLine($"pool={RulesFuzzRunner.PoolVersion(content)} deals={dealsPlayed}/{deals} stopped-early={stoppedEarly.ToString().ToLowerInvariant()}");
             foreach (LadderPairedComparison paired in pairedComparisons)
                 output.WriteLine(string.Create(CultureInfo.InvariantCulture,
-                    $"paired {paired.Side,-6} {paired.Candidate}-{paired.Baseline} score={paired.ScoreDifference:+0.0000;-0.0000} 95%=[{paired.Lower:+0.0000;-0.0000}, {paired.Upper:+0.0000;-0.0000}] deals={paired.Deals} changed={paired.ChangedDeals} clear={paired.Clear.ToString().ToLowerInvariant()}"));
+                    $"paired {paired.Side,-6} {paired.Candidate}-{paired.Baseline} score={paired.ScoreDifference:+0.0000;-0.0000} 95%=[{paired.Lower:+0.0000;-0.0000}, {paired.Upper:+0.0000;-0.0000}] deals={paired.Deals} changed={paired.ChangedDeals} results-changed={paired.ResultChangedDeals} clear={paired.Clear.ToString().ToLowerInvariant()}"));
             foreach (LadderDeckComparison deck in deckComparisons)
                 output.WriteLine(string.Create(CultureInfo.InvariantCulture,
                     $"deck {deck.Side,-6} {deck.ContentId} {deck.Candidate}-{deck.Baseline} score={deck.ScoreDifference:+0.00;-0.00} 95%=[{deck.Lower:+0.00;-0.00}, {deck.Upper:+0.00;-0.00}] deals={deck.Deals}{(deck.Warning ? " WARNING" : "")}"));
