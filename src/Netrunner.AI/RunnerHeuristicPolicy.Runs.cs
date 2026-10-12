@@ -149,7 +149,7 @@ public sealed partial class RunnerHeuristicPolicy
                 : RunnerInference.StealDamage(context);
             if (steal > 0) risk += Exposure(1, steal > gripAfter ? agenda : 0, steal == gripAfter ? agenda : 0);
             // v34 (PT16): a steal that raises the threat level arms the Corp's punishing operation for its next turn.
-            if (context.Generation == HeuristicContext.FactionGeneration && evidence && need == 0 && agenda > 0
+            if (context.PunisherRules && evidence && need == 0 && agenda > 0
                 && !RunnerInference.StealWins(context.Self.AgendaPoints, RunnerInference.SmallestAgenda(context)))
             {
                 double arms = RunnerInference.StealArms(context, gripAfter, Math.Max(0, clicksAfter), out double held);

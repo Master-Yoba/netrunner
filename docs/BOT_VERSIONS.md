@@ -2439,3 +2439,41 @@ action 80 on turn 2: v35 passes it over, v36 installs it).
 default policies (the fuzz's agents, `standard-x1` and `standard-x4`), which a version that isn't shipped leaves
 unchanged, so they would exercise none of v36's code; they run when a version becomes the default, as they did for
 Runner v35 (batch 11). The same holds for the other versions left constructible (Corp v35 and v36, Runner v33 and v34).
+
+## Paired ladder intervals (12 October 2026)
+
+**The finding.** Reading chiriboga's seeded gates (`docs/CHIRIBOGA_NOTES.md`), which judge a change by the paired
+difference over the same seeds, showed that `RatingLadder.Rate` resampled single games in its bootstrap. A candidate
+and its baseline play the same deal, so the deal's luck cancels in their gap only if a draw keeps their games together;
+resampled one game at a time, the gap's interval carried every game's luck. The bootstrap now resamples deals, and a
+two-entrant ladder prints a `paired` line per seat: the mean seat-score difference over deals, its interval, and how
+many deals the candidate changed at all (chiriboga's "changed by the option" check). A change that touches few deals is
+judged by them without dilution: the unchanged deals add nothing to the difference or to its noise.
+
+The same ladder results, rescored (a re-reading, not a ship decision; each was decided by the rule declared for it):
+
+| Ladder (1,600 box deals unless noted) | Interval as reported | Rescored by deal | Deals changed |
+|---|---:|---:|---:|
+| Corp v36 − v34, 3,200 deals (seed 2) | +8 [−2, +20] | +8 [+3, +14] | 170 |
+| Corp v36 − v34 (seed 1) | +10 [−4, +28] | +10 [+3, +18] | 77 |
+| Corp v35 − v34 | +3 [−11, +20] | +3 [−3, +8] | 39 |
+| Corp v34 − v31 | +18 [+0.2, +33] | +18 [+1, +35] | 401 |
+| Corp v33 − v31 | +16 [−2, +30] | +16 [−1, +32] | 386 |
+| Runner v35 − v32 | +27 [+10, +43] | +27 [+20, +34] | 80 |
+| Runner v34 − v32 | +6 [−11, +24] | +6 [−1, +14] | 66 |
+| Runner v36 − v35 | −1 [−18, +16] | −1 [−9, +7] | 133 |
+| Runner v33 − v32 | +1 [−17, +17] | +1 [−17, +20] | 534 |
+
+The narrower the change, the more the pairing gains: a Nebula-only change (77 to 170 deals) narrowed threefold, one that
+moved 400 deals hardly at all. When both entrants of a seat are the same policy (a Corp ladder's two Runners), their
+games are identical, which the per-deal mean handles.
+
+**Re-tests, declared before running them.** Fresh seeds (seed 3), 1,600 box deals each, judged by the corrected
+interval; a version becomes the default only if that interval clears zero:
+
+- Corp v36 (fast advance with Nanomanagement) against Corp v34;
+- Corp v35 (the planner's flooded draws) against Corp v34;
+- Runner v37, new: v35 with v34's rules against the first Measured Response (its evidence from the Corp's faction or a
+  damage deck, the grip floor, a steal that arms it), against Runner v35. v36's draw-engine rule is now v36's alone.
+
+If both Corp versions pass, they are combined and the combination is measured against the better one before it ships.
