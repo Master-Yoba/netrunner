@@ -43,7 +43,7 @@ public sealed class PolicyVersionTests
             // Corp v31 to v33 (bot plan H3) are live beside v34, the default since H3 batch 8.
             Type expected = version == live || side == PlayerSide.Runner
                 && version is RunnerHeuristicPolicy.V27 or RunnerHeuristicPolicy.V28 or RunnerHeuristicPolicy.V29 or RunnerHeuristicPolicy.V30 or RunnerHeuristicPolicy.V31 or RunnerHeuristicPolicy.V32 or RunnerHeuristicPolicy.V33 or RunnerHeuristicPolicy.V34
-                || side == PlayerSide.Corp && version is CorpHeuristicPolicy.V31 or CorpHeuristicPolicy.V32 or CorpHeuristicPolicy.V33 or CorpHeuristicPolicy.V35
+                || side == PlayerSide.Corp && version is CorpHeuristicPolicy.V31 or CorpHeuristicPolicy.V32 or CorpHeuristicPolicy.V33 or CorpHeuristicPolicy.V35 or CorpHeuristicPolicy.V36
                 ? side == PlayerSide.Corp ? typeof(CorpHeuristicPolicy) : typeof(RunnerHeuristicPolicy)
                 : side == PlayerSide.Corp ? typeof(LegacyCorpPolicy) : typeof(LegacyRunnerPolicy);
             Assert.IsType(expected, policy);
@@ -60,6 +60,7 @@ public sealed class PolicyVersionTests
         if (side == PlayerSide.Corp) Assert.Throws<ArgumentException>(() => new LegacyCorpPolicy(CorpHeuristicPolicy.V33));
         if (side == PlayerSide.Corp) Assert.Throws<ArgumentException>(() => new LegacyCorpPolicy(CorpHeuristicPolicy.V34));
         if (side == PlayerSide.Corp) Assert.Throws<ArgumentException>(() => new LegacyCorpPolicy(CorpHeuristicPolicy.V35));
+        if (side == PlayerSide.Corp) Assert.Throws<ArgumentException>(() => new LegacyCorpPolicy(CorpHeuristicPolicy.V36));
     }
 
     /// <summary>

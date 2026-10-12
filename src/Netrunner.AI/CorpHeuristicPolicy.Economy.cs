@@ -11,10 +11,55 @@ public sealed partial class CorpHeuristicPolicy
         CardBehaviorDefinition? behavior = context.Definition(card)?.Behavior;
         if (behavior is null) return Value(-50, "play/unmodelled", approximate: true, fallback: true);
         int effect = Effects(context, behavior.Instructions, card, behavior.Controller);
+        if (context.Configuration.PolicyVersion == V36) effect += FastAdvance(context, behavior, play.CreditCost, play.CardId.Value);
         // v30: a play only possible before the turn's first action finishes (Petty Cash) is now or never this turn.
         if (effect - play.CreditCost * context.CreditValue > 0 && NowOrNever(behavior.Conditions)) effect += NowOrNeverBonus;
         return new(effect >= 10000 ? 100 : 0, effect - play.CreditCost * context.CreditValue,
             "play/effect-minus-current-cost", Approximate: effect < 10000);
+    }
+
+    /// <summary>
+    /// v36 (bot plan H3 batch 12; MATCHUP_NEBULA.md NE07 to NE09): an operation that gains clicks is worth the best agenda
+    /// it lets the Corp score this turn that it can't score without it: one from HQ, installed and advanced in full, or an
+    /// installed one advanced the rest of the way, each advancement a click and a credit. Front-side Nebula with 7 credits
+    /// plays Nanomanagement and installs and advances a three-advancement agenda; v34 never played it. The other
+    /// click-gaining operations in HQ count too, cheapest first, as far as the credits go (the review of #141: NE09's three
+    /// Nanomanagements score Next Big Thing from 17 credits, and the first of them starts that line).
+    /// </summary>
+    internal static int FastAdvance(HeuristicContext context, CardBehaviorDefinition behavior, int creditCost, string? cardId = null)
+    {
+        int gained = Gained(behavior);
+        if (gained <= 1) return 0;
+        int clicks = context.Self.Clicks, credits = context.Self.Credits;
+        // Each line plays this operation, then the others in HQ one more at a time.
+        var lines = new List<(int Clicks, int Credits)> { (clicks - 1 + gained, credits - creditCost) };
+        foreach ((int otherGain, int otherCost) in context.Features.Hand.Where(card => card.Id != cardId)
+            .Select(card => context.Definition(card)).OfType<CardEvaluationDescriptor>()
+            .Where(definition => definition.Printed.CardClass == RuntimeCardClass.Operation && definition.Behavior is not null && Gained(definition.Behavior) > 1)
+            .Select(definition => (Gained(definition.Behavior!), definition.Printed.PlayCost ?? 0)).OrderBy(other => other.Item2))
+        {
+            (int lastClicks, int lastCredits) = lines[^1];
+            if (otherCost > lastCredits || lastClicks < 1) break;
+            lines.Add((lastClicks - 1 + otherGain, lastCredits - otherCost));
+        }
+        int best = 0;
+        foreach (AgentCard card in context.Features.Hand)
+            if (context.Definition(card) is { Agenda: not null, Printed: { } agenda })
+                best = Math.Max(best, Enabled(1 + agenda.AdvancementRequirement, agenda.AdvancementRequirement, agenda.AgendaPoints));
+        foreach (AgentCard card in context.Features.Board.Servers.Where(server => server.Kind == ServerKind.Remote).SelectMany(server => server.Root).OfType<AgentCard>())
+            if (context.Definition(card) is { Agenda: not null, Printed: { } agenda })
+            {
+                int left = Math.Max(0, agenda.AdvancementRequirement - (card.AdvancementCounters ?? 0));
+                best = Math.Max(best, Enabled(left, left, agenda.AgendaPoints));
+            }
+        return best;
+
+        int Enabled(int clicksNeeded, int creditsNeeded, int points) =>
+            (clicksNeeded > clicks || creditsNeeded > credits)
+            && lines.Any(line => clicksNeeded <= line.Clicks && creditsNeeded <= line.Credits) ? 200 + 300 * points : 0;
+
+        static int Gained(CardBehaviorDefinition definition) => HeuristicContext.Flatten(definition.Instructions)
+            .Where(instruction => instruction.Kind == BehaviorInstructionKind.GainClicks).Sum(instruction => instruction.Amount);
     }
 
     private static AgentUtility Ability(HeuristicContext context, AbilityActionParameters ability)

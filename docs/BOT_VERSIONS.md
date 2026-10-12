@@ -2371,3 +2371,40 @@ pool (official 24, Gateway 288, Elevation 1,152, Gateway–Elevation 288, NSG co
 budget-scaling ladder, `standard-x4` − `standard-x1` on 240 box deals: Corp −19 [−55, +24], Runner +11 [−33, +52], flat as
 before. `bot-check`'s first run timed out two coordinator tests (`FullMatchTests`, `BeatPlannerTests`, human Runner) under
 its parallel suites; alone they pass twice (0.1 s and 8 s), and the gates run them again.
+
+### H3 batch 12: Corp v36, fast advance with Nanomanagement (12 October 2026)
+
+**The diagnosis.** A replay of the Corp's clicks per deck (6,400 box games, Runner v35) found Nebula, whose deck is built
+to score "straight from hand with Nanomanagement and the flipped identity's extra clicks", never playing Nanomanagement
+in 800 games: v34 priced it at its two clicks (200) less its 4 credits, always below zero. Corp wins by deck: LEO 40%,
+Nebula 64%, PT Untaian and Zwicky 68%.
+
+**The change** (MATCHUP_NEBULA.md NE07 to NE09; `CorpHeuristicPolicy.FastAdvance`): an operation that gains clicks is
+worth 200 and 300 a point for the best agenda it lets the Corp score this turn that it couldn't score without it: one
+from HQ, installed and advanced in full, or an installed one advanced the rest of the way, each advancement a click and
+a credit. The identity's face isn't in the bot's view, so the flipped Nebula's refunded click isn't counted (the note's
+front-side line: Nanomanagement on 7 credits installs and scores a three-advancement agenda).
+
+| | Corp v36 − v34 |
+|---|---:|
+| Box, 1,600 deals (seed 1) | **+10 Elo [−4, +28]**, level; Corp wins 58% to 60% |
+| Nebula, 804 games | 62.4% to 68.7%; the other three Corps game for game (none holds Nanomanagement) |
+| Nebula's pairings | Magdalene +0.09 [+0.01, +0.18], MuslihaT +0.10 [+0.04, +0.16], Topan +0.00 [−0.07, +0.08] |
+
+The rule, decided before the run, was to ship v36 only if the interval cleared zero; it did not. The change touches a
+quarter of the box's games, so the whole-box interval dilutes it, and single-deck cells have misled before (batch 5).
+**Declared before running it:** a confirmation on 3,200 fresh box deals (seed 2); v36 ships only if that interval clears
+zero.
+
+**Test:** `NanomanagementIsWorthTheAgendaItLetsTheCorpScore` (3 clicks and 7 credits score a three-advancement agenda; 6
+credits don't; a two-advancement agenda scores without it).
+
+**The confirmation (seed 2, 3,200 box deals): +8 Elo [−2, +20]**, level, so v36 is not shipped and the default stays Corp
+v34. The Nebula effect repeated, 62.2% to 67.2% over 1,602 Nebula games, and the other Corps again played game for game;
+a whole-box ladder can't resolve a gain confined to a quarter of its games at this size. Shipping it on the deck-level
+evidence would need a rule decided before a run that measures that deck, which the ladder can't select today.
+
+**The review of #141.** Codex found one gap, valid: the bonus counted only the operation being played, so NE09's chain
+(front-side Nebula on 17 credits, three Nanomanagements, Next Big Thing) never started. The other click-gaining operations
+in HQ now count, cheapest first and as far as the credits go, with a test (`ChainedNanomanagementsCountTowardTheScore`).
+v36 isn't the default, so its ladders weren't run again.
