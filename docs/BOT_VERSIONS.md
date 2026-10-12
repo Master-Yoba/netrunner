@@ -2490,3 +2490,11 @@ Corp v36's gain was smaller on these seeds than on the first two, and its interv
 Corp v34. Rescored by deal, its first two runs cleared zero; this one, the run declared under the corrected rule, does
 not. Runner v37 (v34's rules against the first Measured Response, on top of v35) clears it; its
 shipping checks follow.
+
+**Runner v37's shipping checks.** Gateway, 240 deals: no deal changed (no Gateway Corp holds a punishing operation), so
+no harm. The per-slice fuzz, `--games-per-pairing 8 --verify-replays-every 8`: every game terminal on every pool
+(official 24, Gateway 288, Elevation 1,152, Gateway–Elevation 288, NSG core sets 2,592; 543 replays verified). The
+budget-scaling ladder, `standard-x4` − `standard-x1` on 240 box deals: Corp −23 [−54, +10], Runner +10 [−29, +56], flat.
+Anchors (`standard` − `standard-m5`, stopped clear at 48 deals): Corp +191 [105, 277], Runner +380 [309, 478].
+`BOT_CHECK_SUITES=1 make bot-check`: every suite passes; regret Runner v37 0.0576, as v35; puzzles 28/29 box, 5/5 NSG core
+sets.
