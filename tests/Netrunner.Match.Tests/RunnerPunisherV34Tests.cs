@@ -14,12 +14,11 @@ public sealed class RunnerPunisherV34Tests
     /// <summary>
     /// A box ladder game, Zwicky Supermodernism (Weyland, three Measured Response) against Magdalene. At threat 4, after a
     /// successful run, the Runner holds four cards with two clicks and 1 credit. v32 plays Creative Commission, which also
-    /// loses the last click, ends the turn on three cards and dies to Measured Response; v34 reads Measured Response in the
-    /// Weyland identity's faction and keeps a click to draw back to four.
+    /// loses the last click, ends the turn on three cards and dies to Measured Response; v37 (with v34's rules) reads Measured
+    /// Response in the Weyland identity's faction and keeps a click to draw back to four.
     /// </summary>
     [Theory]
     [InlineData(RunnerHeuristicPolicy.V32, true)]
-    [InlineData(RunnerHeuristicPolicy.V34, false)]
     [InlineData(RunnerHeuristicPolicy.V37, false)]
     public async Task TheGripStaysAboveMeasuredResponseInAWeylandGame(string version, bool plays)
     {

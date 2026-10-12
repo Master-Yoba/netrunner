@@ -56,7 +56,7 @@ public static partial class RatingLadder
     /// in its own seat, and "hard".
     /// </summary>
     public static IReadOnlyList<string> EntrantOrder { get; } =
-        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard-w3", "standard-c1", "standard-r22", "standard-c26", "standard-r23", "standard-c27", "standard-r24", "standard-c28", "standard-r25", "standard-c29", "standard-r28", "standard-r29", "standard-r30", "standard-r31", "standard-r32", "standard-r33", "standard-c31", "standard-c32", "standard-c33", "standard-c34", "standard-prev", "standard", "standard-c35", "standard-r34", "standard-r35", "standard-c36", "standard-r36", "standard-r37", "standard-c37", "standard-plan", "standard-plan-fit", "standard-run", "standard-rez", "standard-w4a", "standard-w4b", "standard-arch", "standard-rarch", "standard-rgen", "standard-w4c", "standard-c13", "standard-w4d", "standard-c14", "standard-c15", "standard-c16", "standard-r13", "standard-c17", "standard-c18", "standard-c19", "standard-r14", "standard-c20", "standard-r15", "standard-c21", "standard-r16", "standard-c22", "standard-b3", "standard-c23", "standard-r17", "standard-r18", "standard-c24", "standard-r19", "standard-w5", "standard-r21", "hard-r21", "hard-a9c", "hard-a9d", "hard-a9d-list", "hard-a9d-pins", "glacier", "rush", "asset-spam", "aggressive", "rig-builder", "hard", "hard-wide", "hard-weight", "hard-rez", "hard-model", "hard-playout", "standard-heuristic", "standard-apprentice", "standard-apprentice-v1", "hard-set5", "hard-set4-teacher", "hard-value", "hard-set5-value", "hard-set5l-value", "hard-set4l-value", "hard-set5l-value-x1", "hard-set5l-value-x4", "hard-set5l-value-x8", "standard-x1", "standard-x2", "standard-x4", "standard-x8", "standard-x16"];
+        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard-w3", "standard-c1", "standard-r22", "standard-c26", "standard-r23", "standard-c27", "standard-r24", "standard-c28", "standard-r25", "standard-c29", "standard-r28", "standard-r30", "standard-r32", "standard-c31", "standard-c34", "standard-prev", "standard", "standard-r35", "standard-r37", "standard-plan", "standard-plan-fit", "standard-run", "standard-rez", "standard-w4a", "standard-w4b", "standard-arch", "standard-rarch", "standard-rgen", "standard-w4c", "standard-c13", "standard-w4d", "standard-c14", "standard-c15", "standard-c16", "standard-r13", "standard-c17", "standard-c18", "standard-c19", "standard-r14", "standard-c20", "standard-r15", "standard-c21", "standard-r16", "standard-c22", "standard-b3", "standard-c23", "standard-r17", "standard-r18", "standard-c24", "standard-r19", "standard-w5", "standard-r21", "hard-r21", "hard-a9c", "hard-a9d", "hard-a9d-list", "hard-a9d-pins", "glacier", "rush", "asset-spam", "aggressive", "rig-builder", "hard", "hard-wide", "hard-weight", "hard-rez", "hard-model", "hard-playout", "standard-heuristic", "standard-apprentice", "standard-apprentice-v1", "hard-set5", "hard-set4-teacher", "hard-value", "hard-set5-value", "hard-set5l-value", "hard-set4l-value", "hard-set5l-value-x1", "hard-set5l-value-x4", "hard-set5l-value-x8", "standard-x1", "standard-x2", "standard-x4", "standard-x8", "standard-x16"];
 
     private const double EloScale = 400 / 2.302585092994046;
     private const double Ridge = 0.01;
@@ -202,55 +202,25 @@ public static partial class RatingLadder
             // Corp v29 with the default Runner: the sequencing work measures Corp v30 against it.
             "standard-c29" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
                 side == PlayerSide.Corp ? CorpHeuristicPolicy.V29 : RunnerHeuristicPolicy.PolicyVersion),
-            // Corp v31 with the default Runner: the Corp before H3 batch 8 made v34 the default.
+            // Corp v31 with the default Runner: the Corp before H3 batch 8 made v34 the default. Versions never shipped
+            // (Corp v32, v33, v35 to v37; Runner v29, v31, v33, v34, v36) were removed on 12 October 2026.
             "standard-c31" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
                 side == PlayerSide.Corp ? CorpHeuristicPolicy.V31 : RunnerHeuristicPolicy.PolicyVersion),
-            // Corp v37 (v34 drawing out of a flooded HQ when it holds no ICE) with the default Runner.
-            "standard-c37" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
-                side == PlayerSide.Corp ? CorpHeuristicPolicy.V37 : RunnerHeuristicPolicy.PolicyVersion),
-            // Bot plan H3 batch 12: Corp v36 (fast advance with Nanomanagement) with the default Runner.
-            "standard-c36" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
-                side == PlayerSide.Corp ? CorpHeuristicPolicy.V36 : RunnerHeuristicPolicy.PolicyVersion),
-            // Bot plan H3 batch 9: Corp v35 (v34 with the flooded draw kept below the planner's other choices) with the default Runner.
-            "standard-c35" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
-                side == PlayerSide.Corp ? CorpHeuristicPolicy.V35 : RunnerHeuristicPolicy.PolicyVersion),
             // Bot plan H3 batch 8: Corp v34 (v33 and no optional draw into a flooded HQ) with the default Runner.
             "standard-c34" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
                 side == PlayerSide.Corp ? CorpHeuristicPolicy.V34 : RunnerHeuristicPolicy.PolicyVersion),
-            // Bot plan H3 batch 7: Corp v33 (the scoring server protected first) with the default Runner.
-            "standard-c33" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
-                side == PlayerSide.Corp ? CorpHeuristicPolicy.V33 : RunnerHeuristicPolicy.PolicyVersion),
-            // Bot plan H3 batch 6: Corp v32 (an agenda waits in a flooded HQ rather than enter a breakable remote) with the
-            // default Runner.
-            "standard-c32" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
-                side == PlayerSide.Corp ? CorpHeuristicPolicy.V32 : RunnerHeuristicPolicy.PolicyVersion),
             // Runner v37 (v35 with v34's rules against the first Measured Response) with the default Corp.
             "standard-r37" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
                 side == PlayerSide.Corp ? CorpHeuristicPolicy.PolicyVersion : RunnerHeuristicPolicy.V37),
-            // Bot plan H3 batch 13: Runner v36 (a draw engine valued over the turns left) with the default Corp.
-            "standard-r36" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
-                side == PlayerSide.Corp ? CorpHeuristicPolicy.PolicyVersion : RunnerHeuristicPolicy.V36),
             // Bot plan H3 batch 11: Runner v35 (Madani's hosting priced at the clicks it saves) with the default Corp.
             "standard-r35" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
                 side == PlayerSide.Corp ? CorpHeuristicPolicy.PolicyVersion : RunnerHeuristicPolicy.V35),
-            // Bot plan H3 batch 10: Runner v34 (the Corp's faction is evidence of Measured Response) with the default Corp.
-            "standard-r34" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
-                side == PlayerSide.Corp ? CorpHeuristicPolicy.PolicyVersion : RunnerHeuristicPolicy.V34),
-            // Bot plan H3 batch 5: Runner v33 (Regolith discipline, HQ pressure) with the default Corp.
-            "standard-r33" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
-                side == PlayerSide.Corp ? CorpHeuristicPolicy.PolicyVersion : RunnerHeuristicPolicy.V33),
             // Bot plan H3 batch 4: Runner v32 (advanced remote cards as agendas) with the default Corp.
             "standard-r32" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
                 side == PlayerSide.Corp ? CorpHeuristicPolicy.PolicyVersion : RunnerHeuristicPolicy.V32),
-            // Bot plan H3 batch 3: Runner v31 (the Nebula note's tags) with the default Corp.
-            "standard-r31" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
-                side == PlayerSide.Corp ? CorpHeuristicPolicy.PolicyVersion : RunnerHeuristicPolicy.V31),
             // Runner v28 with the default Corp: the Runner before H3 batch 2 made v30 the default.
             "standard-r28" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
                 side == PlayerSide.Corp ? CorpHeuristicPolicy.PolicyVersion : RunnerHeuristicPolicy.V28),
-            // Bot plan H3: Runner v29 (the grip cushion) with the default Corp, measured against the live Runner v28.
-            "standard-r29" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
-                side == PlayerSide.Corp ? CorpHeuristicPolicy.PolicyVersion : RunnerHeuristicPolicy.V29),
             // Bot plan H3 batch 2: Runner v30 (the PT Untaian note's rules) with the default Corp.
             "standard-r30" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
                 side == PlayerSide.Corp ? CorpHeuristicPolicy.PolicyVersion : RunnerHeuristicPolicy.V30),
