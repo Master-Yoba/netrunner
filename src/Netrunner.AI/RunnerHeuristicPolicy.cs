@@ -202,6 +202,13 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// level to arm one pays for it.
     /// </summary>
     public const string V34 = "runner-heuristic-v34";
+    /// <summary>
+    /// V32 (not V33 or V34, level) with Madani's hosting priced at the clicks it saves (bot plan H3 batch 11): hosting one
+    /// program and installing it later with Madani's free install takes the same click as installing it; only hosting two or
+    /// more at once saves any. V32 valued every hosting at 280 and spent 7.6 clicks a game on it, with one Madani install a
+    /// game, so most of Magdalene's hosted breakers never reached the rig.
+    /// </summary>
+    public const string V35 = "runner-heuristic-v35";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
     /// V18 is V15 with only the reinstall fix (no install over its own copy or a second console), a fix that can only remove
@@ -217,30 +224,32 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// live policy, identical game by game. V28 values a protected face-down remote card as the agenda it likely is. V29 (the
     /// grip cushion) was level and is not the default. V30 (bot plan H3 batch 2, the PT Untaian note) is: +30 Elo [9, 55] over
     /// V28 on 800 Core Battle Box deals, 11% to 30% against PT Untaian, level on Gateway. V31 (tags) was level. V32 (bot plan
-    /// H3 batch 4, advanced remote cards as agendas) is: +23 Elo [6, 40] over V30 on 1,600 box deals.
+    /// H3 batch 4, advanced remote cards as agendas) is: +23 Elo [6, 40] over V30 on 1,600 box deals. V33 and V34 were level.
+    /// V35 (bot plan H3 batch 11, Madani's hosting priced at the clicks it saves) is: +27 Elo [10, 43] over V32 on 1,600 box
+    /// deals, Magdalene 24% to 36%.
     /// </remarks>
-    public const string PolicyVersion = V32;
+    public const string PolicyVersion = V35;
     /// <summary>
     /// The planner's model of the Runner. It stays V7, which Corp v9 was measured
     /// with, so the shipped Corp planner plays as it did.
     /// </summary>
     public const string LatestHeuristic = V7;
-    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25, V26, V27, V28, V29, V30, V31, V32, V33, V34];
+    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25, V26, V27, V28, V29, V30, V31, V32, V33, V34, V35];
 
     /// <summary>Whether the version's memory of a face-down root card survives installs in that root (v20).</summary>
-    public static bool KeepsRootMemoryThroughInstalls(string version) => version is V20 or V21 or V22 or V23 or V24 or V25 or V26 or V27 or V28 or V29 or V30 or V31 or V32 or V33 or V34;
+    public static bool KeepsRootMemoryThroughInstalls(string version) => version is V20 or V21 or V22 or V23 or V24 or V25 or V26 or V27 or V28 or V29 or V30 or V31 or V32 or V33 or V34 or V35;
 
     /// <summary>Whether the version keeps the A9a tracker of the Corp's hidden cards (v21).</summary>
-    public static bool UsesTracker(string version) => version is V21 or V22 or V23 or V24 or V25 or V26 or V27 or V28 or V29 or V30 or V31 or V32 or V33 or V34;
+    public static bool UsesTracker(string version) => version is V21 or V22 or V23 or V24 or V25 or V26 or V27 or V28 or V29 or V30 or V31 or V32 or V33 or V34 or V35;
 
     public RunnerHeuristicPolicy() : this(PolicyVersion) { }
 
     public RunnerHeuristicPolicy(string version)
     {
-        if (version is not (V27 or V28 or V29 or V30 or V31 or V32 or V33 or V34))
-            throw new ArgumentException($"The live Runner policy is {V27} to {V34}; '{version}' is {nameof(LegacyRunnerPolicy)}.", nameof(version));
+        if (version is not (V27 or V28 or V29 or V30 or V31 or V32 or V33 or V34 or V35))
+            throw new ArgumentException($"The live Runner policy is {V27} to {V35}; '{version}' is {nameof(LegacyRunnerPolicy)}.", nameof(version));
         Version = version;
-        _contextGeneration = version switch { V34 => HeuristicContext.FactionGeneration, V33 => HeuristicContext.NebulaGeneration, V32 => 27, V31 => 26, V30 => 25, V29 => 24, V28 => 23, _ => 22 };
+        _contextGeneration = version switch { V35 => HeuristicContext.ConsoleGeneration, V34 => HeuristicContext.FactionGeneration, V33 => HeuristicContext.NebulaGeneration, V32 => 27, V31 => 26, V30 => 25, V29 => 24, V28 => 23, _ => 22 };
     }
 
     /// <summary>
@@ -373,7 +382,7 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// </summary>
     private static AgentUtility GripFloor(HeuristicContext context, AgentAction action, AgentUtility utility)
     {
-        if (context.Generation < HeuristicContext.FactionGeneration || context.Features.Decision?.Kind != DecisionKind.TurnAction
+        if (context.Generation != HeuristicContext.FactionGeneration || context.Features.Decision?.Kind != DecisionKind.TurnAction
             || context.Features.Board.TurnFacts?.Runner.ThisTurn?.SuccessfulRun != true) return utility;
         string? card = action.Parameters switch
         {

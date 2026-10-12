@@ -2336,3 +2336,38 @@ Magdalene, action 379: v32 plays Creative Commission and dies, v34 doesn't); `AC
 event (VRcation's four, Ritual) that refills the grip could be refused as a card spent. It now counts what a played card
 draws as well as the clicks it loses, with a test (`TheGripFloorCountsAPlayedCardsDrawsAndLostClicks`). v34 isn't the
 default, so its ladder wasn't run again.
+
+### H3 batch 11: Runner v35, Madani's hosting (12 October 2026)
+
+**Shipped: Runner v35 is the default.** It is v32 (not v33 or v34, both level) with one change.
+
+**The diagnosis.** Magdalene won 23% of her box games where MuslihaT won 60%. Her rig was no slower (2.0 programs and
+hardware at her third turn, MuslihaT 1.7) and she ran as often, but a replay of 532 of her games counted 4,062 clicks on
+Madani's hosting (7.6 a game, about a sixth of her clicks) against 554 installs from it (one a game). Madani hosts
+programs from the grip face up, not installed, and installs one a turn for no click; hosting one program and installing
+it later takes the same click as installing it, and only hosting two or more at once saves any. v32 valued every hosting
+at 280 (a card choice's 180 and hosting's 100), above most draws and credits, so the breakers the matchup notes ask
+Magdalene to install early ("accelerate the minimum usable rig") sat on Madani.
+
+**The change** (`RunnerHeuristicPolicy.Ability`): hosting on a console whose hosted cards don't play from the grip
+(Madani; Bling's do) is worth 100 for each program in the grip past the first.
+
+| | Runner v35 − v32 |
+|---|---:|
+| Box, 1,600 deals | **+27 Elo [+10, +43]**, separated; Runner wins 38% to 42% |
+| Magdalene / MuslihaT / Topan, 1,066 games each | 23.6% to **35.6%** / 59.7% / 30.5%, the last two game for game |
+| Gateway, 240 deals | 0 [−38, +39], level (no harm; no Gateway Runner holds Madani) |
+| Anchors (240 box deals, `standard` − `standard-m5`) | Corp +138 [69, 212], Runner +416 [356, 491] |
+| Regret (bot-check, core held-out, teacher v3) | Runner 0.0576 [0.0479, 0.0653], as v32's |
+| Puzzles | 28/29 box, 5/5 NSG core sets, as before |
+
+The rule, decided before the run, was to ship v35 only if the interval cleared zero; it did.
+
+**Test:** `RunnerMadaniV35Tests.OneProgramIsNotHostedOnMadani`, from a box ladder game (LEO Glacier against Magdalene,
+action 273, one program in the grip): v32 hosts it, v35 doesn't.
+
+**Verification.** The per-slice fuzz, `--games-per-pairing 8 --verify-replays-every 8`, every game terminal on every
+pool (official 24, Gateway 288, Elevation 1,152, Gateway–Elevation 288, NSG core sets 2,592; 543 replays verified). The
+budget-scaling ladder, `standard-x4` − `standard-x1` on 240 box deals: Corp −19 [−55, +24], Runner +11 [−33, +52], flat as
+before. `bot-check`'s first run timed out two coordinator tests (`FullMatchTests`, `BeatPlannerTests`, human Runner) under
+its parallel suites; alone they pass twice (0.1 s and 8 s), and the gates run them again.

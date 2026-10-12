@@ -229,8 +229,14 @@ internal sealed class HeuristicContext
     /// </summary>
     public const int NebulaGeneration = 28;
 
-    /// <summary>Runner v34 (bot plan H3 batch 10): the Corp's faction is evidence of its punishing operations.</summary>
+    /// <summary>
+    /// Runner v34 (bot plan H3 batch 10): the Corp's faction is evidence of its punishing operations. Level on the ladder and
+    /// v34's alone; v35 builds on v32.
+    /// </summary>
     public const int FactionGeneration = 29;
+
+    /// <summary>Runner v35 (bot plan H3 batch 11): hosting on a console whose cards don't play from the grip (Madani).</summary>
+    public const int ConsoleGeneration = 30;
 
     public double OpponentScorePressure => Opponent.AgendaPoints switch
     {
