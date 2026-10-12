@@ -38,12 +38,11 @@ public sealed class PolicyVersionTests
         {
             IOfflinePolicy policy = OfflinePolicies.Create(OfflinePolicies.Configure(side, "standard", 7, version));
             Assert.Equal(version, policy.Version);
-            // Runner v27 stays live beside v28, so the regret suite can compare them (S1.5 follow-up); v28 to v36 (bot plan H3)
-            // beside v37, the default since the paired re-tests.
-            // Corp v31 to v33 (bot plan H3) are live beside v34, the default since H3 batch 8.
+            // The shipped versions stay live beside the defaults, Runner v37 and Corp v34: Runner v27 so the regret suite can
+            // compare it with v28 (S1.5 follow-up), and the ones bot plan H3 shipped. Versions never shipped were removed.
             Type expected = version == live || side == PlayerSide.Runner
-                && version is RunnerHeuristicPolicy.V27 or RunnerHeuristicPolicy.V28 or RunnerHeuristicPolicy.V29 or RunnerHeuristicPolicy.V30 or RunnerHeuristicPolicy.V31 or RunnerHeuristicPolicy.V32 or RunnerHeuristicPolicy.V33 or RunnerHeuristicPolicy.V34 or RunnerHeuristicPolicy.V35 or RunnerHeuristicPolicy.V36
-                || side == PlayerSide.Corp && version is CorpHeuristicPolicy.V31 or CorpHeuristicPolicy.V32 or CorpHeuristicPolicy.V33 or CorpHeuristicPolicy.V35 or CorpHeuristicPolicy.V36 or CorpHeuristicPolicy.V37
+                && version is RunnerHeuristicPolicy.V27 or RunnerHeuristicPolicy.V28 or RunnerHeuristicPolicy.V30 or RunnerHeuristicPolicy.V32 or RunnerHeuristicPolicy.V35
+                || side == PlayerSide.Corp && version is CorpHeuristicPolicy.V31
                 ? side == PlayerSide.Corp ? typeof(CorpHeuristicPolicy) : typeof(RunnerHeuristicPolicy)
                 : side == PlayerSide.Corp ? typeof(LegacyCorpPolicy) : typeof(LegacyRunnerPolicy);
             Assert.IsType(expected, policy);
@@ -51,19 +50,10 @@ public sealed class PolicyVersionTests
         Assert.Throws<ArgumentException>(() => side == PlayerSide.Corp ? new CorpHeuristicPolicy(CorpHeuristicPolicy.V30) : new RunnerHeuristicPolicy(RunnerHeuristicPolicy.V26));
         Assert.Throws<ArgumentException>(() => side == PlayerSide.Corp ? new LegacyCorpPolicy(CorpHeuristicPolicy.V31) : new LegacyRunnerPolicy(RunnerHeuristicPolicy.V27));
         if (side == PlayerSide.Runner) Assert.Throws<ArgumentException>(() => new LegacyRunnerPolicy(RunnerHeuristicPolicy.V28));
-        if (side == PlayerSide.Runner) Assert.Throws<ArgumentException>(() => new LegacyRunnerPolicy(RunnerHeuristicPolicy.V29));
         if (side == PlayerSide.Runner) Assert.Throws<ArgumentException>(() => new LegacyRunnerPolicy(RunnerHeuristicPolicy.V30));
-        if (side == PlayerSide.Runner) Assert.Throws<ArgumentException>(() => new LegacyRunnerPolicy(RunnerHeuristicPolicy.V31));
-        if (side == PlayerSide.Runner) Assert.Throws<ArgumentException>(() => new LegacyRunnerPolicy(RunnerHeuristicPolicy.V34));
         if (side == PlayerSide.Runner) Assert.Throws<ArgumentException>(() => new LegacyRunnerPolicy(RunnerHeuristicPolicy.V35));
-        if (side == PlayerSide.Runner) Assert.Throws<ArgumentException>(() => new LegacyRunnerPolicy(RunnerHeuristicPolicy.V36));
         if (side == PlayerSide.Runner) Assert.Throws<ArgumentException>(() => new LegacyRunnerPolicy(RunnerHeuristicPolicy.V37));
-        if (side == PlayerSide.Corp) Assert.Throws<ArgumentException>(() => new LegacyCorpPolicy(CorpHeuristicPolicy.V32));
-        if (side == PlayerSide.Corp) Assert.Throws<ArgumentException>(() => new LegacyCorpPolicy(CorpHeuristicPolicy.V33));
         if (side == PlayerSide.Corp) Assert.Throws<ArgumentException>(() => new LegacyCorpPolicy(CorpHeuristicPolicy.V34));
-        if (side == PlayerSide.Corp) Assert.Throws<ArgumentException>(() => new LegacyCorpPolicy(CorpHeuristicPolicy.V35));
-        if (side == PlayerSide.Corp) Assert.Throws<ArgumentException>(() => new LegacyCorpPolicy(CorpHeuristicPolicy.V36));
-        if (side == PlayerSide.Corp) Assert.Throws<ArgumentException>(() => new LegacyCorpPolicy(CorpHeuristicPolicy.V37));
     }
 
     /// <summary>

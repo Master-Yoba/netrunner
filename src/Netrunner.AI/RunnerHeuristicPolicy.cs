@@ -163,13 +163,6 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// </summary>
     public const string V28 = "runner-heuristic-v28";
     /// <summary>
-    /// V28 with a grip cushion against the damage a run may meet (bot plan H3, the strategy guide's R18): an ambush the Corp
-    /// can pay for among HQ's and R&amp;D's cards, unknown ICE that deals damage, and an operation that punishes the run's
-    /// success when too few cards and clicks would be left to survive it. Against PT Untaian Shell Game the Runner won 8% of
-    /// its box games, 172 of 200 lost to flatlines.
-    /// </summary>
-    public const string V29 = "runner-heuristic-v29";
-    /// <summary>
     /// V29 with the PT Untaian matchup note's rules (bot plan H3 batch 2, docs/MATCHUP_PT_UNTAIAN.md): an engine whose own
     /// triggers damage the Runner (Phật Gioan Baotixita) is worth trashing before agendas are farmed (PT08), a non-winning
     /// steal's damage is part of the run's cushion (PT13, PT15), and the damage a run is expected to deal beyond the clicks
@@ -177,31 +170,11 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// </summary>
     public const string V30 = "runner-heuristic-v30";
     /// <summary>
-    /// V30 with the tag rules of the Nebula note (bot plan H3 batch 3, docs/MATCHUP_NEBULA.md NE17 to NE22, NE25): a tag is
-    /// priced by what the Corp's next turn can take for it (IP Enforcement's repossession, Bigger Picture's transfer), a run's
-    /// tags by the cheaper of keeping them and clearing those the turn has clicks and credits for, and removing a tag gains
-    /// the punishment it no longer enables.
-    /// </summary>
-    public const string V31 = "runner-heuristic-v31";
-    /// <summary>
     /// V30 (not V31: its tag rules were level) with an advanced face-down card in a remote valued as the agenda an advanced
     /// card likely is (bot plan H3 batch 4; MATCHUP_ZWICKY.md ZW05, ZW07, MATCHUP_LEO.md LE15): the Corp scored 85% of the
     /// remotes the Runner let through with counters already showing, and V30 valued such a card at 190 and 200 a counter.
     /// </summary>
     public const string V32 = "runner-heuristic-v32";
-    /// <summary>
-    /// V32 with two rules of the Nebula note (bot plan H3 batch 5): an asset holding credits is worth only the withdrawals
-    /// after the Corp's next one (NE15: Regolith's last 3 deny nothing), and HQ is valued by the agendas the Corp likely holds
-    /// there however little of it the tracker knows (NE12).
-    /// </summary>
-    public const string V33 = "runner-heuristic-v33";
-    /// <summary>
-    /// V32 (not V33, level) against the first Measured Response (bot plan H3 batch 10; MATCHUP_PT_UNTAIAN.md PT16 to PT20): 92%
-    /// of the Runner's flatlines to it came from a copy it hadn't seen, so its grip guard never woke. A punishing operation in
-    /// the Corp identity's faction is now evidence, as likely as a seen copy; and a run whose steal would raise the threat
-    /// level to arm one pays for it.
-    /// </summary>
-    public const string V34 = "runner-heuristic-v34";
     /// <summary>
     /// V32 (not V33 or V34, level) with Madani's hosting priced at the clicks it saves (bot plan H3 batch 11): hosting one
     /// program and installing it later with Madani's free install takes the same click as installing it; only hosting two or
@@ -209,12 +182,6 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// game, so most of Magdalene's hosted breakers never reached the rig.
     /// </summary>
     public const string V35 = "runner-heuristic-v35";
-    /// <summary>
-    /// V35 with a draw engine valued over the turns left (bot plan H3 batch 13): Verbal Plasticity's extra card on the first
-    /// basic draw was worth three turns of it, less than a basic draw, so Topan and Magdalene left their three copies in the
-    /// grip (0.4 installs a game of 4.3 offered).
-    /// </summary>
-    public const string V36 = "runner-heuristic-v36";
     /// <summary>
     /// V35 with V34's rules against the first Measured Response (the Corp's faction or a damage deck as evidence, the grip
     /// floor, a steal that arms it), re-tested once the ladder's bootstrap kept candidates paired with their baselines.
@@ -246,22 +213,22 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// with, so the shipped Corp planner plays as it did.
     /// </summary>
     public const string LatestHeuristic = V7;
-    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25, V26, V27, V28, V29, V30, V31, V32, V33, V34, V35, V36, V37];
+    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25, V26, V27, V28, V30, V32, V35, V37];
 
     /// <summary>Whether the version's memory of a face-down root card survives installs in that root (v20).</summary>
-    public static bool KeepsRootMemoryThroughInstalls(string version) => version is V20 or V21 or V22 or V23 or V24 or V25 or V26 or V27 or V28 or V29 or V30 or V31 or V32 or V33 or V34 or V35 or V36 or V37;
+    public static bool KeepsRootMemoryThroughInstalls(string version) => version is V20 or V21 or V22 or V23 or V24 or V25 or V26 or V27 or V28 or V30 or V32 or V35 or V37;
 
     /// <summary>Whether the version keeps the A9a tracker of the Corp's hidden cards (v21).</summary>
-    public static bool UsesTracker(string version) => version is V21 or V22 or V23 or V24 or V25 or V26 or V27 or V28 or V29 or V30 or V31 or V32 or V33 or V34 or V35 or V36 or V37;
+    public static bool UsesTracker(string version) => version is V21 or V22 or V23 or V24 or V25 or V26 or V27 or V28 or V30 or V32 or V35 or V37;
 
     public RunnerHeuristicPolicy() : this(PolicyVersion) { }
 
     public RunnerHeuristicPolicy(string version)
     {
-        if (version is not (V27 or V28 or V29 or V30 or V31 or V32 or V33 or V34 or V35 or V36 or V37))
-            throw new ArgumentException($"The live Runner policy is {V27} to {V37}; '{version}' is {nameof(LegacyRunnerPolicy)}.", nameof(version));
+        if (version is not (V27 or V28 or V30 or V32 or V35 or V37))
+            throw new ArgumentException($"The live Runner policy is one of {V27}, {V28}, {V30}, {V32}, {V35} and {V37}; '{version}' is {nameof(LegacyRunnerPolicy)}.", nameof(version));
         Version = version;
-        _contextGeneration = version switch { V37 => HeuristicContext.PunisherGeneration, V36 => HeuristicContext.DrawEngineGeneration, V35 => HeuristicContext.ConsoleGeneration, V34 => HeuristicContext.FactionGeneration, V33 => HeuristicContext.NebulaGeneration, V32 => 27, V31 => 26, V30 => 25, V29 => 24, V28 => 23, _ => 22 };
+        _contextGeneration = version switch { V37 => HeuristicContext.PunisherGeneration, V35 => HeuristicContext.ConsoleGeneration, V32 => 27, V30 => 25, V28 => 23, _ => 22 };
     }
 
     /// <summary>
@@ -453,15 +420,6 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     private static AgentUtility RemoveTag(HeuristicContext context, RemoveTagParameters remove)
     {
         int score = RunnerValues.TagRisk(context, threat: false) - remove.CreditCost * context.CreditValue;
-        // v31 (MATCHUP_NEBULA.md NE17, NE19): a tag removed is the punishment it no longer enables (IP Enforcement's
-        // repossession at the stolen agenda's points, Bigger Picture's 5 credits a tag).
-        if (context.Generation == HeuristicContext.TagGeneration)
-        {
-            int tags = context.Self.Tags ?? 0;
-            score += (int)(RunnerInference.TagThreat(context, tags) - RunnerInference.TagThreat(context, tags - 1));
-            // NE17: against a Corp that plays tags, end the turn untagged by default: clearing comes before optional setup.
-            if (RunnerInference.TagDeck(context)) score += 2 * context.CreditValue + 40;
-        }
         return new(score <= 0 ? 0 : 10, score, "defense/remove-tag");
     }
 }

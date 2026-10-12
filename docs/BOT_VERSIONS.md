@@ -2536,3 +2536,20 @@ v37 becomes the default only if that interval clears zero.
 and 82 results; v37 is not shipped and the default stays Corp v34. Drawing out of the flood for ICE finds protection
 about as often as it finds more agendas: it changes many games and wins none on balance. So the draw stop isn't what
 leaves those agendas exposed; what to do with a flooded, ICE-less HQ stays open.
+
+## Versions never shipped, removed (12 October 2026)
+
+After chiriboga's rule that a failed idea's code goes and its record stays (`docs/CHIRIBOGA_NOTES.md`), the versions that
+were measured and never became the default were removed: Corp v32, v33, v35, v36 and v37; Runner v29, v31, v33, v34 and
+v36, with their ladder entrants (`standard-c32`, `-c33`, `-c35` to `-c37`, `standard-r29`, `-r31`, `-r33`, `-r34`,
+`-r36`), the rules only they used, and the tests that existed only for them. Their records above stay, and so do the rules
+later versions carry: v33's in Corp v34, v29's grip cushion in every later Runner, and v34's rules against the first
+Measured Response in Runner v37. The live versions are Corp v31 and v34, and Runner v27, v28, v30, v32, v35 and v37.
+
+Gone with them: Runner v31's tag pricing (`TagThreat`, `TagDeck`, `StealTags`), v33's Nebula rules (HQ pressure,
+hosted-credit trash value), v36's draw-engine horizon, Corp v32's held agendas, v35's flooded-draw priority band, v36's
+fast advance (`FastAdvance`) and v37's flood exception. Corp v36's fast advance is the one with a deck-level effect
+worth another look (Nebula 62% to 67-69% in three runs); its code is in git at `1f8e4f6`.
+
+**Checked:** a 24-deal ladder of the live versions (Corp v34 and v31, Runner v37 and v35, seed 9) played before and
+after the removal: all 216 games end in the same final state.

@@ -185,41 +185,12 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     /// </summary>
     public const string V31 = "corp-heuristic-v31";
     /// <summary>
-    /// V31 with an agenda that can't be scored this turn kept in HQ whenever the Runner can get into its server next turn,
-    /// unless HQ is full (bot plan H3 batch 6; the guide's C14: moving an agenda out of a flooded HQ into a breakable remote
-    /// relocates the problem). 54% of the remote steals were behind one rezzed ICE, 83% on the Runner's first turn after
-    /// the install, and V31 let an agenda out of an HQ holding two whenever HQ was no safer.
-    /// </summary>
-    public const string V32 = "corp-heuristic-v32";
-    /// <summary>
-    /// V31 (not V32, which was worse) with the scoring server protected before the agenda goes in (bot plan H3 batch 7; the
-    /// guide's C01, C02): a flooded HQ still lets an agenda out, but not into a server the Runner gets into while HQ holds ICE
-    /// the Corp can put there and rez; that ICE goes in first.
-    /// </summary>
-    public const string V33 = "corp-heuristic-v33";
-    /// <summary>
-    /// V33 with no optional draw into a flooded HQ (bot plan H3 batch 8, the guide's C13): with three agendas or more in HQ an
-    /// optional draw falls below a basic credit. Two Corp fixes measured together, each too small for the ladder alone.
+    /// V31 with the scoring server protected before the agenda goes in (bot plan H3 batch 7; the guide's C01, C02): a flooded
+    /// HQ still lets an agenda out, but not into a server the Runner gets into while HQ holds ICE the Corp can put there and
+    /// rez; that ICE goes in first. And no optional draw into a flooded HQ (H3 batch 8, C13): with three agendas or more in
+    /// HQ an optional draw falls below a basic credit.
     /// </summary>
     public const string V34 = "corp-heuristic-v34";
-    /// <summary>
-    /// V34 with its flooded draw kept below every other choice when the turn planner re-scores them (bot plan H3 batch 9):
-    /// V34's draw ranked below a credit, but the planner's rollouts value a card in HQ and picked the draw anyway (458 times
-    /// in 3,200 box games), so the flooded draw drops a priority band and stays only the choice of last resort.
-    /// </summary>
-    public const string V35 = "corp-heuristic-v35";
-    /// <summary>
-    /// V34 (not V35, level) with fast advance (bot plan H3 batch 12; MATCHUP_NEBULA.md NE07 to NE09): an operation that gains
-    /// clicks (Nanomanagement) is worth the agenda it lets the Corp score this turn, from HQ or the board, when it couldn't
-    /// without it. V34 priced Nanomanagement at its clicks less its 4 credits and never played it.
-    /// </summary>
-    public const string V36 = "corp-heuristic-v36";
-    /// <summary>
-    /// V34 with the guide's C13 exception (after chiriboga's emergency protection): the flooded HQ stops drawing only while
-    /// the Corp holds ICE to protect an agenda with. 74% of the agendas the Runner stole from remotes went in from a flooded
-    /// HQ with no ICE in it, where V34 had stopped the Corp drawing for any.
-    /// </summary>
-    public const string V37 = "corp-heuristic-v37";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
     /// V23 fixes V22's faults the reviews of batch 4's losses to Codex found (1 October: known traps advanced, two agendas
@@ -233,22 +204,24 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     /// default until V30. V31 (bot plan S3) is V30 as the live policy, identical game by game. V32 (agendas held in a flooded
     /// HQ) was 50 Elo worse. V33 (bot plan H3 batch 7, the scoring server protected first) is not: +16 Elo [-2, 30] over V31
     /// on 1,600 Core Battle Box deals once the review of #137's fixes were in. V34 (bot plan H3 batch 8, V33 with no optional
-    /// draw into a flooded HQ) is: +18 Elo [0.2, 33] over V31 on 1,600 Core Battle Box deals.
+    /// draw into a flooded HQ) is: +18 Elo [0.2, 33] over V31 on 1,600 Core Battle Box deals. V32, V33 and V35 to V37 were
+    /// never shipped and were removed on 12 October 2026 (after chiriboga's rule that a failed idea's code goes and its
+    /// record stays): their records are in docs/BOT_VERSIONS.md, and V33's rules live on in V34.
     /// </remarks>
     public const string PolicyVersion = V34;
     /// <summary>The latest version that never plans: the planner's model of the Corp.</summary>
     public const string LatestHeuristic = V8;
-    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25, V26, V27, V28, V29, V30, V31, V32, V33, V34, V35, V36, V37];
+    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25, V26, V27, V28, V29, V30, V31, V34];
 
     /// <summary>Whether the version keeps the A9 tracker of the Runner's hidden cards (v26).</summary>
-    public static bool UsesTracker(string version) => version is V26 or V27 or V28 or V29 or V30 or V31 or V32 or V33 or V34 or V35 or V36 or V37;
+    public static bool UsesTracker(string version) => version is V26 or V27 or V28 or V29 or V30 or V31 or V34;
 
     public CorpHeuristicPolicy() : this(PolicyVersion) { }
 
     public CorpHeuristicPolicy(string version)
     {
-        if (version is not (V31 or V32 or V33 or V34 or V35 or V36 or V37))
-            throw new ArgumentException($"The live Corp policy is {V31} to {V37}; '{version}' is {nameof(LegacyCorpPolicy)}.", nameof(version));
+        if (version is not (V31 or V34))
+            throw new ArgumentException($"The live Corp policy is {V31} or {V34}; '{version}' is {nameof(LegacyCorpPolicy)}.", nameof(version));
         Version = version;
     }
 
@@ -311,9 +284,7 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
         {
             ActionKind.GainCredit => Value(context.CreditValue + (context.Self.Credits < ProtectionReserve(context) ? 150 : 0),
                 "economy/basic-credit-and-rez-reserve"),
-            ActionKind.DrawCard => FloodedDraw(context) > 0 && context.Configuration.PolicyVersion == V35 && features.Board.HiddenZoneCounts.CorpDeck > 1
-                ? new(-1, context.DrawValue - FloodedDraw(context), "economy/no-draw-into-flooded-hq")
-                : Value(features.Board.HiddenZoneCounts.CorpDeck > 1 ? context.DrawValue - FloodedDraw(context) : -10000, "economy/draw-reserve"),
+            ActionKind.DrawCard => Value(features.Board.HiddenZoneCounts.CorpDeck > 1 ? context.DrawValue - FloodedDraw(context) : -10000, "economy/draw-reserve"),
             ActionKind.PlayCard => Play(context, Require<PlayCardParameters>(action)),
             ActionKind.InstallCard when action.Parameters is BehaviorInstallChoiceParameters behaviorInstall =>
                 behaviorInstall.Choice is { } chosen
@@ -366,10 +337,7 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     /// 0.55 times a game). A larger HQ raises the threshold by its extra size (C13's hand-size modifiers).
     /// </summary>
     internal static int FloodedDraw(HeuristicContext context) =>
-        context.Configuration.PolicyVersion is V34 or V35 or V36 or V37 && context.AgendaCount >= 3 + Math.Max(0, (context.Self.MaximumHandSize ?? 5) - 5)
-        // v37 (the guide's C13 exception; chiriboga's emergency protection): with no ICE in HQ there is no protection to
-        // put the agendas behind, and drawing for it is the escape, so the flooded draw is allowed again.
-        && (context.Configuration.PolicyVersion != V37 || context.Features.Hand.Any(card => context.Definition(card)?.Ice is not null))
+        context.Configuration.PolicyVersion == V34 && context.AgendaCount >= 3 + Math.Max(0, (context.Self.MaximumHandSize ?? 5) - 5)
             ? context.DrawValue + context.CreditValue : 0;
 
     private static AgentUtility Mulligan(HeuristicContext context, NumberChoiceParameters choice)

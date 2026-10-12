@@ -216,37 +216,19 @@ internal sealed class HeuristicContext
         return Math.Clamp(density / (total / (double)deckSize), 0.25, 2.5);
     }
 
-    /// <summary>Score-race pressure from the opponent's points: 1 below 5, rising to 1.6 at 6 or more.</summary>
-    /// <summary>
-    /// Runner v31's generation: its tag rules (bot plan H3 batch 3) were level on the ladder and are v31's alone, not carried
-    /// into later versions.
-    /// </summary>
-    public const int TagGeneration = 26;
-
-    /// <summary>
-    /// Runner v33's generation: its Nebula rules (bot plan H3 batch 5) were level on the ladder and are v33's alone; v34 builds
-    /// on v32.
-    /// </summary>
-    public const int NebulaGeneration = 28;
-
-    /// <summary>
-    /// Runner v34 (bot plan H3 batch 10): the Corp's faction is evidence of its punishing operations. Level on the ladder and
-    /// v34's alone; v35 builds on v32.
-    /// </summary>
-    public const int FactionGeneration = 29;
-
     /// <summary>Runner v35 (bot plan H3 batch 11): hosting on a console whose cards don't play from the grip (Madani).</summary>
     public const int ConsoleGeneration = 30;
 
-    /// <summary>Runner v36 (bot plan H3 batch 13): a better basic draw is worth it over the turns left. Level, and v36's alone.</summary>
-    public const int DrawEngineGeneration = 31;
-
-    /// <summary>Runner v37: v35 with v34's rules against the first Measured Response, re-tested on the paired ladder.</summary>
+    /// <summary>
+    /// Runner v37: v35 with the rules against the first Measured Response (bot plan H3 batch 10's v34, re-tested on the
+    /// paired ladder). Generations 26, 28, 29 and 31 belonged to Runner v31, v33, v34 and v36, removed unshipped.
+    /// </summary>
     public const int PunisherGeneration = 32;
 
-    /// <summary>Whether v34's rules against a punishing operation apply: v34's, and v37's on top of v35.</summary>
-    public bool PunisherRules => Generation is FactionGeneration or PunisherGeneration;
+    /// <summary>Whether the rules against a punishing operation apply: v37's and later.</summary>
+    public bool PunisherRules => Generation >= PunisherGeneration;
 
+    /// <summary>Score-race pressure from the opponent's points: 1 below 5, rising to 1.6 at 6 or more.</summary>
     public double OpponentScorePressure => Opponent.AgendaPoints switch
     {
         >= 6 => 1.6,

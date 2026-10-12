@@ -183,12 +183,12 @@ public sealed class CorpCodexV20Tests
 
     /// <summary>
     /// Bot plan H3 batch 7 (the guide's C01, C02): a flooded HQ lets an agenda into a remote the Runner gets into, unless HQ
-    /// holds ICE the Corp can put there and rez; v33 installs that ICE first. A box ladder game, LEO Glacier against
+    /// holds ICE the Corp can put there and rez; v33 (and v34, which carries its rules) installs that ICE first. A box ladder game, LEO Glacier against
     /// Magdalene, where v31 put the agenda behind one ICE and the Runner stole it.
     /// </summary>
     [Theory]
     [InlineData(CorpHeuristicPolicy.V31, RuntimeCardClass.Agenda)]
-    [InlineData(CorpHeuristicPolicy.V33, RuntimeCardClass.Ice)]
+    [InlineData(CorpHeuristicPolicy.V34, RuntimeCardClass.Ice)]
     public async Task TheScoringServerIsProtectedBeforeTheAgendaGoesIn(string version, RuntimeCardClass installs)
     {
         if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
@@ -211,22 +211,6 @@ public sealed class CorpCodexV20Tests
     {
         if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
         (LegalAction chosen, _) = await ChooseAtAsync("corp-flooded-hq-draw", version, 55);
-        Assert.True((chosen.Kind == ActionKind.DrawCard) == draws, $"{version} chose {chosen.Kind} {chosen.Description}.");
-    }
-
-    /// <summary>
-    /// Bot plan H3 batch 9: v34's heuristic ranked the flooded draw below a credit, but the turn planner's rollouts value a
-    /// card in HQ and drew anyway; v35 keeps the draw below the planner's other choices. A box ladder game, LEO Glacier
-    /// against Muslihat, where v34 drew with three agendas in HQ on turns 3 and 4.
-    /// </summary>
-    [Theory]
-    [InlineData(CorpHeuristicPolicy.V34, 103, true)]
-    [InlineData(CorpHeuristicPolicy.V35, 103, false)]
-    [InlineData(CorpHeuristicPolicy.V35, 182, false)]
-    public async Task ThePlannerDrawsNoMoreCardsIntoAFloodedHq(string version, long sequence, bool draws)
-    {
-        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
-        (LegalAction chosen, _) = await ChooseAtAsync("corp-planner-flooded-draw", version, sequence);
         Assert.True((chosen.Kind == ActionKind.DrawCard) == draws, $"{version} chose {chosen.Kind} {chosen.Description}.");
     }
 

@@ -50,7 +50,7 @@ public sealed partial class CorpHeuristicPolicy
             // v33 (C01, C02): the layer an agenda waiting in HQ is waiting for, on the empty remote the Runner gets into.
             // The review of #137: on any remote without an agenda in its root (an upgrade may be there), the destinations the
             // agenda waits for, and only while its rez, modifiers included, is affordable.
-            if (context.Configuration.PolicyVersion is V33 or V34 or V35 or V36 or V37 && !install.CreateNewRemote && server is { Kind: ServerKind.Remote }
+            if (context.Configuration.PolicyVersion == V34 && !install.CreateNewRemote && server is { Kind: ServerKind.Remote }
                 && !server.Root.Any(value => context.Definition(value)?.Agenda is not null)
                 && context.AgendaCount > 0 && context.Self.Credits - install.CreditCost >= ice.RezCost + IceRezModifier(context)
                 && RunnerGetsIn(context, server, 0))
@@ -101,13 +101,7 @@ public sealed partial class CorpHeuristicPolicy
             // which can't see the steal, doesn't bring it back.
             // v23 (reviews of batch 4's losses to Codex, 1 October): two agendas in HQ push one out only when HQ is no
             // safer than the remote; it was, and four agendas went out into breakable remotes and were stolen.
-            // v32 (bot plan H3 batch 6, the guide's C14): a breakable remote is a near-certain steal, HQ a fraction an access,
-            // so a flooded HQ no longer pushes an agenda out; only a full one does, where a draw would discard.
-            agendaWaits = context.Configuration.PolicyVersion == V32
-                ? !scoreableNow && !nakedAgenda && server is not null
-                    && RunnerGetsIn(context, server, install.CreditCost + definition.Printed.AdvancementRequirement)
-                    && context.Features.Hand.Length < (context.Self.MaximumHandSize ?? 5)
-                : !scoreableNow && !nakedAgenda && server is not null
+            agendaWaits = !scoreableNow && !nakedAgenda && server is not null
                 && RunnerGetsIn(context, server, install.CreditCost + definition.Printed.AdvancementRequirement)
                 && (context.AgendaCount < 2
                     || context.Features.Board.Servers.FirstOrDefault(value => value.Kind == ServerKind.Headquarters) is { } hq
@@ -119,7 +113,7 @@ public sealed partial class CorpHeuristicPolicy
             // v33 (bot plan H3 batch 7, the guide's C01, C02): a flooded HQ still lets an agenda out, but not into a server the
             // Runner gets into while the Corp holds ICE it can put there and rez: the ICE goes in this turn and the agenda
             // behind it the next (54% of the remote steals were behind one rezzed ICE, often from a Corp on 10 credits or more).
-            if (!agendaWaits && context.Configuration.PolicyVersion is V33 or V34 or V35 or V36 or V37 && !scoreableNow && !nakedAgenda && server is not null
+            if (!agendaWaits && context.Configuration.PolicyVersion == V34 && !scoreableNow && !nakedAgenda && server is not null
                 && ProtectionInHand(context, server)
                 && RunnerGetsIn(context, server, install.CreditCost + definition.Printed.AdvancementRequirement))
                 agendaWaits = true;

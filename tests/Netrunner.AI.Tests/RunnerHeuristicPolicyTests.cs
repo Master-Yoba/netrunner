@@ -132,68 +132,6 @@ public sealed class RunnerHeuristicPolicyTests
         Assert.Equal(wins, RunnerInference.StealWins(points, smallest));
 
     /// <summary>
-    /// Runner v31, the review of #133: a known agenda whose ability tags the Runner when stolen (Tomorrow's Headline) adds
-    /// that tag to the run's clean-up; an ability that fires only when the Corp scores it adds none.
-    /// </summary>
-    [Fact]
-    public void AKnownAgendasOnStealTagCountsTowardTheRunsTags()
-    {
-        CardDefinitionId headline = new("test:headline"), scoredOnly = new("test:scored-only");
-        CardBehaviorDefinition Tagging(CardDefinitionId id, PlayerSide? controller) => new(id, PlayerSide.Corp, triggers:
-            [new BehaviorTrigger("tag", OccurrenceKind.AgendaScoredOrStolen, TriggerMode.Mandatory, BehaviorTriggerScope.Self, null,
-                [new BehaviorInstruction(BehaviorInstructionKind.AddTags, 1, recipient: BehaviorPlayerSelector.Runner)],
-                occurrenceControllerSide: controller)]);
-        CardEvaluationDescriptor Agenda(CardDefinitionId id, PlayerSide? controller) =>
-            new(new(id, PlayerSide.Corp, RuntimeCardClass.Agenda, agendaPoints: 2, advancementRequirement: 3), Tagging(id, controller),
-                null, null, null, null, new(id, 2), [], false);
-        var catalog = new ScenarioCatalog(Agenda(headline, null), Agenda(scoredOnly, PlayerSide.Corp));
-        Observation observation = Decision(new LegalAction(new("action:credit"), ActionKind.GainCredit, "ignored", new NoActionParameters()));
-        AgentBoard baseline = ObservationReader.Read(observation).Board;
-        AgentBoard board = baseline with
-        {
-            Servers = [
-                new("server:headline", ServerKind.Remote, [], [new AgentCard { Id = "card:headline", DefinitionId = headline.Value }]),
-                new("server:scored-only", ServerKind.Remote, [], [new AgentCard { Id = "card:scored-only", DefinitionId = scoredOnly.Value }])],
-        };
-        observation = observation with { PublicState = EngineJson.Deserialize<Dictionary<string, object?>>(EngineJson.Serialize(board)) };
-        AgentFeatures features = ObservationReader.Read(observation);
-        var context = new HeuristicContext(features, catalog, RunnerPolicyProfiles.Create("standard", 54, RunnerHeuristicPolicy.V31), 26);
-
-        Assert.Equal(1, RunnerInference.StealTags(context, features.Board.Servers[0]));
-        Assert.Equal(0, RunnerInference.StealTags(context, features.Board.Servers[1]));
-    }
-
-    /// <summary>
-    /// Runner v31, the review of #133: every tag choice (Funhouse's take a tag or end the run) prices the tag with what the
-    /// Corp's punishers can take for it: against a list holding a Bigger Picture-like transfer, a tag on 5 credits costs the
-    /// 5 credits twice over; v30 prices it at the flat risk.
-    /// </summary>
-    [Fact]
-    public void ATagIsPricedByTheCreditsAPunisherTransfers()
-    {
-        CardDefinitionId transfer = new("test:transfer");
-        var choice = new BehaviorChoiceSpec("transfer-mode", BehaviorChooser.Controller, BehaviorChoiceMode.Mode, BehaviorChoiceCardinality.Exactly(1),
-            [new BehaviorChoiceOption("give-tag", [new BehaviorInstruction(BehaviorInstructionKind.AddTags, 1, recipient: BehaviorPlayerSelector.Runner)]),
-            new BehaviorChoiceOption("remove-1",
-                [new BehaviorInstruction(BehaviorInstructionKind.LoseCredits, 5, recipient: BehaviorPlayerSelector.Runner)],
-                condition: BehaviorCondition.RunnerTagsAtLeast(1))]);
-        var catalog = new ScenarioCatalog(new CardEvaluationDescriptor(new(transfer, PlayerSide.Corp, RuntimeCardClass.Operation, playCost: 0),
-            new CardBehaviorDefinition(transfer, PlayerSide.Corp, conditions: [BehaviorCondition.Tagged(PlayerSide.Runner)],
-                instructions: [new BehaviorInstruction(BehaviorInstructionKind.Choose, choice: choice)]),
-            null, null, null, null, null, [], false));
-        Observation observation = Decision(new LegalAction(new("action:credit"), ActionKind.GainCredit, "ignored", new NoActionParameters()));
-        AgentBoard baseline = ObservationReader.Read(observation).Board;
-        AgentBoard board = baseline with { Players = baseline.Players with { Runner = baseline.Players.Runner with { Credits = 5 } } };
-        observation = observation with { PublicState = EngineJson.Deserialize<Dictionary<string, object?>>(EngineJson.Serialize(board)) };
-        AgentFeatures features = ObservationReader.Read(observation);
-        AgentKnowledge knowledge = AgentKnowledge.Empty with { OpponentList = [new AgentListEntry(transfer.Value, 1)] };
-        int Risk(string version, int generation) => RunnerValues.TagRisk(
-            new HeuristicContext(features, catalog, RunnerPolicyProfiles.Create("standard", 54, version), generation) { Knowledge = knowledge });
-
-        Assert.Equal(2 * 5 * 110, Risk(RunnerHeuristicPolicy.V31, 26) - Risk(RunnerHeuristicPolicy.V30, 25));
-    }
-
-    /// <summary>
     /// Runner v32 (bot plan H3 batch 4, ZW05, LE15): an advanced face-down card in a remote is worth the agenda an advanced card
     /// likely is, with the score its steal denies (R06): where the only advanceable card is a 2-point agenda (500 and 180 a
     /// point), 190 + 670 × 1.5; v30 valued it at 190 and 200 a counter.
@@ -255,34 +193,6 @@ public sealed class RunnerHeuristicPolicyTests
     }
 
     /// <summary>
-    /// Runner v33 (NE15) and the review of #135: an asset holding credits is worth only what it holds after its next payout, a
-    /// campaign's at the Corp's turn begin as much as a paid withdrawal: on its last 3 nothing is denied; on 9, the 6 after it.
-    /// </summary>
-    [Theory]
-    [InlineData(3, 60)]
-    [InlineData(9, 160 + 6 * 90)]
-    public void AHostedCreditAssetIsWorthWhatItHoldsAfterItsNextPayout(int hosted, int worth)
-    {
-        CardDefinitionId campaign = new("test:campaign");
-        var catalog = new ScenarioCatalog(new CardEvaluationDescriptor(
-            new(campaign, PlayerSide.Corp, RuntimeCardClass.Asset, rezCost: 1, trashCost: 2),
-            new CardBehaviorDefinition(campaign, PlayerSide.Corp, triggers:
-                [new BehaviorTrigger("payout", OccurrenceKind.TurnBegin, TriggerMode.Mandatory, BehaviorTriggerScope.Controller, null,
-                    [new BehaviorInstruction(BehaviorInstructionKind.TakeHostedCredits, 3)])]),
-            null, null, null, null, null, [], false));
-        AgentFeatures features = ObservationReader.Read(Decision(new LegalAction(new("action:credit"), ActionKind.GainCredit, "ignored", new NoActionParameters())));
-        var card = new AgentCard
-        {
-            Id = "card:campaign",
-            DefinitionId = campaign.Value,
-            Rezzed = true,
-            Counters = [new AgentCounter("credit", CardCounterPurpose.HostedCredit, hosted, null)],
-        };
-
-        Assert.Equal(worth, RunnerValues.Trash(new HeuristicContext(features, catalog, RunnerPolicyProfiles.Create("standard", 54, RunnerHeuristicPolicy.V33), 28), card));
-    }
-
-    /// <summary>
     /// Corp v33, the review of #137: the layer an agenda waits for counts as affordable only with what the cards in play add
     /// to its rez (Fransofia Ward's +1): a rezzed upgrade raising ICE rez costs counts, an unrezzed one does not.
     /// </summary>
@@ -308,7 +218,7 @@ public sealed class RunnerHeuristicPolicyTests
         };
 
         Assert.Equal(modifier, CorpHeuristicPolicy.IceRezModifier(new HeuristicContext(features, catalog,
-            CorpPolicyProfiles.Create("standard", 54, CorpHeuristicPolicy.V33), 25)));
+            CorpPolicyProfiles.Create("standard", 54, CorpHeuristicPolicy.V34), 25)));
     }
 
     /// <summary>
@@ -364,7 +274,7 @@ public sealed class RunnerHeuristicPolicyTests
         };
         AgentFeatures read = ObservationReader.Read(Decision(new LegalAction(new("action:credit"), ActionKind.GainCredit, "ignored", new NoActionParameters())));
         AgentFeatures features = read with { Board = read.Board with { CorpIdentity = [new AgentCard { Id = "card:identity", DefinitionId = identity.Value }] } };
-        var context = new HeuristicContext(features, catalog, RunnerPolicyProfiles.Create("standard", 54, RunnerHeuristicPolicy.V34), HeuristicContext.FactionGeneration);
+        var context = new HeuristicContext(features, catalog, RunnerPolicyProfiles.Create("standard", 54, RunnerHeuristicPolicy.V37), HeuristicContext.PunisherGeneration);
 
         catalog.TryGet(operation, out CardEvaluationDescriptor card);
         Assert.Equal(inFaction, RunnerInference.InCorpFaction(context, card));
@@ -392,7 +302,7 @@ public sealed class RunnerHeuristicPolicyTests
                     [.. ice.Take(seen).Select((card, index) => new AgentCard { Id = $"card:ice-{index}", DefinitionId = card.Printed.DefinitionId.Value, Rezzed = true })], [])],
             },
         };
-        var context = new HeuristicContext(features, catalog, RunnerPolicyProfiles.Create("standard", 54, RunnerHeuristicPolicy.V34), HeuristicContext.FactionGeneration);
+        var context = new HeuristicContext(features, catalog, RunnerPolicyProfiles.Create("standard", 54, RunnerHeuristicPolicy.V37), HeuristicContext.PunisherGeneration);
 
         Assert.Equal(damageDeck, RunnerInference.DamageDeck(context));
     }
@@ -420,114 +330,9 @@ public sealed class RunnerHeuristicPolicyTests
             },
             Board = read.Board with { Players = read.Board.Players with { Runner = read.Board.Players.Runner with { Clicks = 3 } } },
         };
-        var context = new HeuristicContext(features, catalog, RunnerPolicyProfiles.Create("standard", 54, RunnerHeuristicPolicy.V34), HeuristicContext.FactionGeneration);
+        var context = new HeuristicContext(features, catalog, RunnerPolicyProfiles.Create("standard", 54, RunnerHeuristicPolicy.V37), HeuristicContext.PunisherGeneration);
 
         Assert.Equal((grip, clicks), RunnerHeuristicPolicy.AfterPlaying(context, "card:event", played));
-    }
-
-    /// <summary>
-    /// Bot plan H3 batch 12 (MATCHUP_NEBULA.md's thresholds): Nanomanagement on 3 clicks and 7 credits leaves four clicks
-    /// and 3 credits, enough to install and advance a three-advancement agenda; on 6 credits it isn't, and a two-advancement
-    /// agenda scores on 3 clicks without it.
-    /// </summary>
-    [Theory]
-    [InlineData(3, 7, 3, 800)]
-    [InlineData(3, 6, 3, 0)]
-    [InlineData(3, 7, 2, 0)]
-    public void NanomanagementIsWorthTheAgendaItLetsTheCorpScore(int clicks, int credits, int requirement, int worth)
-    {
-        CardDefinitionId agendaId = new("test:agenda");
-        CardDefinitionId nanoId = new("test:nanomanagement");
-        var nano = new CardBehaviorDefinition(nanoId, PlayerSide.Corp, instructions: [new BehaviorInstruction(BehaviorInstructionKind.GainClicks, amount: 2)]);
-        var catalog = new ScenarioCatalog(
-            new CardEvaluationDescriptor(new(agendaId, PlayerSide.Corp, RuntimeCardClass.Agenda, agendaPoints: 2, advancementRequirement: requirement),
-                null, null, null, null, null, new(agendaId, 2), [], false),
-            new CardEvaluationDescriptor(new(nanoId, PlayerSide.Corp, RuntimeCardClass.Operation, playCost: 4), nano, null, null, null, null, null, [], false));
-        AgentFeatures read = ObservationReader.Read(Decision(new LegalAction(new("action:credit"), ActionKind.GainCredit, "ignored", new NoActionParameters())));
-        AgentFeatures features = read with
-        {
-            Side = PlayerSide.Corp,
-            PrivateCards = new AgentPrivateCards
-            {
-                Hand = [new AgentCard { Id = "card:agenda", DefinitionId = agendaId.Value }, new AgentCard { Id = "card:nano", DefinitionId = nanoId.Value }],
-            },
-            Board = read.Board with
-            {
-                Players = read.Board.Players with { Corp = read.Board.Players.Corp with { Clicks = clicks, Credits = credits } },
-            },
-        };
-        var context = new HeuristicContext(features, catalog, CorpPolicyProfiles.Create("standard", 54, CorpHeuristicPolicy.V36), 25);
-
-        Assert.Equal(worth, CorpHeuristicPolicy.FastAdvance(context, nano, 4));
-    }
-
-    /// <summary>
-    /// The review of #141 (MATCHUP_NEBULA.md NE09): front-side Nebula on 3 clicks and 17 credits with three Nanomanagements
-    /// leaves six clicks and 5 credits, enough to install and advance Next Big Thing five times; the first Nanomanagement
-    /// starts that line. With two, five clicks are one short.
-    /// </summary>
-    [Theory]
-    [InlineData(3, 1100)]
-    [InlineData(2, 0)]
-    public void ChainedNanomanagementsCountTowardTheScore(int copies, int worth)
-    {
-        CardDefinitionId agendaId = new("test:next-big-thing");
-        CardDefinitionId nanoId = new("test:nanomanagement");
-        var nano = new CardBehaviorDefinition(nanoId, PlayerSide.Corp, instructions: [new BehaviorInstruction(BehaviorInstructionKind.GainClicks, amount: 2)]);
-        var catalog = new ScenarioCatalog(
-            new CardEvaluationDescriptor(new(agendaId, PlayerSide.Corp, RuntimeCardClass.Agenda, agendaPoints: 3, advancementRequirement: 5),
-                null, null, null, null, null, new(agendaId, 3), [], false),
-            new CardEvaluationDescriptor(new(nanoId, PlayerSide.Corp, RuntimeCardClass.Operation, playCost: 4), nano, null, null, null, null, null, [], false));
-        AgentFeatures read = ObservationReader.Read(Decision(new LegalAction(new("action:credit"), ActionKind.GainCredit, "ignored", new NoActionParameters())));
-        AgentFeatures features = read with
-        {
-            Side = PlayerSide.Corp,
-            PrivateCards = new AgentPrivateCards
-            {
-                Hand = [new AgentCard { Id = "card:agenda", DefinitionId = agendaId.Value },
-                    .. Enumerable.Range(0, copies).Select(index => new AgentCard { Id = $"card:nano-{index}", DefinitionId = nanoId.Value })],
-            },
-            Board = read.Board with
-            {
-                Players = read.Board.Players with { Corp = read.Board.Players.Corp with { Clicks = 3, Credits = 17 } },
-            },
-        };
-        var context = new HeuristicContext(features, catalog, CorpPolicyProfiles.Create("standard", 54, CorpHeuristicPolicy.V36), 25);
-
-        Assert.Equal(worth, CorpHeuristicPolicy.FastAdvance(context, nano, 4, "card:nano-0"));
-    }
-
-    /// <summary>
-    /// Corp v37 (the guide's C13 exception): three agendas in HQ stop the optional draw only while HQ holds ICE to protect
-    /// one with; with none, drawing for protection is the escape. v34 stops it either way.
-    /// </summary>
-    [Theory]
-    [InlineData(CorpHeuristicPolicy.V34, false, true)]
-    [InlineData(CorpHeuristicPolicy.V34, true, true)]
-    [InlineData(CorpHeuristicPolicy.V37, false, false)]
-    [InlineData(CorpHeuristicPolicy.V37, true, true)]
-    public void AFloodedHqDrawsForIceWhenItHoldsNone(string version, bool holdsIce, bool stopsDrawing)
-    {
-        CardDefinitionId agendaId = new("test:agenda");
-        CardDefinitionId iceId = new("test:ice");
-        var catalog = new ScenarioCatalog(
-            new CardEvaluationDescriptor(new(agendaId, PlayerSide.Corp, RuntimeCardClass.Agenda, agendaPoints: 2, advancementRequirement: 3),
-                null, null, null, null, null, new(agendaId, 2), [], false),
-            new CardEvaluationDescriptor(new(iceId, PlayerSide.Corp, RuntimeCardClass.Ice, rezCost: 2), null,
-                new(iceId, 0, IceType.Barrier, 2, [new EndRunSubroutineSpec()], []), null, null, null, null, [], false));
-        AgentFeatures read = ObservationReader.Read(Decision(new LegalAction(new("action:draw"), ActionKind.DrawCard, "ignored", new NoActionParameters())));
-        AgentFeatures features = read with
-        {
-            Side = PlayerSide.Corp,
-            PrivateCards = new AgentPrivateCards
-            {
-                Hand = [.. Enumerable.Range(0, 3).Select(index => new AgentCard { Id = $"card:agenda-{index}", DefinitionId = agendaId.Value }),
-                    .. holdsIce ? [new AgentCard { Id = "card:ice", DefinitionId = iceId.Value }] : Array.Empty<AgentCard>()],
-            },
-        };
-        var context = new HeuristicContext(features, catalog, CorpPolicyProfiles.Create("standard", 54, version), 25);
-
-        Assert.Equal(stopsDrawing, CorpHeuristicPolicy.FloodedDraw(context) > 0);
     }
 
     private static Observation Decision(params LegalAction[] actions)
