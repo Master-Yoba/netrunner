@@ -2434,3 +2434,8 @@ Plasticity over early, v36 installed it at 7 of 40 such decisions, and the cards
 
 **Test:** `RunnerDrawEngineV36Tests.VerbalPlasticityIsInstalledEarly` (a box ladder game, LEO Glacier against Topan,
 action 80 on turn 2: v35 passes it over, v36 installs it).
+
+**The review of #142.** Codex asked for the per-slice fuzz and the budget-scaling ladder (AGENTS.md). Both play the
+default policies (the fuzz's agents, `standard-x1` and `standard-x4`), which a version that isn't shipped leaves
+unchanged, so they would exercise none of v36's code; they run when a version becomes the default, as they did for
+Runner v35 (batch 11). The same holds for the other versions left constructible (Corp v35 and v36, Runner v33 and v34).
