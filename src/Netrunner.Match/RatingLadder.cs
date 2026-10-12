@@ -35,7 +35,11 @@ public sealed record LadderReport(IReadOnlyList<LadderRating> Ratings, IReadOnly
 /// weakest expected entrant, with seeded bootstrap intervals. An order is
 /// separated when every adjacent gap's paired bootstrap interval is above
 /// zero; comparing separate rating intervals would be too strict because
-/// ratings fitted from the same games are correlated.
+/// ratings fitted from the same games are correlated. The bootstrap resamples
+/// whole deals when the games carry them, so each draw keeps every entrant's
+/// games on a deal together and the deal's luck cancels in a gap; resampling
+/// single games (as before 12 October 2026) lost that pairing and made a
+/// candidate's interval against its baseline about three times too wide.
 /// </summary>
 public static partial class RatingLadder
 {
@@ -52,7 +56,7 @@ public static partial class RatingLadder
     /// in its own seat, and "hard".
     /// </summary>
     public static IReadOnlyList<string> EntrantOrder { get; } =
-        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard-w3", "standard-c1", "standard-r22", "standard-c26", "standard-r23", "standard-c27", "standard-r24", "standard-c28", "standard-r25", "standard-c29", "standard-r28", "standard-r29", "standard-r30", "standard-r31", "standard-r32", "standard-r33", "standard-c31", "standard-c32", "standard-c33", "standard-c34", "standard-prev", "standard", "standard-c35", "standard-r34", "standard-r35", "standard-c36", "standard-r36", "standard-plan", "standard-plan-fit", "standard-run", "standard-rez", "standard-w4a", "standard-w4b", "standard-arch", "standard-rarch", "standard-rgen", "standard-w4c", "standard-c13", "standard-w4d", "standard-c14", "standard-c15", "standard-c16", "standard-r13", "standard-c17", "standard-c18", "standard-c19", "standard-r14", "standard-c20", "standard-r15", "standard-c21", "standard-r16", "standard-c22", "standard-b3", "standard-c23", "standard-r17", "standard-r18", "standard-c24", "standard-r19", "standard-w5", "standard-r21", "hard-r21", "hard-a9c", "hard-a9d", "hard-a9d-list", "hard-a9d-pins", "glacier", "rush", "asset-spam", "aggressive", "rig-builder", "hard", "hard-wide", "hard-weight", "hard-rez", "hard-model", "hard-playout", "standard-heuristic", "standard-apprentice", "standard-apprentice-v1", "hard-set5", "hard-set4-teacher", "hard-value", "hard-set5-value", "hard-set5l-value", "hard-set4l-value", "hard-set5l-value-x1", "hard-set5l-value-x4", "hard-set5l-value-x8", "standard-x1", "standard-x2", "standard-x4", "standard-x8", "standard-x16"];
+        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard-w3", "standard-c1", "standard-r22", "standard-c26", "standard-r23", "standard-c27", "standard-r24", "standard-c28", "standard-r25", "standard-c29", "standard-r28", "standard-r29", "standard-r30", "standard-r31", "standard-r32", "standard-r33", "standard-c31", "standard-c32", "standard-c33", "standard-c34", "standard-prev", "standard", "standard-c35", "standard-r34", "standard-r35", "standard-c36", "standard-r36", "standard-r37", "standard-plan", "standard-plan-fit", "standard-run", "standard-rez", "standard-w4a", "standard-w4b", "standard-arch", "standard-rarch", "standard-rgen", "standard-w4c", "standard-c13", "standard-w4d", "standard-c14", "standard-c15", "standard-c16", "standard-r13", "standard-c17", "standard-c18", "standard-c19", "standard-r14", "standard-c20", "standard-r15", "standard-c21", "standard-r16", "standard-c22", "standard-b3", "standard-c23", "standard-r17", "standard-r18", "standard-c24", "standard-r19", "standard-w5", "standard-r21", "hard-r21", "hard-a9c", "hard-a9d", "hard-a9d-list", "hard-a9d-pins", "glacier", "rush", "asset-spam", "aggressive", "rig-builder", "hard", "hard-wide", "hard-weight", "hard-rez", "hard-model", "hard-playout", "standard-heuristic", "standard-apprentice", "standard-apprentice-v1", "hard-set5", "hard-set4-teacher", "hard-value", "hard-set5-value", "hard-set5l-value", "hard-set4l-value", "hard-set5l-value-x1", "hard-set5l-value-x4", "hard-set5l-value-x8", "standard-x1", "standard-x2", "standard-x4", "standard-x8", "standard-x16"];
 
     private const double EloScale = 400 / 2.302585092994046;
     private const double Ridge = 0.01;
@@ -217,6 +221,9 @@ public static partial class RatingLadder
             // default Runner.
             "standard-c32" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
                 side == PlayerSide.Corp ? CorpHeuristicPolicy.V32 : RunnerHeuristicPolicy.PolicyVersion),
+            // Runner v37 (v35 with v34's rules against the first Measured Response) with the default Corp.
+            "standard-r37" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
+                side == PlayerSide.Corp ? CorpHeuristicPolicy.PolicyVersion : RunnerHeuristicPolicy.V37),
             // Bot plan H3 batch 13: Runner v36 (a draw engine valued over the turns left) with the default Corp.
             "standard-r36" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
                 side == PlayerSide.Corp ? CorpHeuristicPolicy.PolicyVersion : RunnerHeuristicPolicy.V36),
@@ -457,11 +464,15 @@ public static partial class RatingLadder
         var samples = keys.ToDictionary(key => key, _ => new List<double>(bootstrap), StringComparer.Ordinal);
         var draws = new List<Dictionary<string, double>>(bootstrap);
         var random = new DeterministicRandom(bootstrapSeed);
+        // Deal plans resample deals, every game of a deal together; seed-per-pairing plans have no deals and resample games.
+        LadderGameResult[][] clusters = scored.All(result => result.Game.Deal >= 0)
+            ? [.. scored.GroupBy(result => result.Game.Deal).OrderBy(group => group.Key).Select(group => group.ToArray())]
+            : [.. scored.Select(result => new[] { result })];
         for (int iteration = 0; iteration < bootstrap; iteration++)
         {
-            var resample = new LadderGameResult[scored.Length];
-            for (int index = 0; index < resample.Length; index++) resample[index] = scored[random.NextInt(scored.Length)];
-            Dictionary<string, double> draw = Anchor(Fit(resample, keys));
+            var resample = new List<LadderGameResult>(scored.Length);
+            for (int index = 0; index < clusters.Length; index++) resample.AddRange(clusters[random.NextInt(clusters.Length)]);
+            Dictionary<string, double> draw = Anchor(Fit([.. resample], keys));
             draws.Add(draw);
             foreach ((string key, double value) in draw) samples[key].Add(value);
         }

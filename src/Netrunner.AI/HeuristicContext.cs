@@ -238,8 +238,14 @@ internal sealed class HeuristicContext
     /// <summary>Runner v35 (bot plan H3 batch 11): hosting on a console whose cards don't play from the grip (Madani).</summary>
     public const int ConsoleGeneration = 30;
 
-    /// <summary>Runner v36 (bot plan H3 batch 13): a better basic draw is worth it over the turns left.</summary>
+    /// <summary>Runner v36 (bot plan H3 batch 13): a better basic draw is worth it over the turns left. Level, and v36's alone.</summary>
     public const int DrawEngineGeneration = 31;
+
+    /// <summary>Runner v37: v35 with v34's rules against the first Measured Response, re-tested on the paired ladder.</summary>
+    public const int PunisherGeneration = 32;
+
+    /// <summary>Whether v34's rules against a punishing operation apply: v34's, and v37's on top of v35.</summary>
+    public bool PunisherRules => Generation is FactionGeneration or PunisherGeneration;
 
     public double OpponentScorePressure => Opponent.AgendaPoints switch
     {

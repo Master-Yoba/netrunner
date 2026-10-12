@@ -20,6 +20,7 @@ public sealed class RunnerPunisherV34Tests
     [Theory]
     [InlineData(RunnerHeuristicPolicy.V32, true)]
     [InlineData(RunnerHeuristicPolicy.V34, false)]
+    [InlineData(RunnerHeuristicPolicy.V37, false)]
     public async Task TheGripStaysAboveMeasuredResponseInAWeylandGame(string version, bool plays)
     {
         if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;

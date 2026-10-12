@@ -87,7 +87,7 @@ public sealed partial class RunnerHeuristicPolicy
             // turns the game likely has left, at the Runner's usual basic draw a turn; three turns' worth lost to a draw, and
             // Topan installed it 0.4 times a game from three copies.
             value += (definition.Behavior?.FirstBasicDrawReplacements ?? []).Sum(replacement => (int)((replacement.DrawCount - 1) * context.DrawValue
-                * (context.Generation >= HeuristicContext.DrawEngineGeneration ? DrawEngineTurns(context) : 3)));
+                * (context.Generation == HeuristicContext.DrawEngineGeneration ? DrawEngineTurns(context) : 3)));
             if (definition.Printed.Console) value += 180;
             if (context.Self.UsedMemory >= context.Self.MemoryLimit && definition.Printed.CardClass == RuntimeCardClass.Hardware) value += 170;
         }

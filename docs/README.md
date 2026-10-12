@@ -13,6 +13,8 @@ are kept unchanged in [`history/`](history/) as design history and gate evidence
 - [Strategy fundamentals](STRATEGY_FUNDAMENTALS.md): how to play either side, as rules with IDs, for the heuristic
   track (bot plan section 10), and the Core Battle Box matchup notes: [PT Untaian Shell Game](MATCHUP_PT_UNTAIAN.md),
   [Zwicky Supermodernism](MATCHUP_ZWICKY.md), [LEO Glacier](MATCHUP_LEO.md) and [Nebula Fast Advance](MATCHUP_NEBULA.md)
+- [What chiriboga's opponent AI offers us](CHIRIBOGA_NOTES.md): its paired seeded gates (which found our ladder's
+  unpaired bootstrap), and the Corp, Runner and process ideas worth trying
 
 ## Reference and how-to
 

@@ -19,6 +19,21 @@ public sealed record LadderDeckComparison(string ContentId, PlayerSide Side, str
     public const double WarningScoreDifference = 0.14;
 }
 
+/// <summary>
+/// A candidate's paired comparison against a baseline in one seat over every deal (after chiriboga's seeded gates): the
+/// mean seat-score difference and its bootstrap interval over deals, the deals where any of the candidate's games played
+/// out differently from the baseline's against the same opponent (<paramref name="ChangedDeals"/>, by final state), and
+/// those where any such game's result differed (<paramref name="ResultChangedDeals"/>). Both are counted game by game,
+/// before a deal's games are averaged, so changes against two opponents that cancel still count. A change that alters
+/// no deal says nothing, and one that alters few is judged by those few without being diluted: the unchanged deals add
+/// nothing to the difference or its noise.
+/// </summary>
+public sealed record LadderPairedComparison(PlayerSide Side, string Baseline, string Candidate, int Deals, int ChangedDeals,
+    int ResultChangedDeals, double ScoreDifference, double Lower, double Upper)
+{
+    public bool Clear => Lower > 0 || Upper < 0;
+}
+
 public static partial class RatingLadder
 {
     /// <summary>
@@ -67,14 +82,7 @@ public static partial class RatingLadder
             foreach (PlayerSide side in new[] { PlayerSide.Corp, PlayerSide.Runner })
             {
                 // Per deal: mean seat score as the candidate minus as the baseline, over the opponents faced.
-                double[] differences = content.GroupBy(result => result.Game.Deal)
-                    .Select(deal =>
-                    {
-                        double Seat(string entrant) => deal.Where(result => (side == PlayerSide.Corp ? result.Game.Corp : result.Game.Runner) == entrant)
-                            .Select(result => side == PlayerSide.Corp ? result.CorpScore : 1 - result.CorpScore).DefaultIfEmpty(double.NaN).Average();
-                        return Seat(candidate) - Seat(baseline);
-                    })
-                    .Where(value => !double.IsNaN(value)).ToArray();
+                double[] differences = DealDifferences(content, side, baseline, candidate);
                 if (differences.Length == 0) continue;
                 double mean = differences.Average();
                 var draws = new List<double>(bootstrap);
@@ -91,6 +99,73 @@ public static partial class RatingLadder
         }
         return comparisons;
     }
+
+    /// <summary>
+    /// The paired comparison of a two-entrant ladder in each seat, over all its deals: per deal, the candidate's mean seat
+    /// score less the baseline's against the same opponents on the same seed.
+    /// </summary>
+    public static IReadOnlyList<LadderPairedComparison> ComparePaired(IReadOnlyList<LadderGameResult> results, string baseline,
+        string candidate, int bootstrap = 200, ulong bootstrapSeed = 1, double confidence = 0.95)
+    {
+        ArgumentNullException.ThrowIfNull(results);
+        double tail = (1 - confidence) / 2;
+        var random = new DeterministicRandom(bootstrapSeed);
+        LadderGameResult[] scored = results.Where(result => result.Error is null && result.Game.Deal >= 0).ToArray();
+        var comparisons = new List<LadderPairedComparison>();
+        foreach (PlayerSide side in new[] { PlayerSide.Corp, PlayerSide.Runner })
+        {
+            double[] differences = DealDifferences(scored, side, baseline, candidate);
+            if (differences.Length == 0) continue;
+            double mean = differences.Average();
+            var draws = new List<double>(bootstrap);
+            for (int iteration = 0; iteration < bootstrap; iteration++)
+            {
+                double sum = 0;
+                for (int index = 0; index < differences.Length; index++) sum += differences[random.NextInt(differences.Length)];
+                draws.Add(sum / differences.Length);
+            }
+            draws.Sort();
+            (int changed, int resultChanged) = ChangedDeals(scored, side, baseline, candidate);
+            comparisons.Add(new LadderPairedComparison(side, baseline, candidate, differences.Length, changed, resultChanged, mean,
+                draws.Count == 0 ? mean : Percentile(draws, tail), draws.Count == 0 ? mean : Percentile(draws, 1 - tail)));
+        }
+        return comparisons;
+    }
+
+    /// <summary>
+    /// The deals where the candidate's game against an opponent differs from the baseline's against the same opponent: in
+    /// its final state (when both are known) or its result, and in its result alone.
+    /// </summary>
+    private static (int Changed, int ResultChanged) ChangedDeals(IEnumerable<LadderGameResult> scored, PlayerSide side, string baseline,
+        string candidate)
+    {
+        int changed = 0, resultChanged = 0;
+        foreach (IGrouping<int, LadderGameResult> deal in scored.GroupBy(result => result.Game.Deal))
+        {
+            string Seat(LadderGameResult result) => side == PlayerSide.Corp ? result.Game.Corp : result.Game.Runner;
+            string Opponent(LadderGameResult result) => side == PlayerSide.Corp ? result.Game.Runner : result.Game.Corp;
+            var pairs = deal.Where(result => Seat(result) == candidate)
+                .Join(deal.Where(result => Seat(result) == baseline), Opponent, Opponent, (mine, theirs) => (Mine: mine, Theirs: theirs),
+                    StringComparer.Ordinal).ToArray();
+            bool result = pairs.Any(pair => Math.Abs(pair.Mine.CorpScore - pair.Theirs.CorpScore) > 1e-9);
+            if (result) resultChanged++;
+            if (result || pairs.Any(pair => pair.Mine.FinalStateHash is { } mine && pair.Theirs.FinalStateHash is { } theirs
+                && !string.Equals(mine, theirs, StringComparison.Ordinal)))
+                changed++;
+        }
+        return (changed, resultChanged);
+    }
+
+    /// <summary>Per deal, the candidate's mean seat score less the baseline's, over the opponents each faced; deals without both are left out.</summary>
+    private static double[] DealDifferences(IEnumerable<LadderGameResult> scored, PlayerSide side, string baseline, string candidate) =>
+        scored.GroupBy(result => result.Game.Deal)
+            .Select(deal =>
+            {
+                double Seat(string entrant) => deal.Where(result => (side == PlayerSide.Corp ? result.Game.Corp : result.Game.Runner) == entrant)
+                    .Select(result => side == PlayerSide.Corp ? result.CorpScore : 1 - result.CorpScore).DefaultIfEmpty(double.NaN).Average();
+                return Seat(candidate) - Seat(baseline);
+            })
+            .Where(value => !double.IsNaN(value)).ToArray();
 
     /// <summary>
     /// Sequential stopping: every seat's adjacent difference is clear, above or below
