@@ -2477,3 +2477,16 @@ interval; a version becomes the default only if that interval clears zero:
   damage deck, the grip floor, a steal that arms it), against Runner v35. v36's draw-engine rule is now v36's alone.
 
 If both Corp versions pass, they are combined and the combination is measured against the better one before it ships.
+
+**The re-tests (seed 3, 1,600 box deals each), judged by the rule declared above:**
+
+| Candidate | Deal-paired interval | Paired score difference | Deals changed | Outcome |
+|---|---:|---:|---:|---|
+| Corp v36 − v34 | +5 Elo [−2, +14] | +0.0075 [−0.0025, +0.0207] | 88 | not shipped |
+| Corp v35 − v34 | +2 [−3, +8] | +0.0038 [−0.0038, +0.0125] | 48 | not shipped |
+| **Runner v37 − v35** | **+8 [+1, +15]** | +0.0125 [+0.0019, +0.0231] | 94 | **shipped: Runner v37 is the default** |
+
+Corp v36's gain was smaller on these seeds than on the first two, and its interval admits zero, so the default stays
+Corp v34. Rescored by deal, its first two runs cleared zero; this one, the run declared under the corrected rule, does
+not. Runner v37 (v34's rules against the first Measured Response, on top of v35) clears it; its
+shipping checks follow.
