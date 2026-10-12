@@ -2504,3 +2504,30 @@ difference, so changes against two opponents that cancel, or a different game wi
 unchanged. Both counts now come game by game, before averaging: `changed` (a matched game's final state differs) and
 `results-changed` (its result differs), with a test (`ChangedDealsAreCountedGameByGame`). The counts above are of deals
 whose result changed; in those ladders both opponents were one policy, so nothing cancelled.
+
+### Step 3 of the chiriboga notes: Corp v37, drawing out of a flooded HQ for ICE (12 October 2026)
+
+**The diagnosis.** The chiriboga notes proposed judging a server's security by the Runner's real capability; our Corp
+already does (`RunnerGetsIn`, the run model with the Runner's credits, three clicks of credit, burst and a shared rez
+budget). So the question became why the Corp still lets agendas be stolen from remotes. A replay of 400 box deals
+(Corp v34 against Runner v37) found the install behind each of 323 agenda steals from remotes. In the 268 that fall in
+the twenty commonest situations:
+
+| At the agenda's install | Steals |
+|---|---:|
+| HQ held 2 or more agendas | 85% |
+| No ICE in HQ | 76% |
+| Both: a flooded HQ and no ICE to protect a remote with | **74%** |
+| The server had one ICE | 57% |
+
+With nothing to protect an agenda with, the flooded Corp installs it where the Runner gets in; and v34 (C13) stopped
+it drawing, so it couldn't find ICE either. The guide's C13 names the exception ("draw to seek a specific flood solution
+when that is the best escape"), and chiriboga's emergency protection draws for protection when HQ is breachable and
+holds none.
+
+**The change.** Corp v37 is v34 with the flooded-draw stop applied only while HQ holds ICE.
+
+**Declared before running it:** 1,600 fresh box deals (seed 4) against Corp v34, judged by the deal-paired interval;
+v37 becomes the default only if that interval clears zero.
+
+**Test:** `AFloodedHqDrawsForIceWhenItHoldsNone`.
