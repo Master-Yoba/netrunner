@@ -2403,3 +2403,8 @@ credits don't; a two-advancement agenda scores without it).
 v34. The Nebula effect repeated, 62.2% to 67.2% over 1,602 Nebula games, and the other Corps again played game for game;
 a whole-box ladder can't resolve a gain confined to a quarter of its games at this size. Shipping it on the deck-level
 evidence would need a rule decided before a run that measures that deck, which the ladder can't select today.
+
+**The review of #141.** Codex found one gap, valid: the bonus counted only the operation being played, so NE09's chain
+(front-side Nebula on 17 credits, three Nanomanagements, Next Big Thing) never started. The other click-gaining operations
+in HQ now count, cheapest first and as far as the credits go, with a test (`ChainedNanomanagementsCountTowardTheScore`).
+v36 isn't the default, so its ladders weren't run again.

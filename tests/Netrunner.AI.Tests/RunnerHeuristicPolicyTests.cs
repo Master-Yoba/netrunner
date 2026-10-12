@@ -461,6 +461,42 @@ public sealed class RunnerHeuristicPolicyTests
         Assert.Equal(worth, CorpHeuristicPolicy.FastAdvance(context, nano, 4));
     }
 
+    /// <summary>
+    /// The review of #141 (MATCHUP_NEBULA.md NE09): front-side Nebula on 3 clicks and 17 credits with three Nanomanagements
+    /// leaves six clicks and 5 credits, enough to install and advance Next Big Thing five times; the first Nanomanagement
+    /// starts that line. With two, five clicks are one short.
+    /// </summary>
+    [Theory]
+    [InlineData(3, 1100)]
+    [InlineData(2, 0)]
+    public void ChainedNanomanagementsCountTowardTheScore(int copies, int worth)
+    {
+        CardDefinitionId agendaId = new("test:next-big-thing");
+        CardDefinitionId nanoId = new("test:nanomanagement");
+        var nano = new CardBehaviorDefinition(nanoId, PlayerSide.Corp, instructions: [new BehaviorInstruction(BehaviorInstructionKind.GainClicks, amount: 2)]);
+        var catalog = new ScenarioCatalog(
+            new CardEvaluationDescriptor(new(agendaId, PlayerSide.Corp, RuntimeCardClass.Agenda, agendaPoints: 3, advancementRequirement: 5),
+                null, null, null, null, null, new(agendaId, 3), [], false),
+            new CardEvaluationDescriptor(new(nanoId, PlayerSide.Corp, RuntimeCardClass.Operation, playCost: 4), nano, null, null, null, null, null, [], false));
+        AgentFeatures read = ObservationReader.Read(Decision(new LegalAction(new("action:credit"), ActionKind.GainCredit, "ignored", new NoActionParameters())));
+        AgentFeatures features = read with
+        {
+            Side = PlayerSide.Corp,
+            PrivateCards = new AgentPrivateCards
+            {
+                Hand = [new AgentCard { Id = "card:agenda", DefinitionId = agendaId.Value },
+                    .. Enumerable.Range(0, copies).Select(index => new AgentCard { Id = $"card:nano-{index}", DefinitionId = nanoId.Value })],
+            },
+            Board = read.Board with
+            {
+                Players = read.Board.Players with { Corp = read.Board.Players.Corp with { Clicks = 3, Credits = 17 } },
+            },
+        };
+        var context = new HeuristicContext(features, catalog, CorpPolicyProfiles.Create("standard", 54, CorpHeuristicPolicy.V36), 25);
+
+        Assert.Equal(worth, CorpHeuristicPolicy.FastAdvance(context, nano, 4, "card:nano-0"));
+    }
+
     private static Observation Decision(params LegalAction[] actions)
     {
         GameState state = GameState.CreateNew(54);
