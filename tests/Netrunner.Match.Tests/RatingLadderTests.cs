@@ -163,6 +163,35 @@ public sealed class RatingLadderTests
         Assert.Equal(20, bad.Deals);
     }
 
+    /// <summary>
+    /// A candidate that changes 20 of 400 deals, winning each it changes, and otherwise plays its baseline's games: deal
+    /// luck is shared, so the paired comparison is clear and counts the changed deals, and the ladder's deal bootstrap
+    /// separates them.
+    /// </summary>
+    [Fact]
+    public void APairedCandidateIsJudgedByTheDealsItChanges()
+    {
+        var results = new List<LadderGameResult>();
+        for (int deal = 0; deal < 400; deal++)
+            foreach (string corp in new[] { "easy", "standard" })
+                foreach (string runner in new[] { "easy", "standard" })
+                {
+                    double luck = deal % 2;
+                    double score = corp == "standard" && deal % 20 == 0 ? 1 : luck;
+                    results.Add(new LadderGameResult(new LadderGame($"{corp}-{runner}-{deal}", "box", (ulong)deal, corp, runner, deal),
+                        score, false, 100, null));
+                }
+
+        LadderPairedComparison paired = Assert.Single(RatingLadder.ComparePaired(results, "easy", "standard", bootstrap: 200),
+            comparison => comparison.Side == PlayerSide.Corp);
+        Assert.Equal(400, paired.Deals);
+        Assert.Equal(20, paired.ChangedDeals);
+        Assert.Equal(0.05, paired.ScoreDifference, 6);
+        Assert.True(paired.Clear && paired.Lower > 0, $"[{paired.Lower}, {paired.Upper}]");
+        LadderDifference gap = Assert.Single(RatingLadder.Rate(results, bootstrap: 200).Differences, difference => difference.Side == PlayerSide.Corp);
+        Assert.True(gap.Separated, $"{gap.Elo} [{gap.Lower}, {gap.Upper}]");
+    }
+
     [Fact]
     public void StoppingNeedsEveryDifferenceClearOfZero()
     {

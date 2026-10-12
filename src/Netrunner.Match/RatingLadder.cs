@@ -35,7 +35,11 @@ public sealed record LadderReport(IReadOnlyList<LadderRating> Ratings, IReadOnly
 /// weakest expected entrant, with seeded bootstrap intervals. An order is
 /// separated when every adjacent gap's paired bootstrap interval is above
 /// zero; comparing separate rating intervals would be too strict because
-/// ratings fitted from the same games are correlated.
+/// ratings fitted from the same games are correlated. The bootstrap resamples
+/// whole deals when the games carry them, so each draw keeps every entrant's
+/// games on a deal together and the deal's luck cancels in a gap; resampling
+/// single games (as before 12 October 2026) lost that pairing and made a
+/// candidate's interval against its baseline about three times too wide.
 /// </summary>
 public static partial class RatingLadder
 {
@@ -457,11 +461,15 @@ public static partial class RatingLadder
         var samples = keys.ToDictionary(key => key, _ => new List<double>(bootstrap), StringComparer.Ordinal);
         var draws = new List<Dictionary<string, double>>(bootstrap);
         var random = new DeterministicRandom(bootstrapSeed);
+        // Deal plans resample deals, every game of a deal together; seed-per-pairing plans have no deals and resample games.
+        LadderGameResult[][] clusters = scored.All(result => result.Game.Deal >= 0)
+            ? [.. scored.GroupBy(result => result.Game.Deal).OrderBy(group => group.Key).Select(group => group.ToArray())]
+            : [.. scored.Select(result => new[] { result })];
         for (int iteration = 0; iteration < bootstrap; iteration++)
         {
-            var resample = new LadderGameResult[scored.Length];
-            for (int index = 0; index < resample.Length; index++) resample[index] = scored[random.NextInt(scored.Length)];
-            Dictionary<string, double> draw = Anchor(Fit(resample, keys));
+            var resample = new List<LadderGameResult>(scored.Length);
+            for (int index = 0; index < clusters.Length; index++) resample.AddRange(clusters[random.NextInt(clusters.Length)]);
+            Dictionary<string, double> draw = Anchor(Fit([.. resample], keys));
             draws.Add(draw);
             foreach ((string key, double value) in draw) samples[key].Add(value);
         }
