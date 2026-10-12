@@ -11,10 +11,40 @@ public sealed partial class CorpHeuristicPolicy
         CardBehaviorDefinition? behavior = context.Definition(card)?.Behavior;
         if (behavior is null) return Value(-50, "play/unmodelled", approximate: true, fallback: true);
         int effect = Effects(context, behavior.Instructions, card, behavior.Controller);
+        if (context.Configuration.PolicyVersion == V36) effect += FastAdvance(context, behavior, play.CreditCost);
         // v30: a play only possible before the turn's first action finishes (Petty Cash) is now or never this turn.
         if (effect - play.CreditCost * context.CreditValue > 0 && NowOrNever(behavior.Conditions)) effect += NowOrNeverBonus;
         return new(effect >= 10000 ? 100 : 0, effect - play.CreditCost * context.CreditValue,
             "play/effect-minus-current-cost", Approximate: effect < 10000);
+    }
+
+    /// <summary>
+    /// v36 (bot plan H3 batch 12; MATCHUP_NEBULA.md NE07 to NE09): an operation that gains clicks is worth the best agenda
+    /// it lets the Corp score this turn that it can't score without it: one from HQ, installed and advanced in full, or an
+    /// installed one advanced the rest of the way, each advancement a click and a credit. Front-side Nebula with 7 credits
+    /// plays Nanomanagement and installs and advances a three-advancement agenda; v34 never played it.
+    /// </summary>
+    internal static int FastAdvance(HeuristicContext context, CardBehaviorDefinition behavior, int creditCost)
+    {
+        int gained = HeuristicContext.Flatten(behavior.Instructions).Where(instruction => instruction.Kind == BehaviorInstructionKind.GainClicks)
+            .Sum(instruction => instruction.Amount);
+        if (gained <= 1) return 0;
+        int clicks = context.Self.Clicks, credits = context.Self.Credits;
+        int clicksAfter = clicks - 1 + gained, creditsAfter = credits - creditCost;
+        int best = 0;
+        foreach (AgentCard card in context.Features.Hand)
+            if (context.Definition(card) is { Agenda: not null, Printed: { } agenda })
+                best = Math.Max(best, Enabled(1 + agenda.AdvancementRequirement, agenda.AdvancementRequirement, agenda.AgendaPoints));
+        foreach (AgentCard card in context.Features.Board.Servers.Where(server => server.Kind == ServerKind.Remote).SelectMany(server => server.Root).OfType<AgentCard>())
+            if (context.Definition(card) is { Agenda: not null, Printed: { } agenda })
+            {
+                int left = Math.Max(0, agenda.AdvancementRequirement - (card.AdvancementCounters ?? 0));
+                best = Math.Max(best, Enabled(left, left, agenda.AgendaPoints));
+            }
+        return best;
+
+        int Enabled(int clicksNeeded, int creditsNeeded, int points) =>
+            clicksNeeded <= clicksAfter && creditsNeeded <= creditsAfter && (clicksNeeded > clicks || creditsNeeded > credits) ? 200 + 300 * points : 0;
     }
 
     private static AgentUtility Ability(HeuristicContext context, AbilityActionParameters ability)

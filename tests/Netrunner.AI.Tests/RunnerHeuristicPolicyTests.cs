@@ -425,6 +425,42 @@ public sealed class RunnerHeuristicPolicyTests
         Assert.Equal((grip, clicks), RunnerHeuristicPolicy.AfterPlaying(context, "card:event", played));
     }
 
+    /// <summary>
+    /// Bot plan H3 batch 12 (MATCHUP_NEBULA.md's thresholds): Nanomanagement on 3 clicks and 7 credits leaves four clicks
+    /// and 3 credits, enough to install and advance a three-advancement agenda; on 6 credits it isn't, and a two-advancement
+    /// agenda scores on 3 clicks without it.
+    /// </summary>
+    [Theory]
+    [InlineData(3, 7, 3, 800)]
+    [InlineData(3, 6, 3, 0)]
+    [InlineData(3, 7, 2, 0)]
+    public void NanomanagementIsWorthTheAgendaItLetsTheCorpScore(int clicks, int credits, int requirement, int worth)
+    {
+        CardDefinitionId agendaId = new("test:agenda");
+        CardDefinitionId nanoId = new("test:nanomanagement");
+        var nano = new CardBehaviorDefinition(nanoId, PlayerSide.Corp, instructions: [new BehaviorInstruction(BehaviorInstructionKind.GainClicks, amount: 2)]);
+        var catalog = new ScenarioCatalog(
+            new CardEvaluationDescriptor(new(agendaId, PlayerSide.Corp, RuntimeCardClass.Agenda, agendaPoints: 2, advancementRequirement: requirement),
+                null, null, null, null, null, new(agendaId, 2), [], false),
+            new CardEvaluationDescriptor(new(nanoId, PlayerSide.Corp, RuntimeCardClass.Operation, playCost: 4), nano, null, null, null, null, null, [], false));
+        AgentFeatures read = ObservationReader.Read(Decision(new LegalAction(new("action:credit"), ActionKind.GainCredit, "ignored", new NoActionParameters())));
+        AgentFeatures features = read with
+        {
+            Side = PlayerSide.Corp,
+            PrivateCards = new AgentPrivateCards
+            {
+                Hand = [new AgentCard { Id = "card:agenda", DefinitionId = agendaId.Value }, new AgentCard { Id = "card:nano", DefinitionId = nanoId.Value }],
+            },
+            Board = read.Board with
+            {
+                Players = read.Board.Players with { Corp = read.Board.Players.Corp with { Clicks = clicks, Credits = credits } },
+            },
+        };
+        var context = new HeuristicContext(features, catalog, CorpPolicyProfiles.Create("standard", 54, CorpHeuristicPolicy.V36), 25);
+
+        Assert.Equal(worth, CorpHeuristicPolicy.FastAdvance(context, nano, 4));
+    }
+
     private static Observation Decision(params LegalAction[] actions)
     {
         GameState state = GameState.CreateNew(54);

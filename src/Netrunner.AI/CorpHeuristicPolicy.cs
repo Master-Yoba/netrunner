@@ -208,6 +208,12 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     /// in 3,200 box games), so the flooded draw drops a priority band and stays only the choice of last resort.
     /// </summary>
     public const string V35 = "corp-heuristic-v35";
+    /// <summary>
+    /// V34 (not V35, level) with fast advance (bot plan H3 batch 12; MATCHUP_NEBULA.md NE07 to NE09): an operation that gains
+    /// clicks (Nanomanagement) is worth the agenda it lets the Corp score this turn, from HQ or the board, when it couldn't
+    /// without it. V34 priced Nanomanagement at its clicks less its 4 credits and never played it.
+    /// </summary>
+    public const string V36 = "corp-heuristic-v36";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
     /// V23 fixes V22's faults the reviews of batch 4's losses to Codex found (1 October: known traps advanced, two agendas
@@ -226,17 +232,17 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     public const string PolicyVersion = V34;
     /// <summary>The latest version that never plans: the planner's model of the Corp.</summary>
     public const string LatestHeuristic = V8;
-    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25, V26, V27, V28, V29, V30, V31, V32, V33, V34, V35];
+    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25, V26, V27, V28, V29, V30, V31, V32, V33, V34, V35, V36];
 
     /// <summary>Whether the version keeps the A9 tracker of the Runner's hidden cards (v26).</summary>
-    public static bool UsesTracker(string version) => version is V26 or V27 or V28 or V29 or V30 or V31 or V32 or V33 or V34 or V35;
+    public static bool UsesTracker(string version) => version is V26 or V27 or V28 or V29 or V30 or V31 or V32 or V33 or V34 or V35 or V36;
 
     public CorpHeuristicPolicy() : this(PolicyVersion) { }
 
     public CorpHeuristicPolicy(string version)
     {
-        if (version is not (V31 or V32 or V33 or V34 or V35))
-            throw new ArgumentException($"The live Corp policy is {V31} to {V35}; '{version}' is {nameof(LegacyCorpPolicy)}.", nameof(version));
+        if (version is not (V31 or V32 or V33 or V34 or V35 or V36))
+            throw new ArgumentException($"The live Corp policy is {V31} to {V36}; '{version}' is {nameof(LegacyCorpPolicy)}.", nameof(version));
         Version = version;
     }
 
@@ -354,7 +360,7 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     /// 0.55 times a game). A larger HQ raises the threshold by its extra size (C13's hand-size modifiers).
     /// </summary>
     internal static int FloodedDraw(HeuristicContext context) =>
-        context.Configuration.PolicyVersion is V34 or V35 && context.AgendaCount >= 3 + Math.Max(0, (context.Self.MaximumHandSize ?? 5) - 5)
+        context.Configuration.PolicyVersion is V34 or V35 or V36 && context.AgendaCount >= 3 + Math.Max(0, (context.Self.MaximumHandSize ?? 5) - 5)
             ? context.DrawValue + context.CreditValue : 0;
 
     private static AgentUtility Mulligan(HeuristicContext context, NumberChoiceParameters choice)
