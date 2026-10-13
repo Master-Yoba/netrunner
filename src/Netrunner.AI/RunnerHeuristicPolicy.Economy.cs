@@ -70,6 +70,10 @@ public sealed partial class RunnerHeuristicPolicy
         return Value(benefit - cost, "ability/benefit-minus-issued-additional-costs", true);
     }
 
+    /// <summary>v38: a grip emptied by the Runner's own damage, and one left empty at the turn's end.</summary>
+    private const int EmptyGrip = 300;
+    private const int EmptyGripAtTurnEnd = 400;
+
     // v23: past any other cost, so a choice that flatlines the Runner is never taken while another isn't.
     private const int Flatline = 100_000;
 
@@ -148,6 +152,11 @@ public sealed partial class RunnerHeuristicPolicy
                 // Semak-samun's 3 net or Measured Response's 4 meat with too few cards).
                 case BehaviorInstructionKind.DealDamage:
                     total -= amount > context.Features.Hand.Length - gripSpent ? Flatline : amount * context.DrawValue;
+                    // v38 (MATCHUP_PT_UNTAIAN.md's Topan knob: skip the discount if it creates a lethal window): a turn action
+                    // that empties the grip leaves any damage lethal until a draw refills it, and none can if no click is left.
+                    if (context.Generation >= HeuristicContext.EmptyGripGeneration && context.Features.Decision?.Kind == DecisionKind.TurnAction
+                        && amount <= context.Features.Hand.Length - gripSpent && context.Features.Hand.Length - gripSpent - amount == 0)
+                        total -= EmptyGrip + (context.Self.Clicks <= 1 ? EmptyGripAtTurnEnd : 0);
                     break;
                 case BehaviorInstructionKind.TrashSelf: total -= RunnerValues.Card(context, source); break;
                 case BehaviorInstructionKind.TrashCard:

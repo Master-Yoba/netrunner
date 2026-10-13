@@ -2553,3 +2553,75 @@ worth another look (Nebula 62% to 67-69% in three runs); its code is in git at `
 
 **Checked:** a 24-deal ladder of the live versions (Corp v34 and v31, Runner v37 and v35, seed 9) played before and
 after the removal: all 216 games end in the same final state.
+
+## Steps 3 and 4 of the next-steps list (13 October 2026)
+
+### Step 3: a flooded HQ with no ICE is not the mistake
+
+A replay of 400 box deals (Corp v34 against Runner v37, seed 5) followed every agenda the Corp installed to its end:
+
+| At the install | Installs | Stolen | Scored |
+|---|---:|---:|---:|
+| HQ flooded, no ICE in HQ, one ICE on the remote | 286 | 31% | 66% |
+| HQ flooded, no ICE in HQ, two ICE | 118 | 27% | 67% |
+| HQ flooded, ICE in HQ, two ICE | 140 | 20% | 75% |
+| HQ not flooded, ICE in HQ, two ICE | 137 | 13% | 82% |
+
+Two installs in three from a flooded, ICE-less HQ are scored, so the install is the Corp's best line there and the
+steals are its price (batch 6's finding, and why holding the agendas, v32, and drawing for ICE, v37, both failed). A
+stronger remote was free in only about 40 of more than 1,300 installs, so ICE spread across remotes isn't the cause either. No
+rule is made.
+
+### Step 4: LEO's identity, Corp v38
+
+LEO Glacier won 30% as the Corp, the Runner stealing 1.72 agendas a game from it (the other Corps 1.17 to 1.43). Its
+identity ends a run by trashing a rezzed bioroid in the attacked server, once a turn. Of the 85 agendas stolen from
+LEO's remotes, it could fire in none: 51 remotes had no bioroid, 17 only unrezzed ones, and in the other 17 LEO had
+spent the ability on an earlier run that turn (the guide's C11). Of its 187 uses in 99 games, 71 were on a remote
+holding an agenda, 22 on a remote without one.
+
+**The change.** Corp v38 is v34 with three rules read from the identity's declared condition (a subtype rezzed in the
+attacked server), not from its name: ICE of that subtype gains 250 on a remote an agenda is in or waits for, with none
+there yet; rezzing it on an agenda's server gains 250; and the once-a-turn ending ability loses 500 against a server
+with nothing at stake (a remote without an agenda, HQ without one, Archives) while another remote holds an agenda. A
+96-deal trial's `ai-ladder-diff` showed the change it was made for: Bumi 1.0 and Brân 1.0 on remotes where v34 put N-Pot,
+Flyswatter or Tithe.
+
+**Declared before running it:** 1,600 fresh box deals (seed 7) against Corp v34, judged by the deal-paired interval; v38
+becomes the default only if that interval clears zero.
+
+**Test:** `CorpCodexV20Tests.LeosRemoteIsProtectedByABioroid` (LEO Glacier against MuslihaT, action 175: v34 installs
+N-Pot on the remote, v38 Bumi 1.0).
+
+### Step 4: Topan's empty grip, Runner v38
+
+Topan won 31% of its box games, started its turns on 3.3 credits (MuslihaT 6.4), ran on a grip of two or fewer 5.5 to
+7.3 times a game (MuslihaT about 2), and lost 22% of its games to flatlines. Its identity installs (5.6 a game, 750 in
+134 games) took one card and dealt one meat damage; about a third of them left the grip empty, many with no click left
+to draw. The Untaian note's Topan knob: skip the discount if it creates a lethal window.
+
+**The change.** Runner v38 is v37 with the Runner's own damage priced by the grip it leaves: a turn action whose damage
+empties the grip costs 300 more, and 400 more again with no click left to draw back. At 30 such last-click installs from
+a two-card grip, v38 chose otherwise every time (a draw, a run, an event or another install).
+
+**Declared before running it:** 1,600 fresh box deals (seed 8) against Runner v37, judged by the deal-paired interval;
+v38 becomes the default only if that interval clears zero.
+
+**Test:** `RunnerPunisherV34Tests.TopanKeepsACardAtTheTurnsEnd` (LEO Glacier against Topan, action 476: v37 empties its
+grip on its last click, v38 doesn't).
+
+### Steps 3 and 4: results
+
+| Candidate (1,600 fresh box deals) | Deal-paired interval | Paired score difference | Deals changed / results changed | Outcome |
+|---|---:|---:|---:|---|
+| Corp v38 − v34 (seed 7) | −4 Elo [−9, +2] | −0.0063 [−0.0144, +0.0025] | 227 / 48 | not shipped |
+| Runner v38 − v37 (seed 8) | +5 Elo [−5, +15] | +0.0069 [−0.0063, +0.0206] | 492 / 153 | not shipped |
+
+Neither interval clears zero; the defaults stay Corp v34 and Runner v37, and both versions stay constructible
+(`standard-c38`, `standard-r38`) for now. LEO's own Corp games went 37.1% to 34.6% (the other Corps game for game), Topan's
+Runner games 31.3% to 33.3% (the other Runners game for game).
+
+`ai-ladder-diff` on Corp v38's games: 227 of 1,600 deals departed, 19 results better and 29 worse, with no one kind of
+change behind the loss. The commonest are the rule working as made (Brân 1.0 or Bumi 1.0 on the agenda's remote instead
+of HQ or a new remote), which leaves HQ a layer short, and installs of a bioroid where v34 took a credit. Keeping LEO's
+identity live on the remote costs about what it saves there.
