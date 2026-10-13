@@ -57,9 +57,9 @@ public static partial class CliCommands
             return 0;
         }
         output.WriteLine($"ai-offers rows={rows.Count} directory={directory}");
-        foreach (IGrouping<(PlayerSide, string, string), OfferRow> seat in rows.GroupBy(row => (row.Side, row.Entrant, row.Identity)))
+        foreach (IGrouping<(PlayerSide, string, string), OfferRow> seat in rows.GroupBy(row => (row.Side, row.Entrant, row.Deck)))
         {
-            output.WriteLine($"{seat.Key.Item1} {seat.Key.Item2} {seat.Key.Item3} games={seat.First().Games}");
+            output.WriteLine($"{seat.Key.Item1} {seat.Key.Item2} {seat.Key.Item3} ({seat.First().Identity}) games={seat.First().Games}");
             foreach (OfferRow row in seat.Where(row => row.GamesOffered * 4 >= row.Games))
                 output.WriteLine(FormattableString.Invariant(
                     $"  {row.Decision,-18} offered/game={(double)row.Offered / row.Games,6:0.0} taken/game={(double)row.Taken / row.Games,5:0.0} take={row.TakeRate,4:P0} share={row.Share,4:P0} score taken={row.ScoreWhenTaken,4:0.00} refused={row.ScoreWhenRefused,4:0.00} {row.Play}"));

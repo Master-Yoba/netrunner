@@ -28,10 +28,14 @@ public sealed class OfferProfileTests
             Assert.DoesNotContain("card:", row.Play, StringComparison.Ordinal);
         });
         // Every choice a seat made among two or more actions is one play taken: the plays' takes sum to the seat's choices.
-        foreach (var seat in rows.GroupBy(row => (row.Side, row.Entrant, row.Identity, row.Decision)))
+        foreach (var seat in rows.GroupBy(row => (row.Side, row.Entrant, row.Deck, row.Decision)))
             Assert.Equal(seat.First().SeatActions, seat.Sum(row => row.Taken));
         // Each entrant played each side in half the games.
-        Assert.Equal(games.Length, rows.Where(row => row.Side == PlayerSide.Corp).GroupBy(row => (row.Entrant, row.Identity)).Sum(seat => seat.First().Games));
+        Assert.Equal(games.Length, rows.Where(row => row.Side == PlayerSide.Corp).GroupBy(row => (row.Entrant, row.Deck)).Sum(seat => seat.First().Games));
         Assert.Contains(rows, row => row.Side == PlayerSide.Runner && row.Decision == DecisionKind.TurnAction && row.Taken > 0);
+        // A seat is its deck from the game's content id (the review of #147), and the order doesn't depend on the workers.
+        Assert.All(rows, row => Assert.Contains(row.Deck, games.Select(game => game.game.Game.ContentId)
+            .SelectMany(content => content.Split('~')).ToHashSet()));
+        Assert.Equal(rows, OfferProfile.Measure(games, workers: 1));
     }
 }

@@ -7,7 +7,7 @@ namespace Netrunner.Match;
 /// advance or ability, a run on a kind of server, or a basic action. Batch 11's diagnosis (Madani hosted 7.6 times a game,
 /// installed from once) found its misplay this way by hand; the profile does it for every card of every deck.
 /// </summary>
-public sealed record OfferRow(PlayerSide Side, string Entrant, string Identity, DecisionKind Decision, string Play, int Games,
+public sealed record OfferRow(PlayerSide Side, string Entrant, string Deck, string Identity, DecisionKind Decision, string Play, int Games,
     int GamesOffered, int GamesTaken, int Offered, int Taken, int SeatActions, double? ScoreWhenTaken, double? ScoreWhenRefused)
 {
     /// <summary>Of the decisions that offered the play, the share that took it.</summary>
@@ -34,9 +34,11 @@ public static class OfferProfile
         Func<CardDefinitionId, string>? title = null, int workers = 1)
     {
         ArgumentNullException.ThrowIfNull(games);
+        // Keyed by the seat's deck, not its identity: a pool holds several lists for one identity (the review of #147).
         var tallies = new Dictionary<(PlayerSide, string, string, DecisionKind, string), Tally>();
         var seatGames = new Dictionary<(PlayerSide, string, string), int>();
         var seatActions = new Dictionary<(PlayerSide, string, string, DecisionKind), int>();
+        var identities = new Dictionary<(PlayerSide, string), string>();
         Parallel.ForEach(games, new ParallelOptions { MaxDegreeOfParallelism = workers }, entry =>
         {
             GameProfile profile = Profile(entry.Game, entry.Definition, title);
@@ -45,7 +47,8 @@ public static class OfferProfile
                 foreach (PlayerSide side in new[] { PlayerSide.Corp, PlayerSide.Runner })
                 {
                     string entrant = side == PlayerSide.Corp ? entry.Game.Game.Corp : entry.Game.Game.Runner;
-                    string identity = profile.Identities[side];
+                    string identity = Deck(entry.Game.Game.ContentId, side);
+                    identities[(side, identity)] = profile.Identities[side];
                     double score = side == PlayerSide.Corp ? entry.Game.CorpScore : 1 - entry.Game.CorpScore;
                     seatGames[(side, entrant, identity)] = seatGames.GetValueOrDefault((side, entrant, identity)) + 1;
                     foreach (var ((seat, decision), count) in profile.Actions.Where(pair => pair.Key.Side == side))
@@ -72,11 +75,18 @@ public static class OfferProfile
             var (side, entrant, identity, decision, play) = pair.Key;
             Tally tally = pair.Value;
             int refused = tally.GamesOffered - tally.GamesTaken;
-            return new OfferRow(side, entrant, identity, decision, play, seatGames[(side, entrant, identity)], tally.GamesOffered,
+            return new OfferRow(side, entrant, identity, identities[(side, identity)], decision, play, seatGames[(side, entrant, identity)], tally.GamesOffered,
                 tally.GamesTaken, tally.Offered, tally.Taken, seatActions.GetValueOrDefault((side, entrant, identity, decision)),
                 tally.GamesTaken == 0 ? null : tally.ScoreTaken / tally.GamesTaken, refused == 0 ? null : tally.ScoreRefused / refused);
-        }).OrderBy(row => row.Side).ThenBy(row => row.Entrant, StringComparer.Ordinal).ThenBy(row => row.Identity, StringComparer.Ordinal)
-            .ThenBy(row => row.Decision).ThenByDescending(row => row.Offered)];
+        }).OrderBy(row => row.Side).ThenBy(row => row.Entrant, StringComparer.Ordinal).ThenBy(row => row.Deck, StringComparer.Ordinal)
+            .ThenBy(row => row.Decision).ThenByDescending(row => row.Offered).ThenBy(row => row.Play, StringComparer.Ordinal)];
+    }
+
+    /// <summary>The seat's deck in a ladder game's content id, which names the Corp's deck and then the Runner's (<c>corp~runner</c>).</summary>
+    private static string Deck(string contentId, PlayerSide side)
+    {
+        string[] decks = contentId.Split('~');
+        return side == PlayerSide.Corp ? decks[0] : decks[^1];
     }
 
     private sealed record GameProfile(Dictionary<PlayerSide, string> Identities,
