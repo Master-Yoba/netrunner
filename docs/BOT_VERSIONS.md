@@ -2592,3 +2592,20 @@ becomes the default only if that interval clears zero.
 
 **Test:** `CorpCodexV20Tests.LeosRemoteIsProtectedByABioroid` (LEO Glacier against MuslihaT, action 175: v34 installs
 N-Pot on the remote, v38 Bumi 1.0).
+
+### Step 4: Topan's empty grip, Runner v38
+
+Topan won 31% of its box games, started its turns on 3.3 credits (MuslihaT 6.4), ran on a grip of two or fewer 5.5 to
+7.3 times a game (MuslihaT about 2), and lost 22% of its games to flatlines. Its identity installs (5.6 a game, 750 in
+134 games) took one card and dealt one meat damage; about a third of them left the grip empty, many with no click left
+to draw. The Untaian note's Topan knob: skip the discount if it creates a lethal window.
+
+**The change.** Runner v38 is v37 with the Runner's own damage priced by the grip it leaves: a turn action whose damage
+empties the grip costs 300 more, and 400 more again with no click left to draw back. At 30 such last-click installs from
+a two-card grip, v38 chose otherwise every time (a draw, a run, an event or another install).
+
+**Declared before running it:** 1,600 fresh box deals (seed 8) against Runner v37, judged by the deal-paired interval;
+v38 becomes the default only if that interval clears zero.
+
+**Test:** `RunnerPunisherV34Tests.TopanKeepsACardAtTheTurnsEnd` (LEO Glacier against Topan, action 476: v37 empties its
+grip on its last click, v38 doesn't).
