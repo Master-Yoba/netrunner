@@ -142,6 +142,11 @@ public static partial class CliCommands
             return RunAiBelief(args, output, error);
         }
 
+        if (args.Length > 0 && args[0] == "ai-offers")
+        {
+            return RunAiOffers(args, output, error);
+        }
+
         if (args.Length > 0 && args[0] == "ai-ladder-diff")
         {
             return RunAiLadderDiff(args, output, error);
@@ -301,6 +306,7 @@ public static partial class CliCommands
             + "ai-lint <games-dir> [--workers N] [--examples N] [--output file] [--json] | "
             + "ai-style <games-dir> [--workers N] [--json] | "
             + "ai-ladder-diff <games-dir> --baseline E --candidate E [--workers N] [--top N] [--examples N] [--reasons] | "
+            + "ai-offers <games-dir> [--entrant E] [--workers N] [--json] | "
             + "ai-belief <games-dir> [--games N] [--json] | "
             + "card-vocabulary [--json] | "
             + "ai-codex-play --output new-dir [--side corp|runner|both] [--games N] [--seed S] [--model gpt-6.1-sol] [--print-deals] [--print-prompt corp|runner] | ai-mcp-game --content ID --side corp|runner --output new-dir | "
