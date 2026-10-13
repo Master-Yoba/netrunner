@@ -2666,3 +2666,9 @@ are unchanged.
 
 **Test:** `CorpCodexV20Tests.IdiosyncresisIsAdvancedForItsPayout` (PT Untaian against Magdalene on Elevation, action 314:
 v34 doesn't advance it, v39 does).
+
+**Result.** Level, not shipped: v39 − v34 is −0.0013 [−0.0150, +0.0113] in paired score on 800 Elevation deals (about −1
+Elo), with 116 deals changed and 35 results. The default stays Corp v34; v39 stays constructible (`standard-c39`). The
+card's payout arrives a turn after its click and credit, and in that turn the Runner often accesses and trashes it (an
+advanced card in a remote reads as an agenda), so working it is worth about what clicking for credits is. The sweep's
+other finding, Plutus never rezzed, is left for a later step.
