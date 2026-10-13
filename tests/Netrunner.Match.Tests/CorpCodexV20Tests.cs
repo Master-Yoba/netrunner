@@ -234,6 +234,22 @@ public sealed class CorpCodexV20Tests
         Assert.True(installsBioroid == bioroid, $"{version} chose {chosen.Kind} {chosen.Description}.");
     }
 
+    /// <summary>
+    /// Corp v39 (the misplay sweep): Idiosyncresis pays 3 credits and costs the Runner 2 for each counter on it when the Corp's
+    /// turn begins, and earlier versions never advanced it. An Elevation ladder game, PT Untaian against Magdalene, action 314:
+    /// v34 doesn't advance it, v39 does.
+    /// </summary>
+    [Theory]
+    [InlineData(CorpHeuristicPolicy.V34, false)]
+    [InlineData(CorpHeuristicPolicy.V39, true)]
+    public async Task IdiosyncresisIsAdvancedForItsPayout(string version, bool advances)
+    {
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
+        (LegalAction chosen, GameState state) = await ChooseAtAsync("corp-counter-asset-advanced", version, 314);
+        bool advanced = chosen.Parameters is AdvanceCardParameters advance && state.GetCard(advance.CardId).DefinitionId.Value == "35061";
+        Assert.True(advanced == advances, $"{version} chose {chosen.Kind} {chosen.Description}.");
+    }
+
     /// <summary>The Corp version's choice at the recorded decision <paramref name="sequence"/>, having watched the game to it.</summary>
     private static async Task<(LegalAction Chosen, GameState State)> ChooseAtAsync(string fixture, string version, long sequence)
     {

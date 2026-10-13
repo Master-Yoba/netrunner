@@ -2625,3 +2625,50 @@ Runner games 31.3% to 33.3% (the other Runners game for game).
 change behind the loss. The commonest are the rule working as made (Brân 1.0 or Bumi 1.0 on the agenda's remote instead
 of HQ or a new remote), which leaves HQ a layer short, and installs of a bioroid where v34 took a credit. Keeping LEO's
 identity live on the remote costs about what it saves there.
+
+## The misplay sweep (13 October 2026)
+
+`ai-offers <games-dir> [--entrant E]` replays saved ladder games and lists, for each seat's deck, every kind of play it
+was offered (a card's install, play, rez, advance or ability, a run, a basic action) with how often it was offered and
+taken. Batch 11 found Madani's hosting this way by hand; the sweep does it for every card. It ran over the default bots
+(Corp v34, Runner v37) playing themselves: 800 box deals (seed 21), 400 Elevation deals and 400 NSG core-set deals
+(seed 22).
+
+**The box:** no new misplay. What it flags is known (Nebula's Nanomanagement, Corp v36) or right: Urtica Cipher and Byte!
+work face down and are never rezzed; Topan installs its hardware through its identity, not by clicks; Manegarm
+Skunkworks is rezzed during runs (98 rezzes in 88 of its 134 games), not in the turn's windows. A card's offers have to be
+read across all its timing windows.
+
+**Elevation and the NSG core sets:** advanceable assets the Corp installs and never works.
+
+| Card | Decks | Installed | Advanced | Rezzed |
+|---|---|---:|---:|---:|
+| Idiosyncresis (each counter: 3 credits, the Runner loses 2, when the Corp's turn begins) | Nebula, PT Untaian, Synapse; NBN, Weyland | about once a game | 1 in about 200 games | never |
+| Plutus (rezzed by forfeiting an agenda or trashing 3 cards from HQ) | BANGUN, Nebula, Zwicky | about once a game | | never |
+
+On the Runner's side, Conduit is rarely installed by a click (Magdalene on the box in 0 of 94 games it was offered) and
+Shred never played; neither is as clear.
+
+### Corp v39: Idiosyncresis advanced and rezzed
+
+Corp v34 sees only damage grow with counters (`ScalesWithCounters`, the advanceable traps), so an advance of Idiosyncresis
+was `advance/nonagenda-opportunity` (−20) and its rez `rez/no-current-payoff` (−10).
+
+**The change.** Corp v39 is v34 with an advanceable asset that pays by its counters when the Corp's turn begins valued for
+that payout: each counter (3 credits to the Corp, 2 lost by the Runner) is worth half its payout, for the Runner
+trashing or accessing it first, less the credit it costs, up to four counters and keeping the ICE budget; with counters on
+it, it is rezzed in the last windows before the Corp's turn, as a turn-income asset is. A 96-deal Elevation trial (seed
+23) showed the cycle working (advanced, rezzed before the turn, cashed in) in 17 changed deals, −0.04 [−0.08, 0].
+
+**Declared before running it:** 800 fresh Elevation deals (seed 24) against Corp v34, judged by the deal-paired
+interval; v39 becomes the default only if that interval clears zero. No box deck holds Idiosyncresis, so the box's games
+are unchanged.
+
+**Test:** `CorpCodexV20Tests.IdiosyncresisIsAdvancedForItsPayout` (PT Untaian against Magdalene on Elevation, action 314:
+v34 doesn't advance it, v39 does).
+
+**Result.** Level, not shipped: v39 − v34 is −0.0013 [−0.0150, +0.0113] in paired score on 800 Elevation deals (about −1
+Elo), with 116 deals changed and 35 results. The default stays Corp v34; v39 stays constructible (`standard-c39`). The
+card's payout arrives a turn after its click and credit, and in that turn the Runner often accesses and trashes it (an
+advanced card in a remote reads as an agenda), so working it is worth about what clicking for credits is. The sweep's
+other finding, Plutus never rezzed, is left for a later step.
