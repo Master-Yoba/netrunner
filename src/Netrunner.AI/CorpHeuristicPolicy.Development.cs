@@ -50,11 +50,16 @@ public sealed partial class CorpHeuristicPolicy
             // v33 (C01, C02): the layer an agenda waiting in HQ is waiting for, on the empty remote the Runner gets into.
             // The review of #137: on any remote without an agenda in its root (an upgrade may be there), the destinations the
             // agenda waits for, and only while its rez, modifiers included, is affordable.
-            if (context.Configuration.PolicyVersion == V34 && !install.CreateNewRemote && server is { Kind: ServerKind.Remote }
+            if (context.Configuration.PolicyVersion is V34 or V38 && !install.CreateNewRemote && server is { Kind: ServerKind.Remote }
                 && !server.Root.Any(value => context.Definition(value)?.Agenda is not null)
                 && context.AgendaCount > 0 && context.Self.Credits - install.CreditCost >= ice.RezCost + IceRezModifier(context)
                 && RunnerGetsIn(context, server, 0))
                 score += ProtectionBonus;
+            // v38: ICE of the subtype the identity's ability needs, on a remote an agenda is in or waits for, with none there yet.
+            if (context.Configuration.PolicyVersion == V38 && server is { Kind: ServerKind.Remote } && IdentitySubtype(context) is { } subtype
+                && HasSubtype(definition, subtype) && (server.Root.Any(value => context.Definition(value)?.Agenda is not null) || context.AgendaCount > 0)
+                && !server.Ice.Any(value => HasSubtype(context.Definition(value), subtype)))
+                score += IdentityIceBonus;
         }
         else if (definition.Agenda is not null)
         {
@@ -113,7 +118,7 @@ public sealed partial class CorpHeuristicPolicy
             // v33 (bot plan H3 batch 7, the guide's C01, C02): a flooded HQ still lets an agenda out, but not into a server the
             // Runner gets into while the Corp holds ICE it can put there and rez: the ICE goes in this turn and the agenda
             // behind it the next (54% of the remote steals were behind one rezzed ICE, often from a Corp on 10 credits or more).
-            if (!agendaWaits && context.Configuration.PolicyVersion == V34 && !scoreableNow && !nakedAgenda && server is not null
+            if (!agendaWaits && context.Configuration.PolicyVersion is V34 or V38 && !scoreableNow && !nakedAgenda && server is not null
                 && ProtectionInHand(context, server)
                 && RunnerGetsIn(context, server, install.CreditCost + definition.Printed.AdvancementRequirement))
                 agendaWaits = true;
@@ -160,6 +165,21 @@ public sealed partial class CorpHeuristicPolicy
 
     /// <summary>v33: what the layer an agenda waits for is worth, above an ordinary remote ICE's place.</summary>
     private const int ProtectionBonus = 300;
+
+    /// <summary>v38: what ICE that arms the identity's ability is worth on an agenda's remote, and what rezzing it there adds.</summary>
+    private const int IdentityIceBonus = 250;
+
+    /// <summary>
+    /// v38: the subtype a Corp identity's paid ability needs rezzed in the attacked server (LEO Construction: bioroid), from
+    /// its declared condition; null for an identity without one.
+    /// </summary>
+    internal static string? IdentitySubtype(HeuristicContext context) => context.Features.Board.CorpIdentity
+        .Select(card => context.Definition(card)?.Behavior).OfType<CardBehaviorDefinition>()
+        .SelectMany(behavior => behavior.PaidAbilities).SelectMany(ability => ability.Conditions)
+        .FirstOrDefault(condition => condition.Kind == BehaviorConditionKind.RezzedSubtypeInAttackedServer)?.Fact;
+
+    internal static bool HasSubtype(CardEvaluationDescriptor? definition, string subtype) =>
+        definition?.Printed.Subtypes.Any(value => string.Equals(value, subtype, StringComparison.OrdinalIgnoreCase)) == true;
 
     /// <summary>
     /// v8: how well a server protects an agenda, from the whole-run model (A4a) run
@@ -486,6 +506,11 @@ public sealed partial class CorpHeuristicPolicy
             if (!agendaServer
                 && context.Self.Credits - cost < AgendaIceReserve(context))
                 return Value(-200, "rez/keep-credits-for-the-agenda-ice", approximate: true);
+            // v38: rezzing ICE of the subtype the identity's ability needs arms that ability on an agenda's server.
+            if (context.Configuration.PolicyVersion == V38 && IdentitySubtype(context) is { } subtype && HasSubtype(definition, subtype)
+                && server?.Root.Any(card => context.Definition(card)?.Agenda is not null) == true
+                && !server.Ice.Concat(server.Root).Any(card => card is { Rezzed: true } && HasSubtype(context.Definition(card), subtype)))
+                force += IdentityIceBonus;
             return Value(force + context.ServerValue(server) + RunDenialValue(context, server) - cost * 30,
                 "rez/relevant-protection-and-denial", approximate: true);
         }

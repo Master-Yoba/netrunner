@@ -2553,3 +2553,42 @@ worth another look (Nebula 62% to 67-69% in three runs); its code is in git at `
 
 **Checked:** a 24-deal ladder of the live versions (Corp v34 and v31, Runner v37 and v35, seed 9) played before and
 after the removal: all 216 games end in the same final state.
+
+## Steps 3 and 4 of the next-steps list (13 October 2026)
+
+### Step 3: a flooded HQ with no ICE is not the mistake
+
+A replay of 400 box deals (Corp v34 against Runner v37, seed 5) followed every agenda the Corp installed to its end:
+
+| At the install | Installs | Stolen | Scored |
+|---|---:|---:|---:|
+| HQ flooded, no ICE in HQ, one ICE on the remote | 286 | 31% | 66% |
+| HQ flooded, no ICE in HQ, two ICE | 118 | 27% | 67% |
+| HQ flooded, ICE in HQ, two ICE | 140 | 20% | 75% |
+| HQ not flooded, ICE in HQ, two ICE | 137 | 13% | 82% |
+
+Two installs in three from a flooded, ICE-less HQ are scored, so the install is the Corp's best line there and the
+steals are its price (batch 6's finding, and why holding the agendas, v32, and drawing for ICE, v37, both failed). A
+stronger remote was free in only about 40 of more than 1,300 installs, so ICE spread across remotes isn't the cause either. No
+rule is made.
+
+### Step 4: LEO's identity, Corp v38
+
+LEO Glacier won 30% as the Corp, the Runner stealing 1.72 agendas a game from it (the other Corps 1.17 to 1.43). Its
+identity ends a run by trashing a rezzed bioroid in the attacked server, once a turn. Of the 85 agendas stolen from
+LEO's remotes, it could fire in none: 51 remotes had no bioroid, 17 only unrezzed ones, and in the other 17 LEO had
+spent the ability on an earlier run that turn (the guide's C11). Of its 187 uses in 99 games, 71 were on a remote
+holding an agenda, 22 on a remote without one.
+
+**The change.** Corp v38 is v34 with three rules read from the identity's declared condition (a subtype rezzed in the
+attacked server), not from its name: ICE of that subtype gains 250 on a remote an agenda is in or waits for, with none
+there yet; rezzing it on an agenda's server gains 250; and the once-a-turn ending ability loses 500 against a server
+with nothing at stake (a remote without an agenda, HQ without one, Archives) while another remote holds an agenda. A
+96-deal trial's `ai-ladder-diff` showed the change it was made for: Bumi 1.0 and Brân 1.0 on remotes where v34 put N-Pot,
+Flyswatter or Tithe.
+
+**Declared before running it:** 1,600 fresh box deals (seed 7) against Corp v34, judged by the deal-paired interval; v38
+becomes the default only if that interval clears zero.
+
+**Test:** `CorpCodexV20Tests.LeosRemoteIsProtectedByABioroid` (LEO Glacier against MuslihaT, action 175: v34 installs
+N-Pot on the remote, v38 Bumi 1.0).
