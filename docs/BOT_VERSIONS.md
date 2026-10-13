@@ -2609,3 +2609,19 @@ v38 becomes the default only if that interval clears zero.
 
 **Test:** `RunnerPunisherV34Tests.TopanKeepsACardAtTheTurnsEnd` (LEO Glacier against Topan, action 476: v37 empties its
 grip on its last click, v38 doesn't).
+
+### Steps 3 and 4: results
+
+| Candidate (1,600 fresh box deals) | Deal-paired interval | Paired score difference | Deals changed / results changed | Outcome |
+|---|---:|---:|---:|---|
+| Corp v38 − v34 (seed 7) | −4 Elo [−9, +2] | −0.0063 [−0.0144, +0.0025] | 227 / 48 | not shipped |
+| Runner v38 − v37 (seed 8) | +5 Elo [−5, +15] | +0.0069 [−0.0063, +0.0206] | 492 / 153 | not shipped |
+
+Neither interval clears zero; the defaults stay Corp v34 and Runner v37, and both versions stay constructible
+(`standard-c38`, `standard-r38`) for now. LEO's own Corp games went 37.1% to 34.6% (the other Corps game for game), Topan's
+Runner games 31.3% to 33.3% (the other Runners game for game).
+
+`ai-ladder-diff` on Corp v38's games: 227 of 1,600 deals departed, 19 results better and 29 worse, with no one kind of
+change behind the loss. The commonest are the rule working as made (Brân 1.0 or Bumi 1.0 on the agenda's remote instead
+of HQ or a new remote), which leaves HQ a layer short, and installs of a bioroid where v34 took a credit. Keeping LEO's
+identity live on the remote costs about what it saves there.
