@@ -1201,6 +1201,9 @@ public enum TurnEventKind
 
     /// <summary>The Corp gained credits through an ability on an agenda or operation.</summary>
     CardCreditGain,
+
+    /// <summary>VP-BAD-PUBLICITY: the Corp took bad publicity.</summary>
+    BadPublicityTaken,
 }
 
 /// <summary>

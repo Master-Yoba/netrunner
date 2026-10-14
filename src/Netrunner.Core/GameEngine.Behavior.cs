@@ -322,6 +322,14 @@ public static partial class GameEngine
                 }
 
                 return;
+            case BehaviorInstructionKind.TakeBadPublicity:
+                ApplyBadPublicity(working, StaticOrDynamicAmount(working, frame, instruction));
+                AdvanceBehaviorCursor(working, frame);
+                return;
+            case BehaviorInstructionKind.RemoveBadPublicity:
+                ApplyBadPublicity(working, -Math.Min(RequireRulesState(working).BadPublicity, StaticOrDynamicAmount(working, frame, instruction)));
+                AdvanceBehaviorCursor(working, frame);
+                return;
             case BehaviorInstructionKind.GainClicks:
                 ApplyClickDelta(working, frame.Controller, instruction.Amount);
                 AdvanceBehaviorCursor(working, frame);

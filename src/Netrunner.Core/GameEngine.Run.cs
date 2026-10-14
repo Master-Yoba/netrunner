@@ -321,6 +321,9 @@ public static partial class GameEngine
             : null;
 
         RunId runId = working.Allocator.NextRunId();
+        // VP-BAD-PUBLICITY (CR 26.03 6.9.1b, 10.6.3a): the bad publicity fund holds a credit for each bad publicity the
+        // Corp has as the server is announced; it joins the run-scoped credits and leaves with them at the run's end.
+        int badPublicityFund = working.RulesState?.BadPublicity ?? 0;
         int currentIceIndex = iceZone.CardIds.Count - 1;
         CardInstanceId? currentIceId = currentIceIndex >= 0
             ? iceZone.CardIds[currentIceIndex]
@@ -335,10 +338,15 @@ public static partial class GameEngine
             RunTimingStep.InitiationPaidWindow,
             CreatePriority(RunPriorityWindowKind.InitiationPaid, corpMayRezNonIce: true),
             initiatingSource,
-            runEventSpec?.HostedCredits ?? 0,
+            (runEventSpec?.HostedCredits ?? 0) + badPublicityFund,
             runEventSpec is null ? null : initiatingSource,
             breachModifiers,
             rezCostModifiers);
+        if (badPublicityFund > 0)
+        {
+            run = run.WithBadPublicityCredits(badPublicityFund);
+        }
+
         working.RunState = run;
 
         // CR 26.03 8.6.7: a played event leaves the Runner's grip and enters a
@@ -408,6 +416,12 @@ public static partial class GameEngine
         // and giving a basic turn action the same run timing cursor.
         Emit(working, EngineEventKinds.RunInitiated, new RunInitiatedEventPayload(
             run.Id, server.Id, runner.Id));
+        if (badPublicityFund > 0)
+        {
+            Emit(working, EngineEventKinds.RunCreditsAdjusted, new RunCreditsAdjustedEventPayload(
+                run.Id, badPublicityFund, run.RunCredits));
+        }
+
         if (QueueRunBeganOccurrence(working, run))
         {
             // "When a run begins" triggers resolve first; the initiation
@@ -3957,7 +3971,9 @@ public static partial class GameEngine
 
         if (hostedCredits > 0)
         {
-            RunState spentRun = run.WithRunCredits(checked(run.RunCredits - hostedCredits));
+            // VP-BAD-PUBLICITY: the fund's share goes first (Vantage Point progress, VP.2's design).
+            RunState spentRun = run.WithRunCredits(checked(run.RunCredits - hostedCredits))
+                .WithBadPublicityCredits(Math.Max(0, run.BadPublicityCredits - hostedCredits));
             working.RunState = spentRun;
             Emit(working, EngineEventKinds.RunCreditsAdjusted, new RunCreditsAdjustedEventPayload(
                 run.Id, -hostedCredits, spentRun.RunCredits));

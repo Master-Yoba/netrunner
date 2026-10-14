@@ -513,6 +513,8 @@ public static partial class ObservationBuilder
                 .Select(effect => LingeringEffectView(state, effect, viewer, accessVisible))
                 .ToArray(),
         };
+        // VP-BAD-PUBLICITY: the fund's share of the run credits, public, and absent while zero.
+        if (run.BadPublicityCredits != 0) view["badPublicityCredits"] = run.BadPublicityCredits;
 
         // Slice 4.5 exposes only public, typed status cues.  The cue envelope
         // intentionally omits source ICE/breaker identities, so an observer
@@ -910,6 +912,8 @@ public static partial class ObservationBuilder
             view["maximumHandSize"] = checked(rules.MaximumHandSize + modifier);
             view["tags"] = Math.Max(0, rules.Tags);
             if (rules.CoreDamage != 0) view["coreDamage"] = rules.CoreDamage;
+            // VP-BAD-PUBLICITY: public (CR 1.9.5d), shown only once the Corp has some, so other observations keep their shape.
+            if (player.Side == PlayerSide.Corp && state.RulesState.BadPublicity != 0) view["badPublicity"] = state.RulesState.BadPublicity;
 
             // Runner memory is a public rules projection. Keep it tied to the
             // optional RulesState so legacy M1 observations retain their

@@ -57,3 +57,30 @@ third registry. Elevation's whole-set figure was 26% of cards needing no Core ch
 - The official build is clean.
 - The Cards tests pass in both content lanes (543), with `VantagePointCardDataTests` new.
 - The coverage report is regenerated; its counts are above.
+
+## VP.2 — Primitives A (in progress)
+
+### Design: bad publicity and credit sources
+
+**Bad publicity** is one counter on the Corp (CR 1.9.5d), kept on `RulesState` and omitted from serialization while it is
+zero, so every existing state, replay and pin keeps its bytes. Taking and removing it are instructions with an event, a
+cost kind removes it (CR 1.14.3a), and the first time each turn the Corp takes it is an occurrence (Editorial Division).
+Bad publicity hosted on a card (Luana Campos) is a card counter, which has no effect while hosted (CR 1.13.3).
+
+**The bad publicity fund** is a run-scoped pool on `RunState`, also omitted while zero: at step 6.9.1b the Runner adds a
+credit for each bad publicity the Corp has, and at step 6.9.6b what is left returns to the bank (CR 10.6.3).
+
+**Credits from outside the pool.** A Runner payment during a run already chooses how much comes from the credit pool and
+how much from run-scoped credits (Overclock's). That one choice stays, and its second share becomes "credits from
+outside the pool", spent in a fixed order:
+
+1. the bad publicity fund;
+2. credits on the active run event that isn't stealth (Overclock);
+3. credits on the active run event that is stealth (Aircheck);
+4. hosted credits on installed stealth cards that may be spent during runs (Methuselah, Touchstone).
+
+Non-stealth credits go before stealth ones and expiring credits before lasting ones, so the order never costs the Runner a
+payment it could otherwise make (an engine ruling, as Elevation's for declared-use credits). A cost payable only with
+credits from stealth cards (Corsair, Baker, Lampades) draws only on 3 and 4, in that order. Shackleton Grid's occurrence
+fires whenever a payment's outside share is above zero, so it counts the fund as Null Signal's rules and jinteki.net do.
+While Aircheck is active the Runner's credit pool offers nothing to a payment and can't lose credits.

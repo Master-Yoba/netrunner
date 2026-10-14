@@ -34,6 +34,8 @@ internal static class ElevationHarness
 
     private static readonly Lazy<BehaviorCatalog> LazyProbe = new(CreateProbe);
 
+    private static readonly Lazy<BehaviorCatalog> LazyVantagePointProbe = new(CreateVantagePointProbe);
+
     public static BehaviorCatalog Behavior => LazyBehavior.Value;
 
     /// <summary>
@@ -44,9 +46,25 @@ internal static class ElevationHarness
     /// </summary>
     public static BehaviorCatalog Probe => LazyProbe.Value;
 
+    /// <summary>
+    /// VP.2: the Elevation catalog plus test-only probe behaviors for Vantage Point primitives no registered card uses yet:
+    /// the filler operation (<see cref="CorpFiller"/>) takes 2 bad publicity.
+    /// </summary>
+    public static BehaviorCatalog VantagePointProbe => LazyVantagePointProbe.Value;
+
     /// <summary>The catalog a state was built with, by fingerprint.</summary>
     public static BehaviorCatalog CatalogFor(GameState state) =>
-        string.Equals(state.BehaviorCatalogFingerprint, Probe.Fingerprint, StringComparison.Ordinal) ? Probe : Behavior;
+        string.Equals(state.BehaviorCatalogFingerprint, Probe.Fingerprint, StringComparison.Ordinal) ? Probe
+        : string.Equals(state.BehaviorCatalogFingerprint, VantagePointProbe.Fingerprint, StringComparison.Ordinal) ? VantagePointProbe
+        : Behavior;
+
+    private static BehaviorCatalog CreateVantagePointProbe() =>
+        new BehaviorCatalogBuilder("vantage-point-probe", Behavior)
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(CorpFiller),
+                PlayerSide.Corp,
+                instructions: [new BehaviorInstruction(BehaviorInstructionKind.TakeBadPublicity, amount: 2)]))
+            .Build();
 
     private static BehaviorCatalog CreateProbe() =>
         new BehaviorCatalogBuilder("elevation-probe", Behavior)
@@ -355,6 +373,9 @@ internal sealed class ElevationBoard
 
     public int Tags { get; set; }
 
+    /// <summary>VP-BAD-PUBLICITY: the Corp's bad publicity at the start.</summary>
+    public int BadPublicity { get; set; }
+
     public int CorpPoints { get; set; }
 
     public int RunnerPoints { get; set; }
@@ -472,7 +493,7 @@ internal sealed class ElevationBoard
         RulesState rules = new(1, players.Select(player => new PlayerRulesState(player.Id, 5, 0,
             player.Side == PlayerSide.Runner ? Tags : 0, 4,
             player.Side == PlayerSide.Runner ? programs.Sum(static program => program.MemoryCost) : 0)).ToArray(),
-            programs, counters, []);
+            programs, counters, [], badPublicity: BadPublicity);
         int allotted = Active == PlayerSide.Corp ? 3 : 4;
         TurnFactsState facts = new(1, Active, TurnNumber, allotted, 0, true, Active == PlayerSide.Corp, false, false);
         // During the Runner's turn the Corp's facts are those of its finished turn.

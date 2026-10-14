@@ -1303,7 +1303,9 @@ public sealed record BehaviorInstruction
                 or BehaviorInstructionKind.Draw
                 or BehaviorInstructionKind.LoseClicks
                 or BehaviorInstructionKind.AdvanceCard
-                or BehaviorInstructionKind.RemoveTags)
+                or BehaviorInstructionKind.RemoveTags
+                or BehaviorInstructionKind.TakeBadPublicity
+                or BehaviorInstructionKind.RemoveBadPublicity)
             && AmountOperand is null
             && Amount <= 0)
         {
@@ -1793,6 +1795,12 @@ public enum BehaviorInstructionKind
     /// server (Proprionegation: Archives).
     /// </summary>
     MoveRunnerToServer,
+
+    /// <summary>VP-BAD-PUBLICITY: the Corp takes the amount in bad publicity (CR 26.03 10.6).</summary>
+    TakeBadPublicity,
+
+    /// <summary>VP-BAD-PUBLICITY: the Corp removes up to the amount of its bad publicity.</summary>
+    RemoveBadPublicity,
 
     // Short aliases keep the contract pleasant for callers while the longer
     // names remain unambiguous in serialized/fingerprint output.

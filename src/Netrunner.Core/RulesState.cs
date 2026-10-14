@@ -513,9 +513,16 @@ public sealed record RulesState
         IReadOnlyList<CardCounterState> counters,
         IReadOnlyList<GameLingeringEffect> lingeringEffects,
         IReadOnlyList<TriggerRegistration>? triggers = null,
-        IReadOnlyList<InterruptRegistration>? interrupts = null)
+        IReadOnlyList<InterruptRegistration>? interrupts = null,
+        int badPublicity = 0)
     {
         ArgumentNullException.ThrowIfNull(players);
+        if (badPublicity < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(badPublicity), "Bad publicity cannot be negative.");
+        }
+
+        BadPublicity = badPublicity;
         ArgumentNullException.ThrowIfNull(programs);
         ArgumentNullException.ThrowIfNull(counters);
         ArgumentNullException.ThrowIfNull(lingeringEffects);
@@ -591,6 +598,14 @@ public sealed record RulesState
     [JsonRequired]
     public IReadOnlyList<InterruptRegistration> Interrupts { get; private set; }
 
+    /// <summary>
+    /// VP-BAD-PUBLICITY: the bad publicity counters on the Corp (CR 26.03 1.9.5d, 10.6). Counters hosted on a card are card
+    /// counters instead, with no effect while hosted (CR 1.13.3). Omitted while zero, so states without it keep their bytes.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int BadPublicity { get; private set; }
+
     public static RulesState CreateDefault(IEnumerable<PlayerState> players)
     {
         ArgumentNullException.ThrowIfNull(players);
@@ -603,5 +618,5 @@ public sealed record RulesState
             usedMemory: 0)).ToArray());
     }
 
-    internal RulesState Copy() => new(Version, Players, Programs, Counters, LingeringEffects, Triggers, Interrupts);
+    internal RulesState Copy() => new(Version, Players, Programs, Counters, LingeringEffects, Triggers, Interrupts, BadPublicity);
 }

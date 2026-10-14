@@ -1483,7 +1483,8 @@ public static partial class GameEngine
             defaults.Counters,
             defaults.LingeringEffects,
             defaults.Triggers,
-            defaults.Interrupts);
+            defaults.Interrupts,
+            defaults.BadPublicity);
     }
 
     private static bool IsBasicInstallClass(PlayerSide side, RuntimeCardClass cardClass) =>

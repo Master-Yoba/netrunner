@@ -1167,6 +1167,12 @@ public static partial class StateInvariantValidator
             Add(violations, "run.negative-credits", $"{path}.runCredits", "Run credits must be nonnegative.");
         }
 
+        if (run.BadPublicityCredits < 0 || run.BadPublicityCredits > run.RunCredits)
+        {
+            Add(violations, "run.bad-publicity-credits", $"{path}.badPublicityCredits",
+                "The bad publicity fund's share must lie between zero and the run credits.");
+        }
+
         // A played run event uses the same card identity for both fields. An
         // installed click-run source is provenance only and deliberately has
         // no active run-event field; after initiation it may leave the Rig.
@@ -2854,7 +2860,8 @@ public static partial class StateInvariantValidator
             // EL.9: also the first credit gain through an agenda or operation (Greenmail forfeited to rez
             // Biawak mid-run, for The Zwicky Group).
             OccurrenceKind.AgendaForfeited or OccurrenceKind.HostedCreditPoolEmptied
-                or OccurrenceKind.FirstTagRemovalThisTurn or OccurrenceKind.FirstOperationPlayedThisTurn
+                or OccurrenceKind.FirstTagRemovalThisTurn or OccurrenceKind.FirstBadPublicityThisTurn
+                or OccurrenceKind.FirstOperationPlayedThisTurn
                 or OccurrenceKind.FirstCardCreditGainThisTurn => occurrence.ServerId is null,
             _ => false,
         };

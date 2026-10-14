@@ -643,6 +643,33 @@ public static partial class GameEngine
         }
     }
 
+    /// <summary>
+    /// VP-BAD-PUBLICITY: changes the Corp's bad publicity (CR 26.03 10.6). Taking it records the turn event whose first
+    /// occurrence each turn opens a trigger window (Editorial Division). A change mid-run leaves the run's fund alone
+    /// (CR 10.6.3c).
+    /// </summary>
+    private static void ApplyBadPublicity(WorkingState working, int delta)
+    {
+        RulesState rules = RequireRulesState(working);
+        long next = checked((long)rules.BadPublicity + delta);
+        if (next is < 0 or > int.MaxValue)
+        {
+            throw new ResolutionFailureException("Bad publicity adjustment would produce an invalid count.");
+        }
+
+        if (delta == 0)
+        {
+            return;
+        }
+
+        SetRulesState(working, badPublicity: (int)next);
+        Emit(working, EngineEventKinds.BadPublicityAdjusted, new BadPublicityAdjustedEventPayload(delta, (int)next));
+        if (delta > 0)
+        {
+            RecordFirstTimeOccurrence(working, TurnEventKind.BadPublicityTaken, OccurrenceKind.FirstBadPublicityThisTurn, PlayerSide.Corp);
+        }
+    }
+
     private static void ApplyBaseMemory(WorkingState working, PlayerId target, int delta)
     {
         PlayerRulesState current = GetPlayerRules(RequireRulesState(working), target);
@@ -1156,7 +1183,8 @@ public static partial class GameEngine
         IReadOnlyList<CardCounterState>? counters = null,
         IReadOnlyList<GameLingeringEffect>? lingeringEffects = null,
         IReadOnlyList<TriggerRegistration>? triggers = null,
-        IReadOnlyList<InterruptRegistration>? interrupts = null)
+        IReadOnlyList<InterruptRegistration>? interrupts = null,
+        int? badPublicity = null)
     {
         RulesState rules = RequireRulesState(working);
         working.RulesState = new RulesState(
@@ -1166,7 +1194,8 @@ public static partial class GameEngine
             counters ?? rules.Counters,
             lingeringEffects ?? rules.LingeringEffects,
             triggers ?? rules.Triggers,
-            interrupts ?? rules.Interrupts);
+            interrupts ?? rules.Interrupts,
+            badPublicity ?? rules.BadPublicity);
     }
 
     private static void ReplaceTopFrame(WorkingState working, ResolutionFrame frame)

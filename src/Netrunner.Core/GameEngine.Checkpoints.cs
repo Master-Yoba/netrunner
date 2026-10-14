@@ -1009,6 +1009,7 @@ public static partial class GameEngine
                 or OccurrenceKind.RunBegan
                 or OccurrenceKind.AgendaForfeited
                 or OccurrenceKind.FirstTagRemovalThisTurn
+                or OccurrenceKind.FirstBadPublicityThisTurn
                 or OccurrenceKind.FirstCardCreditGainThisTurn
                 or OccurrenceKind.FirstOperationPlayedThisTurn
                 or OccurrenceKind.DamageDone

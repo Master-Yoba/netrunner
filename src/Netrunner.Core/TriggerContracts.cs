@@ -76,6 +76,9 @@ public enum OccurrenceKind
 
     /// <summary>EL-ICE-APPROACHED: the Runner approaches a piece of ICE (Mitra Aman); the subject is that ICE.</summary>
     IceApproached,
+
+    /// <summary>VP-BAD-PUBLICITY: the first time this turn the Corp took bad publicity (Editorial Division).</summary>
+    FirstBadPublicityThisTurn,
 }
 
 public enum OccurrencePhase

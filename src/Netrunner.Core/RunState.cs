@@ -961,6 +961,9 @@ public sealed record RunState
 
     internal RunState WithPendingBypass(bool bypass) => this with { PendingBypass = bypass };
 
+    /// <summary>VP-BAD-PUBLICITY: the bad publicity fund's remaining share of the run-scoped credits.</summary>
+    internal RunState WithBadPublicityCredits(int credits) => this with { BadPublicityCredits = credits };
+
     /// <summary>EL.8: the random accesses left, clamped when a card effect takes hidden cards away mid-breach.</summary>
     internal RunState WithRandomAccessLimit(int randomAccessLimit) => this with { RandomAccessLimit = randomAccessLimit };
 
@@ -1006,11 +1009,13 @@ public sealed record RunState
         IReadOnlyList<RunResolvedSubroutineLedgerEntry>? resolvedSubroutineLedger = null,
         RunPersistentContext? persistentContext = null,
         ServerId? pendingMoveServerId = null,
-        bool pendingBypass = false)
+        bool pendingBypass = false,
+        int badPublicityCredits = 0)
     {
         ArgumentNullException.ThrowIfNull(breachCandidates);
         PendingMoveServerId = pendingMoveServerId;
         PendingBypass = pendingBypass;
+        BadPublicityCredits = badPublicityCredits;
         ArgumentNullException.ThrowIfNull(chosenAccessCards);
         ArgumentNullException.ThrowIfNull(accessedCards);
         ArgumentNullException.ThrowIfNull(lingeringEffects);
@@ -1206,6 +1211,16 @@ public sealed record RunState
     public int RunCredits { get; private set; }
 
     /// <summary>
+    /// VP-BAD-PUBLICITY: the bad publicity fund's share of <see cref="RunCredits"/> (CR 26.03 10.6): a credit for each bad
+    /// publicity the Corp had when the run's server was announced (step 6.9.1b). It is spent before the run event's own
+    /// credits, since both expire at the run's end and only the event's can be stealth (Vantage Point progress, VP.2).
+    /// Omitted while zero, so states without bad publicity keep their bytes.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int BadPublicityCredits { get; private set; }
+
+    /// <summary>
     /// The run event played to start this run, kept faceup in the public
     /// RunnerPlayArea for the run's duration and trashed to the public heap
     /// faceup at run end.
@@ -1306,7 +1321,8 @@ public sealed record RunState
         ResolvedSubroutineLedger,
         PersistentContext,
         PendingMoveServerId,
-        PendingBypass);
+        PendingBypass,
+        BadPublicityCredits);
 
     /// <summary>
     /// Creates the next immutable timing cursor while retaining the run's
@@ -1352,7 +1368,8 @@ public sealed record RunState
             ResolvedSubroutineLedger,
         PersistentContext,
         PendingMoveServerId,
-        PendingBypass);
+        PendingBypass,
+        BadPublicityCredits);
 
     /// <summary>
     /// Replaces the run's encounter while retaining every other field; the
@@ -1395,7 +1412,8 @@ public sealed record RunState
         ResolvedSubroutineLedger,
         PersistentContext,
         PendingMoveServerId,
-        PendingBypass);
+        PendingBypass,
+        BadPublicityCredits);
 
     /// <summary>
     /// Replaces the run's run-scoped hosted credits while retaining every
@@ -1431,7 +1449,8 @@ public sealed record RunState
         ResolvedSubroutineLedger,
         PersistentContext,
         PendingMoveServerId,
-        PendingBypass);
+        PendingBypass,
+        BadPublicityCredits);
 
     /// <summary>
     /// Replaces the live run priority cursor while retaining the exact run
@@ -1468,7 +1487,8 @@ public sealed record RunState
         ResolvedSubroutineLedger,
         PersistentContext,
         PendingMoveServerId,
-        PendingBypass);
+        PendingBypass,
+        BadPublicityCredits);
 
     internal RunState WithEncounter(RunEncounterState encounter) => new(
         Version,
@@ -1500,7 +1520,8 @@ public sealed record RunState
         ResolvedSubroutineLedger,
         PersistentContext,
         PendingMoveServerId,
-        PendingBypass);
+        PendingBypass,
+        BadPublicityCredits);
 
     /// <summary>
     /// Replaces the run's breach candidate/access fields while retaining every
@@ -1541,7 +1562,8 @@ public sealed record RunState
         ResolvedSubroutineLedger,
         PersistentContext,
         PendingMoveServerId,
-        PendingBypass);
+        PendingBypass,
+        BadPublicityCredits);
 
     /// <summary>
     /// Replaces the immutable breach-access snapshot after the authoritative
@@ -1578,7 +1600,8 @@ public sealed record RunState
         ResolvedSubroutineLedger,
         PersistentContext,
         PendingMoveServerId,
-        PendingBypass);
+        PendingBypass,
+        BadPublicityCredits);
 
     /// <summary>Replaces the run-scoped typed restrictions immutably.</summary>
     internal RunState WithRunRestrictions(IReadOnlyList<RunRestriction>? runRestrictions) => new(
@@ -1611,7 +1634,8 @@ public sealed record RunState
         ResolvedSubroutineLedger,
         PersistentContext,
         PendingMoveServerId,
-        PendingBypass);
+        PendingBypass,
+        BadPublicityCredits);
 
     /// <summary>Replaces the structural history of resolved unbroken subroutines.</summary>
     internal RunState WithResolvedSubroutineLedger(
@@ -1645,7 +1669,8 @@ public sealed record RunState
         resolvedSubroutineLedger,
         PersistentContext,
         PendingMoveServerId,
-        PendingBypass);
+        PendingBypass,
+        BadPublicityCredits);
 
     private static ReadOnlyCollection<CardInstanceId> FreezeIds(IEnumerable<CardInstanceId> values) =>
         new(values.ToArray());
