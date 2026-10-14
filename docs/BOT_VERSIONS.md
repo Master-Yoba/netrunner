@@ -2672,3 +2672,12 @@ Elo), with 116 deals changed and 35 results. The default stays Corp v34; v39 sta
 card's payout arrives a turn after its click and credit, and in that turn the Runner often accesses and trashes it (an
 advanced card in a remote reads as an agenda), so working it is worth about what clicking for credits is. The sweep's
 other finding, Plutus never rezzed, is left for a later step.
+
+## Runner v38 confirmation (14 October 2026)
+
+Runner v38 (Topan's empty grip) was level on its declared run, +5 Elo [−5, +15] on 1,600 box deals (seed 8), but read
++0.0213 [+0.0037, +0.0425] in paired score against v37 on the misplay sweep's 800 box deals (seed 21), a set played for
+the sweep, not to judge it.
+
+**Declared before running it:** 1,600 fresh box deals (seed 25) against Runner v37, judged by the deal-paired interval;
+v38 becomes the default only if that interval clears zero. Seeds 8 and 21 are not pooled with it.
