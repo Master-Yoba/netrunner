@@ -110,13 +110,13 @@ public sealed class ElevationCardDataTests
     }
 
     [Fact]
-    public void OfficialPackTableNamesBothPinnedPacks()
+    public void OfficialPackTableNamesEveryPinnedPack()
     {
-        Assert.Equal(["sg", "elev"], OfficialCardPacks.All.Select(static pack => pack.PackCode));
+        Assert.Equal(["sg", "elev", "vp"], OfficialCardPacks.All.Select(static pack => pack.PackCode));
         Assert.Equal(77, OfficialCardPacks.SystemGateway.CardCount);
         Assert.Equal(82, OfficialCardPacks.Elevation.CardCount);
         Assert.Equal("data/vendor/elevation", OfficialCardPacks.Elevation.RelativeDirectory);
-        Assert.Null(OfficialCardPacks.Find("vp"));
+        Assert.Null(OfficialCardPacks.Find("liberation"));
     }
 
     [Fact]
@@ -125,9 +125,9 @@ public sealed class ElevationCardDataTests
         IReadOnlyList<string> packs = CardDataResource.EmbeddedPackCodes;
         if (CardDataResource.EmbeddedMode == CardDataResource.OfficialMode)
         {
-            Assert.Equal(["sg", "elev"], packs);
+            Assert.Equal(["sg", "elev", "vp"], packs);
             CardDataSet pool = CardDataResource.LoadEmbeddedPool();
-            Assert.Equal(159, pool.Cards.Count);
+            Assert.Equal(225, pool.Cards.Count);
             Assert.Equal(82, CardDataResource.LoadEmbeddedPack("elev").Cards.Count);
         }
         else
@@ -150,9 +150,14 @@ public sealed class ElevationCardDataTests
         Assert.Equal(82, elevation.Cards.Count);
         Assert.Equal("elev", elevation.Manifest.PackCode);
         Assert.All(elevation.Cards, card => Assert.StartsWith("35", card.Code, StringComparison.Ordinal));
+        if (!File.Exists(Path.Combine(root, "data/vendor/vantage-point/cards.json")))
+        {
+            return;
+        }
+
         CardDataSet pool = CardDataLoader.LoadOfficialPool(root);
-        Assert.Equal(159, pool.Cards.Count);
-        Assert.Equal(["sg", "elev"], pool.PackCodes);
+        Assert.Equal(225, pool.Cards.Count);
+        Assert.Equal(["sg", "elev", "vp"], pool.PackCodes);
     }
 
     private static string? FindRepositoryRoot()

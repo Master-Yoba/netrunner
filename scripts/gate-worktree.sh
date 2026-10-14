@@ -29,6 +29,7 @@ for tool in dotnet godot ripgrep xvfb; do
 done
 ln -sfn "$main_root/data/vendor/system-gateway" "$tree/data/vendor/system-gateway"
 ln -sfn "$main_root/data/vendor/elevation" "$tree/data/vendor/elevation"
+ln -sfn "$main_root/data/vendor/vantage-point" "$tree/data/vendor/vantage-point"
 if [[ ! -d "$tree/.tools/godot-data" && -d "$main_root/.tools/godot-data" ]]; then
   cp -a "$main_root/.tools/godot-data" "$tree/.tools/godot-data"
 fi

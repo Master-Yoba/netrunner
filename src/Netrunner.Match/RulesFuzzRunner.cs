@@ -212,7 +212,8 @@ public static class RulesFuzzRunner
             throw new InvalidOperationException("Official fuzz content requires the embedded official card snapshot.");
         OfficialPresetCatalog presets = CatalogOf(corpPreset);
         bool elevation = !ReferenceEquals(presets, OfficialPresetCatalog.Embedded());
-        CardDataSet data = elevation ? CardDataResource.LoadEmbeddedPool() : CardDataResource.LoadEmbedded();
+        // The Gateway + Elevation pool's packs, not every embedded pack: Vantage Point's cards stay out of these games (VP.1).
+        CardDataSet data = elevation ? CardDataResource.LoadEmbeddedPool(CardPools.GatewayElevation.PackCodes) : CardDataResource.LoadEmbedded();
         BehaviorCatalog behavior = elevation ? ElevationBehaviorCatalog.Create() : GatewayBehaviorCatalog.Create();
         MatchRequest request = MatchRequestComposer.ComposeOfficial(
             corpPreset, runnerPreset, data, seed, presets, behaviorCatalog: behavior);

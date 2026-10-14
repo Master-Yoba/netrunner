@@ -8,6 +8,9 @@ public static class CardPoolIds
     public const string Gateway = "gateway";
 
     public const string GatewayElevation = "gateway-elevation";
+
+    /// <summary>System Gateway, Elevation and Vantage Point: the Startup 2026 pool (Vantage Point plan, VP.1).</summary>
+    public const string Startup = "startup";
 }
 
 /// <summary>
@@ -84,7 +87,14 @@ public static class CardPools
         ElevationBehaviorCatalog.Version,
         ElevationBehaviorCatalog.Create);
 
-    public static IReadOnlyList<CardPool> All { get; } = [Gateway, GatewayElevation];
+    public static CardPool Startup { get; } = new(
+        CardPoolIds.Startup,
+        "System Gateway + Elevation + Vantage Point",
+        [OfficialCardPacks.SystemGatewayCode, OfficialCardPacks.ElevationCode, OfficialCardPacks.VantagePointCode],
+        VantagePointBehaviorCatalog.Version,
+        VantagePointBehaviorCatalog.Create);
+
+    public static IReadOnlyList<CardPool> All { get; } = [Gateway, GatewayElevation, Startup];
 
     public static CardPool Get(string id) =>
         All.FirstOrDefault(pool => string.Equals(pool.Id, id, StringComparison.Ordinal))

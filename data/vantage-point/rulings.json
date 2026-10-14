@@ -1,0 +1,193 @@
+{
+  "schemaVersion": 1,
+  "rulesVersion": "CR-26.03",
+  "sourceUrl": "https://rules.nullsignal.games/",
+  "rulings": [
+    {
+      "id": "VP-CR-10.6-bad-publicity",
+      "cr": "10.6.1-10.6.3; 1.9.5d; 1.14.3a; 6.9.1b; 6.9.6b",
+      "summary": "Bad publicity counters sit on the Corp. When a run's server is announced the Runner fills a bad publicity fund with 1 credit per bad publicity, spendable only during that run, and returns what is left when it ends; taking or removing bad publicity mid-run doesn't change the fund. Either player may remove bad publicity to pay a cost that calls for it.",
+      "jnetCrossCheck": "jnet fills the fund at run initiation from the Corp's bad publicity count, offers it in run payments and fires a bad-publicity-spent event; take and lose effects use gain-bad-publicity and lose-bad-publicity."
+    },
+    {
+      "id": "VP-CR-1.10.4-credit-sources",
+      "cr": "1.10.4; 1.13.3; 1.16.3",
+      "summary": "Credits hosted on a card aren't in a pool; they are spent only as their card allows (during runs, for a kind of cost). A cost payable only with credits from stealth cards may draw on those cards' hosted credits and nothing else.",
+      "jnetCrossCheck": "jnet tags a payment with a stealth requirement ({:stealth :all-stealth}) and offers only stealth cards' credits; Aircheck adds static cannot-pay-credits-from-pool and cannot-lose-credits effects."
+    },
+    {
+      "id": "VP-CR-1.16.10-steal-score-costs",
+      "cr": "1.16.10; 7.1.6a; 1.17.3",
+      "summary": "Abilities can add costs to stealing or scoring an agenda. The Runner may decline a steal cost and leave the agenda; the Corp may not score without paying a score cost.",
+      "jnetCrossCheck": "jnet models steal costs as steal-additional-cost static abilities (Magistrate Revontulet) and resolves Word on the Street on pre-agenda-scored."
+    },
+    {
+      "id": "VP-CR-10.1.3-as-an-agenda",
+      "cr": "10.1.3; 1.17.3f",
+      "summary": "A card added to a score area 'as an agenda' loses its other properties and gains only the stated agenda points and text; it was neither scored nor stolen.",
+      "jnetCrossCheck": "jnet uses as-agenda with the printed points (Myōshu 2, Word on the Street -1) and a cannot-forfeit flag where printed."
+    },
+    {
+      "id": "VP-CR-1.17.1-agenda-points",
+      "cr": "1.17.1; 4.5.4",
+      "summary": "A player's score is the sum of the agenda points in their score area, as modified by active abilities; an agenda in the Runner's score area can carry an ability that changes its own value there.",
+      "jnetCrossCheck": "jnet applies an agenda-value modifier while Let Them Dream is in the Runner's score area."
+    },
+    {
+      "id": "VP-CR-1.16-costs",
+      "cr": "1.16.1-1.16.4; 1.16.9",
+      "summary": "Costs are paid in full before effects: trashing a card as a cost, spending an extra click on a Double operation, and cost reductions that apply to a kind of card the first time each turn.",
+      "jnetCrossCheck": "jnet adds play-additional-cost for Double operations and lowers it for Synchrocyclotron; Sell Out and Methuselah trash as part of their cost."
+    },
+    {
+      "id": "VP-CR-2.3-cost-modifiers",
+      "cr": "2.3.1-2.3.3; 8.1.2e",
+      "summary": "Play, install and rez costs can be raised or lowered by abilities and calculated when paid, never below zero.",
+      "jnetCrossCheck": "jnet applies rez-cost static abilities (Reverb per other unrezzed ice, Hype Machine while an agenda was scored or stolen) and a play-cost reduction for Tailgate."
+    },
+    {
+      "id": "VP-CR-8.1.3-derez",
+      "cr": "8.1.3a-c; 6.2.7c",
+      "summary": "Derezzing turns a rezzed card facedown with no cost; ice derezzed while encountered ends that encounter.",
+      "jnetCrossCheck": "jnet derezzes with derez (Kompromat's choice, realloc(), Knowledge Seeker after its purge)."
+    },
+    {
+      "id": "VP-CR-6.5.7-pass-and-break",
+      "cr": "6.5.7; 6.6.1-6.6.4; 9.8.4-9.8.5",
+      "summary": "The Runner passes a piece of ice when the movement phase moves past it; ice is fully broken when every subroutine was broken in the encounter. Abilities can trigger on either, and on the outermost ice of a server.",
+      "jnetCrossCheck": "jnet fires pass-ice (Sipa, Vertigo) and subroutines-broken with an all-subs-broken flag (Lethe, The Tungsten Tailor)."
+    },
+    {
+      "id": "VP-CR-6.5.8-bypass",
+      "cr": "6.5.8a-c",
+      "summary": "Bypassing ice ends its encounter at once and the Runner passes it; abilities may trigger on the bypass.",
+      "jnetCrossCheck": "jnet fires bypassed-ice (Lethe)."
+    },
+    {
+      "id": "VP-CR-9.8-subroutines",
+      "cr": "9.8.2-9.8.7",
+      "summary": "Subroutines have an order by how the ice gained them; a subroutine gained for an encounter can come before the printed ones, and only unbroken ones resolve.",
+      "jnetCrossCheck": "jnet adds additional-subroutines at the front for the encounter (Stick and Poke)."
+    },
+    {
+      "id": "VP-CR-6.1.5-jack-out",
+      "cr": "6.1.5; 6.6.3",
+      "summary": "Jacking out ends the run at once; an effect may offer it as the way to prevent a subroutine.",
+      "jnetCrossCheck": "jnet resolves Lionsmane's third subroutine as a choice between taking the damage and jacking out."
+    },
+    {
+      "id": "VP-CR-6.7-success",
+      "cr": "6.7.2-6.7.3",
+      "summary": "A run is declared successful at the success phase; an ability can stop the declaration without making the run unsuccessful.",
+      "jnetCrossCheck": "jnet blocks it with a block-successful-run static ability (Flagship)."
+    },
+    {
+      "id": "VP-CR-7.4-access-limits",
+      "cr": "7.4.2b; 7.3.4-7.3.5",
+      "summary": "An ability may cap the cards the Runner accesses during a run on a server; once the cap is reached no further candidate is offered.",
+      "jnetCrossCheck": "jnet disables access candidacy and random accesses after one other card was accessed (Flagship)."
+    },
+    {
+      "id": "VP-CR-7.1-access-abilities",
+      "cr": "7.1.1-7.1.6; 7.2",
+      "summary": "While accessing a card the Runner may use access abilities and pay trash costs, and some cards must be revealed while accessed in R&D.",
+      "jnetCrossCheck": "jnet offers Lampades as an access ability paying the accessed card's printed cost from stealth credits; Esca reveals on access in R&D."
+    },
+    {
+      "id": "VP-CR-8.3-arrange",
+      "cr": "8.3.1-8.3.3",
+      "summary": "Arranging a deck's top cards repositions them among their own locations, privately, after the player looks at them.",
+      "jnetCrossCheck": "jnet prompts an arrange order for Cultivate and Knowledge Seeker's subroutine."
+    },
+    {
+      "id": "VP-CR-1.13.7-facedown-hosting",
+      "cr": "1.13.7; 1.13.12; 1.21",
+      "summary": "Cards can be hosted facedown on a card without being installed; their controller may look at them, the opponent may not.",
+      "jnetCrossCheck": "jnet hosts Read-Write Share's cards facedown and shuffles them back with its trash ability."
+    },
+    {
+      "id": "VP-CR-1.13-hosting",
+      "cr": "1.13.1-1.13.13",
+      "summary": "Abilities create host relationships: resources installed onto a resource, a program installed on ice, bad publicity counters hosted on an asset. Hosted counters aren't on the player.",
+      "jnetCrossCheck": "jnet uses can-host and host (Hackerspace, Stowaway) and keeps Luana Campos's hosted bad publicity as counters on the card."
+    },
+    {
+      "id": "VP-CR-9.5-paid-abilities",
+      "cr": "9.5.1-9.5.7; 9.1.2",
+      "summary": "Paid abilities are used at will in a priority window by paying their trigger cost; some are usable from other zones (Expendable ice from HQ, revealing and trashing itself as part of the cost).",
+      "jnetCrossCheck": "jnet implements Expendable as an expend ability usable from HQ with the reveal and trash as its cost (Tocsin)."
+    },
+    {
+      "id": "VP-CR-1.5.2-melies-u",
+      "cr": "1.5.2; 3.1.1a",
+      "summary": "A Corp playing Méliès U brings several copies of the identity; the copy in play is chosen secretly and flipped to reveal its side.",
+      "jnetCrossCheck": "jnet keeps the chosen server on the identity, choosing it at the end of the Corp's turn (the card says its discard phase), flips it on a successful central run and resolves the matching side."
+    },
+    {
+      "id": "VP-CR-9.9-interrupts",
+      "cr": "9.9.1-9.9.4",
+      "summary": "An interrupt resolves while another instruction is imminent: an asset that is about to be uninstalled acts before it leaves play.",
+      "jnetCrossCheck": "jnet resolves Luana Campos's bad publicity on its uninstall hook, before the card leaves play."
+    },
+    {
+      "id": "VP-CR-8.7-search",
+      "cr": "8.7.1-8.7.4; 4.2",
+      "summary": "Searching a deck looks through it for cards meeting a description and reveals what is found; the deck is shuffled afterwards.",
+      "jnetCrossCheck": "jnet searches with search and shuffles R&D or the stack after (Editorial Division, Tocsin, Beta Build, Let Them Dream)."
+    },
+    {
+      "id": "VP-CR-7.3.2-archives-faceup",
+      "cr": "7.3.2",
+      "summary": "When the Runner breaches Archives, its facedown cards are turned faceup first; abilities can count how many turned faceup at once.",
+      "jnetCrossCheck": "jnet fires archives-flipped with the count (Nurse Hạnh)."
+    },
+    {
+      "id": "VP-CR-9.6-conditional",
+      "cr": "9.6.1-9.6.6",
+      "summary": "Conditional abilities trigger on game events (turn and phase steps, scoring, advancing, runs) and may check turn facts such as an agenda scored this turn or ice rezzed this turn.",
+      "jnetCrossCheck": "jnet uses turn events (corp-action-phase-ends, runner-action-phase-ends) and per-turn registers for scored, installed and rezzed facts."
+    },
+    {
+      "id": "VP-CR-10.5-tags",
+      "cr": "10.5.1-10.5.4",
+      "summary": "Tags are removed as an effect or as a cost; cards can count the Runner's tags.",
+      "jnetCrossCheck": "jnet removes tags as an additional cost (Unleash) and counts them for Vicsek's X."
+    },
+    {
+      "id": "VP-CR-9.12.5-persistent",
+      "cr": "9.12.5",
+      "summary": "A persistent ability stays active through the access on which its card is trashed, for the rest of that run.",
+      "jnetCrossCheck": "jnet re-registers Flagship's access limits as lingering effects when it is trashed during the run."
+    },
+    {
+      "id": "VP-CR-10.4-damage",
+      "cr": "10.4.1-10.4.5",
+      "summary": "Net and meat damage trash cards from the grip at random; damage greater than the grip flatlines the Runner.",
+      "jnetCrossCheck": "jnet deals damage with damage (Esca, Lionsmane, Vicsek, Shackleton Grid)."
+    },
+    {
+      "id": "VP-CR-8.5-install",
+      "cr": "8.5.1-8.5.14",
+      "summary": "Installing can come from other zones (Archives, the stack), be followed by a rez paying less, or be restricted (only on ice, only faceup).",
+      "jnetCrossCheck": "jnet installs from Archives and rezzes paying less (Reanimation Protocol, Retirement Plan), hosts trojans on ice and installs Public agendas faceup."
+    },
+    {
+      "id": "VP-CR-8.8-swap",
+      "cr": "8.8.1-8.8.3",
+      "summary": "Swapping exchanges two cards' positions; swapped ice keeps its rezzed state.",
+      "jnetCrossCheck": "jnet uses swap-ice (ezaM, Sipa)."
+    },
+    {
+      "id": "VP-CR-1.11-clicks",
+      "cr": "1.11.1-1.11.4",
+      "summary": "Clicks are gained, lost and allotted; an effect can change a player's allotted clicks for their next turn.",
+      "jnetCrossCheck": "jnet adjusts the Runner's next-turn allotment for Caveat Emptor and spends a click as Méliès City Luxury Line's steal cost."
+    },
+    {
+      "id": "VP-CR-1.9-counters",
+      "cr": "1.9.1-1.9.5",
+      "summary": "Counters of several kinds sit on cards: power counters, agenda counters, and virus counters, which ice can also host and a purge removes.",
+      "jnetCrossCheck": "jnet places virus counters on Knowledge Seeker and purges them when the encounter ends with 3 or more."
+    }
+  ]
+}

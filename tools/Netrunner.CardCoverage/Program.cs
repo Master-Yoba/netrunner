@@ -105,6 +105,17 @@ internal sealed record CardSetDefinition(
         Codes(35001, 82),
         Codes(30001, 77));
 
+    /// <summary>
+    /// Vantage Point is registered in the Startup catalog, which also holds
+    /// every Gateway and Elevation card; those are excluded from its set.
+    /// </summary>
+    public static CardSetDefinition VantagePoint { get; } = new(
+        "vantage-point",
+        "Vantage Point",
+        "Netrunner.Cards.VantagePointBehaviorCatalog",
+        Codes(36001, 66),
+        Codes(30001, 77).Concat(Codes(35001, 82)).ToHashSet(StringComparer.Ordinal));
+
     private static HashSet<string> Codes(int first, int count) =>
         Enumerable.Range(first, count)
             .Select(static code => code.ToString(System.Globalization.CultureInfo.InvariantCulture))
@@ -123,13 +134,15 @@ internal sealed record Options(
         "usage: dotnet run --project tools/Netrunner.CardCoverage -- "
         + "--root <repo> [--registry <path>] [--rulings <path>] [--cards <path>] "
         + "[--elevation-registry <path>] [--elevation-rulings <path>] [--elevation-cards <path>] "
+        + "[--vantage-point-registry <path>] [--vantage-point-rulings <path>] [--vantage-point-cards <path>] "
         + "[--catalog <Cards.dll>] [--tests <tests.dll> ...] "
         + "[--markdown <path>] [--json <path>]";
 
     private static readonly string[] ValueOptions =
     [
         "--root", "--registry", "--rulings", "--cards", "--elevation-registry", "--elevation-rulings",
-        "--elevation-cards", "--catalog", "--tests", "--markdown", "--json",
+        "--elevation-cards", "--vantage-point-registry", "--vantage-point-rulings", "--vantage-point-cards",
+        "--catalog", "--tests", "--markdown", "--json",
     ];
 
     public static Options Parse(IReadOnlyList<string> args)
@@ -187,6 +200,11 @@ internal sealed record Options(
                 Value("--elevation-registry", "data/elevation/batch-registry.json"),
                 Value("--elevation-rulings", "data/elevation/rulings.json"),
                 Cards("--elevation-cards", "data/vendor/elevation/cards.json")),
+            new(
+                CardSetDefinition.VantagePoint,
+                Value("--vantage-point-registry", "data/vantage-point/batch-registry.json"),
+                Value("--vantage-point-rulings", "data/vantage-point/rulings.json"),
+                Cards("--vantage-point-cards", "data/vendor/vantage-point/cards.json")),
         ];
 
         return new Options(

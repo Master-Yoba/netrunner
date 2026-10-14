@@ -27,9 +27,13 @@ public sealed class CardFormatTests
             catalog.PlayableFormats.Select(static format => format.Id));
         CardFormat startup = catalog.Get(CardFormatIds.Startup2026);
         Assert.False(startup.Complete);
-        Assert.Equal(["vantage_point"], startup.MissingPacks);
+        Assert.Equal(["vp"], startup.MissingPacks);
         Assert.True(startup.IsBanned("35045"));
-        Assert.Equal(new HighValueAgendaLimit(3, 3), startup.DeckRules.HighValueAgendaLimit);
+        // Balance Update 26.09 (Vantage Point plan, D-VP-5): NBN: Reality Plus is unbanned and a Corp deck may hold 4 agendas
+        // worth 3 or more points.
+        Assert.Equal("startup-balance-update-26-09", startup.Restriction!.Id);
+        Assert.False(startup.IsBanned("30051"));
+        Assert.Equal(new HighValueAgendaLimit(3, 4), startup.DeckRules.HighValueAgendaLimit);
         Assert.Null(catalog.Get(CardFormatIds.Gateway).Restriction);
         Assert.Null(catalog.Get(CardFormatIds.NsgCoreSets).Restriction);
     }
@@ -221,7 +225,7 @@ public sealed class CardFormatTests
             if (deck.Cards.Select(static card => card.Code).Append(deck.IdentityCode).Any(startupBans.Banned.Contains)) illegalUnderBans++;
         }
 
-        // NSG built these for the Core Sets without the Startup bans: 9 Corp decks use a card banned in 26.05.
+        // NSG built these for the Core Sets without the Startup bans: 9 Corp decks use a card banned in 26.09 (as in 26.05).
         Assert.Equal(9, illegalUnderBans);
     }
 
@@ -262,7 +266,15 @@ public sealed class CardFormatTests
         Assert.DoesNotContain(FormatDeckValidator.Validate(withCleaver, elevation, pool).Diagnostics,
             static diagnostic => diagnostic.Code == "format-banned");
 
-        // High-value agendas: four agendas worth 3 points break the Startup limit.
+        // Balance Update 26.09 unbanned NBN: Reality Plus; a Vantage Point card isn't legal in Startup 2026 until VP.8.
+        DeckRequest realityPlus = new(DeckRequest.CurrentSchemaVersion, PlayerSide.Corp, "30051", []);
+        Assert.DoesNotContain(FormatDeckValidator.Validate(realityPlus, startup, pool).Diagnostics,
+            static diagnostic => diagnostic.Code == "format-banned");
+        DeckRequest withVantagePoint = Runner("30010", [("36013", 1)]);
+        Assert.Contains(FormatDeckValidator.Validate(withVantagePoint, startup, pool).Diagnostics,
+            static diagnostic => diagnostic.Code == "format-pack");
+
+        // High-value agendas: five agendas worth 3 points break the Startup limit of four (26.09).
         NormalizedCardDefinition threePointer = pool.Cards.First(static card =>
             card.Type == "agenda" && card.AgendaPoints == 3 && card.Faction == "nbn");
         NormalizedCardDefinition otherThreePointer = pool.Cards.First(card =>
@@ -271,7 +283,7 @@ public sealed class CardFormatTests
             DeckRequest.CurrentSchemaVersion,
             PlayerSide.Corp,
             "35058",
-            [new DeckCardEntry(threePointer.Code, 3), new DeckCardEntry(otherThreePointer.Code, 1)]);
+            [new DeckCardEntry(threePointer.Code, 3), new DeckCardEntry(otherThreePointer.Code, 2)]);
         Assert.Contains(FormatDeckValidator.Validate(agendas, startup, pool).Diagnostics,
             static diagnostic => diagnostic.Code == "format-agenda-limit");
         Assert.DoesNotContain(FormatDeckValidator.Validate(agendas, elevation, pool).Diagnostics,
