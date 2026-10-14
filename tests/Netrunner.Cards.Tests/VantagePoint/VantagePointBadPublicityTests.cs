@@ -31,6 +31,22 @@ public sealed class VantagePointBadPublicityTests
     }
 
     [Fact]
+    public void OnlyTheFirstBadPublicityEachTurnIsAnOccurrence()
+    {
+        GameState state = new ElevationBoard { HqFiller = 2, CorpClicks = 3 }
+            .Add(CorpFillerAsset, Place.Root, rezzed: true)
+            .Begin(catalog: VantagePointProbe);
+        int credits = Player(state, PlayerSide.Corp).Credits;
+
+        state = ToAction(Apply(state, Actions(state).First(static action => action.Kind == ActionKind.PlayCard)).State);
+        Assert.Equal(credits + 1, Player(state, PlayerSide.Corp).Credits);
+        state = ToAction(Apply(state, Actions(state).First(static action => action.Kind == ActionKind.PlayCard)).State);
+
+        Assert.Equal(4, BadPublicity(state));
+        Assert.Equal(credits + 1, Player(state, PlayerSide.Corp).Credits);
+    }
+
+    [Fact]
     public void AStateWithoutBadPublicityKeepsItsBytes()
     {
         GameState none = new ElevationBoard().Build();

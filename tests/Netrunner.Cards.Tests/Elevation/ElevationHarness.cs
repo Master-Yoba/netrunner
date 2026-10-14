@@ -48,7 +48,8 @@ internal static class ElevationHarness
 
     /// <summary>
     /// VP.2: the Elevation catalog plus test-only probe behaviors for Vantage Point primitives no registered card uses yet:
-    /// the filler operation (<see cref="CorpFiller"/>) takes 2 bad publicity.
+    /// the filler operation (<see cref="CorpFiller"/>) takes 2 bad publicity, and the filler asset
+    /// (<see cref="CorpFillerAsset"/>) gains a credit the first time each turn the Corp takes bad publicity.
     /// </summary>
     public static BehaviorCatalog VantagePointProbe => LazyVantagePointProbe.Value;
 
@@ -64,6 +65,19 @@ internal static class ElevationHarness
                 new CardDefinitionId(CorpFiller),
                 PlayerSide.Corp,
                 instructions: [new BehaviorInstruction(BehaviorInstructionKind.TakeBadPublicity, amount: 2)]))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(CorpFillerAsset),
+                PlayerSide.Corp,
+                triggers:
+                [
+                    new BehaviorTrigger(
+                        "probe-first-bad-publicity",
+                        OccurrenceKind.FirstBadPublicityThisTurn,
+                        TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Controller,
+                        null,
+                        [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 1)]),
+                ]))
             .Build();
 
     private static BehaviorCatalog CreateProbe() =>
