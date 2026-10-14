@@ -86,7 +86,7 @@ information and identities.
 - **D-VP-4, bots per batch:** D-EL-6's: no batch closes until the heuristic bots and the contract agent play its cards
   without errors, each with a non-default valuation.
 
-**For the user to decide (each has a default the plan proceeds with):**
+**The user's (15 October 2026: the defaults below, as proposed):**
 - **D-VP-5, formats:**
   - *Default:* Startup 2026 becomes complete and playable (`complete: true`, no missing packs), on Balance Update 26.09:
     its restriction ID, effective date (21 September 2026), ban list and agenda limit, taken from Null Signal's
@@ -273,8 +273,8 @@ Elevation's ([Elevation plan](history/ELEVATION_PLAN.md), section 6), with one s
 
 - **Order:** VP.1 first; then VP.2 → VP.3 → VP.4 → VP.5 → VP.6 → VP.7 → VP.8; a primitive slice and its batch may share a
   PR if both are small (VP.6 and VP.7 likely will).
-- **Defaults:** D-VP-5 to D-VP-8 proceed on their defaults unless the user decides otherwise; D-VP-6's deck source waits
-  for the user's approval before VP.8.
+- **Decisions:** the user took D-VP-5 to D-VP-8's defaults on 15 October 2026; D-VP-6's deck lists are shown to the user
+  before VP.8 offers them.
 - **Merging:** each slice's PR is merged into `dev` when its gates pass and Codex's review is answered, under the
   standing routine; a stack is merged in one push.
 - **No LLM playtesting or reviews:** the session doesn't run Codex or Claude games or reviews, nor spend model usage on
