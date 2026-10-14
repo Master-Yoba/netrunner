@@ -50,16 +50,11 @@ public sealed partial class CorpHeuristicPolicy
             // v33 (C01, C02): the layer an agenda waiting in HQ is waiting for, on the empty remote the Runner gets into.
             // The review of #137: on any remote without an agenda in its root (an upgrade may be there), the destinations the
             // agenda waits for, and only while its rez, modifiers included, is affordable.
-            if (context.Configuration.PolicyVersion is V34 or V38 or V39 && !install.CreateNewRemote && server is { Kind: ServerKind.Remote }
+            if (context.Configuration.PolicyVersion == V34 && !install.CreateNewRemote && server is { Kind: ServerKind.Remote }
                 && !server.Root.Any(value => context.Definition(value)?.Agenda is not null)
                 && context.AgendaCount > 0 && context.Self.Credits - install.CreditCost >= ice.RezCost + IceRezModifier(context)
                 && RunnerGetsIn(context, server, 0))
                 score += ProtectionBonus;
-            // v38: ICE of the subtype the identity's ability needs, on a remote an agenda is in or waits for, with none there yet.
-            if (context.Configuration.PolicyVersion == V38 && server is { Kind: ServerKind.Remote } && IdentitySubtype(context) is { } subtype
-                && HasSubtype(definition, subtype) && (server.Root.Any(value => context.Definition(value)?.Agenda is not null) || context.AgendaCount > 0)
-                && !server.Ice.Any(value => HasSubtype(context.Definition(value), subtype)))
-                score += IdentityIceBonus;
         }
         else if (definition.Agenda is not null)
         {
@@ -118,7 +113,7 @@ public sealed partial class CorpHeuristicPolicy
             // v33 (bot plan H3 batch 7, the guide's C01, C02): a flooded HQ still lets an agenda out, but not into a server the
             // Runner gets into while the Corp holds ICE it can put there and rez: the ICE goes in this turn and the agenda
             // behind it the next (54% of the remote steals were behind one rezzed ICE, often from a Corp on 10 credits or more).
-            if (!agendaWaits && context.Configuration.PolicyVersion is V34 or V38 or V39 && !scoreableNow && !nakedAgenda && server is not null
+            if (!agendaWaits && context.Configuration.PolicyVersion == V34 && !scoreableNow && !nakedAgenda && server is not null
                 && ProtectionInHand(context, server)
                 && RunnerGetsIn(context, server, install.CreditCost + definition.Printed.AdvancementRequirement))
                 agendaWaits = true;
@@ -165,21 +160,6 @@ public sealed partial class CorpHeuristicPolicy
 
     /// <summary>v33: what the layer an agenda waits for is worth, above an ordinary remote ICE's place.</summary>
     private const int ProtectionBonus = 300;
-
-    /// <summary>v38: what ICE that arms the identity's ability is worth on an agenda's remote, and what rezzing it there adds.</summary>
-    private const int IdentityIceBonus = 250;
-
-    /// <summary>
-    /// v38: the subtype a Corp identity's paid ability needs rezzed in the attacked server (LEO Construction: bioroid), from
-    /// its declared condition; null for an identity without one.
-    /// </summary>
-    internal static string? IdentitySubtype(HeuristicContext context) => context.Features.Board.CorpIdentity
-        .Select(card => context.Definition(card)?.Behavior).OfType<CardBehaviorDefinition>()
-        .SelectMany(behavior => behavior.PaidAbilities).SelectMany(ability => ability.Conditions)
-        .FirstOrDefault(condition => condition.Kind == BehaviorConditionKind.RezzedSubtypeInAttackedServer)?.Fact;
-
-    internal static bool HasSubtype(CardEvaluationDescriptor? definition, string subtype) =>
-        definition?.Printed.Subtypes.Any(value => string.Equals(value, subtype, StringComparison.OrdinalIgnoreCase)) == true;
 
     /// <summary>
     /// v8: how well a server protects an agenda, from the whole-run model (A4a) run
@@ -286,14 +266,6 @@ public sealed partial class CorpHeuristicPolicy
     {
         AgentCard? card = context.Card(advance.CardId);
         CardEvaluationDescriptor? definition = context.Definition(card);
-        // v39 (the misplay sweep): each counter on an asset that pays by its counters when the Corp's turn begins (Idiosyncresis)
-        // is a click and a credit now for its payout then, halved for the Runner trashing or accessing it first.
-        if (context.Configuration.PolicyVersion == V39 && CounterPayout(context, definition) is > 0 and var payout)
-        {
-            if (context.Self.Credits - 1 < context.RezReserve) return Value(-40, "advance/counter-asset-keeps-ice-budget", approximate: true);
-            if ((card!.AdvancementCounters ?? 0) >= MaximumPaidCounters) return Value(-20, "advance/counter-asset-at-its-stake", approximate: true);
-            return Value(payout / 2 - context.CreditValue, "advance/counter-asset", approximate: true);
-        }
         if (definition?.Agenda is null && ScalesWithCounters(definition))
         {
             // v7: an advanceable trap (Urtica Cipher, Clearinghouse) grows with every
@@ -487,26 +459,6 @@ public sealed partial class CorpHeuristicPolicy
         .Concat(context.Features.Board.RunnerIdentity)
         .Count(card => context.Definition(card)?.Behavior?.Triggers.Any(trigger => trigger.Occurrence == OccurrenceKind.RunSuccessful) == true);
 
-    /// <summary>v39: the counters an asset paying by them is advanced to; past them, the Runner's trash or access costs too much.</summary>
-    private const int MaximumPaidCounters = 4;
-
-    /// <summary>
-    /// v39: what each advancement counter on an advanceable asset pays when the Corp's turn begins (Idiosyncresis: 3 credits to
-    /// the Corp, 2 lost by the Runner), or 0 for any other card.
-    /// </summary>
-    private static int CounterPayout(HeuristicContext context, CardEvaluationDescriptor? definition) =>
-        definition is { Agenda: null, Printed.CardClass: RuntimeCardClass.Asset, Behavior: { CanBeAdvanced: true } behavior }
-            ? behavior.Triggers.Where(trigger => trigger.Occurrence == OccurrenceKind.TurnBegin)
-                .SelectMany(trigger => HeuristicContext.Flatten(trigger.Instructions))
-                .Where(instruction => instruction.AmountOperand?.Kind == BehaviorAmountKind.SourceAdvancementCounters)
-                .Sum(instruction => instruction.Kind switch
-                {
-                    BehaviorInstructionKind.GainCredits when instruction.Recipient != BehaviorPlayerSelector.Runner => instruction.AmountOperand!.Multiplier * context.CreditValue,
-                    BehaviorInstructionKind.LoseCredits when instruction.Recipient == BehaviorPlayerSelector.Runner => instruction.AmountOperand!.Multiplier * 80,
-                    _ => 0,
-                })
-            : 0;
-
     /// <summary>A card whose damage grows with its advancement counters (an advanceable trap).</summary>
     private static bool ScalesWithCounters(CardEvaluationDescriptor? definition) =>
         definition?.Behavior is { CanBeAdvanced: true } behavior
@@ -534,11 +486,6 @@ public sealed partial class CorpHeuristicPolicy
             if (!agendaServer
                 && context.Self.Credits - cost < AgendaIceReserve(context))
                 return Value(-200, "rez/keep-credits-for-the-agenda-ice", approximate: true);
-            // v38: rezzing ICE of the subtype the identity's ability needs arms that ability on an agenda's server.
-            if (context.Configuration.PolicyVersion == V38 && IdentitySubtype(context) is { } subtype && HasSubtype(definition, subtype)
-                && server?.Root.Any(card => context.Definition(card)?.Agenda is not null) == true
-                && !server.Ice.Concat(server.Root).Any(card => card is { Rezzed: true } && HasSubtype(context.Definition(card), subtype)))
-                force += IdentityIceBonus;
             return Value(force + context.ServerValue(server) + RunDenialValue(context, server) - cost * 30,
                 "rez/relevant-protection-and-denial", approximate: true);
         }
@@ -626,10 +573,7 @@ public sealed partial class CorpHeuristicPolicy
             int perTurn = definition.Behavior?.Triggers.Where(trigger => trigger.Occurrence == OccurrenceKind.TurnBegin)
                 .SelectMany(trigger => trigger.Instructions).Where(instruction => instruction.Kind == BehaviorInstructionKind.GainCredits)
                 .Sum(instruction => instruction.Amount) ?? 0;
-            // v39: an asset that pays by its counters when the Corp's turn begins pays nothing face down; with counters on it,
-            // it is rezzed in the last windows before that turn, as a turn-income asset is.
-            int counterPayout = context.Configuration.PolicyVersion == V39 ? CounterPayout(context, definition) * (card?.AdvancementCounters ?? 0) : 0;
-            if (futureIncome == 0 && immediateDraw == 0 && perTurn == 0 && counterPayout == 0) return Value(-10, "rez/no-current-payoff", approximate: true);
+            if (futureIncome == 0 && immediateDraw == 0 && perTurn == 0) return Value(-10, "rez/no-current-payoff", approximate: true);
             // v12 (self-play review, 28 September): an economy asset rezzed mid-way through the Runner's
             // turn shows it to a Runner who can still run and trash it; it waits for the last windows
             // before the Corp's turn, where auto-pass also stops a human.
@@ -643,7 +587,6 @@ public sealed partial class CorpHeuristicPolicy
                 && definition.Behavior?.Triggers.Any(trigger => trigger.Occurrence == OccurrenceKind.TurnBegin) == true)
                 return Value(-10, "rez/economy-waits-for-the-runner-turn-end", approximate: true);
             // It waits, as the assets above do, for the last windows of the Runner's turn.
-            if (counterPayout > 0) return Value(counterPayout - cost * context.CreditValue, "rez/counter-asset-before-turn", approximate: true);
             if (futureIncome == 0 && immediateDraw == 0)
                 return Value(60 + perTurn * 80 - cost * 30, "rez/turn-income-asset", approximate: true);
             if (immediateDraw >= context.Features.Board.HiddenZoneCounts.CorpDeck) return Value(-10000, "rez/avoid-deck-out");

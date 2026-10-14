@@ -191,22 +191,6 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     /// HQ an optional draw falls below a basic credit.
     /// </summary>
     public const string V34 = "corp-heuristic-v34";
-    /// <summary>
-    /// V34 with an identity's ability kept live where it matters (the steal-diagnosis after the chiriboga notes): when the
-    /// Corp identity ends a run by a rezzed card of a subtype in the attacked server (LEO Construction's bioroids), ICE of
-    /// that subtype goes on the remote an agenda is in or waits for, is rezzed when the Runner reaches it there, and the
-    /// once-a-turn ability is kept for the run with something at stake while another remote holds an agenda. 68 of 85
-    /// agendas stolen from LEO's remotes were behind no rezzed bioroid, and the other 17 came after LEO had spent its
-    /// ability that turn.
-    /// </summary>
-    public const string V38 = "corp-heuristic-v38";
-    /// <summary>
-    /// V34 with an asset that pays by its advancement counters when the Corp's turn begins (Idiosyncresis: 3 credits for the
-    /// Corp and 2 lost by the Runner for each) advanced and rezzed, as an advanceable trap is (the misplay sweep, 13 October
-    /// 2026). Earlier versions saw only damage grow with counters: in 400 Elevation and 400 NSG core-set deals the Corp
-    /// installed Idiosyncresis about once a game in five decks and advanced it once in all.
-    /// </summary>
-    public const string V39 = "corp-heuristic-v39";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
     /// V23 fixes V22's faults the reviews of batch 4's losses to Codex found (1 October: known traps advanced, two agendas
@@ -227,17 +211,17 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     public const string PolicyVersion = V34;
     /// <summary>The latest version that never plans: the planner's model of the Corp.</summary>
     public const string LatestHeuristic = V8;
-    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25, V26, V27, V28, V29, V30, V31, V34, V38, V39];
+    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25, V26, V27, V28, V29, V30, V31, V34];
 
     /// <summary>Whether the version keeps the A9 tracker of the Runner's hidden cards (v26).</summary>
-    public static bool UsesTracker(string version) => version is V26 or V27 or V28 or V29 or V30 or V31 or V34 or V38 or V39;
+    public static bool UsesTracker(string version) => version is V26 or V27 or V28 or V29 or V30 or V31 or V34;
 
     public CorpHeuristicPolicy() : this(PolicyVersion) { }
 
     public CorpHeuristicPolicy(string version)
     {
-        if (version is not (V31 or V34 or V38 or V39))
-            throw new ArgumentException($"The live Corp policy is {V31}, {V34}, {V38} or {V39}; '{version}' is {nameof(LegacyCorpPolicy)}.", nameof(version));
+        if (version is not (V31 or V34))
+            throw new ArgumentException($"The live Corp policy is {V31} or {V34}; '{version}' is {nameof(LegacyCorpPolicy)}.", nameof(version));
         Version = version;
     }
 
@@ -353,7 +337,7 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     /// 0.55 times a game). A larger HQ raises the threshold by its extra size (C13's hand-size modifiers).
     /// </summary>
     internal static int FloodedDraw(HeuristicContext context) =>
-        context.Configuration.PolicyVersion is V34 or V38 or V39 && context.AgendaCount >= 3 + Math.Max(0, (context.Self.MaximumHandSize ?? 5) - 5)
+        context.Configuration.PolicyVersion == V34 && context.AgendaCount >= 3 + Math.Max(0, (context.Self.MaximumHandSize ?? 5) - 5)
             ? context.DrawValue + context.CreditValue : 0;
 
     private static AgentUtility Mulligan(HeuristicContext context, NumberChoiceParameters choice)

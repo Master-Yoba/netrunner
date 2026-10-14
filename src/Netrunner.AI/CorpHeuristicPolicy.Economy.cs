@@ -34,23 +34,6 @@ public sealed partial class CorpHeuristicPolicy
         if (NowOrNever(declaration.Conditions) && context.Definition(card)?.Behavior?.Instructions is { } played
             && HeuristicContext.Flatten(played).Any(instruction => instruction.Kind == BehaviorInstructionKind.GainClicks))
             benefit += NowOrNeverBonus;
-        // v38 (the guide's C11): a once-a-turn ability that ends a run is kept for the run with something at stake while
-        // another remote holds an agenda: not spent on a remote without one, an HQ without one, or Archives.
-        if (context.Configuration.PolicyVersion == V38 && declaration.UsageLimit == BehaviorAbilityUsageLimit.OncePerTurn
-            && declaration.Instructions.Any(instruction => instruction.Kind == BehaviorInstructionKind.EndRun)
-            && context.Features.Board.Run?.AttackedServer is { } attackedId && context.Server(new ServerId(attackedId)) is { } attacked)
-        {
-            bool atStake = attacked.Kind switch
-            {
-                ServerKind.Remote => attacked.Root.Any(card => context.Definition(card)?.Agenda is not null),
-                ServerKind.Headquarters => context.AgendaCount > 0,
-                ServerKind.RAndD => true,
-                _ => false,
-            };
-            bool agendaElsewhere = context.Features.Board.Servers.Any(server => server.Kind == ServerKind.Remote && server.Id != attacked.Id
-                && server.Root.Any(card => context.Definition(card)?.Agenda is not null));
-            if (!atStake && agendaElsewhere) benefit -= 500;
-        }
         int costs = ability.Costs.Where(cost => cost.Kind == BehaviorCostKind.Credits).Sum(cost => cost.Amount) * context.CreditValue;
         costs += ability.Costs.Where(cost => cost.Kind == BehaviorCostKind.TrashSelf
             || cost.Kind == BehaviorCostKind.RemoveSelfFromGame).Sum(_ => context.CardValue(card, installed: true));

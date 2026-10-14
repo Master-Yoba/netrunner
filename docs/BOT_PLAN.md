@@ -554,3 +554,22 @@ improved against it, one concept at a time:
   Glacier; Topan, MuslihaT, Magdalene). Only the archetype modules those decks use are worked; a short note per deck
   (its plan, key cards, what it fears, how to play against it) checks the archetype knobs (`CorpArchetypes`,
   `RunnerArchetypes`, `AgentPersonalities`) against how the deck should play.
+
+### 10.4 Where the heuristic track stops (15 October 2026)
+
+On the user's direction the bot work pauses for the Vantage Point card set ([plan](VANTAGE_POINT_PLAN.md)). The defaults
+are **Corp v34 and Runner v37**. The record is in [BOT_VERSIONS.md](BOT_VERSIONS.md).
+
+- **What shipped:** Runner v30 (the Untaian note, +30 Elo), v32 (advanced remote cards valued as agendas, +19), v35
+  (Madani's hosting priced, +27) and v37 (Measured Response rules on v35, +8); Corp v34 (the scoring server protected
+  first, no optional draw into a flooded HQ, +18). Every one fixed a clear, large misplay found by counting games.
+- **What didn't:** deck-specific rules with a clear mechanism landed inside the noise (Corp v32 to v33 and v35 to v39,
+  Runner v29, v31, v33, v34, v36 and v38). Holding agendas in a flooded HQ cost 50 Elo.
+- **What the box has left:** the misplay sweep (`ai-offers`) found no card the box decks are offered often and misuse.
+  What remains is timing and sequencing (when to run, score, rez), which needs a finer probe than counting plays.
+- **Open leads, for when the track resumes:**
+  - a phase-aware sweep (`ai-offers` by early, middle and late game), or `ai-ladder-diff` grouped over lost games;
+  - Plutus, never rezzed in three Elevation and NSG decks; the Runner's Conduit and Shred, rarely played;
+  - play against a person: every gain so far is bot against bot.
+- **What carries into Vantage Point:** the sweep runs on each card batch's decks (its plan, section 6), so a new card
+  the bots install and never use is found while its batch is open.
