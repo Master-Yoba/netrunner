@@ -41,8 +41,8 @@ public sealed class PolicyVersionTests
             // The shipped versions stay live beside the defaults, Runner v37 and Corp v34: Runner v27 so the regret suite can
             // compare it with v28 (S1.5 follow-up), and the ones bot plan H3 shipped. Versions never shipped were removed.
             Type expected = version == live || side == PlayerSide.Runner
-                && version is RunnerHeuristicPolicy.V27 or RunnerHeuristicPolicy.V28 or RunnerHeuristicPolicy.V30 or RunnerHeuristicPolicy.V32 or RunnerHeuristicPolicy.V35 or RunnerHeuristicPolicy.V38
-                || side == PlayerSide.Corp && version is CorpHeuristicPolicy.V31 or CorpHeuristicPolicy.V38 or CorpHeuristicPolicy.V39
+                && version is RunnerHeuristicPolicy.V27 or RunnerHeuristicPolicy.V28 or RunnerHeuristicPolicy.V30 or RunnerHeuristicPolicy.V32 or RunnerHeuristicPolicy.V35
+                || side == PlayerSide.Corp && version is CorpHeuristicPolicy.V31
                 ? side == PlayerSide.Corp ? typeof(CorpHeuristicPolicy) : typeof(RunnerHeuristicPolicy)
                 : side == PlayerSide.Corp ? typeof(LegacyCorpPolicy) : typeof(LegacyRunnerPolicy);
             Assert.IsType(expected, policy);

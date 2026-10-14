@@ -2686,3 +2686,11 @@ v38 becomes the default only if that interval clears zero. Seeds 8 and 21 are no
 Elo), with 489 deals changed and 153 results; Topan's four matchups read −0.08 to +0.01, each interval admitting zero.
 With the declared run (+5 [−5, +15]), two judged runs agree that v38 is level; the sweep's +0.021 was a third set's noise.
 The default stays Runner v37.
+
+## The versions never shipped, removed (15 October 2026)
+
+Corp v38 (LEO's identity kept live), Corp v39 (Idiosyncresis worked) and Runner v38 (Topan's empty grip) were level on
+their declared ladders and are removed, with their ladder entrants (`standard-c38`, `standard-c39`, `standard-r38`),
+tests and fixtures, after chiriboga's rule that a failed idea's code goes and its record stays (as #145 did). Their
+records above stand. The live versions are Corp v31 and v34, and Runner v27, v28, v30, v32, v35 and v37; their games are
+unchanged. The heuristic track pauses here for the Vantage Point card set (bot plan, section 10.4).

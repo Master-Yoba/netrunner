@@ -28,22 +28,4 @@ public sealed class RunnerPunisherV34Tests
         SavedChoice choice = await SavedDecision.ChooseAsync(replay, definition, 379, PlayerSide.Runner, version);
         Assert.True(plays == (choice.Chosen.Kind == ActionKind.PlayCard), $"{version} chose {choice.Chosen.Kind} {choice.Chosen.Description}.");
     }
-
-    /// <summary>
-    /// Runner v38 (MATCHUP_PT_UNTAIAN.md's Topan knob): a box ladder game, LEO Glacier against Topan, action 476, the last
-    /// click with two cards in the grip. Topan's identity install takes one and its meat damage the other, ending the turn
-    /// with no grip; v37 does it, v38 doesn't.
-    /// </summary>
-    [Theory]
-    [InlineData(RunnerHeuristicPolicy.V37, true)]
-    [InlineData(RunnerHeuristicPolicy.V38, false)]
-    public async Task TopanKeepsACardAtTheTurnsEnd(string version, bool empties)
-    {
-        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
-        (ReplayArtifact replay, FullMatchDefinition definition) = SavedDecision.ReadSaved(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "Fixtures",
-            "saved-games", "runner-topan-empty-grip"));
-        SavedChoice choice = await SavedDecision.ChooseAsync(replay, definition, 476, PlayerSide.Runner, version);
-        Assert.True(empties == choice.Chosen.Parameters is AbilityActionParameters { AbilityKey: "topan-install" },
-            $"{version} chose {choice.Chosen.Kind} {choice.Chosen.Description}.");
-    }
 }

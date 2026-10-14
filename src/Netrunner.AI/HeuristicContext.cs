@@ -225,9 +225,6 @@ internal sealed class HeuristicContext
     /// </summary>
     public const int PunisherGeneration = 32;
 
-    /// <summary>Runner v38: v37 with an empty grip priced when the Runner's own damage empties it (Topan's installs).</summary>
-    public const int EmptyGripGeneration = 33;
-
     /// <summary>Whether the rules against a punishing operation apply: v37's and later.</summary>
     public bool PunisherRules => Generation >= PunisherGeneration;
 

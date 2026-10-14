@@ -214,42 +214,6 @@ public sealed class CorpCodexV20Tests
         Assert.True((chosen.Kind == ActionKind.DrawCard) == draws, $"{version} chose {chosen.Kind} {chosen.Description}.");
     }
 
-    /// <summary>
-    /// Corp v38: LEO Construction ends a run by trashing a rezzed bioroid in the attacked server, so its remote is protected
-    /// by a bioroid; 68 of 85 agendas stolen from LEO's remotes were behind none. A box ladder game, LEO Glacier against
-    /// MuslihaT, action 175: v34 puts N-Pot on the remote, v38 Bumi 1.0.
-    /// </summary>
-    [Theory]
-    [InlineData(CorpHeuristicPolicy.V34, false)]
-    [InlineData(CorpHeuristicPolicy.V38, true)]
-    public async Task LeosRemoteIsProtectedByABioroid(string version, bool bioroid)
-    {
-        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
-        (LegalAction chosen, GameState state) = await ChooseAtAsync("corp-identity-bioroid-remote", version, 175);
-        (_, FullMatchDefinition definition) = SavedDecision.ReadSaved(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "Fixtures",
-            "saved-games", "corp-identity-bioroid-remote"));
-        bool installsBioroid = chosen.Parameters is InstallCardParameters install
-            && definition.Runtime.TryGet(state.GetCard(install.CardId).DefinitionId, out CardRuntimeSpec spec)
-            && spec.Subtypes.Contains("bioroid", StringComparer.OrdinalIgnoreCase);
-        Assert.True(installsBioroid == bioroid, $"{version} chose {chosen.Kind} {chosen.Description}.");
-    }
-
-    /// <summary>
-    /// Corp v39 (the misplay sweep): Idiosyncresis pays 3 credits and costs the Runner 2 for each counter on it when the Corp's
-    /// turn begins, and earlier versions never advanced it. An Elevation ladder game, PT Untaian against Magdalene, action 314:
-    /// v34 doesn't advance it, v39 does.
-    /// </summary>
-    [Theory]
-    [InlineData(CorpHeuristicPolicy.V34, false)]
-    [InlineData(CorpHeuristicPolicy.V39, true)]
-    public async Task IdiosyncresisIsAdvancedForItsPayout(string version, bool advances)
-    {
-        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
-        (LegalAction chosen, GameState state) = await ChooseAtAsync("corp-counter-asset-advanced", version, 314);
-        bool advanced = chosen.Parameters is AdvanceCardParameters advance && state.GetCard(advance.CardId).DefinitionId.Value == "35061";
-        Assert.True(advanced == advances, $"{version} chose {chosen.Kind} {chosen.Description}.");
-    }
-
     /// <summary>The Corp version's choice at the recorded decision <paramref name="sequence"/>, having watched the game to it.</summary>
     private static async Task<(LegalAction Chosen, GameState State)> ChooseAtAsync(string fixture, string version, long sequence)
     {

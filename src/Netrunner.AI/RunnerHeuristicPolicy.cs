@@ -187,12 +187,6 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// floor, a steal that arms it), re-tested once the ladder's bootstrap kept candidates paired with their baselines.
     /// </summary>
     public const string V37 = "runner-heuristic-v37";
-    /// <summary>
-    /// V37 with an empty grip priced when the Runner's own damage empties it (the steps-3-and-4 diagnosis): Topan's identity
-    /// installs (5.6 a game) left its grip empty about a third of the time, a lethal window against any damage, and Topan
-    /// lost 22% of its games to flatlines.
-    /// </summary>
-    public const string V38 = "runner-heuristic-v38";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
     /// V18 is V15 with only the reinstall fix (no install over its own copy or a second console), a fix that can only remove
@@ -219,22 +213,22 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// with, so the shipped Corp planner plays as it did.
     /// </summary>
     public const string LatestHeuristic = V7;
-    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25, V26, V27, V28, V30, V32, V35, V37, V38];
+    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25, V26, V27, V28, V30, V32, V35, V37];
 
     /// <summary>Whether the version's memory of a face-down root card survives installs in that root (v20).</summary>
-    public static bool KeepsRootMemoryThroughInstalls(string version) => version is V20 or V21 or V22 or V23 or V24 or V25 or V26 or V27 or V28 or V30 or V32 or V35 or V37 or V38;
+    public static bool KeepsRootMemoryThroughInstalls(string version) => version is V20 or V21 or V22 or V23 or V24 or V25 or V26 or V27 or V28 or V30 or V32 or V35 or V37;
 
     /// <summary>Whether the version keeps the A9a tracker of the Corp's hidden cards (v21).</summary>
-    public static bool UsesTracker(string version) => version is V21 or V22 or V23 or V24 or V25 or V26 or V27 or V28 or V30 or V32 or V35 or V37 or V38;
+    public static bool UsesTracker(string version) => version is V21 or V22 or V23 or V24 or V25 or V26 or V27 or V28 or V30 or V32 or V35 or V37;
 
     public RunnerHeuristicPolicy() : this(PolicyVersion) { }
 
     public RunnerHeuristicPolicy(string version)
     {
-        if (version is not (V27 or V28 or V30 or V32 or V35 or V37 or V38))
-            throw new ArgumentException($"The live Runner policy is one of {V27}, {V28}, {V30}, {V32}, {V35}, {V37} and {V38}; '{version}' is {nameof(LegacyRunnerPolicy)}.", nameof(version));
+        if (version is not (V27 or V28 or V30 or V32 or V35 or V37))
+            throw new ArgumentException($"The live Runner policy is one of {V27}, {V28}, {V30}, {V32}, {V35} and {V37}; '{version}' is {nameof(LegacyRunnerPolicy)}.", nameof(version));
         Version = version;
-        _contextGeneration = version switch { V38 => HeuristicContext.EmptyGripGeneration, V37 => HeuristicContext.PunisherGeneration, V35 => HeuristicContext.ConsoleGeneration, V32 => 27, V30 => 25, V28 => 23, _ => 22 };
+        _contextGeneration = version switch { V37 => HeuristicContext.PunisherGeneration, V35 => HeuristicContext.ConsoleGeneration, V32 => 27, V30 => 25, V28 => 23, _ => 22 };
     }
 
     /// <summary>
