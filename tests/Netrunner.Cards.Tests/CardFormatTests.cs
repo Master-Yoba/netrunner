@@ -29,7 +29,11 @@ public sealed class CardFormatTests
         Assert.False(startup.Complete);
         Assert.Equal(["vantage_point"], startup.MissingPacks);
         Assert.True(startup.IsBanned("35045"));
-        Assert.Equal(new HighValueAgendaLimit(3, 3), startup.DeckRules.HighValueAgendaLimit);
+        // Balance Update 26.09 (Vantage Point plan, D-VP-5): NBN: Reality Plus is unbanned and a Corp deck may hold 4 agendas
+        // worth 3 or more points.
+        Assert.Equal("startup-balance-update-26-09", startup.Restriction!.Id);
+        Assert.False(startup.IsBanned("30051"));
+        Assert.Equal(new HighValueAgendaLimit(3, 4), startup.DeckRules.HighValueAgendaLimit);
         Assert.Null(catalog.Get(CardFormatIds.Gateway).Restriction);
         Assert.Null(catalog.Get(CardFormatIds.NsgCoreSets).Restriction);
     }
@@ -221,7 +225,7 @@ public sealed class CardFormatTests
             if (deck.Cards.Select(static card => card.Code).Append(deck.IdentityCode).Any(startupBans.Banned.Contains)) illegalUnderBans++;
         }
 
-        // NSG built these for the Core Sets without the Startup bans: 9 Corp decks use a card banned in 26.05.
+        // NSG built these for the Core Sets without the Startup bans: 9 Corp decks use a card banned in 26.09 (as in 26.05).
         Assert.Equal(9, illegalUnderBans);
     }
 

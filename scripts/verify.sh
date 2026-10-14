@@ -14,7 +14,7 @@ elif (($# != 0)); then
   exit 1
 fi
 if ((m4_gate == 1)); then
-  for required_pack in system-gateway elevation; do
+  for required_pack in system-gateway elevation vantage-point; do
     for required_content in cards.json manifest.json SOURCE_COPYRIGHT.md; do
       if [[ ! -f "$verify_root/data/vendor/$required_pack/$required_content" ]]; then
         echo "M4 gate requires authenticated official content; missing $required_pack/$required_content." >&2
@@ -79,6 +79,7 @@ card_data_cards="$card_data_dir/cards.json"
 card_data_manifest="$card_data_dir/manifest.json"
 card_data_copyright="$card_data_dir/SOURCE_COPYRIGHT.md"
 elevation_data_dir="$verify_root/data/vendor/elevation"
+vantage_point_data_dir="$verify_root/data/vendor/vantage-point"
 card_data_present=0
 card_data_content_enabled=0
 official_content_properties=(
@@ -86,10 +87,12 @@ official_content_properties=(
   "-p:NetrunnerCardDataMode=official"
   "-p:NetrunnerCardDataInputRoot=$card_data_dir"
   "-p:NetrunnerElevationCardDataInputRoot=$elevation_data_dir"
+  "-p:NetrunnerVantagePointCardDataInputRoot=$vantage_point_data_dir"
 )
-# EL.1: an official snapshot is both packs, each with its own three files.
+# EL.1, VP.1: an official snapshot is every pack, each with its own three files.
 for card_data_file in "$card_data_cards" "$card_data_manifest" "$card_data_copyright" \
-  "$elevation_data_dir/cards.json" "$elevation_data_dir/manifest.json" "$elevation_data_dir/SOURCE_COPYRIGHT.md"; do
+  "$elevation_data_dir/cards.json" "$elevation_data_dir/manifest.json" "$elevation_data_dir/SOURCE_COPYRIGHT.md" \
+  "$vantage_point_data_dir/cards.json" "$vantage_point_data_dir/manifest.json" "$vantage_point_data_dir/SOURCE_COPYRIGHT.md"; do
   if [[ -e "$card_data_file" ]]; then
     card_data_present=$((card_data_present + 1))
   fi
@@ -98,8 +101,8 @@ if ((card_data_present == 0)); then
   echo "card-data=synthetic (local System Gateway snapshot absent; no network fetch)"
   echo "Provision official content explicitly with:"
   echo "  ./scripts/update-card-data.sh --commit 236140cf84491c23995b028bc791281837520b97 --retrieval-date 2026-08-28"
-elif ((card_data_present == 6)) && [[ -f "$card_data_cards" && -f "$card_data_manifest" && -f "$card_data_copyright" ]]; then
-  for card_data_pack in sg elev; do
+elif ((card_data_present == 9)) && [[ -f "$card_data_cards" && -f "$card_data_manifest" && -f "$card_data_copyright" ]]; then
+  for card_data_pack in sg elev vp; do
     dotnet run --project "$verify_root/src/Netrunner.Cli" --no-build --no-restore -- \
       card-data validate --root "$verify_root" --pack "$card_data_pack" --json
   done
@@ -112,6 +115,7 @@ elif ((card_data_present == 6)) && [[ -f "$card_data_cards" && -f "$card_data_ma
     --no-restore --nologo -m:1 \
     -p:NetrunnerContentEnabled=true -p:NetrunnerCardDataInputRoot="$card_data_dir" \
     -p:NetrunnerElevationCardDataInputRoot="$elevation_missing_dir/absent" \
+    -p:NetrunnerVantagePointCardDataInputRoot="$vantage_point_data_dir" \
     >"$elevation_missing_log" 2>&1; then
     echo "DATA-400 missing-Elevation contract unexpectedly succeeded." >&2
     exit 1
@@ -123,6 +127,26 @@ elif ((card_data_present == 6)) && [[ -f "$card_data_cards" && -f "$card_data_ma
   fi
   rm -rf -- "$elevation_missing_dir"
   echo "card-data=missing-elevation diagnostic=PASS"
+  # VP.1: likewise without the Vantage Point pack.
+  vantage_point_missing_dir="$(mktemp -d "${TMPDIR:-/tmp}/netrunner-missing-vantage-point.XXXXXX")"
+  vantage_point_missing_log="$vantage_point_missing_dir/build.log"
+  vantage_point_missing_expected="DATA-400: normalized Vantage Point card data is missing at '$vantage_point_missing_dir/absent/cards.json'."
+  if dotnet build "$verify_root/src/Netrunner.Cards/Netrunner.Cards.csproj" \
+    --no-restore --nologo -m:1 \
+    -p:NetrunnerContentEnabled=true -p:NetrunnerCardDataInputRoot="$card_data_dir" \
+    -p:NetrunnerElevationCardDataInputRoot="$elevation_data_dir" \
+    -p:NetrunnerVantagePointCardDataInputRoot="$vantage_point_missing_dir/absent" \
+    >"$vantage_point_missing_log" 2>&1; then
+    echo "DATA-400 missing-Vantage-Point contract unexpectedly succeeded." >&2
+    exit 1
+  fi
+  if ! grep -Fq "$vantage_point_missing_expected" "$vantage_point_missing_log"; then
+    echo "DATA-400 missing-Vantage-Point diagnostic changed unexpectedly:" >&2
+    sed -n '1,80p' "$vantage_point_missing_log" >&2
+    exit 1
+  fi
+  rm -rf -- "$vantage_point_missing_dir"
+  echo "card-data=missing-vantage-point diagnostic=PASS"
   dotnet build "$verify_root/src/Netrunner.Cards/Netrunner.Cards.csproj" \
     --no-restore --nologo -m:1 \
     "${official_content_properties[@]}"
@@ -219,7 +243,8 @@ if ! diff -u "$verify_root/docs/generated/card-coverage.json" \
   echo "JSON card coverage report is stale. Regenerate it with Netrunner.CardCoverage." >&2
   exit 1
 fi
-python3 - "$coverage_report_dir/card-coverage.json" "$verify_root/data/elevation/batch-registry.json" <<'PY'
+python3 - "$coverage_report_dir/card-coverage.json" "$verify_root/data/elevation/batch-registry.json" \
+  "$verify_root/data/vantage-point/batch-registry.json" <<'PY'
 import json
 import sys
 
@@ -238,6 +263,13 @@ counts = sets.get("elevation", {})
 if counts.get("total") != 82 or counts.get("registered") != registered or counts.get("tested") != registered:
     raise SystemExit(f"Elevation coverage must list 82 cards with {registered} registered and tested: {counts}")
 print(f"elevation-coverage=PASS total=82 registered={registered} diagnostics=0")
+with open(sys.argv[3], encoding="utf-8") as registry_file:
+    vantage_point = json.load(registry_file)
+registered = sum(1 for card in vantage_point["cards"] if card["status"] == "registered")
+counts = sets.get("vantage-point", {})
+if counts.get("total") != 66 or counts.get("registered") != registered or counts.get("tested") != registered:
+    raise SystemExit(f"Vantage Point coverage must list 66 cards with {registered} registered and tested: {counts}")
+print(f"vantage-point-coverage=PASS total=66 registered={registered} diagnostics=0")
 PY
 m1_replay_dir="$(mktemp -d "$verify_temp_root/netrunner-m1.XXXXXX")"
 if [[ -z "$m1_replay_dir" || ! -d "$m1_replay_dir" ]]; then

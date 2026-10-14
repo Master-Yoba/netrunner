@@ -6,9 +6,9 @@ usage() {
 Usage: scripts/update-card-data.sh --commit <40-hex-sha> --retrieval-date YYYY-MM-DD
 
 The command downloads the official repository at one immutable commit, creates
-local-only metadata for each official pack (System Gateway and Elevation),
+local-only metadata for each official pack (System Gateway, Elevation and Vantage Point),
 validates each offline, and replaces
-data/vendor/{system-gateway,elevation}/{cards.json,manifest.json,SOURCE_COPYRIGHT.md}.
+data/vendor/{system-gateway,elevation,vantage-point}/{cards.json,manifest.json,SOURCE_COPYRIGHT.md}.
 EOF
 }
 
@@ -77,9 +77,9 @@ case "$tmp_dir" in
 esac
 
 # Each official pack: upstream code, expected record count, local directory.
-pack_codes=(sg elev)
-pack_counts=(77 82)
-pack_dirs=(system-gateway elevation)
+pack_codes=(sg elev vp)
+pack_counts=(77 82 66)
+pack_dirs=(system-gateway elevation vantage-point)
 
 data_parent="$repo_root/data/vendor"
 mkdir -p "$data_parent"
@@ -176,6 +176,7 @@ required = {
     f"{root}/COPYRIGHT.md",
     f"{root}/pack/sg.json",
     f"{root}/pack/elev.json",
+    f"{root}/pack/vp.json",
     f"{root}/packs.json",
     f"{root}/cycles.json",
     f"{root}/schema/v1/card_schema.json",
@@ -231,6 +232,7 @@ if items.get("additionalProperties") is not False or not required:
 expected_packs = {
     "sg": (77, "system-gateway"),
     "elev": (82, "elevation"),
+    "vp": (66, "vantage-point"),
 }
 for pack_code, (count, cycle_code) in expected_packs.items():
     cards = read(f"pack/{pack_code}.json")

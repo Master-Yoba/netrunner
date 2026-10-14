@@ -21,18 +21,24 @@ public static class CardDataResource
         LoadEmbeddedElevationCore,
         LazyThreadSafetyMode.ExecutionAndPublication);
 
+    private static readonly Lazy<CardDataSet?> EmbeddedVantagePoint = new(
+        LoadEmbeddedVantagePointCore,
+        LazyThreadSafetyMode.ExecutionAndPublication);
+
     /// <summary>The authenticated source mode selected during the build.</summary>
     public static string EmbeddedMode => GeneratedCardData.Mode;
 
     /// <summary>
     /// The pack codes embedded in this build, in pool order. A synthetic
     /// build embeds only its fixture pack; an official build embeds System
-    /// Gateway and Elevation, each authenticated by its own manifest.
+    /// Gateway, Elevation and Vantage Point, each authenticated by its own manifest.
     /// </summary>
     public static IReadOnlyList<string> EmbeddedPackCodes =>
-        EmbeddedElevation.Value is null
-            ? [LoadEmbedded().Manifest.PackCode]
-            : [LoadEmbedded().Manifest.PackCode, OfficialCardPacks.ElevationCode];
+        [
+            LoadEmbedded().Manifest.PackCode,
+            .. EmbeddedElevation.Value is null ? Array.Empty<string>() : [OfficialCardPacks.ElevationCode],
+            .. EmbeddedVantagePoint.Value is null ? Array.Empty<string>() : [OfficialCardPacks.VantagePointCode],
+        ];
 
     /// <summary>Whether this build embeds the named pack.</summary>
     public static bool HasEmbeddedPack(string packCode) =>
@@ -40,8 +46,8 @@ public static class CardDataResource
 
     /// <summary>
     /// Loads one embedded pack by code. The primary pack is the payload
-    /// <see cref="LoadEmbedded"/> returns; Elevation is a second pack that is
-    /// present only in official builds.
+    /// <see cref="LoadEmbedded"/> returns; Elevation and Vantage Point are further
+    /// packs present only in official builds.
     /// </summary>
     public static CardDataSet LoadEmbeddedPack(string packCode)
     {
@@ -56,6 +62,12 @@ public static class CardDataResource
             && EmbeddedElevation.Value is { } elevation)
         {
             return elevation;
+        }
+
+        if (string.Equals(packCode, OfficialCardPacks.VantagePointCode, StringComparison.Ordinal)
+            && EmbeddedVantagePoint.Value is { } vantagePoint)
+        {
+            return vantagePoint;
         }
 
         throw new CardDataValidationException(
@@ -175,6 +187,29 @@ public static class CardDataResource
         }
 
         return elevation;
+    }
+
+    private static CardDataSet? LoadEmbeddedVantagePointCore()
+    {
+        if (GeneratedCardData.VantagePointCardsBase64.Length == 0
+            && GeneratedCardData.VantagePointManifestBase64.Length == 0
+            && GeneratedCardData.VantagePointCopyrightBase64.Length == 0)
+        {
+            return null;
+        }
+
+        CardDataSet vantagePoint = LoadBytes(
+            Decode(GeneratedCardData.VantagePointCardsBase64, "Vantage Point cards"),
+            Decode(GeneratedCardData.VantagePointManifestBase64, "Vantage Point manifest"),
+            Decode(GeneratedCardData.VantagePointCopyrightBase64, "Vantage Point copyright"),
+            requireOfficialGateway: true);
+        if (!string.Equals(vantagePoint.Manifest.PackCode, OfficialCardPacks.VantagePointCode, StringComparison.Ordinal))
+        {
+            throw new CardDataValidationException(
+                $"DATA-400: the embedded Vantage Point payload is pack '{vantagePoint.Manifest.PackCode}'.");
+        }
+
+        return vantagePoint;
     }
 
     private static byte[] Decode(string value, string description)

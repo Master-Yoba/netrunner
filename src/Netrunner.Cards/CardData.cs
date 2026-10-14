@@ -275,6 +275,8 @@ public static class OfficialCardPacks
 
     public const string ElevationCode = "elev";
 
+    public const string VantagePointCode = "vp";
+
     public static OfficialCardPack SystemGateway { get; } = new(
         SystemGatewayCode,
         "System Gateway – Remastered Edition",
@@ -301,8 +303,21 @@ public static class OfficialCardPacks
             ["35082"] = "Mahkota Langit Grid",
         });
 
+    public static OfficialCardPack VantagePoint { get; } = new(
+        VantagePointCode,
+        "Vantage Point",
+        "pack/vp.json",
+        66,
+        "data/vendor/vantage-point",
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["36009"] = "Virtual Intelligence, P.I.: “You Can Call Me Vic”",
+            ["36036"] = "Méliès U: Only the Brightest",
+            ["36066"] = "Let Them Dream",
+        });
+
     /// <summary>Every official pack, in pool order.</summary>
-    public static IReadOnlyList<OfficialCardPack> All { get; } = [SystemGateway, Elevation];
+    public static IReadOnlyList<OfficialCardPack> All { get; } = [SystemGateway, Elevation, VantagePoint];
 
     public static OfficialCardPack? Find(string? packCode) =>
         All.FirstOrDefault(pack => string.Equals(pack.PackCode, packCode, StringComparison.Ordinal));
