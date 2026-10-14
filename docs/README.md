@@ -8,6 +8,7 @@ are kept unchanged in [`history/`](history/) as design history and gate evidence
 
 - [Product requirements (PRD v0.2)](netrunner_solo_prd_v0.2.md)
 - [Implementation plan](IMPLEMENTATION_PLAN.md): milestones, architecture and decisions
+- [Vantage Point plan](VANTAGE_POINT_PLAN.md): the third card set, which completes Startup 2026 (October 2026)
 - [Bot plan](BOT_PLAN.md): the authoritative AI opponent plan (search first, October 2026), its
   [implementation steps](BOT_PLAN_STEPS.md), and [the evidence record](BOT_VERSIONS.md) of every step and policy version
 - [Strategy fundamentals](STRATEGY_FUNDAMENTALS.md): how to play either side, as rules with IDs, for the heuristic
@@ -20,6 +21,7 @@ are kept unchanged in [`history/`](history/) as design history and gate evidence
 
 - [M4 primitive audit](M4_PRIMITIVES.md): the engine's rule primitives for System Gateway (31 August baseline)
 - [Elevation primitive audit](ELEVATION_PRIMITIVES.md): every Elevation card mapped to the vocabulary it needs
+- [Vantage Point primitive audit](VANTAGE_POINT_PRIMITIVES.md): every Vantage Point card mapped to the vocabulary it needs
 - [M5 gate](M5_GATE.md): what `make m5-gate` runs and the frozen inputs it checks
 - [AI benchmarks](M5_BENCHMARKS.md): `ai-benchmark`, `ai-tactics` and their reports
 - [Developer engine sessions](M5_DEVELOPER.md): `make play-dev` and the developer tools
