@@ -60,8 +60,12 @@ and Shaper. **This milestone implements all 66** on the engine that plays System
   `236140cf84491c23995b028bc791281837520b97`, which already contains `vp` (66 records, codes 36001–36066).
 - **Rules:** Null Signal Comprehensive Rules 26.03 (`data/vendor/rules`), which already covers Vantage Point: bad
   publicity (10.6), interface abilities, Méliès U's copies (1.x) and Scapegoat are in it.
-- **Formats:** `startup-2026.json` exists, marked incomplete with `missingPacks: ["vantage_point"]`; its ban list
-  (Balance Update 26.05) already names one Vantage Point card, Let Them Dream (36066).
+- **Formats:** `startup-2026.json` exists, marked incomplete with `missingPacks: ["vantage_point"]`, with Balance Update
+  26.05's ban list, which already names one Vantage Point card, Let Them Dream (36066). It is out of date: Null Signal's
+  [Startup Balance Update 26.09](https://nullsignal.games/blog/startup-balance-update-26-09/), effective 21 September 2026,
+  unbanned NBN: Reality Plus (30051), keeps Cleaver, Seamless Launch, Offworld Office, Mercia B4LL4RD and Let Them Dream
+  banned, and allows a Corp deck at most 4 agendas worth 3 or more points (the snapshot has 3). The pinned upstream
+  commit predates 26.09, so its `mwl.json` doesn't have it (the review of #149).
 - **Bots:** Corp v34 and Runner v37 by default; the Core Battle Box, Gateway, Elevation and NSG core-set ladders; the
   misplay sweep (`ai-offers`), the oddity lints and the saved-game tests.
 
@@ -84,7 +88,9 @@ information and identities.
 
 **For the user to decide (each has a default the plan proceeds with):**
 - **D-VP-5, formats:**
-  - *Default:* Startup 2026 becomes complete and playable (`complete: true`, no missing packs), with its 26.05 ban list.
+  - *Default:* Startup 2026 becomes complete and playable (`complete: true`, no missing packs), on Balance Update 26.09:
+    its restriction ID, effective date (21 September 2026), ban list and agenda limit, taken from Null Signal's
+    announcement until the pinned card data carries it.
   - A "System Gateway + Elevation + Vantage Point" format with no ban list, as D-EL-10 did for the Core Battle Box,
     only if D-VP-6's decks need a banned card.
 - **D-VP-6, decks:** the bots and the menu need Startup 2026 decks.
@@ -119,7 +125,9 @@ Progress goes to `docs/VANTAGE_POINT_PROGRESS.md`.
 - **The audit review:** confirm or correct every row of VANTAGE_POINT_PRIMITIVES.md against the CR and the engine
   (`card-vocabulary --json`), the rows marked "to confirm" first. Each card's citations go to
   `data/vantage-point/rulings.json`.
-- **Formats:** Startup 2026 gains `vp` in its legal packs and keeps its ban list; it stays marked incomplete until VP.8.
+- **Formats:** Startup 2026 gains `vp` in its legal packs and moves to Balance Update 26.09 (D-VP-5): Reality Plus
+  unbanned, at most 4 agendas worth 3 or more, the source recorded in `data/formats/README.md`; a FORMAT-401 test that a
+  Reality Plus deck validates. It stays marked incomplete until VP.8.
 - **E6:** `make core-growth` reads the third registry; the Elevation figure goes into the progress record.
 - **Gate:** data loads and validates in both modes; the coverage report lists 225 cards; `verify.sh` green.
 
@@ -258,6 +266,8 @@ Elevation's ([Elevation plan](history/ELEVATION_PLAN.md), section 6), with one s
 - **Bots:** new cards that fall back to default valuations, and new card kinds the policies never value (Elevation's
   Idiosyncresis and Plutus went unused for weeks). Mitigation: D-VP-4 per batch, and the misplay sweep as a batch step.
 - **Decks:** Startup 2026's ban list or the chosen lists may not fit together. Mitigation: D-VP-5's fallback format.
+- **Formats move:** Null Signal revises Startup's restrictions every few months (26.05, then 26.09). Mitigation: VP.8
+  checks the current balance update before marking the format complete, and decks are validated against it.
 
 ## 10. For the goal session
 
