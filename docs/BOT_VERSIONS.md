@@ -2681,3 +2681,8 @@ the sweep, not to judge it.
 
 **Declared before running it:** 1,600 fresh box deals (seed 25) against Runner v37, judged by the deal-paired interval;
 v38 becomes the default only if that interval clears zero. Seeds 8 and 21 are not pooled with it.
+
+**Result.** Level, not shipped: v38 − v37 is −0.0069 [−0.0225, +0.0082] in paired score on 1,600 box deals (about −5
+Elo), with 489 deals changed and 153 results; Topan's four matchups read −0.08 to +0.01, each interval admitting zero.
+With the declared run (+5 [−5, +15]), two judged runs agree that v38 is level; the sweep's +0.021 was a third set's noise.
+The default stays Runner v37.
