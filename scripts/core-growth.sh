@@ -3,7 +3,7 @@
 # vocabulary, and runs scripts/core-growth.py with the given arguments. Usage:
 #   scripts/core-growth.sh --registry data/m4/batch-registry.json --range slice-4.7=ade5111^..fa99e86 [--json]
 #   scripts/core-growth.sh --registry data/m4/batch-registry.json --registry data/elevation/batch-registry.json \
-#     --range slice-EL.3=BASE..HEAD
+#     --registry data/vantage-point/batch-registry.json --range slice-VP.3=BASE..HEAD
 # Needs the provisioned official card data.
 set -euo pipefail
 
@@ -18,7 +18,8 @@ growth_build="$growth_root/.tools/core-growth-cli"
 dotnet build "$growth_root/src/Netrunner.Cli" -c Release --artifacts-path "$growth_build" -m:1 --disable-build-servers \
   "-p:NetrunnerCardDataGeneratedFile=$growth_build/generated/GeneratedCardData.g.cs" \
   -p:NetrunnerContentEnabled=true -p:NetrunnerCardDataMode=official "-p:NetrunnerCardDataInputRoot=$growth_data" \
-  "-p:NetrunnerElevationCardDataInputRoot=$growth_root/data/vendor/elevation" >&2
+  "-p:NetrunnerElevationCardDataInputRoot=$growth_root/data/vendor/elevation" \
+  "-p:NetrunnerVantagePointCardDataInputRoot=$growth_root/data/vendor/vantage-point" >&2
 vocabulary="$growth_build/vocabulary.json"
 dotnet "$growth_build/bin/Netrunner.Cli/release/Netrunner.Cli.dll" card-vocabulary --json > "$vocabulary"
 cd "$growth_root"

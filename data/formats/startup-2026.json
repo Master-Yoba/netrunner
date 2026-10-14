@@ -6,7 +6,7 @@
   "complete": false,
   "cardPool": "gateway-elevation",
   "legalPacks": ["sg", "elev"],
-  "missingPacks": ["vantage_point"],
+  "missingPacks": ["vp"],
   "restriction": {
     "id": "startup-balance-update-26-09",
     "banned": ["30006", "30040", "30067", "35045", "36066"],

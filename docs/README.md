@@ -8,7 +8,8 @@ are kept unchanged in [`history/`](history/) as design history and gate evidence
 
 - [Product requirements (PRD v0.2)](netrunner_solo_prd_v0.2.md)
 - [Implementation plan](IMPLEMENTATION_PLAN.md): milestones, architecture and decisions
-- [Vantage Point plan](VANTAGE_POINT_PLAN.md): the third card set, which completes Startup 2026 (October 2026)
+- [Vantage Point plan](VANTAGE_POINT_PLAN.md): the third card set, which completes Startup 2026 (October 2026), and its
+  [progress](VANTAGE_POINT_PROGRESS.md)
 - [Bot plan](BOT_PLAN.md): the authoritative AI opponent plan (search first, October 2026), its
   [implementation steps](BOT_PLAN_STEPS.md), and [the evidence record](BOT_VERSIONS.md) of every step and policy version
 - [Strategy fundamentals](STRATEGY_FUNDAMENTALS.md): how to play either side, as rules with IDs, for the heuristic

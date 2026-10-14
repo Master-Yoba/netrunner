@@ -157,7 +157,11 @@ public sealed class CardFormatCatalog
             foreach (string code in format.Restriction?.Banned ?? [])
             {
                 string? pack = pool.PackCodeOf(code);
-                if (pack is null ? format.MissingPacks.Count == 0 : !format.LegalPacks.Contains(pack, StringComparer.Ordinal))
+                // A ban on a card this build has may name a legal pack or a missing one it embeds but doesn't play yet
+                // (Vantage Point before VP.8); a ban on a card it lacks needs the format to list a missing pack.
+                if (pack is null
+                        ? format.MissingPacks.Count == 0
+                        : !format.LegalPacks.Contains(pack, StringComparer.Ordinal) && !format.MissingPacks.Contains(pack, StringComparer.Ordinal))
                 {
                     throw new CardDataValidationException(
                         $"FORMAT-401: format '{format.Id}' bans card '{code}', which is not in its legal or missing packs.");
