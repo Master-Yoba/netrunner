@@ -23,6 +23,11 @@ internal static class ElevationHarness
     internal const string RunnerFillerResource = "90007";
     internal const string RunnerFillerHardware = "90008";
 
+    /// <summary>VP.2 probes: test-only cards with printed stealth subtypes, and a Corp upgrade.</summary>
+    internal const string StealthHardware = "90009";
+    internal const string StealthRunEvent = "90010";
+    internal const string CorpProbeUpgrade = "90011";
+
     /// <summary>The neutral Gateway identities a match board gets by default.</summary>
     internal const string CorpNeutralIdentity = "30077";
 
@@ -49,7 +54,11 @@ internal static class ElevationHarness
     /// <summary>
     /// VP.2: the Elevation catalog plus test-only probe behaviors for Vantage Point primitives no registered card uses yet:
     /// the filler operation (<see cref="CorpFiller"/>) takes 2 bad publicity, and the filler asset
-    /// (<see cref="CorpFillerAsset"/>) gains a credit the first time each turn the Corp takes bad publicity.
+    /// (<see cref="CorpFillerAsset"/>) gains a credit the first time each turn the Corp takes bad publicity. The stealth
+    /// hardware (<see cref="StealthHardware"/>) has an access ability costing 1 credit from stealth cards that draws a card;
+    /// the stealth run event (<see cref="StealthRunEvent"/>) carries 2 credits and locks the pool; the Corp upgrade
+    /// (<see cref="CorpProbeUpgrade"/>) gains the Corp a credit when the Runner spends credits from outside the pool during a
+    /// run on its server.
     /// </summary>
     public static BehaviorCatalog VantagePointProbe => LazyVantagePointProbe.Value;
 
@@ -77,6 +86,36 @@ internal static class ElevationHarness
                         BehaviorTriggerScope.Controller,
                         null,
                         [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 1)]),
+                ]))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(StealthHardware),
+                PlayerSide.Runner,
+                paidAbilities:
+                [
+                    new BehaviorPaidAbility(
+                        "probe-stealth-access",
+                        BehaviorAbilityTiming.BreachAccessPaidWindow,
+                        BehaviorAbilityActivation.PaidAbility,
+                        [new BehaviorCost(BehaviorCostKind.Credits, 1, creditSourceSubtype: "stealth")],
+                        [],
+                        [],
+                        [new BehaviorInstruction(BehaviorInstructionKind.Draw, amount: 1)],
+                        BehaviorAbilityUsageLimit.Unlimited),
+                ]))
+            .AddRunEvent(new RunEventBehaviorSpec(new CardDefinitionId(StealthRunEvent), 0, 2, locksCreditPool: true))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(CorpProbeUpgrade),
+                PlayerSide.Corp,
+                triggers:
+                [
+                    new BehaviorTrigger(
+                        "probe-outside-credits",
+                        OccurrenceKind.CreditsSpentFromOutsidePool,
+                        TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Any,
+                        null,
+                        [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 1)],
+                        requireSourceOnAttackedServer: true),
                 ]))
             .Build();
 
@@ -131,6 +170,9 @@ internal static class ElevationHarness
                 new(RunnerFillerProgram, "Filler Program", "runner", "neutral-runner", "program", [], 3, 3, false, 1, null, 1, null, null, null, 0, null, null, null),
                 new(RunnerFillerResource, "Filler Resource", "runner", "neutral-runner", "resource", [], 3, 3, false, 1, null, null, null, null, null, 0, null, null, null),
                 new(RunnerFillerHardware, "Filler Hardware", "runner", "neutral-runner", "hardware", [], 3, 3, false, 1, null, null, null, null, null, 0, null, null, null),
+                new(StealthHardware, "Stealth Hardware", "runner", "neutral-runner", "hardware", ["Stealth"], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(StealthRunEvent, "Stealth Run Event", "runner", "neutral-runner", "event", ["Run", "Stealth"], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(CorpProbeUpgrade, "Probe Upgrade", "corp", "neutral-corp", "upgrade", [], 3, 3, false, 0, null, null, 2, null, null, 0, null, null, null),
             ]),
         ]);
         return GatewayRuntimeCardCatalog.Create(pool);
@@ -485,6 +527,8 @@ internal sealed class ElevationBoard
                 {
                     "credit" => CardCounterState.CreateHostedCredit(card.Id, count),
                     "declared-credit" => CardCounterState.CreateHostedCredit(card.Id, count, HostedCreditSpendRestriction.DeclaredUseOnly),
+                    // VP-STEALTH-CREDITS: hosted credits that may be spent during runs (Methuselah, Touchstone).
+                    "run-credit" => CardCounterState.CreateHostedCredit(card.Id, count, HostedCreditSpendRestriction.RunCost),
                     _ => new CardCounterState(card.Id, name, count),
                 });
             }

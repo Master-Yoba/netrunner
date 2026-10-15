@@ -389,6 +389,7 @@ public sealed record GameplayOccurrenceEffect : EffectInstruction
                 or OccurrenceKind.AgendaForfeited
                 or OccurrenceKind.FirstTagRemovalThisTurn
                 or OccurrenceKind.FirstBadPublicityThisTurn
+                or OccurrenceKind.CreditsSpentFromOutsidePool
                 or OccurrenceKind.FirstCardCreditGainThisTurn
                 or OccurrenceKind.FirstOperationPlayedThisTurn
                 or OccurrenceKind.DamageDone
@@ -718,6 +719,7 @@ public static class EffectInstructionValidator
                 or OccurrenceKind.AgendaForfeited
                 or OccurrenceKind.FirstTagRemovalThisTurn
                 or OccurrenceKind.FirstBadPublicityThisTurn
+                or OccurrenceKind.CreditsSpentFromOutsidePool
                 or OccurrenceKind.FirstCardCreditGainThisTurn
                 or OccurrenceKind.FirstOperationPlayedThisTurn
                 or OccurrenceKind.DamageDone

@@ -2861,6 +2861,7 @@ public static partial class StateInvariantValidator
             // Biawak mid-run, for The Zwicky Group).
             OccurrenceKind.AgendaForfeited or OccurrenceKind.HostedCreditPoolEmptied
                 or OccurrenceKind.FirstTagRemovalThisTurn or OccurrenceKind.FirstBadPublicityThisTurn
+                or OccurrenceKind.CreditsSpentFromOutsidePool
                 or OccurrenceKind.FirstOperationPlayedThisTurn
                 or OccurrenceKind.FirstCardCreditGainThisTurn => occurrence.ServerId is null,
             _ => false,
@@ -8794,6 +8795,15 @@ public static partial class StateInvariantValidator
         }
 
         var expected = new List<(ActionKind Kind, CardInstanceId? Target, int Quantity, int HostedCredits, string Targets)>();
+        // VP-STEALTH-CREDITS, VP-POOL-LOCK: as the engine computes them (CreditSources): every credit outside the pool, and
+        // no pool credits while the active run event locks the pool.
+        int outsidePool = CreditSources.OutsidePool(run, state.Cards, state.Zones, state.RulesState, runtimeCardCatalog);
+        bool poolLocked = run.EndReason is null
+            && run.ActiveRunEventId is { } lockEventId
+            && state.Cards.FirstOrDefault(card => card.Id == lockEventId) is { } lockEvent
+            && behaviorCatalog.TryGetRunEvent(lockEvent.DefinitionId, out RunEventBehaviorSpec? lockSpec)
+            && lockSpec.LocksCreditPool;
+        int Wallet(PlayerState player) => poolLocked ? 0 : player.Credits;
         // Without the runtime card catalog an upgrade's printed trash cost is unknown, so its basic
         // trash may or may not be offered (GameEngine.AccessTrashCost).
         CardInstanceId? unknownTrashCost = null;
@@ -8904,7 +8914,7 @@ public static partial class StateInvariantValidator
                             foreach (EncounteredBioroidAbilitySpec ability in bioroidAbilities)
                             {
                                 if (ability.Cost.Kind == BehaviorCostKind.Credits
-                                        ? (long)runnerPlayer.Credits + run.RunCredits < ability.Cost.Amount
+                                        ? (long)Wallet(runnerPlayer) + outsidePool < ability.Cost.Amount
                                         : runnerPlayer.Clicks < ability.Cost.Amount)
                                 {
                                     continue;
@@ -8968,7 +8978,7 @@ public static partial class StateInvariantValidator
                                         expectedBreakerSpec,
                                         GameEngine.CardSubtypes(runtimeCardCatalog, card.DefinitionId))
                                     && expectedBreakerQuote.EffectiveValue >= iceStrength
-                                    && (long)runnerPlayer.Credits + run.RunCredits >= (GameEngine.ProjectCostQuote(
+                                    && (long)Wallet(runnerPlayer) + outsidePool >= (GameEngine.ProjectCostQuote(
                                         state,
                                         behaviorCatalog,
                                         cardId,
@@ -8989,8 +8999,8 @@ public static partial class StateInvariantValidator
                                     {
                                         int quantity = targets.Count;
                                         foreach (int hostedCredits in LegalHostedCreditSplits(
-                                            runnerPlayer,
-                                            run,
+                                            Wallet(runnerPlayer),
+                                            outsidePool,
                                             expectedBreakCost))
                                         {
                                             expected.Add((
@@ -9020,11 +9030,11 @@ public static partial class StateInvariantValidator
                                 if (runnerPlayer is not null
                                     && expectedBreakerSpec.HasPump
                                     && dynamicPumpAvailable
-                                    && (long)runnerPlayer.Credits + run.RunCredits >= expectedPumpCost)
+                                    && (long)Wallet(runnerPlayer) + outsidePool >= expectedPumpCost)
                                 {
                                     foreach (int hostedCredits in LegalHostedCreditSplits(
-                                        runnerPlayer,
-                                        run,
+                                        Wallet(runnerPlayer),
+                                        outsidePool,
                                         expectedPumpCost))
                                     {
                                         expected.Add((
@@ -9100,11 +9110,11 @@ public static partial class StateInvariantValidator
                         {
                             int trashCost = trashPayment.Remaining;
                             PlayerState? trashRunner = state.Players.FirstOrDefault(player => player?.Side == PlayerSide.Runner);
-                            if (trashRunner is not null && (long)trashRunner.Credits + run.RunCredits >= trashCost)
+                            if (trashRunner is not null && (long)Wallet(trashRunner) + outsidePool >= trashCost)
                             {
                                 foreach (int hostedCredits in LegalHostedCreditSplits(
-                                    trashRunner,
-                                    run,
+                                    Wallet(trashRunner),
+                                    outsidePool,
                                     trashCost))
                                 {
                                     expected.Add((
@@ -9353,12 +9363,12 @@ public static partial class StateInvariantValidator
         }
 
         static IEnumerable<int> LegalHostedCreditSplits(
-            PlayerState runner,
-            RunState run,
+            int wallet,
+            int outside,
             int amount)
         {
-            int minimumHosted = Math.Max(0, amount - runner.Credits);
-            int maximumHosted = Math.Min(amount, run.RunCredits);
+            int minimumHosted = Math.Max(0, amount - wallet);
+            int maximumHosted = Math.Min(amount, outside);
             for (int hosted = minimumHosted; hosted <= maximumHosted; hosted++)
             {
                 yield return hosted;

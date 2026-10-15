@@ -307,7 +307,10 @@ public static partial class GameEngine
                 // A player loses only the credits they have (CR 1.10); the
                 // realized loss is what a recorded amount reads.
                 PlayerId loser = ResolveBehaviorRecipient(working, frame, instruction);
-                int lost = Math.Min(GetPlayer(working, loser).Credits, StaticOrDynamicAmount(working, frame, instruction));
+                // VP-POOL-LOCK: a locked pool loses nothing (Aircheck).
+                int lost = GetPlayer(working, loser).Side == PlayerSide.Runner && CreditPoolLocked(working, working.RunState)
+                    ? 0
+                    : Math.Min(GetPlayer(working, loser).Credits, StaticOrDynamicAmount(working, frame, instruction));
                 ApplyCreditDeltaIfNonZero(working, loser, -lost);
                 AdvanceBehaviorCursor(working, RecordBehaviorAmount(frame, instruction.RecordAs, lost));
                 return;
@@ -2855,10 +2858,17 @@ public static partial class GameEngine
             PlayerState payer = GetPlayer(working, owner);
             long credits = 0;
             long clicks = 0;
+            long restricted = 0;
+            string? restrictedSubtype = null;
             foreach (BehaviorCost cost in option.Costs ?? [])
             {
                 switch (cost.Kind)
                 {
+                    case BehaviorCostKind.Credits when cost.CreditSourceSubtype is { } subtype:
+                        // VP-STEALTH-CREDITS: an option payable only with credits from cards of a subtype (Baker).
+                        restricted = checked(restricted + cost.Amount);
+                        restrictedSubtype = subtype;
+                        break;
                     case BehaviorCostKind.Credits:
                         credits = checked(credits + cost.Amount);
                         break;
@@ -2875,6 +2885,7 @@ public static partial class GameEngine
             }
 
             return credits <= int.MaxValue && credits <= AvailableCreditsForPayment(working, owner)
+                && (restrictedSubtype is null || restricted <= SourceRestrictedCredits(working, owner, restrictedSubtype))
                 && clicks <= payer.Clicks
                 && (!HasBehaviorChoiceAdditionalCardCost(option)
                     || EnumerateBehaviorChoiceAdditionalSelections(working, option).Any());
@@ -3164,10 +3175,16 @@ public static partial class GameEngine
         PlayerState payer = GetPlayer(working, owner);
         long credits = 0;
         long clicks = 0;
+        long restricted = 0;
+        string? restrictedSubtype = null;
         foreach (BehaviorCost cost in option.Costs ?? [])
         {
             switch (cost.Kind)
             {
+                case BehaviorCostKind.Credits when cost.CreditSourceSubtype is { } subtype:
+                    restricted = checked(restricted + cost.Amount);
+                    restrictedSubtype = subtype;
+                    break;
                 case BehaviorCostKind.Credits:
                     credits = checked(credits + cost.Amount);
                     break;
@@ -3182,7 +3199,8 @@ public static partial class GameEngine
             }
         }
 
-        if (credits > int.MaxValue || credits > AvailableCreditsForPayment(working, owner) || clicks > payer.Clicks)
+        if (credits > int.MaxValue || credits > AvailableCreditsForPayment(working, owner) || clicks > payer.Clicks
+            || restrictedSubtype is not null && restricted > SourceRestrictedCredits(working, owner, restrictedSubtype))
         {
             throw new ResolutionFailureException(
                 "The behavior option cost is no longer affordable by its chooser.");
@@ -3193,6 +3211,11 @@ public static partial class GameEngine
         if (credits != 0)
         {
             PayCreditCost(working, owner, (int)credits);
+        }
+
+        if (restrictedSubtype is not null && restricted != 0)
+        {
+            PaySourceRestrictedCredits(working, owner, (int)restricted, restrictedSubtype);
         }
 
         if (clicks != 0)

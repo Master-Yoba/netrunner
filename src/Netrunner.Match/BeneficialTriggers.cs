@@ -78,6 +78,9 @@ public static class BeneficialTriggers
             [BehaviorInstructionKind.RezIgnoringCosts] = EffectVerdict.PlayerDecides,
             [BehaviorInstructionKind.ShuffleSearchedDeck] = EffectVerdict.PlayerDecides,
             [BehaviorInstructionKind.RemoveTags] = EffectVerdict.PlayerDecides,
+            // VP-BAD-PUBLICITY: taking it costs the Corp a credit on every run; removing it is the Corp's call, as a tag's is.
+            [BehaviorInstructionKind.TakeBadPublicity] = EffectVerdict.PlayerDecides,
+            [BehaviorInstructionKind.RemoveBadPublicity] = EffectVerdict.PlayerDecides,
             [BehaviorInstructionKind.ModifySourceStrength] = EffectVerdict.PlayerDecides,
             [BehaviorInstructionKind.FlipSelf] = EffectVerdict.PlayerDecides,
             [BehaviorInstructionKind.RemoveCounter] = EffectVerdict.PlayerDecides,

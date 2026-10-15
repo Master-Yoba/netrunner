@@ -101,7 +101,8 @@ public sealed record BehaviorCost
         string? counterName = null,
         string? additionalKey = null,
         BehaviorTarget? additionalTarget = null,
-        BehaviorAdditionalCostKind? additionalKind = null)
+        BehaviorAdditionalCostKind? additionalKind = null,
+        string? creditSourceSubtype = null)
     {
         if (!Enum.IsDefined(kind))
         {
@@ -153,6 +154,16 @@ public sealed record BehaviorCost
         {
             throw new ArgumentOutOfRangeException(nameof(additionalKind));
         }
+
+        if (creditSourceSubtype is not null
+            && (kind != BehaviorCostKind.Credits || !StableIdentifier.TryValidate(creditSourceSubtype)))
+        {
+            throw new ArgumentException(
+                "Only a credit cost may restrict its credits to cards of a subtype, named by a stable identifier.",
+                nameof(creditSourceSubtype));
+        }
+
+        CreditSourceSubtype = creditSourceSubtype;
 
         if (kind != BehaviorCostKind.Counter && counterName is not null)
         {
@@ -236,6 +247,13 @@ public sealed record BehaviorCost
     /// <summary>Typed operation implemented by a structured additional cost.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public BehaviorAdditionalCostKind? AdditionalKind { get; }
+
+    /// <summary>
+    /// VP-STEALTH-CREDITS: a credit cost payable only with credits from cards of this printed subtype ("stealth": Corsair,
+    /// Lampades, Baker), never from the Runner's pool or the bad publicity fund. Null for an ordinary credit cost.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? CreditSourceSubtype { get; }
 
     private static bool IsStructuredCardTrash(BehaviorTarget? target) =>
         target is
@@ -2056,7 +2074,8 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
         }
 
         if (requireSourceOnAttackedServer
-            && occurrence is not (OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered or OccurrenceKind.IceApproached or OccurrenceKind.CardRezzed or OccurrenceKind.RunEnded or OccurrenceKind.AgendaScoredOrStolen))
+            && occurrence is not (OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered or OccurrenceKind.IceApproached or OccurrenceKind.CardRezzed or OccurrenceKind.RunEnded or OccurrenceKind.AgendaScoredOrStolen
+                or OccurrenceKind.CreditsSpentFromOutsidePool))
         {
             throw new ArgumentException(
                 "Requiring the source to occupy the attacked server is valid only for ServerApproached, IceEncountered, or CardRezzed triggers.",

@@ -1010,6 +1010,7 @@ public static partial class GameEngine
                 or OccurrenceKind.AgendaForfeited
                 or OccurrenceKind.FirstTagRemovalThisTurn
                 or OccurrenceKind.FirstBadPublicityThisTurn
+                or OccurrenceKind.CreditsSpentFromOutsidePool
                 or OccurrenceKind.FirstCardCreditGainThisTurn
                 or OccurrenceKind.FirstOperationPlayedThisTurn
                 or OccurrenceKind.DamageDone
@@ -1155,6 +1156,14 @@ public static partial class GameEngine
             return true;
         }
 
+        // VP-CREDITS-OUTSIDE-POOL: the deferred occurrence carries no server; the payment was made during this run, which
+        // is still going on when the occurrence opens (Shackleton Grid).
+        if (occurrence.Kind == OccurrenceKind.CreditsSpentFromOutsidePool)
+        {
+            return working.RunState?.AttackedServer is { } runServer
+                && working.Zones.FirstOrDefault(zone => zone.Id == source.ZoneId)?.ServerId == runServer;
+        }
+
         if (occurrence.Kind is not (OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered or OccurrenceKind.IceApproached or OccurrenceKind.CardRezzed or OccurrenceKind.RunEnded or OccurrenceKind.AgendaScoredOrStolen)
             || occurrence.Effect is not GameplayOccurrenceEffect gameplay
             || gameplay.ServerId is not { } attackedServer)
@@ -1200,6 +1209,9 @@ public static partial class GameEngine
                         && working.Servers.FirstOrDefault(candidate => candidate.Id == suppliedServerId)?.Kind
                             == trigger.ServerKindRequirement)
                 && (!trigger.RequireSourceOnAttackedServer
+                    || occurrenceKind == OccurrenceKind.CreditsSpentFromOutsidePool
+                        && working.RunState?.AttackedServer is { } paymentServer
+                        && working.Zones.FirstOrDefault(zone => zone.Id == source.ZoneId)?.ServerId == paymentServer
                     || occurrenceKind is OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered or OccurrenceKind.IceApproached or OccurrenceKind.CardRezzed or OccurrenceKind.RunEnded or OccurrenceKind.AgendaScoredOrStolen
                         && (occurrenceKind != OccurrenceKind.CardRezzed || working.RunState?.AttackedServer == serverId)
                         && serverId is { } suppliedServer

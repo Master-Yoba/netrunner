@@ -738,9 +738,11 @@ public sealed record RunEventBehaviorSpec
         BehaviorRunBreachAccessModifier? breachAccessModifier = null,
         int additionalClicks = 0,
         ServerKind? redirectApproachTo = null,
-        bool preventFirstEndRun = false)
+        bool preventFirstEndRun = false,
+        bool locksCreditPool = false)
     {
         PreventFirstEndRun = preventFirstEndRun;
+        LocksCreditPool = locksCreditPool;
         DefinitionId = definitionId;
         Cost = cost;
         HostedCredits = hostedCredits;
@@ -826,6 +828,13 @@ public sealed record RunEventBehaviorSpec
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool PreventFirstEndRun { get; }
+
+    /// <summary>
+    /// VP-POOL-LOCK: while the event is active the Runner can neither spend nor lose credits from their pool, only the
+    /// event's hosted credits and other credits from outside the pool (Aircheck).
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool LocksCreditPool { get; }
 
     private static ReadOnlyCollection<BehaviorRunRezCostModifier>? FreezeRezCostModifiers(
         IReadOnlyList<BehaviorRunRezCostModifier>? modifiers)

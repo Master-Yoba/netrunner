@@ -79,6 +79,12 @@ public enum OccurrenceKind
 
     /// <summary>VP-BAD-PUBLICITY: the first time this turn the Corp took bad publicity (Editorial Division).</summary>
     FirstBadPublicityThisTurn,
+
+    /// <summary>
+    /// VP-CREDITS-OUTSIDE-POOL: the Runner spent credits from outside the pool during a run (hosted credits or the bad
+    /// publicity fund; Shackleton Grid).
+    /// </summary>
+    CreditsSpentFromOutsidePool,
 }
 
 public enum OccurrencePhase

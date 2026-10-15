@@ -1137,7 +1137,10 @@ public static partial class GameEngine
                     // lose credits from cards." The run-scoped hosted pool
                     // (Overclock) is never touched by a credit loss; only the
                     // SPEND path (PayRunnerRunCredits) draws it.
-                    int loss = Math.Min(loseCredits.Amount, debtor.Credits);
+                    // VP-POOL-LOCK: a locked pool loses nothing (Aircheck).
+                    int loss = debtor.Side == PlayerSide.Runner && CreditPoolLocked(working, working.RunState)
+                        ? 0
+                        : Math.Min(loseCredits.Amount, debtor.Credits);
                     if (loss > 0)
                     {
                         ApplyCreditDelta(working, debtor.Id, -loss);
@@ -1428,9 +1431,9 @@ public static partial class GameEngine
                 owner = GetPlayer(working, PlayerSide.Runner).Id;
                 prompt = $"Resolve the ICE subroutine: pay {paySpec.CreditAmount} credits or take {paySpec.TagAmount} tag(s).";
                 PlayerState runner = GetPlayer(working, PlayerSide.Runner);
-                if (CanAffordRunCredits(runner, run, paySpec.CreditAmount))
+                if (CanAffordRunCredits(working, runner, run, paySpec.CreditAmount))
                 {
-                    foreach (int hostedCredits in LegalHostedCreditSplits(runner, run, paySpec.CreditAmount))
+                    foreach (int hostedCredits in LegalHostedCreditSplits(working, runner, run, paySpec.CreditAmount))
                     {
                         choices.Add(new IceSubroutineChoiceParameters(
                             frameIdentity,
@@ -2635,7 +2638,7 @@ public static partial class GameEngine
         }
 
         PlayerState runner = GetPlayer(working, PlayerSide.Runner);
-        if (!CanAffordRunCredits(runner, run, trashPayment.Remaining))
+        if (!CanAffordRunCredits(working, runner, run, trashPayment.Remaining))
         {
             throw new ResolutionFailureException(
                 $"The Runner cannot pay the {trashCost} credit trash cost of '{accessed}' "
@@ -3198,7 +3201,7 @@ public static partial class GameEngine
         }
 
         PlayerState runner = GetPlayer(working, PlayerSide.Runner);
-        if (!CanAffordRunCredits(runner, run, effectiveBreakCost))
+        if (!CanAffordRunCredits(working, runner, run, effectiveBreakCost))
         {
             throw new ResolutionFailureException(
                 $"The Runner cannot pay the {effectiveBreakCost} credit break cost of breaker "
@@ -3347,7 +3350,7 @@ public static partial class GameEngine
         {
             // EL-RUNNER-ICE-ABILITY: run credits expire with the run, so they
             // are spent first; the rest comes from the wallet.
-            int fromRun = Math.Min(declaration.Cost.Amount, run.RunCredits);
+            int fromRun = Math.Min(declaration.Cost.Amount, OutsidePoolCredits(working, run));
             run = PayRunnerRunCredits(working, run, declaration.Cost.Amount, fromRun);
         }
         else
@@ -3482,7 +3485,7 @@ public static partial class GameEngine
         PlayerState runner = GetPlayer(working, PlayerSide.Runner);
         int pumpCost = CostModifierProjection.IcebreakerPump(working, breaker, breakerSpec.PumpCost)?.EffectiveCost
             ?? breakerSpec.PumpCost;
-        if (!CanAffordRunCredits(runner, run, pumpCost))
+        if (!CanAffordRunCredits(working, runner, run, pumpCost))
         {
             throw new ResolutionFailureException(
                 $"The Runner cannot pay the {pumpCost} credit pump cost of breaker "
@@ -3655,7 +3658,7 @@ public static partial class GameEngine
                     $"Encounter ICE '{iceSpec.DefinitionId}' has no executable strength quote.");
             int iceStrength = iceQuote.EffectiveValue;
             PlayerState runner = GetPlayer(working, PlayerSide.Runner);
-            long availableCredits = (long)runner.Credits + run.RunCredits;
+            long availableCredits = (long)WalletCreditsForRunPayment(working, runner, run) + OutsidePoolCredits(working, run);
 
             // Encountered bioroid interface abilities are separate from the
             // installed icebreaker loop below. They do not inspect breaker
@@ -3754,7 +3757,7 @@ public static partial class GameEngine
                             run.Encounter.Subroutines.Where(sub => !sub.Broken && !sub.Resolved).Select(sub => sub.Ordinal), breakerSpec.BreakLimit))
                         {
                             int quantity = targets.Count;
-                            foreach (int hostedCredits in LegalHostedCreditSplits(runner, run, effectiveBreakCost))
+                            foreach (int hostedCredits in LegalHostedCreditSplits(working, runner, run, effectiveBreakCost))
                             {
                                 actions.Add(new LegalAction(
                                     working.Allocator.NextActionId(),
@@ -3779,7 +3782,7 @@ public static partial class GameEngine
                         ?? breakerSpec.PumpCost;
                     if (breakerSpec.HasPump && dynamicPumpAvailable && availableCredits >= pumpCost)
                     {
-                        foreach (int hostedCredits in LegalHostedCreditSplits(runner, run, pumpCost))
+                        foreach (int hostedCredits in LegalHostedCreditSplits(working, runner, run, pumpCost))
                         {
                             actions.Add(new LegalAction(
                                 working.Allocator.NextActionId(),
@@ -3894,6 +3897,7 @@ public static partial class GameEngine
     /// either source.
     /// </summary>
     private static IEnumerable<int> LegalHostedCreditSplits(
+        WorkingState working,
         PlayerState runner,
         RunState run,
         int amount)
@@ -3903,16 +3907,18 @@ public static partial class GameEngine
             throw new ResolutionFailureException("A run credit payment amount must be nonnegative.");
         }
 
-        int minimumHosted = Math.Max(0, amount - runner.Credits);
-        int maximumHosted = Math.Min(amount, run.RunCredits);
+        // VP-STEALTH-CREDITS: the hosted share is every credit from outside the pool, and none of the payment may come from
+        // a locked pool (Aircheck).
+        int minimumHosted = Math.Max(0, amount - WalletCreditsForRunPayment(working, runner, run));
+        int maximumHosted = Math.Min(amount, OutsidePoolCredits(working, run));
         for (int hosted = minimumHosted; hosted <= maximumHosted; hosted++)
         {
             yield return hosted;
         }
     }
 
-    private static bool CanAffordRunCredits(PlayerState runner, RunState run, int amount) =>
-        amount >= 0 && (long)runner.Credits + run.RunCredits >= amount;
+    private static bool CanAffordRunCredits(WorkingState working, PlayerState runner, RunState run, int amount) =>
+        amount >= 0 && (long)WalletCreditsForRunPayment(working, runner, run) + OutsidePoolCredits(working, run) >= amount;
 
     private static string FormatPaymentSplit(int amount, int hostedCredits)
     {
@@ -3951,11 +3957,13 @@ public static partial class GameEngine
         }
 
         int fromWallet = checked(amount - hostedCredits);
-        if (hostedCredits > run.RunCredits || fromWallet > GetPlayer(working, PlayerSide.Runner).Credits)
+        int outside = OutsidePoolCredits(working, run);
+        int wallet = WalletCreditsForRunPayment(working, GetPlayer(working, PlayerSide.Runner), run);
+        if (hostedCredits > outside || fromWallet > wallet)
         {
             throw new ResolutionFailureException(
                 $"The Runner cannot pay {amount} credits with {fromWallet} wallet and {hostedCredits} run credits: "
-                + $"{GetPlayer(working, PlayerSide.Runner).Credits} wallet and {run.RunCredits} run credits are available.");
+                + $"{wallet} wallet and {outside} run credits are available.");
         }
 
         if (amount == 0)
@@ -3971,12 +3979,21 @@ public static partial class GameEngine
 
         if (hostedCredits > 0)
         {
-            // VP-BAD-PUBLICITY: the fund's share goes first (Vantage Point progress, VP.2's design).
-            RunState spentRun = run.WithRunCredits(checked(run.RunCredits - hostedCredits))
-                .WithBadPublicityCredits(Math.Max(0, run.BadPublicityCredits - hostedCredits));
-            working.RunState = spentRun;
-            Emit(working, EngineEventKinds.RunCreditsAdjusted, new RunCreditsAdjustedEventPayload(
-                run.Id, -hostedCredits, spentRun.RunCredits));
+            // VP-BAD-PUBLICITY, VP-STEALTH-CREDITS (Vantage Point progress, VP.2's design): the bad publicity fund first,
+            // then the run event's credits, then run-spendable hosted credits on Runner cards.
+            int fromRun = Math.Min(hostedCredits, run.RunCredits);
+            RunState spentRun = run;
+            if (fromRun > 0)
+            {
+                spentRun = run.WithRunCredits(checked(run.RunCredits - fromRun))
+                    .WithBadPublicityCredits(Math.Max(0, run.BadPublicityCredits - fromRun));
+                working.RunState = spentRun;
+                Emit(working, EngineEventKinds.RunCreditsAdjusted, new RunCreditsAdjustedEventPayload(
+                    run.Id, -fromRun, spentRun.RunCredits));
+            }
+
+            SpendRunSpendableHostedCredits(working, checked(hostedCredits - fromRun), subtype: null);
+            DeferOccurrence(working, OccurrenceKind.CreditsSpentFromOutsidePool, PlayerSide.Runner);
             return spentRun;
         }
 
@@ -4036,11 +4053,11 @@ public static partial class GameEngine
             && accessedCard is not null
             && !working.BehaviorCatalog.TryGetAgenda(accessedCard.DefinitionId, out _)
             && AccessTrashPayment(working, accessedCard) is { } trashPayment
-            && CanAffordRunCredits(GetPlayer(working, PlayerSide.Runner), run, trashPayment.Remaining))
+            && CanAffordRunCredits(working, GetPlayer(working, PlayerSide.Runner), run, trashPayment.Remaining))
         {
             int trashCost = trashPayment.Cost;
             PlayerState runner = GetPlayer(working, PlayerSide.Runner);
-            foreach (int hostedCredits in LegalHostedCreditSplits(runner, run, trashPayment.Remaining))
+            foreach (int hostedCredits in LegalHostedCreditSplits(working, runner, run, trashPayment.Remaining))
             {
                 actions.Add(new LegalAction(
                     working.Allocator.NextActionId(),
