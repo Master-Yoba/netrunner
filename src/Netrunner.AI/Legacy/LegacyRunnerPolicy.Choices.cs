@@ -76,7 +76,7 @@ public sealed partial class LegacyRunnerPolicy
         AgentEncounter? encounter = context.Features.Board.Run?.Encounter;
         IceBehaviorSpec? ice = context.Definition(encounter?.Ice)?.Ice;
         return encounter is null || ice is null ? 0 : encounter.Subroutines.Where(subroutine => !subroutine.Broken && !subroutine.Resolved && subroutine.Ordinal < ice.Subroutines.Count)
-            .Sum(subroutine => ice.Subroutines.ElementAtOrDefault(subroutine.Ordinal) is DamageSubroutineSpec damage ? damage.Amount : 0);
+            .Sum(subroutine => ice.Subroutines[subroutine.Ordinal] is DamageSubroutineSpec damage ? damage.Amount : 0);
     }
 
     private static int BestSwap(HeuristicContext context, IReadOnlyList<CardInstanceId> selected)

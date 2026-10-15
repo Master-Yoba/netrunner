@@ -1741,7 +1741,9 @@ public sealed record BehaviorInstruction
             or BehaviorInstructionKind.SwapApproachedIce
             or BehaviorInstructionKind.HostSourceOnTarget
             or BehaviorInstructionKind.ChooseAtRandom
-            or BehaviorInstructionKind.StealAgenda)
+            or BehaviorInstructionKind.StealAgenda
+            or BehaviorInstructionKind.RemoveAdvancementCounters
+            or BehaviorInstructionKind.RestrictRun)
             && Target is not null)
         {
             throw new ArgumentException(

@@ -161,7 +161,9 @@ virus counters on Corp ICE. Every run-timing primitive gets a scenario fixture w
 
 ### VP.5 — Batch 2 (28 cards): ICE, runs and access
 
-The ICE, the run events and run-interacting programs, hardware and upgrades. **Gate:** as VP.3.
+The ICE, the run events and run-interacting programs, hardware and upgrades. **Gate:** as VP.3. It opens with **VP.5a**:
+the seven primitives binding VP.5's cards found missing during VP.4 (the progress record lists them), on probe cards
+before any card is registered, as VP.2c did for VP.3.
 
 ### VP.6 — Primitives C: zones, information and identities
 

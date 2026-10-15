@@ -53,6 +53,24 @@ internal static class ElevationHarness
     internal const string ProbeGrubberIce = "90031";
     internal const string ProbeFloodAdvanceOperation = "90032";
 
+    /// <summary>VP.4: the run and ICE probes (see <see cref="VantagePointProbe"/>).</summary>
+    internal const string ProbeVertigoIce = "90033";
+    internal const string ProbeSipaProgram = "90034";
+    internal const string ProbeTailorHardware = "90035";
+    internal const string ProbeEzamIce = "90036";
+    internal const string ProbeStickAndPokeResource = "90037";
+    internal const string ProbeLionsmaneIce = "90038";
+    internal const string ProbeFlagshipUpgrade = "90039";
+    internal const string ProbeLampadesProgram = "90040";
+    internal const string ProbePerfectRecallUpgrade = "90041";
+    internal const string ProbeCentralUpgrade = "90042";
+    internal const string ProbeTagDamageOperation = "90043";
+    internal const string ProbeSourceServerUpgrade = "90044";
+    internal const string ProbeSpendAdvancementAsset = "90045";
+    internal const string ProbeBounceIce = "90046";
+    internal const string ProbeSeekerIce = "90047";
+    internal const string ProbeLetheIce = "90048";
+
     /// <summary>The neutral Gateway identities a match board gets by default.</summary>
     internal const string CorpNeutralIdentity = "30077";
 
@@ -94,7 +112,7 @@ internal static class ElevationHarness
     /// probe operation is playable once the Corp scored an agenda it didn't install this turn, and becomes a 2-point
     /// agenda (Myōshu). VP.2 step 4: the cost and value probes (90013 to 90023); VP.2c: the probes 90024 to 90032 for the primitives VP.3's
     /// binding found missing, the probe Luana's trash cost, and the filler
-    /// ICE as a 1-strength barrier ending the run.
+    /// ICE as a 1-strength barrier ending the run. VP.4: the probes 90033 to 90046 for the run and ICE primitives.
     /// </summary>
     public static BehaviorCatalog VantagePointProbe => LazyVantagePointProbe.Value;
 
@@ -249,6 +267,221 @@ internal static class ElevationHarness
                     new BehaviorTrigger("probe-rez-on-hq", OccurrenceKind.CardRezzed, TriggerMode.Mandatory,
                         BehaviorTriggerScope.Self, null, [new BehaviorInstruction(BehaviorInstructionKind.TakeBadPublicity, amount: 1)],
                         serverKindRequirement: ServerKind.Headquarters),
+                ]))
+            .AddIce(new IceBehaviorSpec(new CardDefinitionId(ProbeVertigoIce), 1, IceType.CodeGate, 0, [], []))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeVertigoIce),
+                PlayerSide.Corp,
+                triggers:
+                [
+                    new BehaviorTrigger("probe-vertigo-passed", OccurrenceKind.IcePassed, TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Self, null,
+                        [new BehaviorInstruction(BehaviorInstructionKind.RestrictRun, argument: nameof(RunRestrictionKind.CannotStealOrTrashCorpCards))],
+                        requirement: BehaviorCondition.ClicksAtMost(2, PlayerSide.Runner)),
+                ]))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeSipaProgram),
+                PlayerSide.Runner,
+                triggers:
+                [
+                    new BehaviorTrigger("probe-sipa-passed", OccurrenceKind.IcePassed, TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Controller, null, [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 1)],
+                        oncePerTurn: true, condition: BehaviorTriggerCondition.SubjectOutermostFullyBroken),
+                ]))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeTailorHardware),
+                PlayerSide.Runner,
+                triggers:
+                [
+                    new BehaviorTrigger("probe-tailor-broken", OccurrenceKind.SubroutineBroken, TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Controller, null, [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 1)],
+                        oncePerTurn: true, condition: BehaviorTriggerCondition.SubjectStrengthAtMostZero),
+                ],
+                allIceStrength: -1))
+            .AddIce(new IceBehaviorSpec(new CardDefinitionId(ProbeEzamIce), 1, IceType.CodeGate, 0,
+                [new BehaviorSubroutineSpec("probe-ezam-strength")], []))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeEzamIce),
+                PlayerSide.Corp,
+                triggers:
+                [
+                    new BehaviorTrigger("probe-ezam-strength", OccurrenceKind.IceSubroutine, TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Controller, null,
+                        [new BehaviorInstruction(BehaviorInstructionKind.ModifyAllIceStrengthForRun, amount: 1)]),
+                ]))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeStickAndPokeResource),
+                PlayerSide.Runner,
+                triggers:
+                [
+                    new BehaviorTrigger("probe-stick-and-poke", OccurrenceKind.IceEncountered, TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Controller, null, [new BehaviorInstruction(BehaviorInstructionKind.EncounteredIceGainsSubroutine)],
+                        oncePerTurn: true),
+                ],
+                gainedIceSubroutine: new DamageSubroutineSpec(DamageKind.Net, 1, DamageSubroutineFollowUp.RunnerDrawsOne)))
+            .AddIce(new IceBehaviorSpec(new CardDefinitionId(ProbeLionsmaneIce), 1, IceType.Sentry, 0,
+                [new BehaviorSubroutineSpec("probe-lionsmane-jack")], []))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeLionsmaneIce),
+                PlayerSide.Corp,
+                triggers:
+                [
+                    new BehaviorTrigger("probe-lionsmane-jack", OccurrenceKind.IceSubroutine, TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Controller, null,
+                        [
+                            new BehaviorInstruction(BehaviorInstructionKind.Choose, choice: new BehaviorChoiceSpec(
+                                "probe-lionsmane-choice",
+                                BehaviorChooser.Runner,
+                                BehaviorChoiceMode.Mode,
+                                BehaviorChoiceCardinality.Exactly(1),
+                                options:
+                                [
+                                    new BehaviorChoiceOption("suffer-damage", [new BehaviorInstruction(BehaviorInstructionKind.DealDamage,
+                                        amount: 2, damageKind: DamageKind.Net, recipient: BehaviorPlayerSelector.Runner)]),
+                                    new BehaviorChoiceOption("jack-out", [new BehaviorInstruction(BehaviorInstructionKind.JackOut)]),
+                                ])),
+                        ]),
+                ]))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeFlagshipUpgrade),
+                PlayerSide.Corp,
+                runsCannotSucceed: true,
+                runAccessLimitBesidesSelf: 1))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeLampadesProgram),
+                PlayerSide.Runner,
+                paidAbilities:
+                [
+                    new BehaviorPaidAbility(
+                        "probe-lampades-trash",
+                        BehaviorAbilityTiming.BreachAccessPaidWindow,
+                        BehaviorAbilityActivation.PaidAbility,
+                        [new BehaviorCost(BehaviorCostKind.Credits, 0, accessedCardPrintedCost: true)],
+                        [],
+                        [new BehaviorTarget(BehaviorTargetKind.AccessedCard)],
+                        [new BehaviorInstruction(BehaviorInstructionKind.TrashCard, target: new BehaviorTarget(BehaviorTargetKind.AccessedCard))],
+                        BehaviorAbilityUsageLimit.Unlimited),
+                ]))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbePerfectRecallUpgrade),
+                PlayerSide.Corp,
+                paidAbilities:
+                [
+                    new BehaviorPaidAbility(
+                        "probe-recall-name",
+                        BehaviorAbilityTiming.AnyPaidWindow,
+                        BehaviorAbilityActivation.PaidAbility,
+                        [],
+                        [new BehaviorCondition(BehaviorConditionKind.RunInProgress)],
+                        [],
+                        [
+                            new BehaviorInstruction(BehaviorInstructionKind.Choose, choice: new BehaviorChoiceSpec(
+                                "probe-recall-card",
+                                BehaviorChooser.Controller,
+                                BehaviorChoiceMode.Mandatory,
+                                BehaviorChoiceCardinality.Exactly(1),
+                                target: BehaviorTarget.CardsInZone(BehaviorZone.Headquarters, reveal: true))),
+                            new BehaviorInstruction(BehaviorInstructionKind.RestrictRun,
+                                argument: nameof(RunRestrictionKind.CannotStealOrTrashCorpCards),
+                                target: new BehaviorTarget(BehaviorTargetKind.ChosenCard, selector: "probe-recall-card")),
+                        ],
+                        BehaviorAbilityUsageLimit.OncePerTurn),
+                ]))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeCentralUpgrade),
+                PlayerSide.Corp,
+                installServerKinds: [ServerKind.Headquarters, ServerKind.RAndD, ServerKind.Archives]))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeTagDamageOperation),
+                PlayerSide.Corp,
+                instructions:
+                [
+                    new BehaviorInstruction(BehaviorInstructionKind.DealDamage, damageKind: DamageKind.Meat, recipient: BehaviorPlayerSelector.Runner,
+                        damageAmountOperand: new BehaviorDamageAmountOperand(BehaviorDamageAmountKind.RunnerTags)),
+                ]))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeSourceServerUpgrade),
+                PlayerSide.Corp,
+                paidAbilities:
+                [
+                    new BehaviorPaidAbility(
+                        "probe-source-server",
+                        BehaviorAbilityTiming.AnyPaidWindow,
+                        BehaviorAbilityActivation.PaidAbility,
+                        [],
+                        [new BehaviorCondition(BehaviorConditionKind.RunAgainstSourceServer)],
+                        [],
+                        [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 1)],
+                        BehaviorAbilityUsageLimit.OncePerTurn),
+                ]))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeSpendAdvancementAsset),
+                PlayerSide.Corp,
+                paidAbilities:
+                [
+                    new BehaviorPaidAbility(
+                        "probe-spend-advancement",
+                        BehaviorAbilityTiming.ActionPhase,
+                        BehaviorAbilityActivation.ClickAction,
+                        [new BehaviorCost(BehaviorCostKind.Clicks, 1)],
+                        [BehaviorCondition.SourceAdvancementAtLeast(1)],
+                        [],
+                        [
+                            new BehaviorInstruction(BehaviorInstructionKind.RemoveAdvancementCounters, amount: 1,
+                                target: new BehaviorTarget(BehaviorTargetKind.Self)),
+                            new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 2),
+                        ],
+                        BehaviorAbilityUsageLimit.Unlimited),
+                ]))
+            .AddIce(new IceBehaviorSpec(new CardDefinitionId(ProbeBounceIce), 1, IceType.Sentry, 0,
+                [new BehaviorSubroutineSpec("probe-bounce")], []))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeBounceIce),
+                PlayerSide.Corp,
+                triggers:
+                [
+                    new BehaviorTrigger("probe-bounce", OccurrenceKind.IceSubroutine, TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Controller, null,
+                        [
+                            new BehaviorInstruction(BehaviorInstructionKind.Choose, choice: new BehaviorChoiceSpec(
+                                "probe-bounce-card",
+                                BehaviorChooser.Controller,
+                                BehaviorChoiceMode.Mandatory,
+                                BehaviorChoiceCardinality.Exactly(1),
+                                target: new BehaviorTarget(BehaviorTargetKind.InstalledCard,
+                                    filter: new BehaviorCardFilter(BehaviorCardType.Any, ownerSide: PlayerSide.Runner)))),
+                            new BehaviorInstruction(BehaviorInstructionKind.AddToHand, sourceZone: BehaviorZone.Rig,
+                                destinationZone: BehaviorZone.Grip,
+                                target: new BehaviorTarget(BehaviorTargetKind.ChosenCard, selector: "probe-bounce-card")),
+                        ]),
+                ]))
+            .AddIce(new IceBehaviorSpec(new CardDefinitionId(ProbeSeekerIce), 1, IceType.CodeGate, 0,
+                [new BehaviorSubroutineSpec("probe-seeker-virus")], []))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeSeekerIce),
+                PlayerSide.Corp,
+                triggers:
+                [
+                    new BehaviorTrigger("probe-seeker-virus", OccurrenceKind.IceSubroutine, TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Controller, null,
+                        [new BehaviorInstruction(BehaviorInstructionKind.AddCounter, amount: 1, argument: "virus")]),
+                    new BehaviorTrigger("probe-seeker-ended", OccurrenceKind.EncounterEnded, TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Self, null,
+                        [
+                            new BehaviorInstruction(BehaviorInstructionKind.PurgeVirusCounters),
+                            new BehaviorInstruction(BehaviorInstructionKind.Derez, target: new BehaviorTarget(BehaviorTargetKind.Self)),
+                        ],
+                        requirement: new BehaviorCondition(BehaviorConditionKind.CounterAtLeast, fact: "virus", value: 1)),
+                ]))
+            .AddIce(new IceBehaviorSpec(new CardDefinitionId(ProbeLetheIce), 1, IceType.Barrier, 0, [new EndRunSubroutineSpec()], []))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeLetheIce),
+                PlayerSide.Corp,
+                triggers:
+                [
+                    new BehaviorTrigger("probe-lethe-broken", OccurrenceKind.IceFullyBroken, TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Self, null,
+                        [new BehaviorInstruction(BehaviorInstructionKind.AddTags, amount: 1, recipient: BehaviorPlayerSelector.Runner)]),
                 ]))
             .Add(new CardBehaviorDefinition(
                 new CardDefinitionId(ProbeSellOutEvent),
@@ -409,6 +642,22 @@ internal static class ElevationHarness
                 new(ProbePublicAgenda, "Probe Public Agenda", "corp", "neutral-corp", "agenda", ["Public"], 3, 3, false, null, null, null, null, 2, 3, null, null, null, null),
                 new(ProbeGrubberIce, "Probe Grubber", "corp", "neutral-corp", "ice", ["Barrier"], 3, 3, false, 0, 1, null, null, null, null, 0, null, null, null),
                 new(ProbeFloodAdvanceOperation, "Probe Flood Advance", "corp", "neutral-corp", "operation", [], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(ProbeVertigoIce, "Probe Vertigo", "corp", "neutral-corp", "ice", ["Code Gate"], 3, 3, false, 0, 1, null, null, null, null, 0, null, null, null),
+                new(ProbeSipaProgram, "Probe Sipa", "runner", "neutral-runner", "program", [], 3, 3, false, 0, null, 1, null, null, null, 0, null, null, null),
+                new(ProbeTailorHardware, "Probe Tailor", "runner", "neutral-runner", "hardware", [], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(ProbeEzamIce, "Probe ezaM", "corp", "neutral-corp", "ice", ["Code Gate"], 3, 3, false, 0, 1, null, null, null, null, 0, null, null, null),
+                new(ProbeStickAndPokeResource, "Probe Stick and Poke", "runner", "neutral-runner", "resource", [], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(ProbeLionsmaneIce, "Probe Lionsmane", "corp", "neutral-corp", "ice", ["Sentry"], 3, 3, false, 0, 1, null, null, null, null, 0, null, null, null),
+                new(ProbeFlagshipUpgrade, "Probe Flagship", "corp", "neutral-corp", "upgrade", [], 3, 3, false, 0, null, null, 4, null, null, 0, null, null, null),
+                new(ProbeLampadesProgram, "Probe Lampades", "runner", "neutral-runner", "program", [], 3, 3, false, 0, null, 1, null, null, null, 0, null, null, null),
+                new(ProbePerfectRecallUpgrade, "Probe Perfect Recall", "corp", "neutral-corp", "upgrade", [], 3, 3, false, 0, null, null, 3, null, null, 0, null, null, null),
+                new(ProbeCentralUpgrade, "Probe Central Upgrade", "corp", "neutral-corp", "upgrade", [], 3, 3, false, 0, null, null, 2, null, null, 0, null, null, null),
+                new(ProbeTagDamageOperation, "Probe Tag Damage", "corp", "neutral-corp", "operation", [], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(ProbeSourceServerUpgrade, "Probe Event Horizon", "corp", "neutral-corp", "upgrade", [], 3, 3, false, 0, null, null, 2, null, null, 0, null, null, null),
+                new(ProbeSpendAdvancementAsset, "Probe Sacrifice Zone", "corp", "neutral-corp", "asset", [], 3, 3, false, 0, null, null, 2, null, null, 0, null, null, null),
+                new(ProbeBounceIce, "Probe Bounce", "corp", "neutral-corp", "ice", ["Sentry"], 3, 3, false, 0, 1, null, null, null, null, 0, null, null, null),
+                new(ProbeSeekerIce, "Probe Knowledge Seeker", "corp", "neutral-corp", "ice", ["Code Gate"], 3, 3, false, 0, 1, null, null, null, null, 0, null, null, null),
+                new(ProbeLetheIce, "Probe Lethe", "corp", "neutral-corp", "ice", ["Barrier"], 3, 3, false, 0, 1, null, null, null, null, 0, null, null, null),
             ]),
         ]);
         return GatewayRuntimeCardCatalog.Create(pool);

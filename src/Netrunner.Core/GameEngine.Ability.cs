@@ -997,7 +997,9 @@ public static partial class GameEngine
             // A paid ability has no search continuation; a forged declaration
             // depending on one therefore fails closed.
             BehaviorConditionKind.FoundCard => false,
+            // VP-SPEND-ADVANCEMENT: an ability spending its source's advancement counters needs one (Sacrifice Zone Expansion).
             BehaviorConditionKind.SourceHostsAtLeast or BehaviorConditionKind.RezzedInstalledCopy
+                or BehaviorConditionKind.SourceAdvancementAtLeast
                 => OptionConditionMatches(working, controllerId, source.Id, condition),
             _ => SharedConditionMatches(working, controllerId, condition, source.Id) ?? false,
         };

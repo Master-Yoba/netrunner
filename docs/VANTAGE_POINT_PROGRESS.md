@@ -271,3 +271,59 @@ errors and 1 capped game; the Synchrocyclotron fixture comes from it, since the 
 | Editorial Division, Retirement Plan | One mode per subtype or kind searched or installed: the filter names one subtype or type. |
 | Let Them Dream | One mode per zone searched; the found agenda then goes to HQ or R&D's bottom. Banned in Startup 2026, so in no deck. |
 | Scapegoat | Removing bad publicity is offered only while the Corp has some. |
+
+## VP.4 — Primitives B: runs and ICE (15 October 2026)
+
+On probe cards 90033 to 90048 (`VantagePointRunIceTests`), each test citing the rule or the card it serves. Every
+existing game, replay and pin keeps its bytes: each new field is omitted while unused, and each new occurrence is queued
+only when a trigger waits on it.
+
+- **VP-ICE-PASSED:** the occurrences `IcePassed` (after an encounter, a bypass, or unrezzed ICE; CR 26.03 6.9.4a),
+  `IceBypassed` and `IceFullyBroken` (the break that leaves no subroutine unbroken). The trigger condition
+  `SubjectOutermostFullyBroken` reads the encounter that just ended (Sipa). `ClicksRemainingAtMost` is Vertigo's "no
+  clicks remaining".
+- **VP-SUBROUTINE-BROKEN:** `SubroutineBroken`, from every break: a breaker, a bioroid's click, a hosted counter. The
+  condition `SubjectStrengthAtMostZero` reads the ICE's current strength quote (The Tungsten Tailor).
+- **VP-ENCOUNTER-ENDED:** `EncounterEnded`, before the pass (Knowledge Seeker).
+- **VP-ALL-ICE-STRENGTH:** `CardBehaviorDefinition.AllIceStrength`, static while the card is active and installed, and
+  `ModifyAllIceStrengthForRun` (`RunState.AllIceStrengthModifiers`, ezaM). Both are terms of every ICE's strength
+  quote, so the engine and the bots' encounter planner read the same value.
+- **VP-ICE-GAINS-SUBROUTINE:** `EncounteredIceGainsSubroutine` gives the encountered ICE the source's
+  `GainedIceSubroutine`, a typed subroutine, listed before its others. Its encounter ordinal follows the printed ones.
+  `RunState.GainedSubroutines` keeps it for the run, so the resolved-subroutine ledger stays readable, and
+  `RunState.EncounterSubroutineSpec` resolves an ordinal, printed or gained, for the engine and the validator. The damage
+  follow-up `RunnerDrawsOne` is Stick and Poke's subroutine.
+- **VP-CANNOT-STEAL-OR-TRASH:** `RestrictRun`, kept in `RunState.BehaviorRestrictions` with its source, its ability's
+  key and, with a target, the named definition (Vertigo, Perfect Recall). `RunState.ForbidsStealOrTrash` decides it for
+  the engine, the validator and the run's public cue, with the ICE subroutines' restriction.
+- **VP-UNLESS-JACK-OUT:** `JackOut` ends the run as jacked out (CR 26.03 6.1.5). Shred's run-end prevention doesn't stop it
+  (Lionsmane, as the Runner's choice option).
+- **VP-NO-SUCCESSFUL-RUN:** `CardBehaviorDefinition.RunsCannotSucceed`. At the success step the run ends, neither
+  successful nor unsuccessful (`RunEndReason.NotDeclaredSuccessful`, Flagship).
+- **VP-ACCESS-LIMIT:** declared (`RunAccessLimitBesidesSelf`), and allowed only beside the no-success clause. It can't
+  apply: every breach follows a successful run, which that clause forbids while the card is rezzed, and the Corp can't
+  rez between the success step and the breach. Persistence doesn't reach it either, since the engine arms persistent
+  abilities only for a card trashed while accessed (CR 26.03 9.12.5).
+- **VP-ACCESS-PAID-ABILITY:** `BehaviorCost.AccessedCardPrintedCost`, a credit cost of the accessed card's printed rez
+  or play cost; a card with neither can't pay it (Lampades).
+- **VP-ICE-VIRUS-COUNTERS:** existing vocabulary: virus counters may sit on Corp ICE, the purge instruction clears them,
+  and `Derez` takes the source (Knowledge Seeker's probe).
+
+**For VP.5's cards**, also here:
+- `RunnerTags` as an amount for counts and damage.
+- `InstallServerKinds` (The Red Room, Flagship).
+- The conditions `RunAgainstSourceServer` and `RunAgainstAnotherServer`.
+- `RemoveAdvancementCounters`; an ability may require its source's advancement counters.
+- `AddToHand` from the rig (Lethe).
+
+**Binding VP.5 ahead** found seven further gaps, beyond the audit's primitives. They land in **VP.5a**, before VP.5's
+cards, as VP.2c did for VP.3:
+- `VP-ENDED-RUN-SERVER` (Kompromat);
+- `VP-INSTALL-AND-REZ-LESS` (Reanimation Protocol);
+- a run made when a run ends (Aircheck);
+- an installed program returned when the run ends (Beta Build);
+- a paid change of the approached server (Baker);
+- resolving a subroutine outside an encounter (Unleash);
+- an optional cost of the source's advancement counters (Sacrifice Zone Expansion).
+
+**Client.** A gained subroutine's ordinal follows the printed ones; VP.8's client shows its text from the source card.
