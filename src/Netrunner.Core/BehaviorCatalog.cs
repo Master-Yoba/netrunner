@@ -1492,6 +1492,7 @@ public sealed record BehaviorInstruction
             case BehaviorInstructionKind.ShuffleIntoDeck:
                 if (SourceZone is { } shuffleSource)
                 {
+                    // VP.3: the rig too, for an installed Runner card shuffled into the stack (Scapegoat).
                     RequireZone(
                         shuffleSource,
                         nameof(SourceZone),
@@ -1499,7 +1500,8 @@ public sealed record BehaviorInstruction
                         BehaviorZone.Headquarters,
                         BehaviorZone.Archives,
                         BehaviorZone.Stack,
-                        BehaviorZone.Grip);
+                        BehaviorZone.Grip,
+                        BehaviorZone.Rig);
                 }
 
                 RequireDestination(nameof(DestinationZone), BehaviorZone.Deck, BehaviorZone.Stack);
@@ -4315,6 +4317,10 @@ internal static class BehaviorCatalogFingerprint
 
         builder.Append("kind=").Append((int)value.Kind).Append(",count=");
         AppendNullableInt(builder, value.Count);
+        if (value.ClampsToCandidates)
+        {
+            builder.Append(",clamps=1");
+        }
     }
 
     private static void AppendFilter(StringBuilder builder, BehaviorCardFilter? value)

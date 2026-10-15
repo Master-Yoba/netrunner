@@ -25,7 +25,8 @@ public static partial class CliCommands
             return 2;
         }
 
-        CardPool pool = CardPools.GatewayElevation.IsEmbedded ? CardPools.GatewayElevation : CardPools.Gateway;
+        CardPool pool = CardPools.Startup.IsEmbedded ? CardPools.Startup
+            : CardPools.GatewayElevation.IsEmbedded ? CardPools.GatewayElevation : CardPools.Gateway;
         BehaviorCatalog behavior = pool.CreateBehavior();
         SortedDictionary<string, string> cards = new(StringComparer.Ordinal);
         foreach (CardDefinitionId id in behavior.AllDefinitionIds)
@@ -34,6 +35,7 @@ public static partial class CliCommands
         foreach (string content in RulesFuzzRunner.ContentNames.Where(name => name != "developer"))
         {
             if (content != "official" && content != "gateway" && !CardPools.GatewayElevation.IsEmbedded) continue;
+            if (content == "vantage-point" && !CardPools.Startup.IsEmbedded) continue;
             var codes = new SortedSet<string>(StringComparer.Ordinal);
             foreach (string contentId in RulesFuzzRunner.ContentIds(content))
             {

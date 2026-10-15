@@ -8,7 +8,7 @@
       "id": "slice-VP.3",
       "slice": "VP.3",
       "title": "Batch 1: bad publicity, stealth, scoring and economy",
-      "status": "planned",
+      "status": "complete",
       "completionRequired": true,
       "codes": [
         "36002",
@@ -129,9 +129,9 @@
       "faction": "anarch",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "VP-BAD-PUBLICITY"
@@ -176,9 +176,9 @@
       "faction": "anarch",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "VP-STEALTH-CREDITS"
@@ -290,9 +290,9 @@
       "faction": "criminal",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [],
       "citations": [
@@ -333,9 +333,9 @@
       "faction": "criminal",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "VP-TRASH-AS-COST"
@@ -355,9 +355,9 @@
       "faction": "criminal",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "VP-PLAY-COST-MODIFIER"
@@ -377,9 +377,9 @@
       "faction": "criminal",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [],
       "citations": [
@@ -441,9 +441,9 @@
       "faction": "criminal",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "VP-RUN-FACTS"
@@ -529,9 +529,9 @@
       "faction": "shaper",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "VP-STEALTH-CREDITS",
@@ -553,9 +553,9 @@
       "faction": "shaper",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "VP-STEALTH-CREDITS"
@@ -621,9 +621,9 @@
       "faction": "shaper",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [],
       "citations": [
@@ -642,9 +642,9 @@
       "faction": "neutral-runner",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "VP-SCORE-STEAL-COST",
@@ -668,9 +668,9 @@
       "faction": "haas-bioroid",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "VP-SCORE-STEAL-COST"
@@ -691,9 +691,9 @@
       "faction": "haas-bioroid",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "VP-CLICK-COST-MODIFIER"
@@ -801,9 +801,9 @@
       "faction": "haas-bioroid",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [],
       "citations": [
@@ -821,9 +821,9 @@
       "faction": "haas-bioroid",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "VP-AMOUNT"
@@ -844,9 +844,9 @@
       "faction": "haas-bioroid",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [],
       "citations": [
@@ -933,9 +933,9 @@
       "faction": "jinteki",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [],
       "citations": [
@@ -1112,9 +1112,9 @@
       "faction": "nbn",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "VP-BAD-PUBLICITY"
@@ -1135,9 +1135,9 @@
       "faction": "nbn",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "VP-BAD-PUBLICITY",
@@ -1160,9 +1160,9 @@
       "faction": "nbn",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "VP-SCORE-STEAL-COST"
@@ -1182,9 +1182,9 @@
       "faction": "nbn",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "VP-BAD-PUBLICITY"
@@ -1206,9 +1206,9 @@
       "faction": "nbn",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "VP-BAD-PUBLICITY"
@@ -1272,9 +1272,9 @@
       "faction": "nbn",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "VP-AMOUNT"
@@ -1294,9 +1294,9 @@
       "faction": "nbn",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "VP-BAD-PUBLICITY"
@@ -1364,9 +1364,9 @@
       "faction": "weyland-consortium",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "VP-BAD-PUBLICITY",
@@ -1454,9 +1454,9 @@
       "faction": "weyland-consortium",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "VP-CARD-AS-AGENDA",
@@ -1501,9 +1501,9 @@
       "faction": "weyland-consortium",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "VP-BAD-PUBLICITY"
@@ -1572,9 +1572,9 @@
       "faction": "neutral-corp",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "VP-AGENDA-POINTS-MODIFIER"

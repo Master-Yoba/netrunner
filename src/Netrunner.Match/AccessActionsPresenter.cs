@@ -17,6 +17,7 @@ public static class AccessActionsPresenter
         {
             (ActionKind.TrashAccessedCard, RunCardPaymentParameters p) => p.CardId.Value == card.Id,
             (ActionKind.StealAgenda, CardChoiceParameters p) => p.CardId.Value == card.Id,
+            (ActionKind.StealAgenda, RunCardPaymentParameters paid) => paid.CardId.Value == card.Id,
             (ActionKind.NoAccessAction, NoActionParameters) => true,
             _ => false,
         }));

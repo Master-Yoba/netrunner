@@ -2523,6 +2523,7 @@ public static partial class GameEngine
 
         if (spec.Target is not null
             && spec.Cardinality.Kind == BehaviorChoiceCardinalityKind.Exactly
+            && !spec.Cardinality.ClampsToCandidates
             && candidates.Length < spec.Cardinality.Count)
         {
             throw new ResolutionFailureException($"Behavior choice '{spec.Key}' has fewer candidates than required.");
@@ -2558,7 +2559,7 @@ public static partial class GameEngine
             owner,
             spec.Mode,
             spec.Cardinality.Kind,
-            spec.Cardinality.Count,
+            spec.Cardinality.ClampsToCandidates ? Math.Min(spec.Cardinality.Count!.Value, candidates.Length) : spec.Cardinality.Count,
             optionKeys,
             candidates);
         ReplaceTopFrame(working, frame.With(choice: choice));
@@ -3518,9 +3519,14 @@ public static partial class GameEngine
             StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// An option that installs the card a search holds in custody (a chosen card): its availability is that install's.
+    /// An option installing from a zone (Retirement Plan's, Mycoweb's copy of Ansel 1.0's subroutine) is an ordinary
+    /// option whose install chooses its card when it resolves (VP.3: such options were never offered before).
+    /// </summary>
     private static bool IsBehaviorInstallOption(BehaviorChoiceOption option) =>
         option.Instructions.Count == 1
-        && option.Instructions[0].Kind == BehaviorInstructionKind.InstallCard;
+        && option.Instructions[0] is { Kind: BehaviorInstructionKind.InstallCard, Target.Kind: BehaviorTargetKind.ChosenCard };
 
     internal static GameState ProjectBehaviorInstallSelection(GameState state, IBehaviorCatalog behavior,
         IRuntimeCardCatalog runtime, BehaviorResolutionFrame frame, BehaviorInstruction instruction,
@@ -4368,6 +4374,7 @@ public static partial class GameEngine
             || shuffleInstruction.SourceZone != sourceZone
             || choice.Cardinality.Kind is not
                 (BehaviorChoiceCardinalityKind.UpTo or BehaviorChoiceCardinalityKind.AnyNumber)
+                && !choice.Cardinality.ClampsToCandidates
             || shuffleInstruction.DestinationZone is not { } destinationZone
             || destinationZone != (ResolveBehaviorOwner(target, frame, working) == PlayerSide.Corp
                 ? BehaviorZone.Deck

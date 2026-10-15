@@ -173,3 +173,95 @@ Sacrifice Zone Expansion to VP.5; Lotus Haze and Hype Machine to VP.7. VP.3 is 2
   unpayable;
 - hosted credits spendable on any cost weren't offered for run costs;
 - a null card scored as an agenda was accepted when a state was read.
+
+## VP.3 — Batch 1 (15 October 2026)
+
+28 cards on `feat/vp3-batch1`:
+- **Runner:** Take a Dive, Corsair, Virtual Intelligence P.I., Sell Out, Tailgate, Borrowed Goods, Underdome
+  Irregulars, Methuselah, Touchstone, Stowaway and Word on the Street.
+- **Corp:** Méliès City Luxury Line, Synchrocyclotron, Caveat Emptor, realloc(), Retirement Plan, Esca, Editorial
+  Division, Witch Hunt, Magistrate Revontulet, Nihilo Agent, Grubber, Flood the Market, Scapegoat, Luana Campos,
+  Myōshu, Vulture Fund and Let Them Dream.
+
+- **Specs:** `src/Netrunner.Cards/VantagePoint/`, composed by `VantagePointBehaviorCatalog` (version `startup-vp.3`),
+  which records the opt-in turn events the batch reads. Elevation's catalog and every Elevation card's behavior
+  fingerprint are unchanged.
+- **Tests:** 41 card tests (`VantagePointBatch1RunnerTests`, `VantagePointBatch1CorpTests`), at least one per card, on
+  a text-free runtime catalog: Vantage Point's stats join `ElevationTestMetadata`, so the synthetic lane runs them.
+- **Registry and coverage:** VP.3 complete; the report shows Vantage Point 28 of 66 registered, tested and complete.
+
+### What binding found
+
+- **Engine fixes:**
+  - A mode option that installs from a zone was never offered: only an install of a searched card in custody is an
+    "install option". This affected Retirement Plan, and Elevation's Mycoweb resolving Ansel 1.0's install subroutine.
+  - The rig is a shuffle source (Scapegoat shuffles an installed Runner card into the stack).
+- **VP-CHOOSE-AS-MANY-AS-ABLE:** an exact count that takes every candidate when there are fewer (realloc()'s "choose 2"
+  with one rezzed piece of ICE). The one Core change a VP.3 card needed beyond VP.2.
+- **Bots:**
+  - The heuristic policies value taking and removing bad publicity and a card scored as an agenda.
+  - The Runner policy and the contract agent take paid steals (Méliès City Luxury Line, Magistrate Revontulet).
+  - The agent features carry the Corp's bad publicity, omitted while zero.
+  - The misplay sweep's fixes, below.
+  - These paths are reached only by Vantage Point cards, so the policy versions stay as they are, and bot-check's regret
+    suites and every existing pool's fuzz agree.
+
+### Ladder and the misplay sweep
+
+`scripts/ai-ladder.sh --content vantage-point --entrants random,contract,easy,standard --seeds-per-pairing 3`: 288 games,
+0 errors, 2 capped (both with the contract agent). Both sides order random < contract < easy < standard; three seeds don't
+separate every neighbour. `ai-offers` over the saved games (the misplay sweep) found five plays the heuristic bots were
+offered and never took:
+- Flood the Market was never played: its amount was estimated at one counter. It now counts the protected remotes with
+  a root card on the observed board.
+- The standard Corp never rezzed Magistrate Revontulet, Synchrocyclotron or Nihilo Agent: assets that work just by being
+  rezzed fell through to "no current payoff". They are now rezzed for:
+  - a steal tax;
+  - the Double discount while a Double operation is in HQ;
+  - bad publicity that feeds the identity's first-bad-publicity search (Nihilo Agent with Editorial Division).
+- Corsair's strength ability was never used: the encounter planner counted only abilities paid with counters. It now
+  also plans those paid with credits from cards of a subtype.
+- Esca is never rezzed by the standard Corp, which is right: the ambush works unrezzed.
+
+After the fixes, at de6363c: 288 games, 0 errors, 2 capped, the same order. Every swept play is now taken. Corp easy −
+contract +333 and standard − easy +146; Runner +299 and +48, all in Elo. `VantagePointBotTests` checks each fix at a
+saved decision from the first ladder (`tests/Netrunner.Match.Tests/Fixtures/saved-games/vp3-*`).
+
+### E6
+
+`scripts/core-growth.sh ... --range slice-VP.3=8358757..<head>`: 4 Core files, no new vocabulary, so the script counts
+28 of 28 (100%). By hand, realloc() needed the clamp: **27 of 28 (96%)**.
+
+### Simulation decks and the batch proof
+
+- `data/decks/vantage-point-simulation-decks.json`: three Corp decks (Editorial Division, Poétrï Luxury Brands, Weyland
+  Consortium) and two Runner decks (Virtual Intelligence P.I., Tāo Salonga). They are ours, within Startup 2026's deck
+  rules with Vantage Point counted legal (checked by `CardFormatTests`), and they hold every VP.3 card but the banned
+  Let Them Dream. They load through `OfficialPresetCatalog.VantagePointSimulation()`, apart from the embedded catalog.
+- `scripts/fuzz.sh vantage-point` and `--content vantage-point` play them on the Startup pool and catalog.
+- **The first fuzz run found two defects**, both fixed before the batch closed:
+  - the heuristic Runner rejected a paid steal;
+  - Scapegoat's shuffle with nothing installed had no source zone.
+- **Evidence:** per-slice fuzz at 28dfdfa, `--games-per-pairing 8 --verify-replays-every 8`, on every pool. Every game
+  ended in a terminal state and every sampled replay verified:
+
+| Pool | Games | Replays verified | Mean actions |
+|---|---:|---:|---:|
+| vantage-point | 144 | 18 | 474.7 |
+| official | 24 | 3 | 390.9 |
+| gateway | 288 | 36 | 411.7 |
+| elevation | 1,152 | 144 | 433.4 |
+| gateway-elevation | 288 | 36 | 405.5 |
+| nsg-core-sets | 2,592 | 324 | 395.8 |
+
+  Only nsg-core-sets moved (396.2 at VP.2): 22 games of NSG's Fashion Lab, whose Mycoweb now offers Ansel 1.0's
+  install subroutine (the install-option fix above).
+
+### Rulings and simplifications
+
+| Card | Note |
+|---|---|
+| Esca | Revealed when accessed in R&D as Byte is (Elevation's reveal-on-access). |
+| Editorial Division, Retirement Plan | One mode per subtype or kind searched or installed: the filter names one subtype or type. |
+| Let Them Dream | One mode per zone searched; the found agenda then goes to HQ or R&D's bottom. Banned in Startup 2026, so in no deck. |
+| Scapegoat | Removing bad publicity is offered only while the Corp has some. |

@@ -37,8 +37,14 @@ public enum BehaviorChoiceCardinalityKind
 /// <summary>Immutable exactly/up-to/any-number choice cardinality.</summary>
 public sealed class BehaviorChoiceCardinality : IEquatable<BehaviorChoiceCardinality>
 {
-    public BehaviorChoiceCardinality(BehaviorChoiceCardinalityKind kind, int? count = null)
+    public BehaviorChoiceCardinality(BehaviorChoiceCardinalityKind kind, int? count = null, bool clampsToCandidates = false)
     {
+        if (clampsToCandidates && kind != BehaviorChoiceCardinalityKind.Exactly)
+        {
+            throw new ArgumentException("Only an exact cardinality clamps to its candidates.", nameof(clampsToCandidates));
+        }
+
+        ClampsToCandidates = clampsToCandidates;
         if (!Enum.IsDefined(kind))
         {
             throw new ArgumentOutOfRangeException(nameof(kind));
@@ -68,8 +74,19 @@ public sealed class BehaviorChoiceCardinality : IEquatable<BehaviorChoiceCardina
 
     public int? Count { get; }
 
+    /// <summary>
+    /// VP-CHOOSE-AS-MANY-AS-ABLE: an exact count that, with fewer candidates, takes them all ("choose 2 rezzed pieces of
+    /// ice" when only one is rezzed: realloc()). Omitted while false, so existing declarations keep their bytes.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool ClampsToCandidates { get; }
+
     public static BehaviorChoiceCardinality Exactly(int count) =>
         new(BehaviorChoiceCardinalityKind.Exactly, count);
+
+    /// <summary>Exactly the count when there are that many candidates, otherwise all of them.</summary>
+    public static BehaviorChoiceCardinality AsManyAsAble(int count) =>
+        new(BehaviorChoiceCardinalityKind.Exactly, count, clampsToCandidates: true);
 
     public static BehaviorChoiceCardinality UpTo(int count) =>
         new(BehaviorChoiceCardinalityKind.UpTo, count);
@@ -80,11 +97,12 @@ public sealed class BehaviorChoiceCardinality : IEquatable<BehaviorChoiceCardina
     public bool Equals(BehaviorChoiceCardinality? other) =>
         other is not null
         && Kind == other.Kind
-        && Count == other.Count;
+        && Count == other.Count
+        && ClampsToCandidates == other.ClampsToCandidates;
 
     public override bool Equals(object? obj) => Equals(obj as BehaviorChoiceCardinality);
 
-    public override int GetHashCode() => HashCode.Combine(Kind, Count);
+    public override int GetHashCode() => HashCode.Combine(Kind, Count, ClampsToCandidates);
 }
 
 /// <summary>

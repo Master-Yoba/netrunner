@@ -568,6 +568,17 @@ public sealed partial class CorpHeuristicPolicy
                 bool gathers = asset.Triggers.Any(trigger => trigger.Occurrence is OccurrenceKind.DiscardPhaseEnded or OccurrenceKind.TurnBegin
                     && HeuristicContext.Flatten(trigger.Instructions).Any(instruction => instruction.Kind == BehaviorInstructionKind.AddCounter));
                 if (usable || gathers) return Value(100 - cost * 30, "rez/ability-or-counter-asset", approximate: true);
+                // VP.3 (misplay sweep): assets that work just by being rezzed were never rezzed: a steal tax and a score drain
+                // (Magistrate Revontulet), a Double operation's click discount while one is in HQ (Synchrocyclotron), and bad
+                // publicity feeding the identity's first-bad-publicity search (Nihilo Agent with Editorial Division).
+                bool taxes = asset.StealCredits > 0;
+                bool discounts = asset.FirstDoubleOperationClickDiscount > 0
+                    && context.Features.Hand.Any(held => context.Definition(held)?.Printed.Subtypes.Contains("double", StringComparer.Ordinal) == true);
+                bool feedsIdentity = HeuristicContext.Flatten(asset.Triggers.SelectMany(trigger => trigger.Instructions))
+                        .Any(instruction => instruction.Kind == BehaviorInstructionKind.TakeBadPublicity)
+                    && context.Features.Board.CorpIdentity.Any(identity => context.Definition(identity)?.Behavior?.Triggers
+                        .Any(trigger => trigger.Occurrence == OccurrenceKind.FirstBadPublicityThisTurn) == true);
+                if (taxes || discounts || feedsIdentity) return Value(120 - cost * 30, "rez/asset-works-rezzed", approximate: true);
             }
             // v29 (bot loop 2): an asset that pays each turn (Public Access Plaza's credit) pays more the sooner it is rezzed.
             int perTurn = definition.Behavior?.Triggers.Where(trigger => trigger.Occurrence == OccurrenceKind.TurnBegin)

@@ -463,7 +463,10 @@ internal static class ElevationHarness
     /// decline an optional trigger, continue the run, take the first breach
     /// candidate, or finish an access without acting.
     /// </summary>
-    public static GameState Pass(GameState state)
+    public static GameState Pass(GameState state) => PassResult(state).State;
+
+    /// <summary>The pass <see cref="Pass"/> makes, with its events.</summary>
+    public static ApplyResult PassResult(GameState state)
     {
         PendingDecision decision = Assert.IsType<PendingDecision>(state.PendingDecision);
         ActionKind[] order =
@@ -489,7 +492,7 @@ internal static class ElevationHarness
         Assert.True(action is not null,
             $"No pass action for {decision.Kind} '{decision.Prompt}': "
             + string.Join(", ", decision.LegalActions.Select(static candidate => candidate.Kind)));
-        return Apply(state, action!).State;
+        return Apply(state, action!);
     }
 
     /// <summary>Passes priority and declines optional triggers until the stop condition holds.</summary>

@@ -112,7 +112,9 @@ public sealed record AgentTurn([property: JsonRequired] PlayerSide ActiveSide, [
 public sealed record AgentPlayers([property: JsonRequired] AgentPlayer Corp, [property: JsonRequired] AgentPlayer Runner);
 public sealed record AgentPlayer([property: JsonRequired] string Id, [property: JsonRequired] int Credits,
     [property: JsonRequired] int Clicks, [property: JsonRequired] int AgendaPoints,
-    int? MaximumHandSize, int? Tags, int? CoreDamage, int? UsedMemory, int? MemoryLimit);
+    int? MaximumHandSize, int? Tags, int? CoreDamage, int? UsedMemory, int? MemoryLimit,
+    // VP-BAD-PUBLICITY: the Corp's, public once it has some; omitted otherwise, so existing feature digests keep their bytes.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? BadPublicity = null);
 public sealed record AgentOutcome(GameOutcomeKind Kind, PlayerSide? Winner, GameWinReason? Reason);
 public sealed record AgentHiddenCounts([property: JsonRequired] int CorpHand, [property: JsonRequired] int CorpDeck,
     [property: JsonRequired] int RunnerGrip, [property: JsonRequired] int RunnerStack);
