@@ -378,6 +378,55 @@ public sealed class VantagePointRunIceTests
             "\"delta\":5,\"reasonKey\":\"probe-ezam-strength\"", "run.all-ice-strength-undeclared");
     }
 
+    // PR #154's second review: a copy of a valid change is refused too, past what the ICE's subroutine resolved.
+    [Fact]
+    public void ADuplicatedAllIceStrengthChangeIsInvalid()
+    {
+        GameState state = new ElevationBoard(PlayerSide.Runner)
+            .Add(CorpFillerIce, Place.Ice, rezzed: true)
+            .Add(ProbeEzamIce, Place.Ice, rezzed: true)
+            .Begin(catalog: VantagePointProbe);
+        state = RunTo(state, ElevationBoard.Remote, static value => value.RunState?.AllIceStrengthModifiers is { Count: 1 });
+        string json = EngineJson.Serialize(state);
+        int start = json.IndexOf("\"allIceStrengthModifiers\":[", StringComparison.Ordinal) + "\"allIceStrengthModifiers\":[".Length;
+        string entry = json[start..(json.IndexOf(']', start))];
+
+        AssertForgeryCaught(state, entry, entry + "," + entry, "run.all-ice-strength-undeclared");
+    }
+
+    [Fact]
+    public void AGainedSubroutineWithAForgedSourceKeyIsInvalid()
+    {
+        GameState state = new ElevationBoard(PlayerSide.Runner) { GripFiller = 2 }
+            .Add(ProbeStickAndPokeResource, Place.Rig)
+            .Add(CorpFillerIce, Place.Ice, rezzed: true)
+            .Begin(catalog: VantagePointProbe);
+        state = RunTo(state, ElevationBoard.Remote, InEncounter);
+
+        AssertForgeryCaught(state, "\"reasonKey\":\"probe-stick-and-poke\"", "\"reasonKey\":\"probe-forged\"",
+            "run.gained-subroutine-source-invalid");
+    }
+
+    // PR #154's second review: moving the Runner mid-encounter (Proprionegation) ends the encounter, whose trigger
+    // resolves before the move (the probe Lionsmane's EncounterEnded gains the Corp a credit).
+    [Fact]
+    public void MovingTheRunnerEndsTheEncounter()
+    {
+        GameState state = new ElevationBoard(PlayerSide.Runner)
+            .Add("35048", Place.CorpScore, counters: new Dictionary<string, int> { ["agenda"] = 1 })
+            .Add(ProbeLionsmaneIce, Place.Ice, rezzed: true)
+            .Add(CorpFillerIce, Place.Ice, server: ElevationBoard.ArchivesServer)
+            .Begin(catalog: VantagePointProbe);
+        state = RunTo(state, ElevationBoard.Remote, static value => value.RunState?.Step == RunTimingStep.EncounterPaidWindow
+            && value.PendingDecision?.LegalActions.Any(static action => action.Parameters is AbilityActionParameters { AbilityKey: "proprionegation-move" }) == true);
+        state = RoundTrip(Apply(state, static action => action.Parameters is AbilityActionParameters { AbilityKey: "proprionegation-move" }).State);
+        state = RoundTrip(PassUntil(state, static value => value.RunState is null
+            || value.RunState.AttackedServer == ElevationBoard.ServerId(value, ElevationBoard.ArchivesServer)));
+
+        Assert.Equal(ElevationBoard.ServerId(state, ElevationBoard.ArchivesServer), state.RunState!.AttackedServer);
+        Assert.Equal(5 + 1, Player(state, PlayerSide.Corp).Credits);
+    }
+
     private static void AssertForgeryCaught(GameState state, string declared, string forged, string violation)
     {
         string json = EngineJson.Serialize(state);

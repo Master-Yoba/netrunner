@@ -1461,13 +1461,24 @@ public static partial class StateInvariantValidator
 
         ValidateRunGainedSubroutines(state, behaviorCatalog, run, path, violations);
 
-        // VP-ALL-ICE-STRENGTH (PR #154's review): each change is one its source declares, with the recorded amount.
-        foreach (RunAllIceStrengthModifier modifier in run.AllIceStrengthModifiers ?? [])
+        // VP-ALL-ICE-STRENGTH (PR #154's review): each change is one its source declares, with the recorded amount, and
+        // no more often than it resolved: an ICE subroutine as often as the run's ledger shows it resolving, anything
+        // else once.
+        IReadOnlyList<RunAllIceStrengthModifier> strengthChanges = run.AllIceStrengthModifiers ?? [];
+        foreach (RunAllIceStrengthModifier modifier in strengthChanges)
         {
+            int resolutions = behaviorCatalog.TryGetIce(modifier.SourceDefinitionId, out IceBehaviorSpec? strengthIce)
+                ? (run.ResolvedSubroutineLedger ?? []).Count(entry => entry.IceId == modifier.SourceCardId
+                    && entry.Ordinal < strengthIce.Subroutines.Count
+                    && strengthIce.Subroutines[entry.Ordinal] is BehaviorSubroutineSpec { TriggerKey: var subroutineKey }
+                    && string.Equals(subroutineKey, modifier.ReasonKey, StringComparison.Ordinal))
+                : 1;
             if (!state.Cards.Any(card => card?.Id == modifier.SourceCardId && card.DefinitionId == modifier.SourceDefinitionId)
                 || !behaviorCatalog.TryGet(modifier.SourceDefinitionId, out CardBehaviorDefinition? strengthSource)
                 || !BehaviorRunRules.InstructionsUnder(strengthSource, modifier.ReasonKey).Any(instruction =>
-                    instruction.Kind == BehaviorInstructionKind.ModifyAllIceStrengthForRun && instruction.Amount == modifier.Delta))
+                    instruction.Kind == BehaviorInstructionKind.ModifyAllIceStrengthForRun && instruction.Amount == modifier.Delta)
+                || strengthChanges.Count(other => other.SourceCardId == modifier.SourceCardId
+                    && string.Equals(other.ReasonKey, modifier.ReasonKey, StringComparison.Ordinal)) > resolutions)
             {
                 Add(violations, "run.all-ice-strength-undeclared", $"{path}.allIceStrengthModifiers",
                     "An all-ICE strength change must match its source's declaration.");
@@ -2463,11 +2474,20 @@ public static partial class StateInvariantValidator
 
         foreach (RunGainedSubroutine entry in gained)
         {
+            // PR #154's review: the recorded trigger or ability declares the gain, and gives it once per encounter, or
+            // once a run for a once-per-turn trigger.
             if (!state.Cards.Any(card => card?.Id == entry.SourceCardId && card.DefinitionId == entry.SourceDefinitionId)
                 || !behaviorCatalog.TryGet(entry.SourceDefinitionId, out CardBehaviorDefinition? source)
-                || source.GainedIceSubroutine is null)
+                || source.GainedIceSubroutine is null
+                || !BehaviorRunRules.InstructionsUnder(source, entry.ReasonKey)
+                    .Any(static instruction => instruction.Kind == BehaviorInstructionKind.EncounteredIceGainsSubroutine)
+                || gained.Count(other => other.SourceCardId == entry.SourceCardId
+                    && string.Equals(other.ReasonKey, entry.ReasonKey, StringComparison.Ordinal)
+                    && (other.EncounterId == entry.EncounterId
+                        || source.Triggers.Any(trigger => trigger.OncePerTurn
+                            && string.Equals(trigger.Key, entry.ReasonKey, StringComparison.Ordinal)))) > 1)
             {
-                Add(violations, "run.gained-subroutine-source-invalid", gainedPath, "A gained subroutine keeps a source that declares it.");
+                Add(violations, "run.gained-subroutine-source-invalid", gainedPath, "A gained subroutine keeps a source that declares it, as often as it may.");
             }
         }
 
@@ -3006,6 +3026,14 @@ public static partial class StateInvariantValidator
                 && (run.CurrentIceId == passedIce
                     || occurrence.Kind == OccurrenceKind.EncounterEnded && run.Step == RunTimingStep.RunEnd
                         && run.Encounter?.IceId == passedIce)
+                && occurrence.ServerId == run.AttackedServer
+            // A pending move ends the encounter in whatever window moved it (Proprionegation).
+            || occurrence.Kind == OccurrenceKind.EncounterEnded
+                && run.PendingMoveServerId is not null
+                && run.Encounter is { Status: RunEncounterStatus.Complete } movedFrom
+                && occurrence.SubjectCardId == movedFrom.IceId
+                && frame.Controller == run.InitiatingPlayer
+                && occurrence.Controller == run.InitiatingPlayer
                 && occurrence.ServerId == run.AttackedServer,
             // VP-SUBROUTINE-BROKEN, VP-ICE-PASSED (fully broken): raised in the encounter's paid window by a break.
             OccurrenceKind.SubroutineBroken or OccurrenceKind.IceFullyBroken => run.Step == RunTimingStep.EncounterPaidWindow
@@ -3250,7 +3278,8 @@ public static partial class StateInvariantValidator
         }
 
         if ((run.Step is RunTimingStep.EncounterPaidWindow or RunTimingStep.Encounter)
-            && encounter.Status != RunEncounterStatus.Initialized)
+            && encounter.Status != RunEncounterStatus.Initialized
+            && run.PendingMoveServerId is null)
         {
             Add(violations, "run.encounter-status-mismatch", $"{path}.encounter.status", "Encounter paid/initialization timing requires an initialized encounter.");
         }

@@ -739,6 +739,18 @@ public static partial class GameEngine
 
         if (run.PendingMoveServerId is { } moveTo && frame.Step != RunTimingStep.RunEnd)
         {
+            // VP-ENCOUNTER-ENDED (PR #154's review): moving ends the encounter, whose reactions resolve first; the move
+            // follows when the cursor resumes.
+            if (run.Encounter is { Status: RunEncounterStatus.Initialized } live
+                && HasActiveCatalogTrigger(working, OccurrenceKind.EncounterEnded, run.AttackedServer, live.IceId))
+            {
+                RunState ended = run.WithEncounter(new RunEncounterState(live.Version, live.Id, live.IceId,
+                    RunEncounterStatus.Complete, live.Subroutines));
+                working.RunState = ended;
+                QueueRunIceOccurrence(working, ended, OccurrenceKind.EncounterEnded, live.IceId);
+                return;
+            }
+
             MoveRunnerToOutermostPosition(working, run, moveTo);
             return;
         }
@@ -2995,7 +3007,8 @@ public static partial class GameEngine
             gained.Where(value => value.EncounterId == encounter.Id).Select(static value => value.Ordinal).DefaultIfEmpty(-1).Max()) + 1;
         RunSubroutineState added = new(new SubroutineId($"subroutine:{encounter.Id.Value}:{ordinal}"), ordinal);
         RunState updated = run
-            .WithGainedSubroutines(gained.Append(new RunGainedSubroutine(encounter.Id, ordinal, frame.SourceCardId, frame.DefinitionId)).ToArray())
+            .WithGainedSubroutines(gained.Append(new RunGainedSubroutine(encounter.Id, ordinal, frame.SourceCardId, frame.DefinitionId,
+                frame.TriggerKey ?? frame.AbilityKey ?? CardBehaviorRestrictionReason)).ToArray())
             .WithEncounter(new RunEncounterState(
                 encounter.Version,
                 encounter.Id,

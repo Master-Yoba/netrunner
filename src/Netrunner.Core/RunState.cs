@@ -513,11 +513,17 @@ public sealed record RunAllIceStrengthModifier
 public sealed record RunGainedSubroutine
 {
     [JsonConstructor]
-    public RunGainedSubroutine(EncounterId encounterId, int ordinal, CardInstanceId sourceCardId, CardDefinitionId sourceDefinitionId)
+    public RunGainedSubroutine(
+        EncounterId encounterId,
+        int ordinal,
+        CardInstanceId sourceCardId,
+        CardDefinitionId sourceDefinitionId,
+        string reasonKey)
     {
         if (!StableIdentifier.TryValidate(encounterId.Value)
             || !StableIdentifier.TryValidate(sourceCardId.Value)
-            || !StableIdentifier.TryValidate(sourceDefinitionId.Value))
+            || !StableIdentifier.TryValidate(sourceDefinitionId.Value)
+            || !StableIdentifier.TryValidate(reasonKey))
         {
             throw new ArgumentException("A gained subroutine requires a stable encounter and source.", nameof(encounterId));
         }
@@ -527,11 +533,17 @@ public sealed record RunGainedSubroutine
         Ordinal = ordinal;
         SourceCardId = sourceCardId;
         SourceDefinitionId = sourceDefinitionId;
+        ReasonKey = reasonKey;
     }
 
     [JsonInclude]
     [JsonRequired]
     public EncounterId EncounterId { get; private set; }
+
+    /// <summary>The key of the trigger or ability whose instruction gave the subroutine (PR #154's review).</summary>
+    [JsonInclude]
+    [JsonRequired]
+    public string ReasonKey { get; private set; }
 
     [JsonInclude]
     [JsonRequired]
@@ -545,7 +557,7 @@ public sealed record RunGainedSubroutine
     [JsonRequired]
     public CardDefinitionId SourceDefinitionId { get; private set; }
 
-    internal RunGainedSubroutine Copy() => new(EncounterId, Ordinal, SourceCardId, SourceDefinitionId);
+    internal RunGainedSubroutine Copy() => new(EncounterId, Ordinal, SourceCardId, SourceDefinitionId, ReasonKey);
 }
 
 /// <summary>The hidden Corp pool a random breach candidate is drawn from.</summary>
