@@ -362,3 +362,29 @@ refills the grip before the next hit. Without draws this is the old total check,
 
 The eighth review's one: the bots' whole-run forecast reads changes to every ICE's strength, from active cards and, through
 the observation (`allIceStrength`, absent while none), from the run itself.
+
+### VP.5a: VP.5's binding gaps (15 October 2026)
+
+On probe cards 90049 to 90059 (`VantagePointRunGapTests`):
+- **VP-ENDED-RUN-SERVER:** with no live run, the attacked-server selector reads the server of the run-ended occurrence
+  resolving (Kompromat's derez choice). The engine and the validator share the lookup.
+- **VP-INSTALL-AND-REZ-LESS:** a rez paying less takes `DiscountLeftAfterIceInstallTax`, the shared discount left after
+  the install tax the ICE paid. It may record whether it rezzed a card matching its filter, and bad publicity may take that
+  recorded amount (Reanimation Protocol). A card filter may name a subtype the card must lack (`ExcludedSubtype`:
+  "non-liability", Beta Build's "non-virus").
+- **VP-RETURN-AT-RUN-END:** `RememberForRun` keeps a card in the run's persistent context, which travels into the
+  run-ended occurrence. A `RememberedCard` target names it while it is still installed. A run event's own abilities are
+  active as its run begins (Beta Build: search, install, and the program back on top of the stack when the run ends).
+- **VP-RUN-AFTER-RUN:** `RunAfterRun` marks the turn frame. Once the ended run's reactions finish, the Runner runs the
+  chosen card's remote server as part of the same action. A remote exists only while it holds a card, so the
+  remote-server selector picks a server by one of its cards (Aircheck).
+- **VP-PAID-REDIRECT:** the occurrence `ServerWouldBeApproached`, raised once at the approach step (6.9.4g). It fires
+  before the approach, and `ChangeAttackedServer` makes the Runner approach a central server instead. The trigger condition
+  `RunStartedBySource` limits it to the source's own run (Baker).
+- **VP-RESOLVE-SUBROUTINE:** `ResolveIceSubroutine` resolves a subroutine of a piece of ICE outside an encounter. A
+  behavior subroutine runs as the resolving card's child frame. Credit, tag and plain damage subroutines resolve
+  directly, and end-the-run subroutines do nothing with no run. A mode offering one is available only while it can
+  resolve; subroutines that need an encounter's choice frame aren't offered (Unleash, a ruling for VP.5's binding to
+  revisit against the decks' ICE).
+- **VP-ADVANCEMENT-COST:** existing vocabulary plus the trigger condition `RunOnAnotherServer`: an optional trigger
+  requiring its source's advancement counters removes one (Sacrifice Zone Expansion).

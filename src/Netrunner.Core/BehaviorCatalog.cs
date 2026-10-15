@@ -2487,8 +2487,7 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
         or OccurrenceKind.IceBypassed
         or OccurrenceKind.IceFullyBroken
         or OccurrenceKind.SubroutineBroken
-        or OccurrenceKind.EncounterEnded
-        or OccurrenceKind.ServerWouldBeApproached;
+        or OccurrenceKind.EncounterEnded;
 
     private static ReadOnlyCollection<BehaviorInstruction> Freeze(
         IEnumerable<BehaviorInstruction> values)

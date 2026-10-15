@@ -227,3 +227,6 @@ Binding VP.5's cards found seven more, which land in VP.5a before those cards:
 | `VP-PAID-REDIRECT` | When the Runner would approach a server, a payment changes the attacked server first. | Baker |
 | `VP-RESOLVE-SUBROUTINE` | A subroutine of a chosen piece of ICE resolves outside an encounter. | Unleash |
 | `VP-ADVANCEMENT-COST` | An optional trigger's cost of its source's advancement counters. | Sacrifice Zone Expansion |
+
+All seven landed in VP.5a (the progress record has each contract). `VP-ADVANCEMENT-COST` needed only a trigger condition
+for "a run on another server", and `VP-RETURN-AT-RUN-END` also made a run event's abilities active as its run begins.
