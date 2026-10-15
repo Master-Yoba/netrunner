@@ -175,6 +175,35 @@ public sealed class VantagePointBatch1CorpTests
         Assert.Equal(ZoneKind.ServerIce, ZoneOf(state, Kessleroid));
     }
 
+    [Fact]
+    [Trait("VantagePointCard", RetirementPlan)]
+    public void RetirementPlanOffersOnlyTheKindsArchivesHolds()
+    {
+        // PR #153's review: with only ICE in Archives, the agenda and asset modes would skip the mandatory install.
+        GameState state = new ElevationBoard { CorpCredits = 1 }
+            .Add(RetirementPlan, Place.Hq)
+            .Add(Kessleroid, Place.Archives)
+            .Begin(catalog: Startup);
+        state = Play(state, RetirementPlan);
+
+        Assert.Equal(["ice"], Actions(state).Select(static action => action.Parameters).OfType<BehaviorChoiceParameters>()
+            .SelectMany(static choice => choice.OptionKeys));
+    }
+
+    [Fact]
+    [Trait("VantagePointCard", RetirementPlan)]
+    public void RetirementPlanWithNothingToInstallDoesNothing()
+    {
+        GameState state = new ElevationBoard { CorpCredits = 1 }
+            .Add(RetirementPlan, Place.Hq)
+            .Add(HedgeFund, Place.Archives)
+            .Begin(catalog: Startup);
+        state = RoundTrip(ToAction(Play(state, RetirementPlan)));
+
+        Assert.Equal(ZoneKind.CorpDiscard, ZoneOf(state, RetirementPlan));
+        Assert.Equal(ZoneKind.CorpDiscard, ZoneOf(state, HedgeFund));
+    }
+
     [Theory]
     [Trait("VantagePointCard", Esca)]
     [InlineData(0, 0)]

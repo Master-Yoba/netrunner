@@ -257,6 +257,12 @@ saved decision from the first ladder (`tests/Netrunner.Match.Tests/Fixtures/save
   Only nsg-core-sets moved (396.2 at VP.2): 22 games of NSG's Fashion Lab, whose Mycoweb now offers Ansel 1.0's
   install subroutine (the install-option fix above).
 
+**Review (PR #153).** Codex found that narrowing install options let every zone-install mode through: Retirement Plan
+with only ICE in Archives still offered its agenda and asset modes, and choosing one skipped the mandatory install. A
+zone-install mode is now offered only while its zone holds a candidate, and the validator mirrors it. When no mode has
+a candidate, the choice resolves to nothing, since the card is still playable. The re-run ladder (38d7d12) has 0
+errors and 1 capped game; the Synchrocyclotron fixture comes from it, since the changed offers move the old saved game.
+
 ### Rulings and simplifications
 
 | Card | Note |

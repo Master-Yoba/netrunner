@@ -2532,11 +2532,20 @@ public static partial class GameEngine
         string[] optionKeys = spec.Options
             .Where(option => !IsBehaviorInstallOption(option)
                 || IsBehaviorInstallOptionAvailable(working, frame, option))
+            .Where(option => IsBehaviorZoneInstallOptionAvailable(working, frame, option))
             .Where(option => IsBehaviorChoiceOptionAffordable(working, owner, option, frame.SourceCardId))
             .Select(option => option.Key)
             .ToArray();
         if (spec.Mode == BehaviorChoiceMode.Mode && optionKeys.Length == 0)
         {
+            // Every mode installs from a zone that holds nothing to install (Retirement Plan with no agenda, asset or ICE in
+            // Archives): the card does nothing.
+            if (spec.Options.All(option => option.Instructions is [{ Kind: BehaviorInstructionKind.InstallCard, IsZoneInstall: true }]))
+            {
+                AdvanceBehaviorCursor(working, frame);
+                return;
+            }
+
             throw new ResolutionFailureException($"Behavior choice '{spec.Key}' has no currently legal mode option.");
         }
 
@@ -2937,6 +2946,40 @@ public static partial class GameEngine
     // reducer workspace.  These read-only seams replay the exact reducer
     // validation against a cloned workspace so a forged legal-action payload
     // cannot pass validation merely because it has a plausible shape.
+    /// <summary>
+    /// A mode that installs a card from a zone is offered only while that zone holds a candidate, so a mandatory install
+    /// can't be skipped by choosing an empty mode (Retirement Plan's agenda mode with only ICE in Archives; PR #153's
+    /// review). Any other option is available here.
+    /// </summary>
+    private static bool IsBehaviorZoneInstallOptionAvailable(
+        WorkingState working,
+        BehaviorResolutionFrame frame,
+        BehaviorChoiceOption option)
+    {
+        if (option.Instructions is not [{ Kind: BehaviorInstructionKind.InstallCard, IsZoneInstall: true, Target: { } target }])
+        {
+            return true;
+        }
+
+        try
+        {
+            return MaterializeBehaviorCandidates(working, target, frame.SourceCardId).Length > 0;
+        }
+        catch (ResolutionFailureException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>The validator's view of <see cref="IsBehaviorZoneInstallOptionAvailable(WorkingState, BehaviorResolutionFrame, BehaviorChoiceOption)"/>.</summary>
+    internal static bool IsBehaviorZoneInstallOptionAvailable(
+        GameState state,
+        IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog? runtimeCardCatalog,
+        BehaviorResolutionFrame frame,
+        BehaviorChoiceOption option) =>
+        IsBehaviorZoneInstallOptionAvailable(WorkingState.From(state, behaviorCatalog, runtimeCardCatalog), frame, option);
+
     internal static bool IsBehaviorChoiceOptionAffordable(
         GameState state,
         IBehaviorCatalog behaviorCatalog,

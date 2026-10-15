@@ -29,7 +29,7 @@ public sealed class VantagePointBotTests
     [InlineData("vp3-editorial-assets", 77, "36049")]
     [InlineData("vp3-editorial-assets", 181, "36048")]
     // Synchrocyclotron with a Double operation in HQ.
-    [InlineData("vp3-synchrocyclotron", 192, "36027")]
+    [InlineData("vp3-synchrocyclotron", 188, "36027")]
     public async Task TheCorpRezzesAssetsThatWorkRezzed(string fixture, long sequence, string code)
     {
         if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;

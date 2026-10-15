@@ -12579,6 +12579,12 @@ public static partial class StateInvariantValidator
                         runtimeCardCatalog,
                         frame,
                         option))
+                .Where(option => GameEngine.IsBehaviorZoneInstallOptionAvailable(
+                    state,
+                    behaviorCatalog,
+                    runtimeCardCatalog,
+                    frame,
+                    option))
                 .Where(option => GameEngine.IsBehaviorChoiceOptionAffordable(
                     state,
                     behaviorCatalog,
