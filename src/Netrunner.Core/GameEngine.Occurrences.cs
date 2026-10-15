@@ -170,7 +170,8 @@ public static partial class GameEngine
         && trigger.Scope == BehaviorTriggerScope.Self
         && subjectCardId == source.Id
         && source.OwnerSide == PlayerSide.Runner
-        && working.Zones.Any(zone => zone.Id == source.ZoneId && zone.Kind == ZoneKind.RunnerHeap)
+        && working.Zones.Any(zone => zone.Id == source.ZoneId
+            && zone.Kind is ZoneKind.RunnerHeap or ZoneKind.RunnerRemovedFromGame)
         && working.BehaviorCatalog.TryGetRunEvent(source.DefinitionId, out _);
 
     /// <summary>Whether a trashed-card occurrence records that its subject was rezzed.</summary>
@@ -218,13 +219,23 @@ public static partial class GameEngine
     private static void GrantNextTurnClicks(WorkingState working, PlayerSide side, int amount)
     {
         TurnState turn = working.Turn;
-        if (amount <= 0 || turn.History?.ThisTurn(side) is not { } facts)
+        if (amount == 0 || turn.History is null)
         {
             return;
         }
 
-        ReplaceTurn(working, turn.ActiveSide, turn.Phase, turn.TurnNumber, turn.Step,
-            turn.History.WithNextTurnExtraClicks(side, checked(facts.NextTurnExtraClicks + amount)));
+        if (turn.History.ThisTurn(side) is { } facts)
+        {
+            ReplaceTurn(working, turn.ActiveSide, turn.Phase, turn.TurnNumber, turn.Step,
+                turn.History.WithNextTurnExtraClicks(side, checked(facts.NextTurnExtraClicks + amount)));
+        }
+        else if (side != turn.ActiveSide && turn.History.ThisTurn(turn.ActiveSide) is { } active)
+        {
+            // VP-ALLOTTED-CLICKS: the opponent hasn't had a turn yet (the Corp's first turn); the active side holds it.
+            ReplaceTurn(working, turn.ActiveSide, turn.Phase, turn.TurnNumber, turn.Step,
+                turn.History.WithOpponentFirstTurnExtraClicks(turn.ActiveSide,
+                    checked(active.OpponentFirstTurnExtraClicks + amount)));
+        }
     }
 
     /// <summary>"You cannot score that card this turn."</summary>

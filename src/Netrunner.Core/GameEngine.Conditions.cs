@@ -12,6 +12,17 @@ public static partial class GameEngine
     internal static int ThreatLevel(IEnumerable<PlayerState> players) =>
         players.Select(static player => player.AgendaPoints).DefaultIfEmpty(0).Max();
 
+    /// <summary>
+    /// VP-ENCOUNTER-SUBTYPE: the encountered ICE has the subtype, printed or gained (Chromatophores); with no subtype, any
+    /// encounter matches.
+    /// </summary>
+    private static bool EncounteredIceHasSubtype(WorkingState working, string? subtype) =>
+        subtype is null
+        || working.RunState?.Encounter is { } encounter
+            && working.Cards.FirstOrDefault(card => card.Id == encounter.IceId) is { } ice
+            && (IceGainsEveryType(working.Cards, working.BehaviorCatalog, ice.Id)
+                || CardSubtypes(working.RuntimeCardCatalog, ice.DefinitionId).Contains(subtype, StringComparer.Ordinal));
+
     private static bool? SharedConditionMatches(
         WorkingState working,
         PlayerId controllerId,
@@ -32,6 +43,7 @@ public static partial class GameEngine
                     && CardSubtypes(working.RuntimeCardCatalog, card.DefinitionId).Contains(condition.Fact!, StringComparer.Ordinal)),
             BehaviorConditionKind.CreditsAtLeast when condition.SubjectSide is { } creditSide =>
                 GetPlayer(working, creditSide).Credits >= threshold,
+            BehaviorConditionKind.BadPublicityAtLeast => (working.RulesState?.BadPublicity ?? 0) >= threshold,
             BehaviorConditionKind.ThreatLevelAtLeast => ThreatLevel(working.Players) >= threshold,
             BehaviorConditionKind.RunnerTagsAtLeast => RunnerTags(working) >= threshold,
             BehaviorConditionKind.ZoneCountAtMost =>

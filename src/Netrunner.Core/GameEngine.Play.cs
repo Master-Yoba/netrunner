@@ -295,6 +295,12 @@ public static partial class GameEngine
             targetServers = targetServers.Where(server => allowed.Contains(server.Kind));
         }
 
+        if (runEvent.TargetMustBeProtected)
+        {
+            targetServers = targetServers.Where(server =>
+                working.Zones.FirstOrDefault(zone => zone.Id == server.IceZoneId)?.CardIds.Count > 0);
+        }
+
         plans = targetServers
             .Select(server => new RunEventPlayPlan(
                 card,
@@ -479,6 +485,11 @@ public static partial class GameEngine
             DeferOccurrence(working, OccurrenceKind.FirstOperationPlayedThisTurn, PlayerSide.Corp, plan.Card.Id);
         }
 
+        if (side == PlayerSide.Runner && ActiveTurnEventCount(working, TurnEventKind.EventPlayed) == 1)
+        {
+            DeferOccurrence(working, OccurrenceKind.FirstEventPlayedThisTurn, PlayerSide.Runner, plan.Card.Id);
+        }
+
         PushBehaviorChild(
             working,
             new BehaviorInvocationContext(plan.Card.Id, player.Id, player.Id),
@@ -535,6 +546,11 @@ public static partial class GameEngine
         }
 
         RecordTurnEvent(working, PlayerSide.Runner, TurnEventKind.EventPlayed);
+        if (ActiveTurnEventCount(working, TurnEventKind.EventPlayed) == 1)
+        {
+            DeferOccurrence(working, OccurrenceKind.FirstEventPlayedThisTurn, PlayerSide.Runner, parameters.CardId);
+        }
+
         StartRunInWorkingState(
             working,
             targetServerId,
@@ -945,6 +961,11 @@ public static partial class GameEngine
         if (side == PlayerSide.Corp && ActiveTurnEventCount(working, TurnEventKind.OperationPlayed) == 1)
         {
             DeferOccurrence(working, OccurrenceKind.FirstOperationPlayedThisTurn, PlayerSide.Corp, card.Id);
+        }
+
+        if (side == PlayerSide.Runner && ActiveTurnEventCount(working, TurnEventKind.EventPlayed) == 1)
+        {
+            DeferOccurrence(working, OccurrenceKind.FirstEventPlayedThisTurn, PlayerSide.Runner, card.Id);
         }
 
         PushBehaviorChild(working, new BehaviorInvocationContext(card.Id, player.Id, player.Id), definition, playArea);

@@ -42,6 +42,16 @@ internal static class ElevationHarness
     internal const string ProbeLuanaAsset = "90022";
     internal const string ProbeSellOutEvent = "90023";
 
+    /// <summary>VP.2c probes: the primitives VP.3's binding found missing.</summary>
+    internal const string ProbeBadPublicityOperation = "90024";
+    internal const string ProbeBarrierResource = "90025";
+    internal const string ProbeCaveatOperation = "90026";
+    internal const string ProbeDiveEvent = "90027";
+    internal const string ProbeTouchstoneResource = "90028";
+    internal const string ProbeStowawayProgram = "90029";
+    internal const string ProbePublicAgenda = "90030";
+    internal const string ProbeGrubberIce = "90031";
+
     /// <summary>The neutral Gateway identities a match board gets by default.</summary>
     internal const string CorpNeutralIdentity = "30077";
 
@@ -54,6 +64,11 @@ internal static class ElevationHarness
     private static readonly Lazy<BehaviorCatalog> LazyProbe = new(CreateProbe);
 
     private static readonly Lazy<BehaviorCatalog> LazyVantagePointProbe = new(CreateVantagePointProbe);
+
+    private static readonly Lazy<BehaviorCatalog> LazyStartup = new(VantagePointBehaviorCatalog.Create);
+
+    /// <summary>The Startup catalog: Gateway, Elevation and the registered Vantage Point cards.</summary>
+    public static BehaviorCatalog Startup => LazyStartup.Value;
 
     public static BehaviorCatalog Behavior => LazyBehavior.Value;
 
@@ -76,7 +91,8 @@ internal static class ElevationHarness
     /// the Runner's score area and costs a click more to steal; the filler asset makes every steal cost 2 credits more; the
     /// filler resource is a score cost as Word on the Street's (-1, can't be forfeited, agendas installed this turn); the
     /// probe operation is playable once the Corp scored an agenda it didn't install this turn, and becomes a 2-point
-    /// agenda (Myōshu). VP.2 step 4: the cost and value probes (90013 to 90023), the probe Luana's trash cost, and the filler
+    /// agenda (Myōshu). VP.2 step 4: the cost and value probes (90013 to 90023); VP.2c: the probes 90024 to 90031 for the primitives VP.3's
+    /// binding found missing, the probe Luana's trash cost, and the filler
     /// ICE as a 1-strength barrier ending the run.
     /// </summary>
     public static BehaviorCatalog VantagePointProbe => LazyVantagePointProbe.Value;
@@ -85,6 +101,7 @@ internal static class ElevationHarness
     public static BehaviorCatalog CatalogFor(GameState state) =>
         string.Equals(state.BehaviorCatalogFingerprint, Probe.Fingerprint, StringComparison.Ordinal) ? Probe
         : string.Equals(state.BehaviorCatalogFingerprint, VantagePointProbe.Fingerprint, StringComparison.Ordinal) ? VantagePointProbe
+        : string.Equals(state.BehaviorCatalogFingerprint, Startup.Fingerprint, StringComparison.Ordinal) ? Startup
         : Behavior;
 
     private static BehaviorCatalog CreateVantagePointProbe() =>
@@ -152,6 +169,69 @@ internal static class ElevationHarness
             .Add(new CardBehaviorDefinition(new CardDefinitionId(ProbeLuanaAsset), PlayerSide.Corp, returnsHostedBadPublicity: true))
             .AddAsset(new AssetBehaviorSpec(new CardDefinitionId(ProbeLuanaAsset), trashCost: 3))
             .AddIce(new IceBehaviorSpec(new CardDefinitionId(CorpFillerIce), 1, IceType.Barrier, 1, [new EndRunSubroutineSpec()], []))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeBadPublicityOperation),
+                PlayerSide.Corp,
+                conditions: [BehaviorCondition.BadPublicityAtLeast(1)],
+                instructions: [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 1)]))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeBarrierResource),
+                PlayerSide.Runner,
+                paidAbilities:
+                [
+                    new BehaviorPaidAbility(
+                        "probe-barrier-strength",
+                        BehaviorAbilityTiming.EncounterPaidWindow,
+                        BehaviorAbilityActivation.PaidAbility,
+                        [new BehaviorCost(BehaviorCostKind.Credits, 1)],
+                        [BehaviorCondition.EncounteringSubtype("barrier")],
+                        [],
+                        [new BehaviorInstruction(BehaviorInstructionKind.ModifyEncounteredIceStrength, amount: -1, argument: "probe-barrier-strength")],
+                        BehaviorAbilityUsageLimit.Unlimited),
+                ]))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeCaveatOperation),
+                PlayerSide.Corp,
+                instructions: [new BehaviorInstruction(BehaviorInstructionKind.GainAllottedClicksNextTurn, amount: -1, recipient: BehaviorPlayerSelector.Runner)]))
+            .AddRunEvent(new RunEventBehaviorSpec(new CardDefinitionId(ProbeDiveEvent), 0, 0,
+                removedFromGameAfterRun: true, targetMustBeProtected: true))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeTouchstoneResource),
+                PlayerSide.Runner,
+                triggers:
+                [
+                    new BehaviorTrigger("probe-first-event", OccurrenceKind.FirstEventPlayedThisTurn, TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Controller, null, [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 1)]),
+                ]))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeStowawayProgram),
+                PlayerSide.Runner,
+                triggers:
+                [
+                    new BehaviorTrigger("probe-hosted-success", OccurrenceKind.RunSuccessful, TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Controller, null, [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 2)],
+                        requireSourceOnAttackedServer: true),
+                ],
+                hosting: new HostingBehaviorSpec()))
+            .AddAgenda(new AgendaBehaviorSpec(new CardDefinitionId(ProbePublicAgenda), 2, installsFaceUp: true))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbePublicAgenda),
+                PlayerSide.Corp,
+                triggers:
+                [
+                    new BehaviorTrigger("probe-public-advanced", OccurrenceKind.CardAdvanced, TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Self, null, [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 1)]),
+                ]))
+            .AddIce(new IceBehaviorSpec(new CardDefinitionId(ProbeGrubberIce), 1, IceType.Barrier, 0, [new EndRunSubroutineSpec()], []))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeGrubberIce),
+                PlayerSide.Corp,
+                triggers:
+                [
+                    new BehaviorTrigger("probe-rez-on-hq", OccurrenceKind.CardRezzed, TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Self, null, [new BehaviorInstruction(BehaviorInstructionKind.TakeBadPublicity, amount: 1)],
+                        serverKindRequirement: ServerKind.Headquarters),
+                ]))
             .Add(new CardBehaviorDefinition(
                 new CardDefinitionId(ProbeSellOutEvent),
                 PlayerSide.Runner,
@@ -276,6 +356,7 @@ internal static class ElevationHarness
         [
             Pack("sg-test", ElevationTestMetadata.Gateway),
             Pack("elev-test", ElevationTestMetadata.Elevation),
+            Pack("vp-test", ElevationTestMetadata.VantagePoint),
             Pack("fixture-test",
             [
                 new(RunnerFiller, "Filler Event", "runner", "neutral-runner", "event", [], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
@@ -301,6 +382,14 @@ internal static class ElevationHarness
                 new(ProbeIceRezzedEvent, "Probe Underdome", "runner", "neutral-runner", "event", [], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
                 new(ProbeLuanaAsset, "Probe Luana", "corp", "neutral-corp", "asset", [], 3, 3, false, 1, null, null, 3, null, null, 0, null, null, null),
                 new(ProbeSellOutEvent, "Probe Sell Out", "runner", "neutral-runner", "event", [], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(ProbeBadPublicityOperation, "Probe Scapegoat", "corp", "neutral-corp", "operation", [], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(ProbeBarrierResource, "Probe Corsair", "runner", "neutral-runner", "resource", [], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(ProbeCaveatOperation, "Probe Caveat", "corp", "neutral-corp", "operation", [], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(ProbeDiveEvent, "Probe Dive", "runner", "neutral-runner", "event", ["Run"], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(ProbeTouchstoneResource, "Probe Touchstone", "runner", "neutral-runner", "resource", [], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(ProbeStowawayProgram, "Probe Stowaway", "runner", "neutral-runner", "program", ["Trojan"], 3, 3, false, 0, null, 1, null, null, null, 0, null, null, null),
+                new(ProbePublicAgenda, "Probe Public Agenda", "corp", "neutral-corp", "agenda", ["Public"], 3, 3, false, null, null, null, null, 2, 3, null, null, null, null),
+                new(ProbeGrubberIce, "Probe Grubber", "corp", "neutral-corp", "ice", ["Barrier"], 3, 3, false, 0, 1, null, null, null, null, 0, null, null, null),
             ]),
         ]);
         return GatewayRuntimeCardCatalog.Create(pool);

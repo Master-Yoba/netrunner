@@ -393,6 +393,7 @@ public sealed record GameplayOccurrenceEffect : EffectInstruction
                 or OccurrenceKind.CardAdvanced
                 or OccurrenceKind.FirstCardCreditGainThisTurn
                 or OccurrenceKind.FirstOperationPlayedThisTurn
+                or OccurrenceKind.FirstEventPlayedThisTurn
                 or OccurrenceKind.DamageDone
                 or OccurrenceKind.CardsTrashedFromHq
                 or OccurrenceKind.HandSizeDiscarded))
@@ -724,6 +725,7 @@ public static class EffectInstructionValidator
                 or OccurrenceKind.CardAdvanced
                 or OccurrenceKind.FirstCardCreditGainThisTurn
                 or OccurrenceKind.FirstOperationPlayedThisTurn
+                or OccurrenceKind.FirstEventPlayedThisTurn
                 or OccurrenceKind.DamageDone
                 or OccurrenceKind.CardsTrashedFromHq
                 or OccurrenceKind.HandSizeDiscarded))

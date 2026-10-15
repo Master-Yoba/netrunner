@@ -147,7 +147,7 @@ Bad publicity and stealth credits change the run structure and every credit paym
 scenario fixtures (M2/M4 style) and the differential fuzz over every existing pool before any card uses them: Gateway
 and Elevation games must replay unchanged. **No cards yet.**
 
-### VP.3 — Batch 1 (33 cards): bad publicity, stealth, scoring and economy
+### VP.3 — Batch 1 (28 cards): bad publicity, stealth, scoring and economy
 
 The bad publicity cards, the stealth credit cards that don't interact with ICE, the scoring and score-area cards, and the
 economy. Listed in the registry. **Gate:** the per-batch process (section 6), with the E6 budget.
@@ -159,7 +159,7 @@ subroutine-broken and encounter-ended occurrences; ICE gaining a subroutine; "ca
 out to prevent a subroutine; runs that can't be declared successful and access limits; paying an accessed card's cost;
 virus counters on Corp ICE. Every run-timing primitive gets a scenario fixture with CR citations.
 
-### VP.5 — Batch 2 (25 cards): ICE, runs and access
+### VP.5 — Batch 2 (28 cards): ICE, runs and access
 
 The ICE, the run events and run-interacting programs, hardware and upgrades. **Gate:** as VP.3.
 
@@ -170,7 +170,7 @@ on a resource; Archives cards turned face up as an occurrence; an ability used f
 the cost; and Méliès U's secret identity (D-VP-8). Hidden-information tests are central: what each side sees of a
 face-down host, an arranged deck and the active identity copy.
 
-### VP.7 — Batch 3 (8 cards): zones and hidden information
+### VP.7 — Batch 3 (10 cards): zones and hidden information
 
 Méliès U, Knowledge Seeker, Cultivate, Read-Write Share, Hackerspace, Nurse Hạnh, Tocsin and Hiram. **Gate:** as VP.3.
 
@@ -194,14 +194,16 @@ Méliès U, Knowledge Seeker, Cultivate, Read-Write Share, Hackerspace, Nurse H�
 
 ## 5. Card assignment
 
-The registry (VP.1) holds every card's batch and the primitives it needs; [VANTAGE_POINT_PRIMITIVES.md](VANTAGE_POINT_PRIMITIVES.md)
-is the readable form. VP.1's review may move cards between batches; the registry is the source of truth.
+The registry (VP.1) holds every card's batch and the primitives it needs;
+[VANTAGE_POINT_PRIMITIVES.md](VANTAGE_POINT_PRIMITIVES.md) is the readable form. VP.1's review may move cards between
+batches; the registry is the source of truth. VP.3's binding moved five (see the primitive audit's "VP.3 binding
+review").
 
 | Batch | Cards | Using only existing vocabulary |
 |---|---|---|
-| VP.3 | 33 | 7 |
-| VP.5 | 25 | 10 |
-| VP.7 | 8 | 1 |
+| VP.3 | 28 | 4 |
+| VP.5 | 28 | 10 |
+| VP.7 | 10 | 1 |
 
 ## 6. Per-batch process
 

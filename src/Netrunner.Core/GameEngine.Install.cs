@@ -3,6 +3,10 @@ namespace Netrunner.Core;
 /// <summary>Install and agenda play reducers for the legacy toy rules.</summary>
 public static partial class GameEngine
 {
+    /// <summary>VP-INSTALL-FACEUP: an agenda installed faceup, neither rezzed nor unrezzed (Sacrifice Zone Expansion).</summary>
+    private static bool InstallsFaceUp(WorkingState working, CardDefinitionId definitionId) =>
+        working.BehaviorCatalog.TryGetAgenda(definitionId, out AgendaBehaviorSpec? agenda) && agenda.InstallsFaceUp;
+
     private sealed record InstallPlan(
         CardInstanceState Card,
         CardRuntimeSpec Spec,
@@ -486,7 +490,8 @@ public static partial class GameEngine
             installed.DefinitionId,
             installed.ZoneId,
             installed.OwnerSide,
-            frame.CardClass is RuntimeCardClass.Program or RuntimeCardClass.Hardware or RuntimeCardClass.Resource,
+            frame.CardClass is RuntimeCardClass.Program or RuntimeCardClass.Hardware or RuntimeCardClass.Resource
+                || InstallsFaceUp(working, installed.DefinitionId),
             false,
             installed.AdvancementCounters, frame.HostCardId));
         MarkInstalledThisTurn(working, frame.CardId);
@@ -880,7 +885,7 @@ public static partial class GameEngine
             installed.DefinitionId,
             installed.ZoneId,
             installed.OwnerSide,
-            faceUp: false,
+            faceUp: InstallsFaceUp(working, installed.DefinitionId),
             rezzed: false,
             installed.AdvancementCounters));
         MarkInstalledThisTurn(working, plan.Card.Id);

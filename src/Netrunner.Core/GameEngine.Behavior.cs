@@ -2066,7 +2066,8 @@ public static partial class GameEngine
             BehaviorConditionKind.SuccessfulRunDuringRunnerLastTurn => working.Turn.History?.RunnerThisTurn?.SuccessfulRun == true,
             BehaviorConditionKind.SuccessfulRunThisTurn => CurrentFacts(working, frame.Controller)?.SuccessfulRun == true,
             BehaviorConditionKind.SourceController => GetCard(working, frame.SourceCardId).OwnerSide == controller.Side,
-            BehaviorConditionKind.Encountering => working.RunState?.Step == RunTimingStep.Encounter,
+            BehaviorConditionKind.Encountering => working.RunState?.Step == RunTimingStep.Encounter
+                && EncounteredIceHasSubtype(working, condition.Fact),
             BehaviorConditionKind.CounterAtLeast => CurrentCounter(working, frame.SourceCardId, condition.Fact!) >= condition.Value.GetValueOrDefault(),
             BehaviorConditionKind.FactEquals => BehaviorFactEquals(working, frame, condition),
             BehaviorConditionKind.FoundCard => FoundCardConditionMatches(working, frame),

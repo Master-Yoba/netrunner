@@ -987,7 +987,8 @@ public static partial class GameEngine
             {
                 Step: RunTimingStep.Encounter or RunTimingStep.EncounterPaidWindow,
                 Encounter: { Status: RunEncounterStatus.Initialized },
-            },
+            }
+                && EncounteredIceHasSubtype(working, condition.Fact),
             BehaviorConditionKind.CounterAtLeast => CurrentCounter(working, source.Id, condition.Fact!) >= condition.Value.GetValueOrDefault(),
             BehaviorConditionKind.FactEquals => AbilityFactEquals(working, source, controllerId, condition),
             // A paid ability has no search continuation; a forged declaration

@@ -848,6 +848,8 @@ public sealed class BehaviorContractsTests
                 OccurrenceKind.AgendaForfeited,
                 OccurrenceKind.FirstCardCreditGainThisTurn,
                 OccurrenceKind.FirstOperationPlayedThisTurn,
+                OccurrenceKind.FirstEventPlayedThisTurn,
+                OccurrenceKind.CardAdvanced,
             }))
         {
             Assert.Throws<ArgumentException>(() => new BehaviorTrigger(

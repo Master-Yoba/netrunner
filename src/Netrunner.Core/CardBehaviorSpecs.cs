@@ -703,8 +703,10 @@ public sealed record AssetBehaviorSpec
 /// </summary>
 public sealed record AgendaBehaviorSpec
 {
-    public AgendaBehaviorSpec(CardDefinitionId definitionId, int agendaPoints, int? runnerScoreAreaPoints = null, int stealClicks = 0)
+    public AgendaBehaviorSpec(CardDefinitionId definitionId, int agendaPoints, int? runnerScoreAreaPoints = null, int stealClicks = 0,
+        bool installsFaceUp = false)
     {
+        InstallsFaceUp = installsFaceUp;
         ArgumentOutOfRangeException.ThrowIfNegative(stealClicks);
         StealClicks = stealClicks;
         DefinitionId = definitionId;
@@ -739,6 +741,13 @@ public sealed record AgendaBehaviorSpec
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public int StealClicks { get; }
 
+    /// <summary>
+    /// VP-INSTALL-FACEUP: the agenda is installed faceup, neither rezzed nor unrezzed, and its abilities are active while
+    /// it is installed (Sacrifice Zone Expansion).
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool InstallsFaceUp { get; }
+
     /// <summary>The points the agenda is worth in a side's score area.</summary>
     public int PointsIn(PlayerSide scoreAreaSide) =>
         scoreAreaSide == PlayerSide.Runner && RunnerScoreAreaPoints is { } runnerPoints ? runnerPoints : AgendaPoints;
@@ -764,8 +773,12 @@ public sealed record RunEventBehaviorSpec
         ServerKind? redirectApproachTo = null,
         bool preventFirstEndRun = false,
         bool locksCreditPool = false,
-        ServerKind? costLoweredPerIceOn = null)
+        ServerKind? costLoweredPerIceOn = null,
+        bool removedFromGameAfterRun = false,
+        bool targetMustBeProtected = false)
     {
+        RemovedFromGameAfterRun = removedFromGameAfterRun;
+        TargetMustBeProtected = targetMustBeProtected;
         if (costLoweredPerIceOn is not (null or ServerKind.Headquarters or ServerKind.RAndD or ServerKind.Archives))
         {
             throw new ArgumentException("A per-ICE play-cost discount names a central server.", nameof(costLoweredPerIceOn));
@@ -873,6 +886,14 @@ public sealed record RunEventBehaviorSpec
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public ServerKind? CostLoweredPerIceOn { get; }
+
+    /// <summary>VP-RUN-EVENT-REMOVED: when its run ends the event is removed from the game, not trashed (Take a Dive).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool RemovedFromGameAfterRun { get; }
+
+    /// <summary>VP-RUN-PROTECTED-SERVER: the event may run only a server protected by ICE (Kompromat).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool TargetMustBeProtected { get; }
 
     private static ReadOnlyCollection<BehaviorRunRezCostModifier>? FreezeRezCostModifiers(
         IReadOnlyList<BehaviorRunRezCostModifier>? modifiers)

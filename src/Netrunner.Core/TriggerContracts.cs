@@ -91,6 +91,9 @@ public enum OccurrenceKind
     /// subject is the card (Sacrifice Zone Expansion, with a once-per-turn trigger).
     /// </summary>
     CardAdvanced,
+
+    /// <summary>VP-FIRST-EVENT: the first event the Runner played this turn; the subject is the event (Touchstone).</summary>
+    FirstEventPlayedThisTurn,
 }
 
 public enum OccurrencePhase

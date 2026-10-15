@@ -106,19 +106,19 @@
           "id": "slice-VP.3",
           "slice": "VP.3",
           "status": "planned",
-          "cards": 33
+          "cards": 28
         },
         {
           "id": "slice-VP.5",
           "slice": "VP.5",
           "status": "planned",
-          "cards": 25
+          "cards": 28
         },
         {
           "id": "slice-VP.7",
           "slice": "VP.7",
           "status": "planned",
-          "cards": 8
+          "cards": 10
         }
       ],
       "counts": {
@@ -4328,8 +4328,8 @@
       "cardSet": "vantage-point",
       "code": "36010",
       "title": "Kompromat",
-      "batch": "slice-VP.3",
-      "slice": "VP.3",
+      "batch": "slice-VP.5",
+      "slice": "VP.5",
       "status": "planned",
       "textStatus": "planned",
       "reviewStatus": "audited",
@@ -4916,8 +4916,8 @@
       "cardSet": "vantage-point",
       "code": "36037",
       "title": "Lotus Haze",
-      "batch": "slice-VP.3",
-      "slice": "VP.3",
+      "batch": "slice-VP.7",
+      "slice": "VP.7",
       "status": "planned",
       "textStatus": "planned",
       "reviewStatus": "audited",
@@ -5311,8 +5311,8 @@
       "cardSet": "vantage-point",
       "code": "36055",
       "title": "Hype Machine",
-      "batch": "slice-VP.3",
-      "slice": "VP.3",
+      "batch": "slice-VP.7",
+      "slice": "VP.7",
       "status": "planned",
       "textStatus": "planned",
       "reviewStatus": "audited",
@@ -5333,8 +5333,8 @@
       "cardSet": "vantage-point",
       "code": "36056",
       "title": "Sacrifice Zone Expansion",
-      "batch": "slice-VP.3",
-      "slice": "VP.3",
+      "batch": "slice-VP.5",
+      "slice": "VP.5",
       "status": "planned",
       "textStatus": "planned",
       "reviewStatus": "audited",
@@ -5467,8 +5467,8 @@
       "cardSet": "vantage-point",
       "code": "36062",
       "title": "Reanimation Protocol",
-      "batch": "slice-VP.3",
-      "slice": "VP.3",
+      "batch": "slice-VP.5",
+      "slice": "VP.5",
       "status": "planned",
       "textStatus": "planned",
       "reviewStatus": "audited",

@@ -145,3 +145,24 @@ and pin keeping its bytes.
 
 **Evidence.** 11 further probe tests (`VantagePointCostTests`, 32 Vantage Point tests in all); the Core, Cards, AI, Match
 and CLI suites pass.
+
+### VP.2c: the audit's misses (15 October 2026)
+
+Binding VP.3's cards found primitives the audit had missed (the primitive audit's "VP.3 binding review" lists them). The
+nine VP.3 needs landed here, before any card was registered, on probe cards 90024 to 90031:
+
+- **VP-BAD-PUBLICITY**, its condition: `BehaviorCondition.BadPublicityAtLeast` (Luana Campos, Scapegoat).
+- **VP-ENCOUNTER-SUBTYPE:** `BehaviorCondition.EncounteringSubtype`, the encountered ICE's printed or gained subtype
+  (Corsair).
+- **VP-ALLOTTED-CLICKS:** a negative `GainAllottedClicksNextTurn`, never below zero clicks (Caveat Emptor).
+- **VP-RUN-EVENT-REMOVED** and **VP-RUN-PROTECTED-SERVER:** `RunEventBehaviorSpec.RemovedFromGameAfterRun` and
+  `TargetMustBeProtected` (Take a Dive, Kompromat); an ended event's run-end abilities still resolve from removed-from-game.
+- **VP-FIRST-EVENT:** `OccurrenceKind.FirstEventPlayedThisTurn`, from every play path (Touchstone).
+- **VP-HOSTED-SERVER:** a RunSuccessful trigger may require its source in the attacked server, and a card hosted on ICE
+  is in its host's server (Stowaway).
+- **VP-INSTALL-FACEUP:** `AgendaBehaviorSpec.InstallsFaceUp`; such an agenda's triggers are active while it is installed
+  (Sacrifice Zone Expansion, now in VP.5).
+- **VP-REZ-SERVER-KIND:** a CardRezzed trigger may name the server kind (Grubber).
+
+Five cards moved to later batches whose primitive slices own what they lack: Kompromat, Reanimation Protocol and
+Sacrifice Zone Expansion to VP.5; Lotus Haze and Hype Machine to VP.7. VP.3 is 28 cards.

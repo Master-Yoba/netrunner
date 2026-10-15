@@ -2210,8 +2210,17 @@ public static partial class GameEngine
         {
             CardInstanceState eventCard = GetCard(working, activeEvent);
             ZoneState eventZone = working.Zones.Single(zone => zone.Id == eventCard.ZoneId);
-            ZoneState heap = GetZone(working, ZoneKind.RunnerHeap);
-            TrashCard(working, eventCard, eventZone, heap);
+            if (working.BehaviorCatalog.TryGetRunEvent(eventCard.DefinitionId, out RunEventBehaviorSpec? endedRunEvent)
+                && endedRunEvent.RemovedFromGameAfterRun)
+            {
+                // VP-RUN-EVENT-REMOVED (Take a Dive): removed from the game instead of trashed.
+                MoveCard(working, eventCard, eventZone, GetBehaviorZone(working, BehaviorZone.RemovedFromGame, PlayerSide.Runner));
+            }
+            else
+            {
+                ZoneState heap = GetZone(working, ZoneKind.RunnerHeap);
+                TrashCard(working, eventCard, eventZone, heap);
+            }
         }
         // CR 26.03 6.5/9.8: breakers never leave the rig; encounter-scoped
         // pump effects live on the run/encounter state, so no per-server

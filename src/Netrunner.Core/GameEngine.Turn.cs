@@ -347,11 +347,27 @@ public static partial class GameEngine
         }
     }
 
+    /// <summary>
+    /// The extra clicks a side's coming turn is allotted: those its previous turn's facts hold, or on its first turn those
+    /// the opponent's facts hold for it (VP-ALLOTTED-CLICKS).
+    /// </summary>
+    internal static int FirstOrNextTurnExtraClicks(TurnHistoryState? history, PlayerSide side)
+    {
+        if (history?.ThisTurn(side) is { } own)
+        {
+            return own.NextTurnExtraClicks;
+        }
+
+        PlayerSide opponent = side == PlayerSide.Corp ? PlayerSide.Runner : PlayerSide.Corp;
+        return (history?.ThisTurn(opponent)?.OpponentFirstTurnExtraClicks ?? 0)
+            + (history?.LastTurn(opponent)?.OpponentFirstTurnExtraClicks ?? 0);
+    }
+
     private static void AllotTurnClicks(WorkingState working, TurnFrame frame)
     {
         PlayerState player = GetPlayer(working, frame.ActiveSide);
-        int allotted = (frame.ActiveSide == PlayerSide.Corp ? 3 : 4)
-            + (working.Turn.History?.ThisTurn(frame.ActiveSide)?.NextTurnExtraClicks ?? 0);
+        int allotted = Math.Max(0, (frame.ActiveSide == PlayerSide.Corp ? 3 : 4)
+            + FirstOrNextTurnExtraClicks(working.Turn.History, frame.ActiveSide));
         ReplacePlayer(working, new PlayerState(
             player.Id,
             player.Side,

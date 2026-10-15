@@ -963,7 +963,10 @@ public static partial class StateInvariantValidator
                     knownPlayers,
                     runtimeCardCatalog,
                     violations,
-                    turn.History.CorpLastTurn?.NextTurnExtraClicks ?? 0);
+                    turn.History.CorpLastTurn is { } corpLast
+                        ? corpLast.NextTurnExtraClicks
+                        : (turn.History.RunnerThisTurn?.OpponentFirstTurnExtraClicks ?? 0)
+                            + (turn.History.RunnerLastTurn?.OpponentFirstTurnExtraClicks ?? 0));
                 ValidateTurnFacts(
                     turn.History.CorpLastTurn,
                     PlayerSide.Corp,
@@ -985,7 +988,10 @@ public static partial class StateInvariantValidator
                     knownPlayers,
                     runtimeCardCatalog,
                     violations,
-                    turn.History.RunnerLastTurn?.NextTurnExtraClicks ?? 0);
+                    turn.History.RunnerLastTurn is { } runnerLast
+                        ? runnerLast.NextTurnExtraClicks
+                        : (turn.History.CorpThisTurn?.OpponentFirstTurnExtraClicks ?? 0)
+                            + (turn.History.CorpLastTurn?.OpponentFirstTurnExtraClicks ?? 0));
                 ValidateTurnFacts(
                     turn.History.RunnerLastTurn,
                     PlayerSide.Runner,
@@ -2866,6 +2872,7 @@ public static partial class StateInvariantValidator
                 or OccurrenceKind.FirstTagRemovalThisTurn or OccurrenceKind.FirstBadPublicityThisTurn
                 or OccurrenceKind.CreditsSpentFromOutsidePool
                 or OccurrenceKind.FirstOperationPlayedThisTurn
+                or OccurrenceKind.FirstEventPlayedThisTurn
                 or OccurrenceKind.FirstCardCreditGainThisTurn => occurrence.ServerId is null,
             _ => false,
         };
@@ -13462,10 +13469,11 @@ public static partial class StateInvariantValidator
 
         // EL-EXTRA-CLICKS: "+1 allotted click next turn" (Aggressive
         // Trendsetting) raises a turn's allotment by the previous own turn's
-        // extra clicks; a last turn's own predecessor is gone, so it may only
-        // exceed the base allotment.
-        int expectedClicks = (expectedSide == PlayerSide.Corp ? 3 : 4) + (extraAllottedClicks ?? 0);
-        if (extraAllottedClicks is null ? facts.ClicksAllotted < expectedClicks : facts.ClicksAllotted != expectedClicks)
+        // extra clicks, and VP-ALLOTTED-CLICKS' "-1" (Caveat Emptor) lowers it,
+        // never below zero; a last turn's own predecessor is gone, so its
+        // allotment is unconstrained.
+        int expectedClicks = Math.Max(0, (expectedSide == PlayerSide.Corp ? 3 : 4) + (extraAllottedClicks ?? 0));
+        if (extraAllottedClicks is not null && facts.ClicksAllotted != expectedClicks)
         {
             Add(violations, "turn.facts-allotment-mismatch", $"{path}.clicksAllotted", $"'{expectedSide}' turn facts must record {expectedClicks} allotted clicks.");
         }

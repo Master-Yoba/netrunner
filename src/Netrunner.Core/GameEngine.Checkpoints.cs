@@ -1014,6 +1014,7 @@ public static partial class GameEngine
                 or OccurrenceKind.CardAdvanced
                 or OccurrenceKind.FirstCardCreditGainThisTurn
                 or OccurrenceKind.FirstOperationPlayedThisTurn
+                or OccurrenceKind.FirstEventPlayedThisTurn
                 or OccurrenceKind.DamageDone
                 or OccurrenceKind.CardsTrashedFromHq
                 or OccurrenceKind.HandSizeDiscarded))
@@ -1135,7 +1136,8 @@ public static partial class GameEngine
             or OccurrenceKind.IceEncountered
             or OccurrenceKind.IceApproached
             or OccurrenceKind.RunSuccessful
-            or OccurrenceKind.RunEnded)
+            or OccurrenceKind.RunEnded
+            or OccurrenceKind.CardRezzed)
             || occurrence.Effect is not GameplayOccurrenceEffect gameplay
             || gameplay.ServerId is not { } serverId)
         {
@@ -1162,20 +1164,31 @@ public static partial class GameEngine
         if (occurrence.Kind == OccurrenceKind.CreditsSpentFromOutsidePool)
         {
             return working.RunState?.AttackedServer is { } runServer
-                && working.Zones.FirstOrDefault(zone => zone.Id == source.ZoneId)?.ServerId == runServer;
+                && SourceServerId(working, source) == runServer;
         }
 
-        if (occurrence.Kind is not (OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered or OccurrenceKind.IceApproached or OccurrenceKind.CardRezzed or OccurrenceKind.RunEnded or OccurrenceKind.AgendaScoredOrStolen)
+        if (occurrence.Kind is not (OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered or OccurrenceKind.IceApproached or OccurrenceKind.CardRezzed or OccurrenceKind.RunEnded or OccurrenceKind.AgendaScoredOrStolen
+                or OccurrenceKind.RunSuccessful)
             || occurrence.Effect is not GameplayOccurrenceEffect gameplay
             || gameplay.ServerId is not { } attackedServer)
         {
             return false;
         }
 
-        ZoneState? sourceZone = working.Zones.FirstOrDefault(zone => zone.Id == source.ZoneId);
-        return sourceZone?.ServerId == attackedServer
+        return SourceServerId(working, source) == attackedServer
             && (occurrence.Kind != OccurrenceKind.CardRezzed
                 || working.RunState?.AttackedServer == attackedServer);
+    }
+
+    /// <summary>
+    /// The server a card is installed in; a card hosted on installed ICE (a trojan) is in its host's server
+    /// (VP-HOSTED-SERVER, Stowaway: "a successful run on this server").
+    /// </summary>
+    private static ServerId? SourceServerId(WorkingState working, CardInstanceState source)
+    {
+        CardInstanceState placed = source.HostCardId is { } hostId
+            && working.Cards.FirstOrDefault(card => card.Id == hostId) is { } host ? host : source;
+        return working.Zones.FirstOrDefault(zone => zone.Id == placed.ZoneId)?.ServerId;
     }
 
     /// <summary>
@@ -1212,11 +1225,12 @@ public static partial class GameEngine
                 && (!trigger.RequireSourceOnAttackedServer
                     || occurrenceKind == OccurrenceKind.CreditsSpentFromOutsidePool
                         && working.RunState?.AttackedServer is { } paymentServer
-                        && working.Zones.FirstOrDefault(zone => zone.Id == source.ZoneId)?.ServerId == paymentServer
+                        && SourceServerId(working, source) == paymentServer
                     || occurrenceKind is OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered or OccurrenceKind.IceApproached or OccurrenceKind.CardRezzed or OccurrenceKind.RunEnded or OccurrenceKind.AgendaScoredOrStolen
+                            or OccurrenceKind.RunSuccessful
                         && (occurrenceKind != OccurrenceKind.CardRezzed || working.RunState?.AttackedServer == serverId)
                         && serverId is { } suppliedServer
-                        && working.Zones.FirstOrDefault(zone => zone.Id == source.ZoneId)?.ServerId == suppliedServer)
+                        && SourceServerId(working, source) == suppliedServer)
                 && (occurrenceKind is not (OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered or OccurrenceKind.IceApproached)
                     || trigger.Scope != BehaviorTriggerScope.Controller
                     || source.OwnerSide == PlayerSide.Runner)
@@ -1264,7 +1278,9 @@ public static partial class GameEngine
                     && trigger.Scope == BehaviorTriggerScope.Self
                     && working.Zones.Any(zone => zone.Id == source.ZoneId && zone.Kind == ZoneKind.CorpRemovedFromGame)
                 || trigger.ActiveWhileUnrezzed && installed && source.OwnerSide == PlayerSide.Corp
-                || trigger.ActiveWhileAccessed && IsBeingAccessedOutsideArchives(working, source));
+                || trigger.ActiveWhileAccessed && IsBeingAccessedOutsideArchives(working, source)
+                || installed && source.FaceUp && InstallsFaceUp(working, source.DefinitionId)
+                    && working.Zones.Any(zone => zone.Id == source.ZoneId && zone.Kind == ZoneKind.ServerRoot));
     }
 
     private static bool IsBeingAccessedOutsideArchives(WorkingState working, CardInstanceState source) =>

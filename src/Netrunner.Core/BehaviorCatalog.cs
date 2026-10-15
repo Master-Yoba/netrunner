@@ -341,6 +341,16 @@ public sealed record BehaviorCondition
             throw new ArgumentException("A credit condition names a side and a nonnegative amount.", nameof(value));
         }
 
+        if (kind == BehaviorConditionKind.BadPublicityAtLeast && (value is null or < 0 || fact is not null))
+        {
+            throw new ArgumentException("A bad publicity condition names a nonnegative amount.", nameof(value));
+        }
+
+        if (kind == BehaviorConditionKind.Encountering && (value is not null || fact is not null && !StableIdentifier.TryValidate(fact)))
+        {
+            throw new ArgumentException("An encounter condition may name one ICE subtype.", nameof(fact));
+        }
+
         if (kind == BehaviorConditionKind.ChoseCards && (!StableIdentifier.TryValidate(fact) || value is not null))
         {
             throw new ArgumentException("A chose-cards condition names its stable choice key.", nameof(fact));
@@ -468,6 +478,14 @@ public sealed record BehaviorCondition
 
     /// <summary>VP-SCORING-FACTS: the source agenda was scored this turn.</summary>
     public static BehaviorCondition SourceScoredThisTurn() => new(BehaviorConditionKind.SourceScoredThisTurn);
+
+    /// <summary>VP-BAD-PUBLICITY: the Corp has at least the given bad publicity.</summary>
+    public static BehaviorCondition BadPublicityAtLeast(int minimum) =>
+        new(BehaviorConditionKind.BadPublicityAtLeast, value: minimum);
+
+    /// <summary>VP-ENCOUNTER-SUBTYPE: the Runner is encountering ICE with the subtype ("the barrier you are encountering").</summary>
+    public static BehaviorCondition EncounteringSubtype(string subtype) =>
+        new(BehaviorConditionKind.Encountering, fact: subtype);
 
     /// <summary>A player (by default the behavior controller) has at least the value in clicks.</summary>
     public static BehaviorCondition ClicksAtLeast(int threshold, PlayerSide? side) =>
@@ -649,6 +667,9 @@ public enum BehaviorConditionKind
 
     /// <summary>VP-RUN-FACTS: this turn the Runner made a successful run on HQ, on R&amp;D and on Archives (Chain Reaction).</summary>
     SuccessfulRunOnEveryCentralThisTurn,
+
+    /// <summary>VP-BAD-PUBLICITY: the Corp has at least the value in bad publicity (Luana Campos, Scapegoat).</summary>
+    BadPublicityAtLeast,
 }
 
 /// <summary>A typed target selector; IDs are resolved by Core at runtime.</summary>
@@ -1018,9 +1039,11 @@ public sealed record BehaviorInstruction
             throw new ArgumentOutOfRangeException(nameof(kind));
         }
 
+        // VP-ALLOTTED-CLICKS: "-1 allotted click for their next turn" (Caveat Emptor) is a negative grant.
         if (kind is not (BehaviorInstructionKind.ModifyEncounteredIceStrength
             or BehaviorInstructionKind.ModifySourceStrength
-            or BehaviorInstructionKind.AddSelfToScoreAreaAsAgenda))
+            or BehaviorInstructionKind.AddSelfToScoreAreaAsAgenda
+            or BehaviorInstructionKind.GainAllottedClicksNextTurn))
         {
             ArgumentOutOfRangeException.ThrowIfNegative(amount);
         }
@@ -2114,7 +2137,9 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
                     or OccurrenceKind.RunEnded
                     or OccurrenceKind.ServerApproached
                     or OccurrenceKind.IceEncountered
-                    or OccurrenceKind.IceApproached)))
+                    or OccurrenceKind.IceApproached
+                    // VP-REZ-SERVER-KIND: the server of the rezzed card (Grubber: "if it is protecting a central server").
+                    or OccurrenceKind.CardRezzed)))
         {
             throw new ArgumentException(
                 "A server-kind requirement is valid only for run server occurrences and must name a defined server kind.",
@@ -2123,7 +2148,7 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
 
         if (requireSourceOnAttackedServer
             && occurrence is not (OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered or OccurrenceKind.IceApproached or OccurrenceKind.CardRezzed or OccurrenceKind.RunEnded or OccurrenceKind.AgendaScoredOrStolen
-                or OccurrenceKind.CreditsSpentFromOutsidePool))
+                or OccurrenceKind.CreditsSpentFromOutsidePool or OccurrenceKind.RunSuccessful))
         {
             throw new ArgumentException(
                 "Requiring the source to occupy the attacked server is valid only for ServerApproached, IceEncountered, or CardRezzed triggers.",
@@ -2297,7 +2322,9 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
         or OccurrenceKind.AccessedCardTrashed
         or OccurrenceKind.AgendaForfeited
         or OccurrenceKind.FirstCardCreditGainThisTurn
-        or OccurrenceKind.FirstOperationPlayedThisTurn;
+        or OccurrenceKind.FirstOperationPlayedThisTurn
+        or OccurrenceKind.FirstEventPlayedThisTurn
+        or OccurrenceKind.CardAdvanced;
 
     private static ReadOnlyCollection<BehaviorInstruction> Freeze(
         IEnumerable<BehaviorInstruction> values)
@@ -3662,6 +3689,7 @@ internal static class BehaviorCatalogFingerprint
         // Vantage Point's declarations are emitted only when used, so other agendas keep their bytes.
         if (value.RunnerScoreAreaPoints is { } runnerPoints) builder.Append("|runnerScoreAreaPoints=").Append(runnerPoints);
         if (value.StealClicks != 0) builder.Append("|stealClicks=").Append(value.StealClicks);
+        if (value.InstallsFaceUp) builder.Append("|installsFaceUp=1");
     }
 
     private static void AppendRunEvent(StringBuilder builder, RunEventBehaviorSpec value)
@@ -3724,6 +3752,16 @@ internal static class BehaviorCatalogFingerprint
         if (value.CostLoweredPerIceOn is { } perIce)
         {
             builder.Append("|costLoweredPerIceOn=").Append((int)perIce);
+        }
+
+        if (value.RemovedFromGameAfterRun)
+        {
+            builder.Append("|removedFromGameAfterRun=1");
+        }
+
+        if (value.TargetMustBeProtected)
+        {
+            builder.Append("|targetMustBeProtected=1");
         }
     }
 
