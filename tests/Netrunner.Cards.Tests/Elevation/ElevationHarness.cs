@@ -341,10 +341,18 @@ internal static class ElevationHarness
                                     new BehaviorChoiceOption("jack-out", [new BehaviorInstruction(BehaviorInstructionKind.JackOut)]),
                                 ])),
                         ]),
+                    new BehaviorTrigger("probe-lionsmane-ended", OccurrenceKind.EncounterEnded, TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Self, null, [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 1)]),
                 ]))
             .Add(new CardBehaviorDefinition(
                 new CardDefinitionId(ProbeFlagshipUpgrade),
                 PlayerSide.Corp,
+                triggers:
+                [
+                    new BehaviorTrigger("probe-flagship-unsuccessful", OccurrenceKind.RunEnded, TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Any, null, [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 1)],
+                        runOutcomeRequirement: RunOutcomeRequirement.Unsuccessful),
+                ],
                 runsCannotSucceed: true,
                 runAccessLimitBesidesSelf: 1))
             .Add(new CardBehaviorDefinition(

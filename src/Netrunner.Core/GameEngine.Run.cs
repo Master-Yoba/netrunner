@@ -2260,7 +2260,8 @@ public static partial class GameEngine
         CardInstanceId? initiatingSource = run.InitiatingSource;
         ServerId attackedServer = run.AttackedServer;
         RunEndReason endReason = run.EndReason.Value;
-        bool successful = run.Successful;
+        // VP-NO-SUCCESSFUL-RUN (PR #154's review): a run never declared successful ended with neither outcome.
+        bool? successful = endReason == RunEndReason.NotDeclaredSuccessful ? null : run.Successful;
         CardInstanceId? activeRunEventId = run.ActiveRunEventId;
         bool realTurnRun = IsRealTurnRun(working, run);
 
@@ -2276,7 +2277,7 @@ public static partial class GameEngine
             runId,
             initiatingSide,
             endReason,
-            successful));
+            run.Successful));
         ExpireRunLingeringEffects(working, run);
         // CR 26.03 6.9.6/8.6.7: the played run event is trashed to the
         // Runner's heap faceup/public when the run ends; its hosted credits
@@ -2394,7 +2395,7 @@ public static partial class GameEngine
         PlayerId controller,
         CardInstanceId? sourceCardId,
         ServerId serverId,
-        bool successful,
+        bool? successful,
         RunPersistentContext? runContext = null)
     {
         working.ResolutionStack.Add(new EffectResolutionFrame(
@@ -2971,7 +2972,8 @@ public static partial class GameEngine
     /// VP-CANNOT-STEAL-OR-TRASH: a card ability's restriction for the rest of the run, its source and behavior key kept as
     /// provenance; a target names the definition it limits to.
     /// </summary>
-    private const string CardBehaviorRestrictionReason = "card-behavior";
+    /// <summary>The reason a run modifier records for a card's own instructions, outside any keyed trigger or ability.</summary>
+    internal const string CardBehaviorRestrictionReason = "card-behavior";
 
     /// <summary>
     /// VP-ICE-GAINS-SUBROUTINE: the encountered ICE gains the source's subroutine, listed before its other subroutines; its

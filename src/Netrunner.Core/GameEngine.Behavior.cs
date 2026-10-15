@@ -1031,6 +1031,16 @@ public static partial class GameEngine
             working.ResolutionStack.RemoveAt(working.ResolutionStack.Count - 1);
         }
 
+        // VP-ENCOUNTER-ENDED (PR #154's review): ending the run mid-encounter ends the encounter; a waiting trigger
+        // resolves first, and the run frame completes the run when it resumes at RunEnd.
+        if (run.Encounter is { Status: RunEncounterStatus.Initialized } live
+            && HasActiveCatalogTrigger(working, OccurrenceKind.EncounterEnded, run.AttackedServer, live.IceId))
+        {
+            SetRunTiming(working, ending);
+            QueueRunIceOccurrence(working, ending, OccurrenceKind.EncounterEnded, live.IceId);
+            return;
+        }
+
         CompleteRun(working, ending);
     }
 

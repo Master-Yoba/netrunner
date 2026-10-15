@@ -3058,14 +3058,8 @@ public static class ResolutionFrameValidator
                         "An IceEncountered occurrence must identify both its encountered ICE subject and server."));
                 }
 
-                if (gameplay.Kind == OccurrenceKind.RunEnded && gameplay.Successful is null)
-                {
-                    violations.Add(new StateInvariantViolation(
-                        "resolution.gameplay-occurrence-outcome-missing",
-                        $"{path}.effect.successful",
-                        "A RunEnded occurrence must carry its success outcome."));
-                }
-                else if (gameplay.Kind != OccurrenceKind.RunEnded && gameplay.Successful is not null)
+                // VP-NO-SUCCESSFUL-RUN: a RunEnded occurrence without an outcome is a run never declared successful (Flagship).
+                if (gameplay.Kind != OccurrenceKind.RunEnded && gameplay.Successful is not null)
                 {
                     violations.Add(new StateInvariantViolation(
                         "resolution.gameplay-occurrence-outcome-unexpected",

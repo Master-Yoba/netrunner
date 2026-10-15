@@ -164,6 +164,11 @@ public sealed class VantagePointRunIceTests
         Assert.Equal(jackedOut, chosen.Events.Select(static value => value.Payload).OfType<RunEndedEventPayload>()
             .Any(static ended => ended.Reason == RunEndReason.JackedOut));
         Assert.Equal(grip, ZoneCount(chosen.State, ZoneKind.RunnerGrip));
+
+        // PR #154's review: jacking out mid-encounter still ends the encounter, and its trigger resolves (the probe's
+        // EncounterEnded gains the Corp a credit; the encounter ends either way).
+        GameState after = RoundTrip(PassUntil(chosen.State, static value => value.RunState is null));
+        Assert.Equal(5 + 1, Player(after, PlayerSide.Corp).Credits);
     }
 
     // Flagship: runs against its server can't be declared successful, and don't become unsuccessful.
@@ -184,6 +189,11 @@ public sealed class VantagePointRunIceTests
         {
             Assert.False(state.RunState is { Unsuccessful: true });
         }
+
+        // PR #154's review: the probe's "when a run ends unsuccessfully" gains the Corp a credit; a run never declared
+        // successful isn't unsuccessful, and a successful one isn't either.
+        state = RoundTrip(PassUntil(state, static value => value.RunState is null));
+        Assert.Equal(5, Player(state, PlayerSide.Corp).Credits);
     }
 
     // Lampades: an access ability paying the accessed card's printed rez cost.
@@ -338,6 +348,45 @@ public sealed class VantagePointRunIceTests
         state = RoundTrip(BreakAll(RunTo(state, ElevationBoard.Remote, InEncounter), Cleaver));
 
         Assert.Equal(1, Rules(state, PlayerSide.Runner).Tags);
+    }
+
+    // PR #154's review: a saved run's restriction and all-ICE change must match what their source declares.
+    [Theory]
+    [InlineData("\"reasonKey\":\"probe-vertigo-passed\"", "\"reasonKey\":\"probe-forged\"", "run.behavior-restriction-source-invalid")]
+    public void AForgedRunRestrictionIsInvalid(string declared, string forged, string violation)
+    {
+        GameState state = new ElevationBoard(PlayerSide.Runner) { RunnerClicks = 3 }
+            .Add(ProbeVertigoIce, Place.Ice, rezzed: true)
+            .Add(CorpFillerAgenda, Place.Root)
+            .Begin(catalog: VantagePointProbe);
+        state = Apply(state, static action => action.Kind == ActionKind.GainCredit).State;
+        state = RunTo(ToAction(state), ElevationBoard.Remote, static value => value.RunState?.BehaviorRestrictions is { Count: 1 });
+
+        AssertForgeryCaught(state, declared, forged, violation);
+    }
+
+    [Fact]
+    public void AForgedAllIceStrengthChangeIsInvalid()
+    {
+        GameState state = new ElevationBoard(PlayerSide.Runner)
+            .Add(CorpFillerIce, Place.Ice, rezzed: true)
+            .Add(ProbeEzamIce, Place.Ice, rezzed: true)
+            .Begin(catalog: VantagePointProbe);
+        state = RunTo(state, ElevationBoard.Remote, static value => value.RunState?.AllIceStrengthModifiers is { Count: 1 });
+
+        AssertForgeryCaught(state, "\"delta\":1,\"reasonKey\":\"probe-ezam-strength\"",
+            "\"delta\":5,\"reasonKey\":\"probe-ezam-strength\"", "run.all-ice-strength-undeclared");
+    }
+
+    private static void AssertForgeryCaught(GameState state, string declared, string forged, string violation)
+    {
+        string json = EngineJson.Serialize(state);
+        Assert.Contains(declared, json, StringComparison.Ordinal);
+        Assert.Empty(StateInvariantValidator.Collect(state, CatalogFor(state), Runtime));
+        // Restoring runs the validator, which refuses the forged state.
+        System.Text.Json.JsonException refused = Assert.Throws<System.Text.Json.JsonException>(() =>
+            EngineJson.DeserializeState(json.Replace(declared, forged, StringComparison.Ordinal), CatalogFor(state), Runtime));
+        Assert.Contains(violation, refused.InnerException?.Message ?? string.Empty, StringComparison.Ordinal);
     }
 
     private static GameState RunToNext(GameState state, Func<GameState, bool> stop) =>

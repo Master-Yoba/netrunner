@@ -1461,6 +1461,19 @@ public static partial class StateInvariantValidator
 
         ValidateRunGainedSubroutines(state, behaviorCatalog, run, path, violations);
 
+        // VP-ALL-ICE-STRENGTH (PR #154's review): each change is one its source declares, with the recorded amount.
+        foreach (RunAllIceStrengthModifier modifier in run.AllIceStrengthModifiers ?? [])
+        {
+            if (!state.Cards.Any(card => card?.Id == modifier.SourceCardId && card.DefinitionId == modifier.SourceDefinitionId)
+                || !behaviorCatalog.TryGet(modifier.SourceDefinitionId, out CardBehaviorDefinition? strengthSource)
+                || !BehaviorRunRules.InstructionsUnder(strengthSource, modifier.ReasonKey).Any(instruction =>
+                    instruction.Kind == BehaviorInstructionKind.ModifyAllIceStrengthForRun && instruction.Amount == modifier.Delta))
+            {
+                Add(violations, "run.all-ice-strength-undeclared", $"{path}.allIceStrengthModifiers",
+                    "An all-ICE strength change must match its source's declaration.");
+            }
+        }
+
         if (!installedRunSource && run.InitiatingSource != run.ActiveRunEventId)
         {
             Add(
@@ -2404,10 +2417,14 @@ public static partial class StateInvariantValidator
 
         foreach (RunBehaviorRestriction restriction in run.BehaviorRestrictions)
         {
+            // PR #154's review: the source declares exactly this restriction under the recorded key.
             bool sourceKnown = state.Cards.Any(card => card?.Id == restriction.SourceCardId
                     && card.DefinitionId == restriction.SourceDefinitionId)
-                && (behaviorCatalog.TryGet(restriction.SourceDefinitionId, out _)
-                    || behaviorCatalog.TryGetIce(restriction.SourceDefinitionId, out _));
+                && behaviorCatalog.TryGet(restriction.SourceDefinitionId, out CardBehaviorDefinition? sourceDefinition)
+                && BehaviorRunRules.InstructionsUnder(sourceDefinition, restriction.ReasonKey).Any(instruction =>
+                    instruction.Kind == BehaviorInstructionKind.RestrictRun
+                    && string.Equals(instruction.Argument, restriction.Kind.ToString(), StringComparison.Ordinal)
+                    && (instruction.Target is null) == (restriction.NamedDefinitionId is null));
             bool namedKnown = restriction.NamedDefinitionId is not { } named
                 || state.Cards.Any(card => card?.DefinitionId == named && card.OwnerSide == PlayerSide.Corp);
             if (!sourceKnown || !namedKnown)
@@ -2985,7 +3002,10 @@ public static partial class StateInvariantValidator
                 && frame.Controller == run.InitiatingPlayer
                 && occurrence.Controller == run.InitiatingPlayer
                 && occurrence.SubjectCardId is { } passedIce
-                && run.CurrentIceId == passedIce
+                // An ability ending the run mid-encounter clears the cursor but keeps the encounter.
+                && (run.CurrentIceId == passedIce
+                    || occurrence.Kind == OccurrenceKind.EncounterEnded && run.Step == RunTimingStep.RunEnd
+                        && run.Encounter?.IceId == passedIce)
                 && occurrence.ServerId == run.AttackedServer,
             // VP-SUBROUTINE-BROKEN, VP-ICE-PASSED (fully broken): raised in the encounter's paid window by a break.
             OccurrenceKind.SubroutineBroken or OccurrenceKind.IceFullyBroken => run.Step == RunTimingStep.EncounterPaidWindow

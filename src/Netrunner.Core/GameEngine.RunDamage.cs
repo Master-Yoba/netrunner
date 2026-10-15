@@ -117,5 +117,7 @@ public static partial class GameEngine
         working.ResolutionStack[^1] = new RunTimingFrame(run.Id, RunTimingStep.Encounter);
         SetRunTiming(working, run.WithTiming(RunTimingStep.RunEnd, run.CurrentIceIndex,
             run.CurrentIceId, false, true, reason, null, completed, run.AccessState));
+        // VP-ENCOUNTER-ENDED: the encounter ends with the run (PR #154's review).
+        QueueRunIceOccurrence(working, working.RunState!, OccurrenceKind.EncounterEnded, encounter.IceId);
     }
 }
