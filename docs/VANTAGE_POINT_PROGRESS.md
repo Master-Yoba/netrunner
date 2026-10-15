@@ -166,3 +166,10 @@ nine VP.3 needs landed here, before any card was registered, on probe cards 9002
 
 Five cards moved to later batches whose primitive slices own what they lack: Kompromat, Reanimation Protocol and
 Sacrifice Zone Expansion to VP.5; Lotus Haze and Hype Machine to VP.7. VP.3 is 28 cards.
+
+**Review (PR #152).** Codex's four findings, all fixed:
+- an advance by a dynamic amount reported the static amount (zero) in its event;
+- an unrestricted run payment could spend stealth credits before non-stealth ones, leaving a later stealth-only cost
+  unpayable;
+- hosted credits spendable on any cost weren't offered for run costs;
+- a null card scored as an agenda was accepted when a state was read.

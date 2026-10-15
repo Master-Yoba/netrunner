@@ -218,4 +218,22 @@ public sealed class VantagePointCostTests
         Assert.Equal(ZoneKind.RunnerHeap, ZoneOf(state, ProbeSellOutEvent));
         Assert.Equal(4, Player(state, PlayerSide.Runner).Credits);
     }
+
+    [Fact]
+    public void ADynamicAdvanceReportsTheCountersItPlaces()
+    {
+        // PR #152's review: the advance event carries the resolved amount, here the two protected remotes with root cards.
+        GameState state = new ElevationBoard { CorpCredits = 0, RemoteServers = 2 }
+            .Add(ProbeFloodAdvanceOperation, Place.Hq)
+            .Add(CorpFillerAgenda, Place.Root, server: ElevationBoard.Remote)
+            .Add(CorpFillerIce, Place.Ice, server: ElevationBoard.Remote)
+            .Add(NicoCampaign, Place.Root, server: ElevationBoard.Remote + 1)
+            .Add(CorpFillerIce, Place.Ice, server: ElevationBoard.Remote + 1)
+            .Begin(catalog: VantagePointProbe);
+        state = Apply(state, action => action.Parameters is PlayCardParameters play
+            && play.CardId == Card(state, ProbeFloodAdvanceOperation)).State;
+        state = RoundTrip(ToAction(ChooseCards(state, Card(state, CorpFillerAgenda))));
+
+        Assert.Equal(2, CardState(state, CorpFillerAgenda).AdvancementCounters);
+    }
 }

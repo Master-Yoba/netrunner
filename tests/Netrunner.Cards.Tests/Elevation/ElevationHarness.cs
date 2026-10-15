@@ -51,6 +51,7 @@ internal static class ElevationHarness
     internal const string ProbeStowawayProgram = "90029";
     internal const string ProbePublicAgenda = "90030";
     internal const string ProbeGrubberIce = "90031";
+    internal const string ProbeFloodAdvanceOperation = "90032";
 
     /// <summary>The neutral Gateway identities a match board gets by default.</summary>
     internal const string CorpNeutralIdentity = "30077";
@@ -91,7 +92,7 @@ internal static class ElevationHarness
     /// the Runner's score area and costs a click more to steal; the filler asset makes every steal cost 2 credits more; the
     /// filler resource is a score cost as Word on the Street's (-1, can't be forfeited, agendas installed this turn); the
     /// probe operation is playable once the Corp scored an agenda it didn't install this turn, and becomes a 2-point
-    /// agenda (Myōshu). VP.2 step 4: the cost and value probes (90013 to 90023); VP.2c: the probes 90024 to 90031 for the primitives VP.3's
+    /// agenda (Myōshu). VP.2 step 4: the cost and value probes (90013 to 90023); VP.2c: the probes 90024 to 90032 for the primitives VP.3's
     /// binding found missing, the probe Luana's trash cost, and the filler
     /// ICE as a 1-strength barrier ending the run.
     /// </summary>
@@ -169,6 +170,23 @@ internal static class ElevationHarness
             .Add(new CardBehaviorDefinition(new CardDefinitionId(ProbeLuanaAsset), PlayerSide.Corp, returnsHostedBadPublicity: true))
             .AddAsset(new AssetBehaviorSpec(new CardDefinitionId(ProbeLuanaAsset), trashCost: 3))
             .AddIce(new IceBehaviorSpec(new CardDefinitionId(CorpFillerIce), 1, IceType.Barrier, 1, [new EndRunSubroutineSpec()], []))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeFloodAdvanceOperation),
+                PlayerSide.Corp,
+                instructions:
+                [
+                    new BehaviorInstruction(BehaviorInstructionKind.Choose, choice: new BehaviorChoiceSpec(
+                        "probe-flood-target",
+                        BehaviorChooser.Controller,
+                        BehaviorChoiceMode.Mandatory,
+                        BehaviorChoiceCardinality.Exactly(1),
+                        target: new BehaviorTarget(
+                            BehaviorTargetKind.InstalledCard,
+                            filter: new BehaviorCardFilter(BehaviorCardType.Advanceable, ownerSide: PlayerSide.Corp)))),
+                    new BehaviorInstruction(BehaviorInstructionKind.AdvanceCard,
+                        target: new BehaviorTarget(BehaviorTargetKind.ChosenCard, selector: "probe-flood-target"),
+                        amountOperand: BehaviorAmountOperand.Of(BehaviorAmountKind.ProtectedRemotesWithRootCards, 1)),
+                ]))
             .Add(new CardBehaviorDefinition(
                 new CardDefinitionId(ProbeBadPublicityOperation),
                 PlayerSide.Corp,
@@ -390,6 +408,7 @@ internal static class ElevationHarness
                 new(ProbeStowawayProgram, "Probe Stowaway", "runner", "neutral-runner", "program", ["Trojan"], 3, 3, false, 0, null, 1, null, null, null, 0, null, null, null),
                 new(ProbePublicAgenda, "Probe Public Agenda", "corp", "neutral-corp", "agenda", ["Public"], 3, 3, false, null, null, null, null, 2, 3, null, null, null, null),
                 new(ProbeGrubberIce, "Probe Grubber", "corp", "neutral-corp", "ice", ["Barrier"], 3, 3, false, 0, 1, null, null, null, null, 0, null, null, null),
+                new(ProbeFloodAdvanceOperation, "Probe Flood Advance", "corp", "neutral-corp", "operation", [], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
             ]),
         ]);
         return GatewayRuntimeCardCatalog.Create(pool);
@@ -746,6 +765,7 @@ internal sealed class ElevationBoard
                     "declared-credit" => CardCounterState.CreateHostedCredit(card.Id, count, HostedCreditSpendRestriction.DeclaredUseOnly),
                     // VP-STEALTH-CREDITS: hosted credits that may be spent during runs (Methuselah, Touchstone).
                     "run-credit" => CardCounterState.CreateHostedCredit(card.Id, count, HostedCreditSpendRestriction.RunCost),
+                    "any-credit" => CardCounterState.CreateHostedCredit(card.Id, count, HostedCreditSpendRestriction.AnyCost),
                     _ => new CardCounterState(card.Id, name, count),
                 });
             }

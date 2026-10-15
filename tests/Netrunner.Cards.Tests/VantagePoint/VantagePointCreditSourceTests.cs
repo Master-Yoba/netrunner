@@ -119,4 +119,38 @@ public sealed class VantagePointCreditSourceTests
         Assert.Equal(ZoneKind.CorpDiscard, ZoneOf(state, NicoCampaign));
         Assert.Equal(5, Player(state, PlayerSide.Runner).Credits);
     }
+
+    [Fact]
+    public void AnUnrestrictedPaymentSpendsNonStealthCreditsFirst()
+    {
+        // PR #152's review: the stealth card sorts first, but its credit is kept for a stealth-only cost.
+        // Nico Campaign's trash cost of 2, one credit from the pool and one from outside it.
+        GameState state = new ElevationBoard(PlayerSide.Runner) { RunnerCredits = 1 }
+            .Add(StealthHardware, Place.Rig, counters: RunCredits(1))
+            .Add(RunnerFillerResource, Place.Rig, counters: RunCredits(1))
+            .Add(NicoCampaign, Place.Root)
+            .Begin(catalog: VantagePointProbe);
+        Assert.True(string.CompareOrdinal(Card(state, StealthHardware).Value, Card(state, RunnerFillerResource).Value) < 0);
+        state = ToTrash(RunRemote(state));
+        state = RoundTrip(ToAction(Apply(state, Actions(state).Single(static action =>
+            action.Kind == ActionKind.TrashAccessedCard && IssuedRunPaymentPreference.RunCredits(action.Parameters) == 1)).State));
+
+        Assert.Equal(ZoneKind.CorpDiscard, ZoneOf(state, NicoCampaign));
+        Assert.Equal((1, 0), (Counter(state, StealthHardware, "credit"), Counter(state, RunnerFillerResource, "credit")));
+    }
+
+    [Fact]
+    public void AnyCostHostedCreditsPayDuringRuns()
+    {
+        // PR #152's review: a pool spendable on any cost pays run costs too.
+        GameState state = new ElevationBoard(PlayerSide.Runner) { RunnerCredits = 1 }
+            .Add(RunnerFillerResource, Place.Rig, counters: new Dictionary<string, int> { ["any-credit"] = 1 })
+            .Add(NicoCampaign, Place.Root)
+            .Begin(catalog: VantagePointProbe);
+        state = ToTrash(RunRemote(state));
+        state = RoundTrip(ToAction(Apply(state, Actions(state).Single(static action => action.Kind == ActionKind.TrashAccessedCard)).State));
+
+        Assert.Equal(ZoneKind.CorpDiscard, ZoneOf(state, NicoCampaign));
+        Assert.Equal(0, Counter(state, RunnerFillerResource, "credit"));
+    }
 }

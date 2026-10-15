@@ -4550,10 +4550,13 @@ public static partial class GameEngine
             ValidateChosenAdvanceTargets(working, frame, instruction.Target, cardIds);
         }
 
-        foreach (CardInstanceId cardId in cardIds)
+        // VP-AMOUNT: a dynamic amount (Flood the Market) is resolved once, may be zero (placing nothing), and is the
+        // event's amount (PR #152's review).
+        int amount = StaticOrDynamicAmount(working, frame, instruction);
+        foreach (CardInstanceId cardId in amount > 0 ? cardIds : [])
         {
             CardInstanceState card = GetCard(working, cardId);
-            int advancementCounters = checked(card.AdvancementCounters + StaticOrDynamicAmount(working, frame, instruction));
+            int advancementCounters = checked(card.AdvancementCounters + amount);
             ReplaceCard(working, new CardInstanceState(
                 card.Id,
                 card.DefinitionId,
@@ -4564,7 +4567,7 @@ public static partial class GameEngine
                 advancementCounters));
             Emit(working, EngineEventKinds.BehaviorCardAdvanced, new BehaviorCardAdvancedEventPayload(
                 card.Id,
-                instruction.Amount,
+                amount,
                 advancementCounters));
         }
 

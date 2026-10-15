@@ -544,7 +544,11 @@ public sealed record RulesState
         int badPublicity = 0,
         IReadOnlyList<ScoreAreaAgenda>? scoredAsAgendas = null)
     {
-        ScoredAsAgendas = scoredAsAgendas is { Count: > 0 } ? new ReadOnlyCollection<ScoreAreaAgenda>(scoredAsAgendas.ToArray()) : null;
+        // PR #152's review: a null entry is an invalid state, rejected here as the other collections' are.
+        ScoredAsAgendas = scoredAsAgendas is { Count: > 0 }
+            ? new ReadOnlyCollection<ScoreAreaAgenda>(scoredAsAgendas.Select(static entry =>
+                entry ?? throw new ArgumentException("Cards scored as agendas must not contain null entries.", nameof(scoredAsAgendas))).ToArray())
+            : null;
         ArgumentNullException.ThrowIfNull(players);
         if (badPublicity < 0)
         {

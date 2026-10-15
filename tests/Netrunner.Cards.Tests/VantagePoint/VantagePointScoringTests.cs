@@ -131,4 +131,11 @@ public sealed class VantagePointScoringTests
         // Once per turn: the second advance gains nothing.
         Assert.Equal(5 - 2 + 1, Player(state, PlayerSide.Corp).Credits);
     }
+
+    [Fact]
+    public void AStateWithANullCardScoredAsAnAgendaIsRejected()
+    {
+        // PR #152's review: rejected on deserialization like the other rules collections' null entries.
+        Assert.Throws<ArgumentException>(() => new RulesState(1, [], [], [], [], scoredAsAgendas: [null!]));
+    }
 }

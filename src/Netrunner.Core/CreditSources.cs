@@ -13,8 +13,9 @@ internal static class CreditSources
     public const string Stealth = "stealth";
 
     /// <summary>
-    /// The hosted credit pools on active Runner cards that may be spent during runs (Methuselah, Touchstone), in card order,
-    /// optionally only those of cards with a printed subtype.
+    /// The hosted credit pools on active Runner cards that may be spent during runs (Methuselah, Touchstone), optionally only
+    /// those of cards with a printed subtype. In spending order: for an unrestricted payment non-stealth pools come before
+    /// stealth ones, so a later stealth-only cost keeps every credit it can use (PR #152's review); then card order.
     /// </summary>
     public static IEnumerable<(CardInstanceId Card, int Credits)> RunSpendablePools(
         IReadOnlyList<CardInstanceState> cards,
@@ -28,10 +29,10 @@ internal static class CreditSources
             yield break;
         }
 
+        var pools = new List<(CardInstanceId Card, int Credits, bool Stealth)>();
+        // An AnyCost pool pays run costs too (PR #152's review): the shared predicate decides.
         foreach (CardCounterState counter in rules.Counters
-            .Where(static counter => counter.Purpose == CardCounterPurpose.HostedCredit
-                && counter.SpendRestriction == HostedCreditSpendRestriction.RunCost
-                && counter.Count > 0)
+            .Where(static counter => counter.Count > 0 && CardCounterRules.CanSpend(counter, HostedCreditSpendRestriction.RunCost))
             .OrderBy(static counter => counter.CardId.Value, StringComparer.Ordinal))
         {
             CardInstanceState? card = cards.FirstOrDefault(candidate => candidate.Id == counter.CardId);
@@ -43,7 +44,12 @@ internal static class CreditSources
                 continue;
             }
 
-            yield return (card.Id, counter.Count);
+            pools.Add((card.Id, counter.Count, subtype is null && HasSubtype(runtime, card.DefinitionId, Stealth)));
+        }
+
+        foreach ((CardInstanceId card, int credits, _) in pools.OrderBy(static pool => pool.Stealth ? 1 : 0))
+        {
+            yield return (card, credits);
         }
     }
 
