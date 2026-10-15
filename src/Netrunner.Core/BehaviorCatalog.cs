@@ -86,6 +86,12 @@ public interface IBehaviorCatalog
     /// never read them, so their states keep their historical bytes.
     /// </summary>
     bool TracksTurnEvents => false;
+
+    /// <summary>
+    /// VP.2: whether the engine records this turn event, which only a catalog with a card that reads it does (Vantage
+    /// Point's scoring and run facts), so other catalogs' states keep their historical bytes.
+    /// </summary>
+    bool RecordsTurnEvent(TurnEventKind kind) => false;
 }
 
 /// <summary>
@@ -310,6 +316,7 @@ public sealed record BehaviorCondition
                 or BehaviorConditionKind.NotTagged
                 or BehaviorConditionKind.ClicksRemainingAtLeast
                 or BehaviorConditionKind.TurnEventCountIs
+                or BehaviorConditionKind.TurnEventCountAtLeast
                 or BehaviorConditionKind.CreditsAtLeast))
         {
             throw new ArgumentException(
@@ -339,7 +346,7 @@ public sealed record BehaviorCondition
             throw new ArgumentException("A chose-cards condition names its stable choice key.", nameof(fact));
         }
 
-        if (kind == BehaviorConditionKind.TurnEventCountIs
+        if (kind is BehaviorConditionKind.TurnEventCountIs or BehaviorConditionKind.TurnEventCountAtLeast
             && (fact is null || !Enum.TryParse<TurnEventKind>(fact, ignoreCase: false, out _)
                 || value is null or < 0))
         {
@@ -397,7 +404,8 @@ public sealed record BehaviorCondition
                 or BehaviorConditionKind.SuccessfulRunDuringRunnerLastTurn
                 or BehaviorConditionKind.RunEventActive
                 or BehaviorConditionKind.PlayedThisTurn
-                or BehaviorConditionKind.NoActionFinishedThisTurn)
+                or BehaviorConditionKind.NoActionFinishedThisTurn
+                or BehaviorConditionKind.SourceScoredThisTurn)
             && (fact is not null || value is not null))
         {
             throw new ArgumentException(
@@ -452,6 +460,13 @@ public sealed record BehaviorCondition
     /// </summary>
     public static BehaviorCondition TurnEventCountIs(TurnEventKind kind, int count, PlayerSide? duringTurnOf = null) =>
         new(BehaviorConditionKind.TurnEventCountIs, fact: kind.ToString(), value: count, subjectSide: duringTurnOf);
+
+    /// <summary>VP-SCORING-FACTS: the active turn's count of a typed event is at least the value.</summary>
+    public static BehaviorCondition TurnEventCountAtLeast(TurnEventKind kind, int count, PlayerSide? duringTurnOf = null) =>
+        new(BehaviorConditionKind.TurnEventCountAtLeast, fact: kind.ToString(), value: count, subjectSide: duringTurnOf);
+
+    /// <summary>VP-SCORING-FACTS: the source agenda was scored this turn.</summary>
+    public static BehaviorCondition SourceScoredThisTurn() => new(BehaviorConditionKind.SourceScoredThisTurn);
 
     /// <summary>A player (by default the behavior controller) has at least the value in clicks.</summary>
     public static BehaviorCondition ClicksAtLeast(int threshold, PlayerSide? side) =>
@@ -624,6 +639,12 @@ public enum BehaviorConditionKind
     /// cost equal to the value (Detente's access: the trash option per cost).
     /// </summary>
     ChosenTrashCostIs,
+
+    /// <summary>VP-SCORING-FACTS: the active turn's count of a typed event is at least the value (Hype Machine, Myōshu).</summary>
+    TurnEventCountAtLeast,
+
+    /// <summary>VP-SCORING-FACTS: the source agenda was scored this turn (Witch Hunt).</summary>
+    SourceScoredThisTurn,
 }
 
 /// <summary>A typed target selector; IDs are resolved by Core at runtime.</summary>
@@ -2719,6 +2740,12 @@ public sealed class BehaviorCatalog : IBehaviorCatalog, IBehaviorCardClassificat
     private readonly ReadOnlyDictionary<CardDefinitionId, BehaviorCardType> _cardTypes;
     private readonly ReadOnlyDictionary<CardDefinitionId, IReadOnlyList<string>> _cardSubtypes;
     private readonly ConcurrentDictionary<CardDefinitionId, string> _definitionFingerprints = new();
+    private readonly HashSet<TurnEventKind> _recordedTurnEvents;
+
+    /// <summary>VP.2: the opt-in turn events this catalog's cards read (see <see cref="IBehaviorCatalog.RecordsTurnEvent"/>).</summary>
+    public IReadOnlyCollection<TurnEventKind> RecordedTurnEvents => _recordedTurnEvents;
+
+    public bool RecordsTurnEvent(TurnEventKind kind) => _recordedTurnEvents.Contains(kind);
 
     internal BehaviorCatalog(
         string version,
@@ -2730,10 +2757,12 @@ public sealed class BehaviorCatalog : IBehaviorCatalog, IBehaviorCardClassificat
         IReadOnlyDictionary<CardDefinitionId, CardBehaviorDefinition> generic,
         IReadOnlyDictionary<CardDefinitionId, BehaviorCardType>? cardTypes = null,
         IReadOnlyDictionary<CardDefinitionId, IReadOnlyList<string>>? cardSubtypes = null,
-        bool tracksTurnEvents = false)
+        bool tracksTurnEvents = false,
+        IReadOnlyCollection<TurnEventKind>? recordedTurnEvents = null)
     {
         Version = ValidateVersion(version);
         TracksTurnEvents = tracksTurnEvents;
+        _recordedTurnEvents = recordedTurnEvents is { Count: > 0 } ? recordedTurnEvents.ToHashSet() : [];
         BehaviorRegistryVersion = Version;
         _ice = Freeze(ice);
         _icebreakers = Freeze(icebreakers);
@@ -3065,6 +3094,7 @@ public sealed class BehaviorCatalogBuilder
     private readonly Dictionary<CardDefinitionId, BehaviorCardType> _cardTypes = new();
     private readonly Dictionary<CardDefinitionId, IReadOnlyList<string>> _cardSubtypes = new();
     private bool _tracksTurnEvents;
+    private readonly HashSet<TurnEventKind> _recordedTurnEvents = [];
     private readonly Dictionary<CardDefinitionId, string> _typedFamilies = new();
 
     public BehaviorCatalogBuilder(string version)
@@ -3100,6 +3130,10 @@ public sealed class BehaviorCatalogBuilder
         }
 
         _tracksTurnEvents = baseCatalog.TracksTurnEvents;
+        if (baseCatalog is BehaviorCatalog withEvents)
+        {
+            _recordedTurnEvents.UnionWith(withEvents.RecordedTurnEvents);
+        }
         if (baseCatalog is BehaviorCatalog compiled)
         {
             foreach (CardDefinitionId definitionId in compiled.SubtypedDefinitionIds)
@@ -3195,6 +3229,15 @@ public sealed class BehaviorCatalogBuilder
         return this;
     }
 
+    /// <summary>VP.2: opts the catalog into recording turn events that only some cards read.</summary>
+    public BehaviorCatalogBuilder RecordTurnEvents(params TurnEventKind[] kinds)
+    {
+        ArgumentNullException.ThrowIfNull(kinds);
+        _tracksTurnEvents = true;
+        _recordedTurnEvents.UnionWith(kinds);
+        return this;
+    }
+
     public BehaviorCatalog Build() => new(
         Version,
         _ice,
@@ -3205,7 +3248,8 @@ public sealed class BehaviorCatalogBuilder
         _generic,
         _cardTypes,
         _cardSubtypes,
-        _tracksTurnEvents);
+        _tracksTurnEvents,
+        _recordedTurnEvents);
 
     private BehaviorCatalogBuilder AddTyped<T>(
         Dictionary<CardDefinitionId, T> map,

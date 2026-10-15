@@ -15,7 +15,8 @@ public static partial class GameEngine
     private static bool? SharedConditionMatches(
         WorkingState working,
         PlayerId controllerId,
-        BehaviorCondition condition)
+        BehaviorCondition condition,
+        CardInstanceId? sourceCardId = null)
     {
         PlayerSide controllerSide = GetPlayer(working, controllerId).Side;
         int threshold = condition.Value.GetValueOrDefault();
@@ -48,6 +49,13 @@ public static partial class GameEngine
                 (condition.SubjectSide is not { } turnOf || working.Turn.ActiveSide == turnOf)
                 && Enum.TryParse(condition.Fact, ignoreCase: false, out TurnEventKind eventKind)
                 && ActiveTurnEventCount(working, eventKind) == threshold,
+            BehaviorConditionKind.TurnEventCountAtLeast =>
+                (condition.SubjectSide is not { } atLeastTurnOf || working.Turn.ActiveSide == atLeastTurnOf)
+                && Enum.TryParse(condition.Fact, ignoreCase: false, out TurnEventKind atLeastKind)
+                && ActiveTurnEventCount(working, atLeastKind) >= threshold,
+            BehaviorConditionKind.SourceScoredThisTurn => sourceCardId is { } scored
+                && working.Turn.History?.ThisTurn(working.Turn.ActiveSide)?.AgendaTurnChanges.Any(change =>
+                    change.CardId == scored && change.Kind == AgendaTurnChangeKind.Score) == true,
             BehaviorConditionKind.ClicksRemainingAtLeast when condition.SubjectSide is { } clickSide =>
                 GetPlayer(working, clickSide).Clicks >= threshold,
             _ => null,

@@ -85,6 +85,12 @@ public enum OccurrenceKind
     /// publicity fund; Shackleton Grid).
     /// </summary>
     CreditsSpentFromOutsidePool,
+
+    /// <summary>
+    /// VP-ADVANCED: the Corp advanced a card with the basic action (placing counters by an effect isn't advancing); the
+    /// subject is the card (Sacrifice Zone Expansion, with a once-per-turn trigger).
+    /// </summary>
+    CardAdvanced,
 }
 
 public enum OccurrencePhase

@@ -995,7 +995,7 @@ public static partial class GameEngine
             BehaviorConditionKind.FoundCard => false,
             BehaviorConditionKind.SourceHostsAtLeast or BehaviorConditionKind.RezzedInstalledCopy
                 => OptionConditionMatches(working, controllerId, source.Id, condition),
-            _ => SharedConditionMatches(working, controllerId, condition) ?? false,
+            _ => SharedConditionMatches(working, controllerId, condition, source.Id) ?? false,
         };
     }
 

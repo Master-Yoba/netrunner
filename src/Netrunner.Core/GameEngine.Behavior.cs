@@ -2064,7 +2064,7 @@ public static partial class GameEngine
                 && AccessTrashCost(working.BehaviorCatalog, working.RuntimeCardCatalog, GetCard(working, chosen.CardIds[0]).DefinitionId)
                     == condition.Value,
             BehaviorConditionKind.SourceHostsAtLeast => OptionConditionMatches(working, frame.Controller, frame.SourceCardId, condition),
-            _ => SharedConditionMatches(working, frame.Controller, condition) ?? false,
+            _ => SharedConditionMatches(working, frame.Controller, condition, frame.SourceCardId) ?? false,
         };
     }
 
@@ -5007,6 +5007,6 @@ public static partial class GameEngine
                 && card.Rezzed
                 && card.DefinitionId.Value == condition.Fact
                 && IsInstalledCard(working, card.Id)),
-            _ => SharedConditionMatches(working, owner, condition) ?? false,
+            _ => SharedConditionMatches(working, owner, condition, sourceCardId) ?? false,
         };
 }

@@ -1204,6 +1204,15 @@ public enum TurnEventKind
 
     /// <summary>VP-BAD-PUBLICITY: the Corp took bad publicity.</summary>
     BadPublicityTaken,
+
+    /// <summary>VP-SCORING-FACTS: the Corp scored an agenda.</summary>
+    AgendaScored,
+
+    /// <summary>VP-SCORING-FACTS: the Corp scored an agenda it had not installed this turn (Myōshu).</summary>
+    AgendaScoredNotInstalledThisTurn,
+
+    /// <summary>VP-RUN-FACTS: a piece of ICE was rezzed (Underdome Irregulars).</summary>
+    IceRezzed,
 }
 
 /// <summary>

@@ -13,6 +13,15 @@ public static partial class GameEngine
     private static void RecordActiveTurnEvent(WorkingState working, TurnEventKind kind) =>
         RecordTurnEvent(working, working.Turn.ActiveSide, kind);
 
+    /// <summary>VP.2: records a turn event only a catalog with a card that reads it records.</summary>
+    private static void RecordOptInTurnEvent(WorkingState working, TurnEventKind kind)
+    {
+        if (working.BehaviorCatalog.RecordsTurnEvent(kind))
+        {
+            RecordActiveTurnEvent(working, kind);
+        }
+    }
+
     private static int ActiveTurnEventCount(WorkingState working, TurnEventKind kind) =>
         working.Turn.History?.ThisTurn(working.Turn.ActiveSide)?.EventCount(kind) ?? 0;
 
