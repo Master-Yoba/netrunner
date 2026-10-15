@@ -206,6 +206,7 @@ public sealed partial class CorpHeuristicPolicy
                         { Kind: BehaviorDamageAmountKind.ScoredAgendaPrintedPointsThisTurn } => context.Features.Board.TurnFacts?.Corp.ThisTurn?.AgendaTurnChanges
                             .Where(change => change.Kind == AgendaTurnChangeKind.Score).Sum(change => change.Points) ?? 0,
                         { Kind: BehaviorDamageAmountKind.SourceAdvancementCounters } damageOperand => damageOperand.BaseAmount + (source?.AdvancementCounters ?? 0),
+                        { Kind: BehaviorDamageAmountKind.RunnerTags } tagOperand => tagOperand.BaseAmount + (context.Features.Board.Players.Runner.Tags ?? 0),
                         _ => amount,
                     };
                     total += amount > context.Features.Board.HiddenZoneCounts.RunnerGrip ? 10000

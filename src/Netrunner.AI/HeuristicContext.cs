@@ -56,6 +56,7 @@ internal sealed class HeuristicContext
             BehaviorAmountKind.ProtectedRemotesWithRootCards => context.Features.Board.Servers.Count(server =>
                 server.Kind == ServerKind.Remote && server.Root.Any(card => card is not null) && server.Ice.Any(card => card is not null)),
             BehaviorAmountKind.Recorded => 1,
+            BehaviorAmountKind.RunnerTags => context.Features.Board.Players.Runner.Tags ?? 0,
             _ => 0,
         };
         return counted * operand.Multiplier + operand.Offset;

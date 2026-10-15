@@ -350,6 +350,9 @@ public enum BehaviorAmountKind
 
     /// <summary>VP-AMOUNT: the remote servers with a card in their root and ICE protecting them (Flood the Market).</summary>
     ProtectedRemotesWithRootCards,
+
+    /// <summary>VP-RUNNER-TAGS: the Runner's tags when the instruction resolves (Vicsek's X).</summary>
+    RunnerTags,
 }
 
 /// <summary>
@@ -858,6 +861,9 @@ public enum BehaviorDamageAmountKind
 {
     SourceAdvancementCounters,
     ScoredAgendaPrintedPointsThisTurn,
+
+    /// <summary>VP-RUNNER-TAGS: the Runner's tags when the damage resolves (Vicsek's X).</summary>
+    RunnerTags,
 }
 
 /// <summary>Typed damage calculation, evaluated once before costs and interrupts.</summary>

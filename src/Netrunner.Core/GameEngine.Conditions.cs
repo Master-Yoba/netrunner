@@ -44,6 +44,13 @@ public static partial class GameEngine
             BehaviorConditionKind.CreditsAtLeast when condition.SubjectSide is { } creditSide =>
                 GetPlayer(working, creditSide).Credits >= threshold,
             BehaviorConditionKind.BadPublicityAtLeast => (working.RulesState?.BadPublicity ?? 0) >= threshold,
+            BehaviorConditionKind.RunAgainstSourceServer => working.RunState is { } sourceRun
+                && sourceCardId is { } sameSource
+                && SourceServerId(working, GetCard(working, sameSource)) == sourceRun.AttackedServer,
+            BehaviorConditionKind.RunAgainstAnotherServer => working.RunState is { } otherRun
+                && sourceCardId is { } otherSource
+                && SourceServerId(working, GetCard(working, otherSource)) is { } sourceServer
+                && sourceServer != otherRun.AttackedServer,
             BehaviorConditionKind.ThreatLevelAtLeast => ThreatLevel(working.Players) >= threshold,
             BehaviorConditionKind.RunnerTagsAtLeast => RunnerTags(working) >= threshold,
             BehaviorConditionKind.ZoneCountAtMost =>

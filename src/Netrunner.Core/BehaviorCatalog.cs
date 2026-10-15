@@ -416,7 +416,9 @@ public sealed record BehaviorCondition
                 or BehaviorConditionKind.PlayedThisTurn
                 or BehaviorConditionKind.NoActionFinishedThisTurn
                 or BehaviorConditionKind.SourceScoredThisTurn
-                or BehaviorConditionKind.SuccessfulRunOnEveryCentralThisTurn)
+                or BehaviorConditionKind.SuccessfulRunOnEveryCentralThisTurn
+                or BehaviorConditionKind.RunAgainstSourceServer
+                or BehaviorConditionKind.RunAgainstAnotherServer)
             && (fact is not null || value is not null))
         {
             throw new ArgumentException(
@@ -670,6 +672,15 @@ public enum BehaviorConditionKind
 
     /// <summary>VP-BAD-PUBLICITY: the Corp has at least the value in bad publicity (Luana Campos, Scapegoat).</summary>
     BadPublicityAtLeast,
+
+    /// <summary>VP-ATTACKED-SERVER: a run is in progress against the source's server (Event Horizon).</summary>
+    RunAgainstSourceServer,
+
+    /// <summary>
+    /// VP-ATTACKED-SERVER: a run is in progress against a server other than the source's (The Red Room, Sacrifice Zone
+    /// Expansion).
+    /// </summary>
+    RunAgainstAnotherServer,
 }
 
 /// <summary>A typed target selector; IDs are resolved by Core at runtime.</summary>
@@ -1298,10 +1309,11 @@ public sealed record BehaviorInstruction
                 or BehaviorInstructionKind.Draw
                 or BehaviorInstructionKind.RemoveTags
                 or BehaviorInstructionKind.AddCounter
-                or BehaviorInstructionKind.AdvanceCard))
+                or BehaviorInstructionKind.AdvanceCard
+                or BehaviorInstructionKind.AddTags))
         {
             throw new ArgumentException(
-                "A dynamic amount operand is valid only for credit, draw, counter, advancement and tag-removal instructions.",
+                "A dynamic amount operand is valid only for credit, draw, counter, advancement and tag instructions.",
                 nameof(AmountOperand));
         }
 
@@ -1381,7 +1393,8 @@ public sealed record BehaviorInstruction
                 or BehaviorInstructionKind.AdvanceCard
                 or BehaviorInstructionKind.RemoveTags
                 or BehaviorInstructionKind.TakeBadPublicity
-                or BehaviorInstructionKind.RemoveBadPublicity)
+                or BehaviorInstructionKind.RemoveBadPublicity
+                or BehaviorInstructionKind.RemoveAdvancementCounters)
             && AmountOperand is null
             && Amount <= 0)
         {
@@ -1477,6 +1490,7 @@ public sealed record BehaviorInstruction
             or BehaviorInstructionKind.TrashCard
             or BehaviorInstructionKind.InstallCard
             or BehaviorInstructionKind.AdvanceCard
+            or BehaviorInstructionKind.RemoveAdvancementCounters
             or BehaviorInstructionKind.SwapInstalledIce)
         {
             if (Target is null)
@@ -1886,6 +1900,12 @@ public enum BehaviorInstructionKind
     /// <see cref="BehaviorInstruction.CannotForfeitArgument"/> marks it as one that can't be forfeited.
     /// </summary>
     AddSelfToScoreAreaAsAgenda,
+
+    /// <summary>
+    /// VP-SPEND-ADVANCEMENT: removes up to the amount of advancement counters from each targeted installed card (Sacrifice
+    /// Zone Expansion: "remove 1 hosted advancement counter").
+    /// </summary>
+    RemoveAdvancementCounters,
 
     // Short aliases keep the contract pleasant for callers while the longer
     // names remain unambiguous in serialized/fingerprint output.
@@ -2390,8 +2410,16 @@ public sealed class CardBehaviorDefinition
         int stealCredits = 0,
         BehaviorScoreCostAsAgenda? scoreCostAsAgenda = null,
         int firstDoubleOperationClickDiscount = 0,
-        bool returnsHostedBadPublicity = false)
+        bool returnsHostedBadPublicity = false,
+        IReadOnlyList<ServerKind>? installServerKinds = null)
     {
+        if (installServerKinds is { Count: > 0 } && (controller != PlayerSide.Corp
+            || installServerKinds.Any(static kind => !Enum.IsDefined(kind)) || installServerKinds.Distinct().Count() != installServerKinds.Count))
+        {
+            throw new ArgumentException("Only a Corp card limits its install to distinct, defined server kinds.", nameof(installServerKinds));
+        }
+
+        InstallServerKinds = installServerKinds is { Count: > 0 } ? installServerKinds.ToArray() : null;
         if (returnsHostedBadPublicity && controller != PlayerSide.Corp)
         {
             throw new ArgumentException("Only a Corp card hosts bad publicity.", nameof(returnsHostedBadPublicity));
@@ -2584,6 +2612,13 @@ public sealed class CardBehaviorDefinition
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool ReturnsHostedBadPublicity { get; }
+
+    /// <summary>
+    /// VP-INSTALL-SERVER-KIND: the kinds of server the card may be installed in ("Central server only": The Red Room;
+    /// "HQ or R&amp;D only": Flagship). Null for no limit.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<ServerKind>? InstallServerKinds { get; }
 
     /// <summary>VP-BAD-PUBLICITY: the name of the counter for bad publicity hosted on a card.</summary>
     public const string HostedBadPublicityCounter = "bad-publicity";
@@ -3491,6 +3526,7 @@ internal static class BehaviorCatalogStructure
                 && a.ScoreCostAsAgenda == b.ScoreCostAsAgenda
                 && a.FirstDoubleOperationClickDiscount == b.FirstDoubleOperationClickDiscount
                 && a.ReturnsHostedBadPublicity == b.ReturnsHostedBadPublicity
+                && SequenceEquals(a.InstallServerKinds ?? [], b.InstallServerKinds ?? [])
                 && SequenceEquals(a.HostedCreditUses ?? [], b.HostedCreditUses ?? [])
                 && a.Hosting == b.Hosting
                 && SequenceEquals(a.Costs, b.Costs)
@@ -3825,6 +3861,10 @@ internal static class BehaviorCatalogFingerprint
         if (value.ReturnsHostedBadPublicity)
         {
             builder.Append(",returnsHostedBadPublicity=1");
+        }
+        if (value.InstallServerKinds is { } installKinds)
+        {
+            builder.Append(",installServerKinds=").Append(string.Join("+", installKinds.Select(static kind => (int)kind)));
         }
         if (value.FirstDoubleOperationClickDiscount != 0)
         {

@@ -40,10 +40,16 @@ public static partial class ObservationBuilder
                         state.Turn.History?.ThisTurn(state.Turn.ActiveSide)?.AgendaTurnChanges
                             .Where(change => change.Kind == AgendaTurnChangeKind.Score && change.BeneficiarySide == PlayerSide.Corp)
                             .Sum(change => change.Points) ?? 0,
+                    BehaviorDamageAmountKind.RunnerTags => state.RulesState?.Players
+                        .SingleOrDefault(player => state.Players.Any(value => value.Id == player.PlayerId && value.Side == PlayerSide.Runner))?.Tags ?? 0,
                     _ => 0,
                 };
-                string reason = operand.Kind == BehaviorDamageAmountKind.SourceAdvancementCounters
-                    ? "hosted-advancement-counters" : "printed-agenda-points-scored-this-turn";
+                string reason = operand.Kind switch
+                {
+                    BehaviorDamageAmountKind.SourceAdvancementCounters => "hosted-advancement-counters",
+                    BehaviorDamageAmountKind.RunnerTags => "runner-tags",
+                    _ => "printed-agenda-points-scored-this-turn",
+                };
                 quotes.Add(new Dictionary<string, object?>
                 {
                     ["key"] = source.Id.Value,

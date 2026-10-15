@@ -82,6 +82,7 @@ public static class BeneficialTriggers
             [BehaviorInstructionKind.TakeBadPublicity] = EffectVerdict.PlayerDecides,
             [BehaviorInstructionKind.RemoveBadPublicity] = EffectVerdict.PlayerDecides,
             [BehaviorInstructionKind.AddSelfToScoreAreaAsAgenda] = EffectVerdict.PlayerDecides,
+            [BehaviorInstructionKind.RemoveAdvancementCounters] = EffectVerdict.PlayerDecides,
             [BehaviorInstructionKind.ModifySourceStrength] = EffectVerdict.PlayerDecides,
             [BehaviorInstructionKind.FlipSelf] = EffectVerdict.PlayerDecides,
             [BehaviorInstructionKind.RemoveCounter] = EffectVerdict.PlayerDecides,

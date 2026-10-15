@@ -328,6 +328,24 @@ public static partial class GameEngine
             case BehaviorInstructionKind.AddSelfToScoreAreaAsAgenda:
                 AddSourceToScoreAreaAsAgenda(working, frame, instruction);
                 return;
+            case BehaviorInstructionKind.RemoveAdvancementCounters:
+                foreach (CardInstanceId advancedId in ResolveBehaviorCards(working, frame, instruction.Target))
+                {
+                    CardInstanceState advanced = GetCard(working, advancedId);
+                    int advancementRemoved = Math.Min(advanced.AdvancementCounters, instruction.Amount);
+                    if (advancementRemoved == 0 || !IsInstalledCard(working, advancedId))
+                    {
+                        continue;
+                    }
+
+                    ReplaceCard(working, new CardInstanceState(advanced.Id, advanced.DefinitionId, advanced.ZoneId, advanced.OwnerSide,
+                        advanced.FaceUp, advanced.Rezzed, advanced.AdvancementCounters - advancementRemoved, advanced.HostCardId));
+                    Emit(working, EngineEventKinds.AdvancementCountersRemoved,
+                        new AdvancementCountersRemovedEventPayload(advanced.Id, advancementRemoved, advanced.AdvancementCounters - advancementRemoved));
+                }
+
+                AdvanceBehaviorCursor(working, frame);
+                return;
             case BehaviorInstructionKind.TakeBadPublicity:
                 ApplyBadPublicity(working, StaticOrDynamicAmount(working, frame, instruction));
                 AdvanceBehaviorCursor(working, frame);
@@ -508,8 +526,14 @@ public static partial class GameEngine
                     _ => throw new ResolutionFailureException("The AddTags recipient is invalid."),
                 };
                 AdvanceBehaviorCursor(working, frame);
-                working.ResolutionStack.Add(new EffectResolutionFrame(frame.Controller, new CostBundle(),
-                    new EffectBundle(new TagAdjustmentEffect(tagRecipient, instruction.Amount))));
+                // VP-RUNNER-TAGS: a dynamic amount (Vicsek's X) may be zero, which gives none.
+                int tagsGiven = StaticOrDynamicAmount(working, frame, instruction);
+                if (tagsGiven > 0)
+                {
+                    working.ResolutionStack.Add(new EffectResolutionFrame(frame.Controller, new CostBundle(),
+                        new EffectBundle(new TagAdjustmentEffect(tagRecipient, tagsGiven))));
+                }
+
                 return;
             case BehaviorInstructionKind.TrashSelf:
                 ResolveBehaviorTransfer(
@@ -792,6 +816,7 @@ public static partial class GameEngine
                             && catalog.TryGet(GetCard(working, change.CardId).DefinitionId, out CardRuntimeSpec? spec)
                                 ? spec.AgendaPoints
                                 : change.Points) ?? 0,
+                BehaviorDamageAmountKind.RunnerTags => RunnerTags(working),
                 _ => throw new ResolutionFailureException("Unknown damage amount operand."),
             };
             amount = checked(operand.BaseAmount + variable);
@@ -2251,6 +2276,7 @@ public static partial class GameEngine
                         ? rezSpec!.RezCost ?? 0
                         : 0),
                 BehaviorAmountKind.ProtectedRemotesWithRootCards => ProtectedRemotesWithRootCards(working),
+                BehaviorAmountKind.RunnerTags => RunnerTags(working),
                 _ => throw new ResolutionFailureException($"Amount kind '{kind}' is not executable."),
             };
             return checked(counted * operand.Multiplier + operand.Offset);
