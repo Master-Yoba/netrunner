@@ -23,6 +23,7 @@ public static class IssuedRunPaymentPreference
         (ActionKind.BreakSubroutines, RunBreakParameters value) => (action.Kind, value.BreakerId, value.Quantity, value.SubroutineId,
             value.SubroutineOrdinals is { } ordinals ? string.Join(",", ordinals) : null, EngineJson.Serialize(value.CostQuote)),
         (ActionKind.TrashAccessedCard, RunCardPaymentParameters value) => (action.Kind, value.CardId),
+        (ActionKind.StealAgenda, RunCardPaymentParameters value) => (action.Kind, value.CardId),
         (ActionKind.ResolveIceSubroutine, IceSubroutineChoiceParameters value) when value.Choice == IceSubroutineChoiceKind.PayCredits =>
             (action.Kind, value.FrameIdentity, value.Choice, value.CardId, value.DestinationKind, value.ServerId, value.CreateNewRemote, value.CreditCost),
         _ => action.Id,

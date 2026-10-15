@@ -984,6 +984,9 @@ public sealed record BehaviorRunOperand
 /// <summary>One inert, typed instruction in a compiled behavior program.</summary>
 public sealed record BehaviorInstruction
 {
+    /// <summary>VP-CARD-AS-AGENDA: the argument of a card added as an agenda that can't be forfeited (Word on the Street).</summary>
+    public const string CannotForfeitArgument = "cannot-forfeit";
+
     [JsonConstructor]
     public BehaviorInstruction(
         BehaviorInstructionKind kind,
@@ -1012,9 +1015,15 @@ public sealed record BehaviorInstruction
         }
 
         if (kind is not (BehaviorInstructionKind.ModifyEncounteredIceStrength
-            or BehaviorInstructionKind.ModifySourceStrength))
+            or BehaviorInstructionKind.ModifySourceStrength
+            or BehaviorInstructionKind.AddSelfToScoreAreaAsAgenda))
         {
             ArgumentOutOfRangeException.ThrowIfNegative(amount);
+        }
+
+        if (kind == BehaviorInstructionKind.AddSelfToScoreAreaAsAgenda && argument is not (null or CannotForfeitArgument))
+        {
+            throw new ArgumentException("A card added as an agenda takes only the cannot-forfeit argument.", nameof(argument));
         }
 
         Kind = kind;
@@ -1841,6 +1850,13 @@ public enum BehaviorInstructionKind
     /// <summary>VP-BAD-PUBLICITY: the Corp removes up to the amount of its bad publicity.</summary>
     RemoveBadPublicity,
 
+    /// <summary>
+    /// VP-CARD-AS-AGENDA: the source card goes to the recipient's score area as an agenda worth the amount, which may be
+    /// negative (CR 26.03 10.1.3; Myōshu, Word on the Street). The argument
+    /// <see cref="BehaviorInstruction.CannotForfeitArgument"/> marks it as one that can't be forfeited.
+    /// </summary>
+    AddSelfToScoreAreaAsAgenda,
+
     // Short aliases keep the contract pleasant for callers while the longer
     // names remain unambiguous in serialized/fingerprint output.
     Shuffle = ShuffleIntoDeck,
@@ -1964,6 +1980,12 @@ public enum BehaviorHostedCreditUseKind
     /// <summary>Rez costs of assets in the root of, and ICE protecting, the card's own server (Mahkota Langit Grid).</summary>
     RezInServer,
 }
+
+/// <summary>
+/// VP-SCORE-STEAL-COST: the card goes to the Corp's score area as an agenda worth the points as an additional cost to score
+/// (Word on the Street: -1, can't be forfeited, only for agendas installed this turn).
+/// </summary>
+public sealed record BehaviorScoreCostAsAgenda(int Points, bool CannotForfeit, bool OnlyAgendasInstalledThisTurn);
 
 /// <summary>One declared use of a card's hosted credits.</summary>
 public sealed record BehaviorHostedCreditUse
@@ -2330,8 +2352,17 @@ public sealed class CardBehaviorDefinition
         IReadOnlyList<BehaviorCondition>? rezRequirements = null,
         bool hostedCardsPlayAsGrip = false,
         int rezForfeitDiscount = 0,
-        int hostIcebreakerStrength = 0)
+        int hostIcebreakerStrength = 0,
+        int stealCredits = 0,
+        BehaviorScoreCostAsAgenda? scoreCostAsAgenda = null)
     {
+        ScoreCostAsAgenda = scoreCostAsAgenda;
+        if (stealCredits < 0 || stealCredits > 0 && controller != PlayerSide.Corp)
+        {
+            throw new ArgumentException("Only a Corp card adds a nonnegative credit cost to stealing.", nameof(stealCredits));
+        }
+
+        StealCredits = stealCredits;
         DefinitionId = definitionId;
         ArgumentOutOfRangeException.ThrowIfNegative(hostIcebreakerStrength);
         if (hostIcebreakerStrength > 0 && controller != PlayerSide.Runner)
@@ -2476,6 +2507,20 @@ public sealed class CardBehaviorDefinition
     /// <summary>What this card's hosted credits can be spent on (Azimat, Open Market, Mahkota Langit Grid).</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<BehaviorHostedCreditUse>? HostedCreditUses { get; }
+
+    /// <summary>
+    /// VP-SCORE-STEAL-COST: while the card is active, stealing any agenda costs the Runner this many more credits
+    /// (Magistrate Revontulet).
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int StealCredits { get; }
+
+    /// <summary>
+    /// VP-SCORE-STEAL-COST: while the card is active, scoring an agenda (one installed this turn, when so declared) costs
+    /// the Corp adding this card to its score area as an agenda (Word on the Street).
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public BehaviorScoreCostAsAgenda? ScoreCostAsAgenda { get; }
 
     public IReadOnlyList<BehaviorCost> Costs { get; }
 
@@ -3376,6 +3421,8 @@ internal static class BehaviorCatalogStructure
                 && a.HostedCardsPlayAsGrip == b.HostedCardsPlayAsGrip
                 && a.RezForfeitDiscount == b.RezForfeitDiscount
                 && a.HostIcebreakerStrength == b.HostIcebreakerStrength
+                && a.StealCredits == b.StealCredits
+                && a.ScoreCostAsAgenda == b.ScoreCostAsAgenda
                 && SequenceEquals(a.HostedCreditUses ?? [], b.HostedCreditUses ?? [])
                 && a.Hosting == b.Hosting
                 && SequenceEquals(a.Costs, b.Costs)
@@ -3570,7 +3617,13 @@ internal static class BehaviorCatalogFingerprint
 
     private static void AppendAsset(StringBuilder builder, AssetBehaviorSpec value) => builder.Append(value.TrashCost);
 
-    private static void AppendAgenda(StringBuilder builder, AgendaBehaviorSpec value) => builder.Append(value.AgendaPoints);
+    private static void AppendAgenda(StringBuilder builder, AgendaBehaviorSpec value)
+    {
+        builder.Append(value.AgendaPoints);
+        // Vantage Point's declarations are emitted only when used, so other agendas keep their bytes.
+        if (value.RunnerScoreAreaPoints is { } runnerPoints) builder.Append("|runnerScoreAreaPoints=").Append(runnerPoints);
+        if (value.StealClicks != 0) builder.Append("|stealClicks=").Append(value.StealClicks);
+    }
 
     private static void AppendRunEvent(StringBuilder builder, RunEventBehaviorSpec value)
     {
@@ -3622,6 +3675,11 @@ internal static class BehaviorCatalogFingerprint
         if (value.PreventFirstEndRun)
         {
             builder.Append("|preventFirstEndRun=1");
+        }
+
+        if (value.LocksCreditPool)
+        {
+            builder.Append("|locksCreditPool=1");
         }
     }
 
@@ -3675,6 +3733,16 @@ internal static class BehaviorCatalogFingerprint
         {
             builder.Append(",rezRequirements=");
             AppendSequence(builder, rezRequirements, AppendCondition);
+        }
+        if (value.StealCredits != 0)
+        {
+            builder.Append(",stealCredits=").Append(value.StealCredits);
+        }
+        if (value.ScoreCostAsAgenda is { } scoreCost)
+        {
+            builder.Append(",scoreCostAsAgenda=").Append(scoreCost.Points)
+                .Append(':').Append(scoreCost.CannotForfeit ? 1 : 0)
+                .Append(':').Append(scoreCost.OnlyAgendasInstalledThisTurn ? 1 : 0);
         }
         if (value.HostedCreditUses is { } uses)
         {
@@ -3876,6 +3944,12 @@ internal static class BehaviorCatalogFingerprint
         if (value.AdditionalKind is { } additionalKind)
         {
             builder.Append(",additionalKind=").Append((int)additionalKind);
+        }
+
+        if (value.CreditSourceSubtype is not null)
+        {
+            builder.Append(",creditSource=");
+            AppendString(builder, value.CreditSourceSubtype);
         }
     }
 

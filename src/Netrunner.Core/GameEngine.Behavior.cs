@@ -325,6 +325,9 @@ public static partial class GameEngine
                 }
 
                 return;
+            case BehaviorInstructionKind.AddSelfToScoreAreaAsAgenda:
+                AddSourceToScoreAreaAsAgenda(working, frame, instruction);
+                return;
             case BehaviorInstructionKind.TakeBadPublicity:
                 ApplyBadPublicity(working, StaticOrDynamicAmount(working, frame, instruction));
                 AdvanceBehaviorCursor(working, frame);
@@ -1597,11 +1600,19 @@ public static partial class GameEngine
                 frame,
                 source,
                 currentSourceZone);
-            bool validLifecycleZone = frame.TriggerKey is not null
+            // VP-CARD-AS-AGENDA: the behavior moved its own source to a score area as an agenda (Myōshu); it finishes there.
+            bool movedToScoreAreaAsAgenda = currentSourceZone.Kind is ZoneKind.CorpScore or ZoneKind.RunnerScore
+                && ScoreAreaAgendaEntry(working, source.Id) is not null
+                && BehaviorInstructionPath.HasReached(
+                    rootInstructions,
+                    frame.Continuation,
+                    frame.InstructionCursor,
+                    BehaviorInstructionKind.AddSelfToScoreAreaAsAgenda);
+            bool validLifecycleZone = movedToScoreAreaAsAgenda || (frame.TriggerKey is not null
                 ? catalogTriggerDetachedSource || catalogTriggerBegan || catalogTriggerLifecycleZone || hostedCreditOccurrenceAuthorized
                 : (selfTrash && IsAbilityTrashZone(currentSourceZone, source))
                     || (selfRemove && IsAbilityRemoveZone(currentSourceZone, source))
-                    || hostedCreditOccurrenceAuthorized;
+                    || hostedCreditOccurrenceAuthorized);
             if (!validLifecycleZone
                 || frame.Stage != BehaviorResolutionStage.Execute
                 || (selfTrash && selfRemove))
@@ -3570,6 +3581,16 @@ public static partial class GameEngine
         if (filter.OwnerSide.HasValue && card.OwnerSide != filter.OwnerSide.Value)
         {
             return false;
+        }
+
+        // VP-CARD-AS-AGENDA (CR 26.03 10.1.3): a card added to a score area as an agenda has only an agenda's properties.
+        // One that can't be forfeited never matches an agenda filter, so no forfeit is offered it.
+        if (ScoreAreaAgendaEntry(working, cardId) is { } converted)
+        {
+            return filter.Subtype is null
+                && (filter.AgendaPoints is not { } convertedPoints || converted.Points == convertedPoints)
+                && (filter.CardType == BehaviorCardType.Any
+                    || filter.CardType is BehaviorCardType.Agenda or BehaviorCardType.Advanceable && !converted.CannotForfeit);
         }
 
         // Once a runtime catalog is present it is the sole authority for

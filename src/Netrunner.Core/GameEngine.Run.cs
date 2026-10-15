@@ -2459,6 +2459,9 @@ public static partial class GameEngine
             case (ActionKind.TrashAccessedCard, RunCardPaymentParameters trash):
                 ConsumeRunTrashAccessedCard(working, run, trash.CardId, trash.HostedCredits);
                 break;
+            case (ActionKind.StealAgenda, RunCardPaymentParameters steal):
+                ConsumeRunPaidSteal(working, run, steal.CardId, steal.HostedCredits);
+                break;
             default:
                 throw new ResolutionFailureException($"Action kind '{kind}' has no registered run resolver.");
         }
@@ -2580,7 +2583,9 @@ public static partial class GameEngine
         if (!HasRunRestriction(run, RunRestrictionKind.CannotStealOrTrashCorpCards)
             && run.ChosenAccessCards.Count > 0
             && TryGetCurrentAccessCard(working, run, out CardInstanceState? card, requireTrashableSource: false)
-            && working.BehaviorCatalog.TryGetAgenda(card!.DefinitionId, out _))
+            && working.BehaviorCatalog.TryGetAgenda(card!.DefinitionId, out _)
+            // VP-SCORE-STEAL-COST: with additional steal costs, no action declines them and leaves the agenda.
+            && StealCosts.For(working.Cards, working.Zones, working.BehaviorCatalog, card.DefinitionId) is (0, 0))
         {
             StealAccessedAgendaInternal(working, run, card.Id);
             return;
@@ -2685,6 +2690,36 @@ public static partial class GameEngine
     /// resolves the steal. The emitted <c>AgendaStolen</c> event is identical
     /// to the pre-U6 player-steal path.
     /// </summary>
+    /// <summary>
+    /// VP-SCORE-STEAL-COST: the Runner pays an accessed agenda's additional steal costs (clicks, then credits from the
+    /// split the action names) and steals it.
+    /// </summary>
+    private static void ConsumeRunPaidSteal(WorkingState working, RunState run, CardInstanceId cardId, int hostedCredits)
+    {
+        if (run.Step != RunTimingStep.BreachAccessAbility || run.ChosenAccessCards.Count == 0 || run.ChosenAccessCards[^1] != cardId
+            || HasRunRestriction(run, RunRestrictionKind.CannotStealOrTrashCorpCards)
+            || !TryGetCurrentAccessCard(working, run, out CardInstanceState? card, requireTrashableSource: false)
+            || !working.BehaviorCatalog.TryGetAgenda(card!.DefinitionId, out _))
+        {
+            throw new ResolutionFailureException($"Card '{cardId}' is not an accessed agenda the Runner may steal.");
+        }
+
+        (int clicks, int credits) = StealCosts.For(working.Cards, working.Zones, working.BehaviorCatalog, card.DefinitionId);
+        PlayerState runner = GetPlayer(working, PlayerSide.Runner);
+        if (runner.Clicks < clicks || !CanAffordRunCredits(working, runner, run, credits))
+        {
+            throw new ResolutionFailureException("The agenda's additional steal costs are no longer affordable.");
+        }
+
+        if (clicks > 0)
+        {
+            ApplyClickDelta(working, runner.Id, -clicks);
+        }
+
+        run = PayRunnerRunCredits(working, working.RunState ?? run, credits, hostedCredits);
+        StealAccessedAgendaInternal(working, run, cardId);
+    }
+
     private static void StealAccessedAgendaInternal(WorkingState working, RunState run, CardInstanceId cardId)
     {
         if (run.Step != RunTimingStep.BreachAccessAbility)
@@ -2736,13 +2771,15 @@ public static partial class GameEngine
         run = run.WithPersistentContext(new RunPersistentContext(run.Id, run.AttackedServer,
             context.StolenAgendas.Append(card.Id).ToArray(), context.Abilities, context.AccessOccurrenceCount));
         working.RunState = run;
-        AddAgendaPoints(working, PlayerSide.Runner, spec.AgendaPoints);
-        Emit(working, EngineEventKinds.AgendaStolen, new AgendaStolenEventPayload(PlayerSide.Runner, cardId, spec.AgendaPoints));
+        // VP-AGENDA-POINTS-MODIFIER: an agenda may be worth less in the Runner's score area (Let Them Dream).
+        int stolenPoints = spec.PointsIn(PlayerSide.Runner);
+        AddAgendaPoints(working, PlayerSide.Runner, stolenPoints);
+        Emit(working, EngineEventKinds.AgendaStolen, new AgendaStolenEventPayload(PlayerSide.Runner, cardId, stolenPoints));
         RecordTurnAgendaChange(
             working,
             card.Id,
             PlayerSide.Runner,
-            spec.AgendaPoints,
+            stolenPoints,
             AgendaTurnChangeKind.Steal);
 
         bool realTurnRun = IsRealTurnRun(working, run);
@@ -4065,6 +4102,30 @@ public static partial class GameEngine
                     $"Trash {accessed} for {trashCost} credits "
                     + $"({FormatPaymentSplit(trashCost, hostedCredits)})",
                     new RunCardPaymentParameters(accessed, hostedCredits)));
+            }
+        }
+
+        // VP-SCORE-STEAL-COST (CR 26.03 7.1.6a): an agenda with additional steal costs is stolen only by paying them, as its
+        // own action; "no action" then leaves it.
+        if (currentAccess
+            && accessedCard is not null
+            && !HasRunRestriction(run, RunRestrictionKind.CannotStealOrTrashCorpCards)
+            && working.BehaviorCatalog.TryGetAgenda(accessedCard.DefinitionId, out _)
+            && StealCosts.For(working.Cards, working.Zones, working.BehaviorCatalog, accessedCard.DefinitionId) is var stealCost
+            && (stealCost.Clicks > 0 || stealCost.Credits > 0))
+        {
+            PlayerState runner = GetPlayer(working, PlayerSide.Runner);
+            if (runner.Clicks >= stealCost.Clicks && CanAffordRunCredits(working, runner, run, stealCost.Credits))
+            {
+                foreach (int hostedCredits in LegalHostedCreditSplits(working, runner, run, stealCost.Credits))
+                {
+                    actions.Add(new LegalAction(
+                        working.Allocator.NextActionId(),
+                        ActionKind.StealAgenda,
+                        $"Steal {accessed} by spending {stealCost.Clicks} click(s) and paying {stealCost.Credits} credits "
+                        + $"({FormatPaymentSplit(stealCost.Credits, hostedCredits)})",
+                        new RunCardPaymentParameters(accessed, hostedCredits)));
+                }
             }
         }
 

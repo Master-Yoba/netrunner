@@ -519,16 +519,23 @@ public static partial class GameEngine
 
     private static void StepCardPlay(WorkingState working, CardPlayFrame frame)
     {
-        _ = ValidateCardPlayFrame(working, frame);
+        // VP-CARD-AS-AGENDA: an operation that added itself to a score area as an agenda (Myōshu) stays there.
+        bool becameAgenda = ScoreAreaAgendaEntry(working, frame.CardId) is not null
+            && ZoneForCard(working, frame.CardId).Kind is ZoneKind.CorpScore or ZoneKind.RunnerScore;
+        if (!becameAgenda)
+        {
+            _ = ValidateCardPlayFrame(working, frame);
+        }
+
         CardInstanceState card = GetCard(working, frame.CardId);
         ZoneState playArea = working.Zones.Single(zone => zone.Id == frame.PlayAreaZoneId);
         ZoneState discard = working.Zones.Single(zone => zone.Id == frame.DiscardZoneId);
 
-        if (frame.RemoveAfterResolution)
+        if (!becameAgenda && frame.RemoveAfterResolution)
         {
             MoveCard(working, card, playArea, GetBehaviorZone(working, BehaviorZone.RemovedFromGame, card.OwnerSide));
         }
-        else
+        else if (!becameAgenda)
         {
             TrashCard(working, card, playArea, discard);
         }

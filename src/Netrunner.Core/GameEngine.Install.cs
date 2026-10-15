@@ -459,8 +459,13 @@ public static partial class GameEngine
         PayCreditsWithDeclaredHosted(working, player.Id, BehaviorHostedCreditUseKind.InstallResource, GetCard(working, frame.CardId), cost);
         if (plan.Source.Kind is ZoneKind.CorpScore or ZoneKind.RunnerScore && plan.Spec.AgendaPoints > 0)
         {
-            // EL-INSTALL-FROM-SCORE-AREA: the agenda's points leave that score area with it.
-            AddAgendaPoints(working, plan.Source.Kind == ZoneKind.CorpScore ? PlayerSide.Corp : PlayerSide.Runner, -plan.Spec.AgendaPoints);
+            // EL-INSTALL-FROM-SCORE-AREA: the agenda's points leave that score area with it, at their value there
+            // (VP-AGENDA-POINTS-MODIFIER: Let Them Dream is worth one less in the Runner's).
+            PlayerSide scoreSide = plan.Source.Kind == ZoneKind.CorpScore ? PlayerSide.Corp : PlayerSide.Runner;
+            int leaving = working.BehaviorCatalog.TryGetAgenda(GetCard(working, frame.CardId).DefinitionId, out AgendaBehaviorSpec? leavingSpec)
+                ? leavingSpec.PointsIn(scoreSide)
+                : plan.Spec.AgendaPoints;
+            AddAgendaPoints(working, scoreSide, -leaving);
         }
         if (frame.InitiationKind == InstallInitiationKind.BasicAction)
         {
@@ -1484,7 +1489,8 @@ public static partial class GameEngine
             defaults.LingeringEffects,
             defaults.Triggers,
             defaults.Interrupts,
-            defaults.BadPublicity);
+            defaults.BadPublicity,
+            defaults.ScoredAsAgendas);
     }
 
     private static bool IsBasicInstallClass(PlayerSide side, RuntimeCardClass cardClass) =>

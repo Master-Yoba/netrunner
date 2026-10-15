@@ -1184,7 +1184,8 @@ public static partial class GameEngine
         IReadOnlyList<GameLingeringEffect>? lingeringEffects = null,
         IReadOnlyList<TriggerRegistration>? triggers = null,
         IReadOnlyList<InterruptRegistration>? interrupts = null,
-        int? badPublicity = null)
+        int? badPublicity = null,
+        IReadOnlyList<ScoreAreaAgenda>? scoredAsAgendas = null)
     {
         RulesState rules = RequireRulesState(working);
         working.RulesState = new RulesState(
@@ -1195,7 +1196,8 @@ public static partial class GameEngine
             lingeringEffects ?? rules.LingeringEffects,
             triggers ?? rules.Triggers,
             interrupts ?? rules.Interrupts,
-            badPublicity ?? rules.BadPublicity);
+            badPublicity ?? rules.BadPublicity,
+            scoredAsAgendas ?? rules.ScoredAsAgendas);
     }
 
     private static void ReplaceTopFrame(WorkingState working, ResolutionFrame frame)

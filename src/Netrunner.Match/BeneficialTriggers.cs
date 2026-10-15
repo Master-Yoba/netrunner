@@ -81,6 +81,7 @@ public static class BeneficialTriggers
             // VP-BAD-PUBLICITY: taking it costs the Corp a credit on every run; removing it is the Corp's call, as a tag's is.
             [BehaviorInstructionKind.TakeBadPublicity] = EffectVerdict.PlayerDecides,
             [BehaviorInstructionKind.RemoveBadPublicity] = EffectVerdict.PlayerDecides,
+            [BehaviorInstructionKind.AddSelfToScoreAreaAsAgenda] = EffectVerdict.PlayerDecides,
             [BehaviorInstructionKind.ModifySourceStrength] = EffectVerdict.PlayerDecides,
             [BehaviorInstructionKind.FlipSelf] = EffectVerdict.PlayerDecides,
             [BehaviorInstructionKind.RemoveCounter] = EffectVerdict.PlayerDecides,

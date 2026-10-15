@@ -27,6 +27,7 @@ internal static class ElevationHarness
     internal const string StealthHardware = "90009";
     internal const string StealthRunEvent = "90010";
     internal const string CorpProbeUpgrade = "90011";
+    internal const string CorpProbeOperation = "90012";
 
     /// <summary>The neutral Gateway identities a match board gets by default.</summary>
     internal const string CorpNeutralIdentity = "30077";
@@ -58,7 +59,11 @@ internal static class ElevationHarness
     /// hardware (<see cref="StealthHardware"/>) has an access ability costing 1 credit from stealth cards that draws a card;
     /// the stealth run event (<see cref="StealthRunEvent"/>) carries 2 credits and locks the pool; the Corp upgrade
     /// (<see cref="CorpProbeUpgrade"/>) gains the Corp a credit when the Runner spends credits from outside the pool during a
-    /// run on its server.
+    /// run on its server, and once a turn when the Corp advances a card. VP.2 step 3: the filler agenda is worth 1 point in
+    /// the Runner's score area and costs a click more to steal; the filler asset makes every steal cost 2 credits more; the
+    /// filler resource is a score cost as Word on the Street's (-1, can't be forfeited, agendas installed this turn); the
+    /// probe operation is playable once the Corp scored an agenda it didn't install this turn, and becomes a 2-point
+    /// agenda (Myōshu).
     /// </summary>
     public static BehaviorCatalog VantagePointProbe => LazyVantagePointProbe.Value;
 
@@ -70,6 +75,17 @@ internal static class ElevationHarness
 
     private static BehaviorCatalog CreateVantagePointProbe() =>
         new BehaviorCatalogBuilder("vantage-point-probe", Behavior)
+            .RecordTurnEvents(TurnEventKind.AgendaScored, TurnEventKind.AgendaScoredNotInstalledThisTurn)
+            .AddAgenda(new AgendaBehaviorSpec(new CardDefinitionId(CorpFillerAgenda), 2, runnerScoreAreaPoints: 1, stealClicks: 1))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(RunnerFillerResource),
+                PlayerSide.Runner,
+                scoreCostAsAgenda: new BehaviorScoreCostAsAgenda(-1, CannotForfeit: true, OnlyAgendasInstalledThisTurn: true)))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(CorpProbeOperation),
+                PlayerSide.Corp,
+                conditions: [BehaviorCondition.TurnEventCountAtLeast(TurnEventKind.AgendaScoredNotInstalledThisTurn, 1)],
+                instructions: [new BehaviorInstruction(BehaviorInstructionKind.AddSelfToScoreAreaAsAgenda, amount: 2)]))
             .Add(new CardBehaviorDefinition(
                 new CardDefinitionId(CorpFiller),
                 PlayerSide.Corp,
@@ -77,6 +93,7 @@ internal static class ElevationHarness
             .Add(new CardBehaviorDefinition(
                 new CardDefinitionId(CorpFillerAsset),
                 PlayerSide.Corp,
+                stealCredits: 2,
                 triggers:
                 [
                     new BehaviorTrigger(
@@ -116,6 +133,14 @@ internal static class ElevationHarness
                         null,
                         [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 1)],
                         requireSourceOnAttackedServer: true),
+                    new BehaviorTrigger(
+                        "probe-advanced",
+                        OccurrenceKind.CardAdvanced,
+                        TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Any,
+                        null,
+                        [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 1)],
+                        oncePerTurn: true),
                 ]))
             .Build();
 
@@ -173,6 +198,7 @@ internal static class ElevationHarness
                 new(StealthHardware, "Stealth Hardware", "runner", "neutral-runner", "hardware", ["Stealth"], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
                 new(StealthRunEvent, "Stealth Run Event", "runner", "neutral-runner", "event", ["Run", "Stealth"], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
                 new(CorpProbeUpgrade, "Probe Upgrade", "corp", "neutral-corp", "upgrade", [], 3, 3, false, 0, null, null, 2, null, null, 0, null, null, null),
+                new(CorpProbeOperation, "Probe Operation", "corp", "neutral-corp", "operation", [], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
             ]),
         ]);
         return GatewayRuntimeCardCatalog.Create(pool);

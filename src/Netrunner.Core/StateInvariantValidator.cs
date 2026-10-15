@@ -512,7 +512,10 @@ public static partial class StateInvariantValidator
                     && (
                         (ToyCardBehaviorCatalog.TryGet(card.DefinitionId, out ToyCardBehavior? behavior)
                             && behavior.Kind == ToyCardKind.CorpAgenda)
-                        || behaviorCatalog.TryGetAgenda(card.DefinitionId, out _));
+                        || behaviorCatalog.TryGetAgenda(card.DefinitionId, out _))
+                    // VP-CARD-AS-AGENDA: a card added to a score area as an agenda may be the other side's (Word on the Street).
+                    || zone.Kind is ZoneKind.CorpScore or ZoneKind.RunnerScore
+                        && state.RulesState?.ScoredAsAgendas?.Any(entry => entry.CardId == card.Id) == true;
                 if (zone.OwnerSide.HasValue && card.OwnerSide != zone.OwnerSide.Value && !isStolenCorpAgenda)
                 {
                     Add(
@@ -4423,6 +4426,7 @@ public static partial class StateInvariantValidator
 
                             if (sourceCard is not null
                                 && sourceCard.ZoneId != sourceZone.Id
+                                && state.RulesState?.ScoredAsAgendas?.Any(entry => entry.CardId == sourceCard.Id) != true
                                 && !catalogTriggerDetachedSource
                                 && !(behaviorFrame.TriggerKey is not null && behaviorFrame.CatalogTriggerSourceMovedAfterStart)
                                 && !movedAfterPayment)
@@ -6707,7 +6711,7 @@ public static partial class StateInvariantValidator
                         $"{actionPath}.parameters",
                         "TrashAccessedCard requires RunCardPaymentParameters with the selected hosted-credit portion.");
                     break;
-                case (ActionKind.TrashAccessedCard, RunCardPaymentParameters trashAccessed):
+                case (ActionKind.TrashAccessedCard or ActionKind.StealAgenda, RunCardPaymentParameters trashAccessed):
                     if (pending.Kind != DecisionKind.RunTiming)
                     {
                         Add(violations, "decision.action-kind-mismatch", $"{actionPath}.kind", "Run timing actions require a RunTiming decision.");
@@ -6989,6 +6993,7 @@ public static partial class StateInvariantValidator
                         or ActionKind.ContinueRun
                         or ActionKind.ChooseBreachCandidate
                         or ActionKind.TrashAccessedCard
+                        or ActionKind.StealAgenda
                         or ActionKind.NoAccessAction
                         or ActionKind.UseAbility
                         or ActionKind.UseBioroidAbility))
@@ -9128,6 +9133,24 @@ public static partial class StateInvariantValidator
                     }
                 }
 
+                // VP-SCORE-STEAL-COST: as the engine offers it (StealCosts).
+                if (run.ChosenAccessCards.Count > 0
+                    && state.Cards.FirstOrDefault(candidate => candidate?.Id == run.ChosenAccessCards[^1]) is { } stealCandidate
+                    && IsLiveAccessCard(state, run, stealCandidate.Id, requireTrashableSource: false)
+                    && run.RunRestrictions?.Any(restriction => restriction.Kind == RunRestrictionKind.CannotStealOrTrashCorpCards) != true
+                    && behaviorCatalog.TryGetAgenda(stealCandidate.DefinitionId, out _)
+                    && StealCosts.For(state.Cards, state.Zones, behaviorCatalog, stealCandidate.DefinitionId) is var stealCost
+                    && (stealCost.Clicks > 0 || stealCost.Credits > 0)
+                    && state.Players.FirstOrDefault(player => player?.Side == PlayerSide.Runner) is { } stealer
+                    && stealer.Clicks >= stealCost.Clicks
+                    && (long)Wallet(stealer) + outsidePool >= stealCost.Credits)
+                {
+                    foreach (int hostedCredits in LegalHostedCreditSplits(Wallet(stealer), outsidePool, stealCost.Credits))
+                    {
+                        expected.Add((ActionKind.StealAgenda, stealCandidate.Id, 0, hostedCredits, ""));
+                    }
+                }
+
                 expected.Add((ActionKind.NoAccessAction, null, 0, 0, ""));
                 break;
             default:
@@ -9243,6 +9266,9 @@ public static partial class StateInvariantValidator
                     break;
                 case (ActionKind.TrashAccessedCard, RunCardPaymentParameters trash):
                     actual.Add((action.Kind, trash.CardId, 0, trash.HostedCredits, ""));
+                    break;
+                case (ActionKind.StealAgenda, RunCardPaymentParameters steal):
+                    actual.Add((action.Kind, steal.CardId, 0, steal.HostedCredits, ""));
                     break;
             }
         }

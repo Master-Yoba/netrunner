@@ -11,8 +11,8 @@ public sealed class ElevationHarnessTests
     [Fact]
     public void TheTestRuntimeCompilesBothPacksAndTheBoardOpensAnActionPhase()
     {
-        // 159 cards, 8 fillers and VP.2's 3 probe cards.
-        Assert.Equal(159 + 8 + 3, Runtime.DefinitionIds.Count);
+        // 159 cards, 8 fillers and VP.2's 4 probe cards.
+        Assert.Equal(159 + 8 + 4, Runtime.DefinitionIds.Count);
         GameState state = new ElevationBoard(PlayerSide.Corp).Add("30075", Place.Hq).Begin();
 
         Assert.Equal(DecisionKind.TurnAction, state.PendingDecision!.Kind);

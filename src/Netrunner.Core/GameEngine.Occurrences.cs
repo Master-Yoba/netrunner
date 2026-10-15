@@ -287,9 +287,10 @@ public static partial class GameEngine
         CardInstanceState stolen = GetCard(working, card.Id);
         ReplaceCard(working, new CardInstanceState(stolen.Id, stolen.DefinitionId, score.Id, stolen.OwnerSide,
             true, false, stolen.AdvancementCounters));
-        AddAgendaPoints(working, PlayerSide.Runner, spec.AgendaPoints);
-        Emit(working, EngineEventKinds.AgendaStolen, new AgendaStolenEventPayload(PlayerSide.Runner, card.Id, spec.AgendaPoints));
-        RecordTurnAgendaChange(working, card.Id, PlayerSide.Runner, spec.AgendaPoints, AgendaTurnChangeKind.Steal);
+        int stolenPoints = spec.PointsIn(PlayerSide.Runner);
+        AddAgendaPoints(working, PlayerSide.Runner, stolenPoints);
+        Emit(working, EngineEventKinds.AgendaStolen, new AgendaStolenEventPayload(PlayerSide.Runner, card.Id, stolenPoints));
+        RecordTurnAgendaChange(working, card.Id, PlayerSide.Runner, stolenPoints, AgendaTurnChangeKind.Steal);
         RecordActiveTurnEvent(working, TurnEventKind.AgendaScoredOrStolen);
         RecordActiveTurnEvent(working, TurnEventKind.CorpCardStolenOrTrashed);
         if (GetPlayer(working, PlayerSide.Runner).AgendaPoints < RealGameRules.AgendaPointsToWin)
@@ -323,14 +324,14 @@ public static partial class GameEngine
         CardInstanceState agenda = GetCard(working, agendaId);
         ZoneState source = ZoneForCard(working, agendaId);
         if (source.Kind != (controller == PlayerSide.Corp ? ZoneKind.CorpScore : ZoneKind.RunnerScore)
-            || working.RuntimeCardCatalog?.TryGet(agenda.DefinitionId, out CardRuntimeSpec? spec) != true
-            || spec!.CardClass != RuntimeCardClass.Agenda)
+            || ForfeitablePoints(working, agenda, controller) is not { } points)
         {
             throw new ResolutionFailureException("Only an agenda in its controller's score area can be forfeited.");
         }
 
         MoveCard(working, agenda, source, GetBehaviorZone(working, BehaviorZone.RemovedFromGame, agenda.OwnerSide));
-        AddAgendaPoints(working, controller, -spec.AgendaPoints);
+        LeaveScoreAreaAsAgenda(working, agenda.Id);
+        AddAgendaPoints(working, controller, -points);
         DeferOccurrence(working, OccurrenceKind.AgendaForfeited, controller, agenda.Id);
     }
 
@@ -358,8 +359,7 @@ public static partial class GameEngine
             ? working.Zones.Single(zone => zone.Id == frozen.OriginalZoneId).Kind
             : source.Kind;
         if (origin != (controller == PlayerSide.Corp ? ZoneKind.CorpScore : ZoneKind.RunnerScore)
-            || working.RuntimeCardCatalog?.TryGet(agenda.DefinitionId, out CardRuntimeSpec? spec) != true
-            || spec!.CardClass != RuntimeCardClass.Agenda)
+            || ForfeitablePoints(working, agenda, controller) is not { } points)
         {
             throw new ResolutionFailureException("Only an agenda in its controller's score area can be forfeited.");
         }
@@ -373,7 +373,8 @@ public static partial class GameEngine
                 sourceZone: BehaviorZone.ScoreArea,
                 destinationZone: BehaviorZone.RemovedFromGame),
             BehaviorTransferKind.Move);
-        AddAgendaPoints(working, controller, -spec.AgendaPoints);
+        LeaveScoreAreaAsAgenda(working, agenda.Id);
+        AddAgendaPoints(working, controller, -points);
         DeferOccurrence(working, OccurrenceKind.AgendaForfeited, controller, agenda.Id);
     }
 

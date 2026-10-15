@@ -113,6 +113,33 @@ public sealed record PlayerRulesState
         UsedMemory);
 }
 
+/// <summary>
+/// VP-CARD-AS-AGENDA: a non-agenda card added to a score area as an agenda (CR 26.03 10.1.3): the points it is worth there
+/// and whether it may be forfeited (Myōshu, Word on the Street). It was neither scored nor stolen.
+/// </summary>
+public sealed record ScoreAreaAgenda
+{
+    [JsonConstructor]
+    public ScoreAreaAgenda(CardInstanceId cardId, int points, bool cannotForfeit)
+    {
+        CardId = cardId;
+        Points = points;
+        CannotForfeit = cannotForfeit;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId CardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int Points { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool CannotForfeit { get; private set; }
+}
+
 /// <summary>Materialized memory usage for one installed program.</summary>
 public sealed record ProgramMemoryState
 {
@@ -514,8 +541,10 @@ public sealed record RulesState
         IReadOnlyList<GameLingeringEffect> lingeringEffects,
         IReadOnlyList<TriggerRegistration>? triggers = null,
         IReadOnlyList<InterruptRegistration>? interrupts = null,
-        int badPublicity = 0)
+        int badPublicity = 0,
+        IReadOnlyList<ScoreAreaAgenda>? scoredAsAgendas = null)
     {
+        ScoredAsAgendas = scoredAsAgendas is { Count: > 0 } ? new ReadOnlyCollection<ScoreAreaAgenda>(scoredAsAgendas.ToArray()) : null;
         ArgumentNullException.ThrowIfNull(players);
         if (badPublicity < 0)
         {
@@ -606,6 +635,11 @@ public sealed record RulesState
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public int BadPublicity { get; private set; }
 
+    /// <summary>VP-CARD-AS-AGENDA: the cards added to a score area as agendas; omitted while there are none.</summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<ScoreAreaAgenda>? ScoredAsAgendas { get; private set; }
+
     public static RulesState CreateDefault(IEnumerable<PlayerState> players)
     {
         ArgumentNullException.ThrowIfNull(players);
@@ -618,5 +652,5 @@ public sealed record RulesState
             usedMemory: 0)).ToArray());
     }
 
-    internal RulesState Copy() => new(Version, Players, Programs, Counters, LingeringEffects, Triggers, Interrupts, BadPublicity);
+    internal RulesState Copy() => new(Version, Players, Programs, Counters, LingeringEffects, Triggers, Interrupts, BadPublicity, ScoredAsAgendas);
 }

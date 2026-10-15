@@ -241,6 +241,8 @@ public static partial class GameEngine
                 "The score action does not match the materialized Corp agenda set.");
         }
 
+        // VP-SCORE-STEAL-COST: additional costs to score are paid first (Word on the Street), before the zones are read.
+        PayScoreCostsAsAgendas(working, parameters.CardId);
         CardInstanceState card = GetCard(working, parameters.CardId);
         CardRuntimeSpec spec = working.RuntimeCardCatalog!.GetSpec(card.DefinitionId);
         ZoneState source = working.Zones.Single(zone => zone.Id == card.ZoneId);

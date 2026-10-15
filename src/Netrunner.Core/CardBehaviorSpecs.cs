@@ -703,10 +703,19 @@ public sealed record AssetBehaviorSpec
 /// </summary>
 public sealed record AgendaBehaviorSpec
 {
-    public AgendaBehaviorSpec(CardDefinitionId definitionId, int agendaPoints)
+    public AgendaBehaviorSpec(CardDefinitionId definitionId, int agendaPoints, int? runnerScoreAreaPoints = null, int stealClicks = 0)
     {
+        ArgumentOutOfRangeException.ThrowIfNegative(stealClicks);
+        StealClicks = stealClicks;
         DefinitionId = definitionId;
         AgendaPoints = agendaPoints;
+        if (runnerScoreAreaPoints is <= 0)
+        {
+            throw new ArgumentException(
+                $"Card '{definitionId}' must be worth positive agenda points in the Runner's score area.", nameof(runnerScoreAreaPoints));
+        }
+
+        RunnerScoreAreaPoints = runnerScoreAreaPoints;
         if (agendaPoints <= 0)
         {
             throw new ArgumentException(
@@ -718,6 +727,21 @@ public sealed record AgendaBehaviorSpec
 
     /// <summary>Agenda points granted when the agenda is scored.</summary>
     public int AgendaPoints { get; }
+
+    /// <summary>
+    /// VP-AGENDA-POINTS-MODIFIER: what the agenda is worth while in the Runner's score area, when that differs (Let Them
+    /// Dream: one less). Null for an ordinary agenda.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? RunnerScoreAreaPoints { get; }
+
+    /// <summary>VP-SCORE-STEAL-COST: the clicks the Runner spends as an additional cost to steal it (Méliès City Luxury Line).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int StealClicks { get; }
+
+    /// <summary>The points the agenda is worth in a side's score area.</summary>
+    public int PointsIn(PlayerSide scoreAreaSide) =>
+        scoreAreaSide == PlayerSide.Runner && RunnerScoreAreaPoints is { } runnerPoints ? runnerPoints : AgendaPoints;
 }
 
 /// <summary>
