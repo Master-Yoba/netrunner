@@ -4892,7 +4892,9 @@
       "reviewer": "architect",
       "registered": true,
       "tests": [
-        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1CorpTests.RetirementPlanInstallsIceFromArchives"
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1CorpTests.RetirementPlanInstallsIceFromArchives",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1CorpTests.RetirementPlanOffersOnlyTheKindsArchivesHolds",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1CorpTests.RetirementPlanWithNothingToInstallDoesNothing"
       ],
       "fullTextComplete": true,
       "partial": false,
