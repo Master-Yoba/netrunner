@@ -118,3 +118,30 @@ while unused, and the opt-in turn events are recorded only by a catalog that dec
 (Match 1,154, including the frozen tactical pins, which caught two definition properties serialized without their
 omit-when-default attributes before they could move a pin).
 
+
+### VP.2b: what landed (15 October 2026)
+
+Again on probe cards only (`ElevationHarness.VantagePointProbe`, codes 90013 to 90023), with every existing game, replay
+and pin keeping its bytes.
+
+- **VP-TRASH-AS-COST:** a card play may carry the existing structured additional cost `TrashCards` for one card of a kind
+  (Sell Out's installed resource). The play action names the card (`PlayCardParameters.TrashCostCardId`, omitted while
+  null), so a play is issued once for each card that may pay it, and is not offered when none may. Trashing a card from
+  the grip as the cost of an optional trigger (Methuselah) is already expressible: a choice option with the same cost
+  over the grip. A play by an effect has no action to name the card, so a card with a trash cost can't be played that
+  way (an engine limit; no Vantage Point card plays another card that has one).
+- **VP-DYNAMIC-REZ-COST:** the cost modifier `SelfRezCreditCost`, counting other installed Corp cards matching a filter
+  (Reverb) or applying under a turn-event condition (Hype Machine); ICE and non-ICE rez quotes include it.
+- **VP-PLAY-COST-MODIFIER:** `RunEventBehaviorSpec.CostLoweredPerIceOn`, a run event's play cost lowered for each piece of
+  ICE protecting a named server (Tailgate), in the affordability check, the issued cost and the payment alike.
+- **VP-CLICK-COST-MODIFIER:** `CardBehaviorDefinition.FirstDoubleOperationClickDiscount`, the first Double operation each
+  turn costing a click less (Synchrocyclotron), from the opt-in turn event `DoubleOperationPlayed`.
+- **VP-AMOUNT:** `ChosenCardsPrintedRezCost` (realloc()) and `ProtectedRemotesWithRootCards` (Flood the Market); the
+  advance instruction accepts a dynamic amount.
+- **VP-RUN-FACTS:** the condition `SuccessfulRunOnEveryCentralThisTurn` from the Runner's turn facts, and the opt-in turn
+  event `IceRezzed`, recorded by every ICE rez (on approach, by an effect, ignoring costs).
+- **VP-UNINSTALL-INTERRUPT:** `CardBehaviorDefinition.ReturnsHostedBadPublicity`: when the card leaves an installed zone,
+  the Corp takes the bad publicity it hosts before its counters are cleared (Luana Campos).
+
+**Evidence.** 11 further probe tests (`VantagePointCostTests`, 32 Vantage Point tests in all); the Core, Cards, AI, Match
+and CLI suites pass.

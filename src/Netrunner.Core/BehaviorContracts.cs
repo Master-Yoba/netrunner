@@ -326,6 +326,12 @@ public enum BehaviorAmountKind
     /// advancement requirement (never negative).
     /// </summary>
     SourceExcessAdvancement,
+
+    /// <summary>VP-AMOUNT: the printed rez costs of the cards bound by the behavior's choice, summed (realloc()).</summary>
+    ChosenCardsPrintedRezCost,
+
+    /// <summary>VP-AMOUNT: the remote servers with a card in their root and ICE protecting them (Flood the Market).</summary>
+    ProtectedRemotesWithRootCards,
 }
 
 /// <summary>

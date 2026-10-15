@@ -1213,6 +1213,9 @@ public enum TurnEventKind
 
     /// <summary>VP-RUN-FACTS: a piece of ICE was rezzed (Underdome Irregulars).</summary>
     IceRezzed,
+
+    /// <summary>VP-CLICK-COST-MODIFIER: the Corp played a Double operation (Synchrocyclotron).</summary>
+    DoubleOperationPlayed,
 }
 
 /// <summary>

@@ -50,6 +50,9 @@ internal sealed class HeuristicContext
             BehaviorAmountKind.SourceExcessAdvancement => 1,
             BehaviorAmountKind.ControllerClicks => context.Self.Clicks,
             BehaviorAmountKind.ChosenCardInstallCost => 2,
+            // VP-AMOUNT: an estimate before the choice; the bots value realloc() and Flood the Market in VP.3.
+            BehaviorAmountKind.ChosenCardsPrintedRezCost => 4,
+            BehaviorAmountKind.ProtectedRemotesWithRootCards => 1,
             BehaviorAmountKind.Recorded => 1,
             _ => 0,
         };

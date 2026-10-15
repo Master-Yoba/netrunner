@@ -53,6 +53,12 @@ public static partial class GameEngine
                 (condition.SubjectSide is not { } atLeastTurnOf || working.Turn.ActiveSide == atLeastTurnOf)
                 && Enum.TryParse(condition.Fact, ignoreCase: false, out TurnEventKind atLeastKind)
                 && ActiveTurnEventCount(working, atLeastKind) >= threshold,
+            BehaviorConditionKind.SuccessfulRunOnEveryCentralThisTurn =>
+                working.Turn.History?.ThisTurn(PlayerSide.Runner) is { } runnerFacts
+                && working.Turn.ActiveSide == PlayerSide.Runner
+                && new[] { ServerKind.Headquarters, ServerKind.RAndD, ServerKind.Archives }.All(central =>
+                    working.Servers.FirstOrDefault(server => server.Kind == central) is { } centralServer
+                    && runnerFacts.SuccessfulRunServerIds.Contains(centralServer.Id)),
             BehaviorConditionKind.SourceScoredThisTurn => sourceCardId is { } scored
                 && working.Turn.History?.ThisTurn(working.Turn.ActiveSide)?.AgendaTurnChanges.Any(change =>
                     change.CardId == scored && change.Kind == AgendaTurnChangeKind.Score) == true,

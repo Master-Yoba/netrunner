@@ -405,7 +405,8 @@ public sealed record BehaviorCondition
                 or BehaviorConditionKind.RunEventActive
                 or BehaviorConditionKind.PlayedThisTurn
                 or BehaviorConditionKind.NoActionFinishedThisTurn
-                or BehaviorConditionKind.SourceScoredThisTurn)
+                or BehaviorConditionKind.SourceScoredThisTurn
+                or BehaviorConditionKind.SuccessfulRunOnEveryCentralThisTurn)
             && (fact is not null || value is not null))
         {
             throw new ArgumentException(
@@ -645,6 +646,9 @@ public enum BehaviorConditionKind
 
     /// <summary>VP-SCORING-FACTS: the source agenda was scored this turn (Witch Hunt).</summary>
     SourceScoredThisTurn,
+
+    /// <summary>VP-RUN-FACTS: this turn the Runner made a successful run on HQ, on R&amp;D and on Archives (Chain Reaction).</summary>
+    SuccessfulRunOnEveryCentralThisTurn,
 }
 
 /// <summary>A typed target selector; IDs are resolved by Core at runtime.</summary>
@@ -1270,10 +1274,11 @@ public sealed record BehaviorInstruction
                 or BehaviorInstructionKind.LoseCredits
                 or BehaviorInstructionKind.Draw
                 or BehaviorInstructionKind.RemoveTags
-                or BehaviorInstructionKind.AddCounter))
+                or BehaviorInstructionKind.AddCounter
+                or BehaviorInstructionKind.AdvanceCard))
         {
             throw new ArgumentException(
-                "A dynamic amount operand is valid only for credit, draw, counter and tag-removal instructions.",
+                "A dynamic amount operand is valid only for credit, draw, counter, advancement and tag-removal instructions.",
                 nameof(AmountOperand));
         }
 
@@ -2354,8 +2359,23 @@ public sealed class CardBehaviorDefinition
         int rezForfeitDiscount = 0,
         int hostIcebreakerStrength = 0,
         int stealCredits = 0,
-        BehaviorScoreCostAsAgenda? scoreCostAsAgenda = null)
+        BehaviorScoreCostAsAgenda? scoreCostAsAgenda = null,
+        int firstDoubleOperationClickDiscount = 0,
+        bool returnsHostedBadPublicity = false)
     {
+        if (returnsHostedBadPublicity && controller != PlayerSide.Corp)
+        {
+            throw new ArgumentException("Only a Corp card hosts bad publicity.", nameof(returnsHostedBadPublicity));
+        }
+
+        ReturnsHostedBadPublicity = returnsHostedBadPublicity;
+        if (firstDoubleOperationClickDiscount < 0 || firstDoubleOperationClickDiscount > 0 && controller != PlayerSide.Corp)
+        {
+            throw new ArgumentException("Only a Corp card lowers a Double operation's click cost, by a nonnegative amount.",
+                nameof(firstDoubleOperationClickDiscount));
+        }
+
+        FirstDoubleOperationClickDiscount = firstDoubleOperationClickDiscount;
         ScoreCostAsAgenda = scoreCostAsAgenda;
         if (stealCredits < 0 || stealCredits > 0 && controller != PlayerSide.Corp)
         {
@@ -2521,6 +2541,23 @@ public sealed class CardBehaviorDefinition
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public BehaviorScoreCostAsAgenda? ScoreCostAsAgenda { get; }
+
+    /// <summary>
+    /// VP-CLICK-COST-MODIFIER: while the card is active, the first Double operation the Corp plays each turn costs this
+    /// many clicks less (Synchrocyclotron).
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int FirstDoubleOperationClickDiscount { get; }
+
+    /// <summary>
+    /// VP-UNINSTALL-INTERRUPT: when the card would be uninstalled, the Corp takes the bad publicity hosted on it
+    /// (<see cref="HostedBadPublicityCounter"/>; Luana Campos).
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool ReturnsHostedBadPublicity { get; }
+
+    /// <summary>VP-BAD-PUBLICITY: the name of the counter for bad publicity hosted on a card.</summary>
+    public const string HostedBadPublicityCounter = "bad-publicity";
 
     public IReadOnlyList<BehaviorCost> Costs { get; }
 
@@ -3423,6 +3460,8 @@ internal static class BehaviorCatalogStructure
                 && a.HostIcebreakerStrength == b.HostIcebreakerStrength
                 && a.StealCredits == b.StealCredits
                 && a.ScoreCostAsAgenda == b.ScoreCostAsAgenda
+                && a.FirstDoubleOperationClickDiscount == b.FirstDoubleOperationClickDiscount
+                && a.ReturnsHostedBadPublicity == b.ReturnsHostedBadPublicity
                 && SequenceEquals(a.HostedCreditUses ?? [], b.HostedCreditUses ?? [])
                 && a.Hosting == b.Hosting
                 && SequenceEquals(a.Costs, b.Costs)
@@ -3681,6 +3720,11 @@ internal static class BehaviorCatalogFingerprint
         {
             builder.Append("|locksCreditPool=1");
         }
+
+        if (value.CostLoweredPerIceOn is { } perIce)
+        {
+            builder.Append("|costLoweredPerIceOn=").Append((int)perIce);
+        }
     }
 
     private static void AppendRunRezCostModifier(
@@ -3737,6 +3781,14 @@ internal static class BehaviorCatalogFingerprint
         if (value.StealCredits != 0)
         {
             builder.Append(",stealCredits=").Append(value.StealCredits);
+        }
+        if (value.ReturnsHostedBadPublicity)
+        {
+            builder.Append(",returnsHostedBadPublicity=1");
+        }
+        if (value.FirstDoubleOperationClickDiscount != 0)
+        {
+            builder.Append(",firstDoubleClickDiscount=").Append(value.FirstDoubleOperationClickDiscount);
         }
         if (value.ScoreCostAsAgenda is { } scoreCost)
         {

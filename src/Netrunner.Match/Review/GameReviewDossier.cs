@@ -251,6 +251,7 @@ public sealed class GameReviewDossier
         string description = action.Description;
         IEnumerable<CardInstanceId> cards = action.Parameters switch
         {
+            PlayCardParameters { TrashCostCardId: { } trashed } play => [play.CardId, trashed],
             PlayCardParameters play => [play.CardId],
             InstallCardParameters install => [install.CardId, .. install.RequiredReplacementCardIds, .. install.SelectedReplacementCardIds],
             AdvanceCardParameters advance => [advance.CardId],

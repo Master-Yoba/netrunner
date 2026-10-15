@@ -29,6 +29,19 @@ internal static class ElevationHarness
     internal const string CorpProbeUpgrade = "90011";
     internal const string CorpProbeOperation = "90012";
 
+    /// <summary>VP.2b probes: costs and values.</summary>
+    internal const string ProbeReverbIce = "90013";
+    internal const string ProbeHypeUpgrade = "90014";
+    internal const string ProbeTailgateEvent = "90015";
+    internal const string ProbeDoubleDiscountAsset = "90016";
+    internal const string ProbeDoubleOperation = "90017";
+    internal const string ProbeReallocOperation = "90018";
+    internal const string ProbeFloodOperation = "90019";
+    internal const string ProbeCentralsEvent = "90020";
+    internal const string ProbeIceRezzedEvent = "90021";
+    internal const string ProbeLuanaAsset = "90022";
+    internal const string ProbeSellOutEvent = "90023";
+
     /// <summary>The neutral Gateway identities a match board gets by default.</summary>
     internal const string CorpNeutralIdentity = "30077";
 
@@ -63,7 +76,8 @@ internal static class ElevationHarness
     /// the Runner's score area and costs a click more to steal; the filler asset makes every steal cost 2 credits more; the
     /// filler resource is a score cost as Word on the Street's (-1, can't be forfeited, agendas installed this turn); the
     /// probe operation is playable once the Corp scored an agenda it didn't install this turn, and becomes a 2-point
-    /// agenda (Myōshu).
+    /// agenda (Myōshu). VP.2 step 4: the cost and value probes (90013 to 90023), the probe Luana's trash cost, and the filler
+    /// ICE as a 1-strength barrier ending the run.
     /// </summary>
     public static BehaviorCatalog VantagePointProbe => LazyVantagePointProbe.Value;
 
@@ -75,7 +89,84 @@ internal static class ElevationHarness
 
     private static BehaviorCatalog CreateVantagePointProbe() =>
         new BehaviorCatalogBuilder("vantage-point-probe", Behavior)
-            .RecordTurnEvents(TurnEventKind.AgendaScored, TurnEventKind.AgendaScoredNotInstalledThisTurn)
+            .RecordTurnEvents(TurnEventKind.AgendaScored, TurnEventKind.AgendaScoredNotInstalledThisTurn,
+                TurnEventKind.IceRezzed, TurnEventKind.DoubleOperationPlayed)
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeReverbIce),
+                PlayerSide.Corp,
+                costModifiers:
+                [
+                    BehaviorCostModifier.Always(BehaviorCostModifierKind.SelfRezCreditCost, -1, "probe-reverb",
+                        new BehaviorCardFilter(BehaviorCardType.Ice, rezzed: false)),
+                ]))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeHypeUpgrade),
+                PlayerSide.Corp,
+                costModifiers:
+                [
+                    new BehaviorCostModifier(BehaviorCostModifierKind.SelfRezCreditCost, -2,
+                        BehaviorCondition.TurnEventCountAtLeast(TurnEventKind.AgendaScoredOrStolen, 1), "probe-hype"),
+                ]))
+            .AddRunEvent(new RunEventBehaviorSpec(new CardDefinitionId(ProbeTailgateEvent), 3, 0,
+                allowedTargetServers: [ServerKind.Headquarters], costLoweredPerIceOn: ServerKind.Headquarters))
+            .Add(new CardBehaviorDefinition(new CardDefinitionId(ProbeDoubleDiscountAsset), PlayerSide.Corp, firstDoubleOperationClickDiscount: 1))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeDoubleOperation),
+                PlayerSide.Corp,
+                costs: [new BehaviorCost(BehaviorCostKind.Clicks, 1)],
+                instructions: [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 3)]))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeReallocOperation),
+                PlayerSide.Corp,
+                instructions:
+                [
+                    new BehaviorInstruction(BehaviorInstructionKind.Choose, choice: new BehaviorChoiceSpec(
+                        "chosen",
+                        BehaviorChooser.Controller,
+                        BehaviorChoiceMode.Mandatory,
+                        BehaviorChoiceCardinality.Exactly(1),
+                        target: new BehaviorTarget(
+                            BehaviorTargetKind.InstalledCard,
+                            filter: new BehaviorCardFilter(BehaviorCardType.Ice, ownerSide: PlayerSide.Corp, rezzed: true)))),
+                    new BehaviorInstruction(BehaviorInstructionKind.GainCredits,
+                        amountOperand: BehaviorAmountOperand.Of(BehaviorAmountKind.ChosenCardsPrintedRezCost, 1)),
+                ]))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeFloodOperation),
+                PlayerSide.Corp,
+                instructions:
+                [
+                    new BehaviorInstruction(BehaviorInstructionKind.GainCredits,
+                        amountOperand: BehaviorAmountOperand.Of(BehaviorAmountKind.ProtectedRemotesWithRootCards, 1)),
+                ]))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeCentralsEvent),
+                PlayerSide.Runner,
+                conditions: [new BehaviorCondition(BehaviorConditionKind.SuccessfulRunOnEveryCentralThisTurn)],
+                instructions: [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 5)]))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeIceRezzedEvent),
+                PlayerSide.Runner,
+                conditions: [BehaviorCondition.TurnEventCountAtLeast(TurnEventKind.IceRezzed, 1)],
+                instructions: [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 5)]))
+            .Add(new CardBehaviorDefinition(new CardDefinitionId(ProbeLuanaAsset), PlayerSide.Corp, returnsHostedBadPublicity: true))
+            .AddAsset(new AssetBehaviorSpec(new CardDefinitionId(ProbeLuanaAsset), trashCost: 3))
+            .AddIce(new IceBehaviorSpec(new CardDefinitionId(CorpFillerIce), 1, IceType.Barrier, 1, [new EndRunSubroutineSpec()], []))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeSellOutEvent),
+                PlayerSide.Runner,
+                costs:
+                [
+                    new BehaviorCost(
+                        BehaviorCostKind.Additional,
+                        amount: 1,
+                        additionalKey: "probe-sell-out-trash",
+                        additionalTarget: BehaviorTarget.CardsInZone(
+                            BehaviorZone.Rig,
+                            new BehaviorCardFilter(BehaviorCardType.Resource, ownerSide: PlayerSide.Runner)),
+                        additionalKind: BehaviorAdditionalCostKind.TrashCards),
+                ],
+                instructions: [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 4)]))
             .AddAgenda(new AgendaBehaviorSpec(new CardDefinitionId(CorpFillerAgenda), 2, runnerScoreAreaPoints: 1, stealClicks: 1))
             .Add(new CardBehaviorDefinition(
                 new CardDefinitionId(RunnerFillerResource),
@@ -199,6 +290,17 @@ internal static class ElevationHarness
                 new(StealthRunEvent, "Stealth Run Event", "runner", "neutral-runner", "event", ["Run", "Stealth"], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
                 new(CorpProbeUpgrade, "Probe Upgrade", "corp", "neutral-corp", "upgrade", [], 3, 3, false, 0, null, null, 2, null, null, 0, null, null, null),
                 new(CorpProbeOperation, "Probe Operation", "corp", "neutral-corp", "operation", [], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(ProbeReverbIce, "Probe Reverb", "corp", "neutral-corp", "ice", ["Barrier"], 3, 3, false, 4, 2, null, null, null, null, 0, null, null, null),
+                new(ProbeHypeUpgrade, "Probe Hype", "corp", "neutral-corp", "upgrade", [], 3, 3, false, 3, null, null, 2, null, null, 0, null, null, null),
+                new(ProbeTailgateEvent, "Probe Tailgate", "runner", "neutral-runner", "event", ["Run"], 3, 3, false, 3, null, null, null, null, null, 0, null, null, null),
+                new(ProbeDoubleDiscountAsset, "Probe Synchrocyclotron", "corp", "neutral-corp", "asset", [], 3, 3, false, 0, null, null, 3, null, null, 0, null, null, null),
+                new(ProbeDoubleOperation, "Probe Double", "corp", "neutral-corp", "operation", ["Double"], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(ProbeReallocOperation, "Probe realloc", "corp", "neutral-corp", "operation", [], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(ProbeFloodOperation, "Probe Flood", "corp", "neutral-corp", "operation", [], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(ProbeCentralsEvent, "Probe Chain", "runner", "neutral-runner", "event", [], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(ProbeIceRezzedEvent, "Probe Underdome", "runner", "neutral-runner", "event", [], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(ProbeLuanaAsset, "Probe Luana", "corp", "neutral-corp", "asset", [], 3, 3, false, 1, null, null, 3, null, null, 0, null, null, null),
+                new(ProbeSellOutEvent, "Probe Sell Out", "runner", "neutral-runner", "event", [], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
             ]),
         ]);
         return GatewayRuntimeCardCatalog.Create(pool);

@@ -98,6 +98,7 @@ public static partial class GameEngine
         ReplaceCard(working, new CardInstanceState(card.Id, card.DefinitionId, card.ZoneId, card.OwnerSide,
             faceUp: true, rezzed: true, card.AdvancementCounters));
         Emit(working, EngineEventKinds.CardRezzed, new CardRezzedEventPayload(card.Id, cost));
+        RecordOptInTurnEvent(working, TurnEventKind.IceRezzed);
         TrashCorpUniqueRezConflicts(working, card.Id);
         QueueCardRezzedOccurrence(working, corp.Id, card.Id, zone.ServerId);
     }
@@ -118,6 +119,7 @@ public static partial class GameEngine
         ReplaceCard(working, new CardInstanceState(card.Id, card.DefinitionId, card.ZoneId, card.OwnerSide,
             faceUp: true, rezzed: true, card.AdvancementCounters));
         Emit(working, EngineEventKinds.CardRezzed, new CardRezzedEventPayload(card.Id, 0));
+        RecordOptInTurnEvent(working, TurnEventKind.IceRezzed);
         TrashCorpUniqueRezConflicts(working, card.Id);
         QueueCardRezzedOccurrence(working, GetPlayer(working, PlayerSide.Corp).Id, card.Id, zone.ServerId);
     }

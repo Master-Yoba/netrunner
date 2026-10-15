@@ -763,8 +763,15 @@ public sealed record RunEventBehaviorSpec
         int additionalClicks = 0,
         ServerKind? redirectApproachTo = null,
         bool preventFirstEndRun = false,
-        bool locksCreditPool = false)
+        bool locksCreditPool = false,
+        ServerKind? costLoweredPerIceOn = null)
     {
+        if (costLoweredPerIceOn is not (null or ServerKind.Headquarters or ServerKind.RAndD or ServerKind.Archives))
+        {
+            throw new ArgumentException("A per-ICE play-cost discount names a central server.", nameof(costLoweredPerIceOn));
+        }
+
+        CostLoweredPerIceOn = costLoweredPerIceOn;
         PreventFirstEndRun = preventFirstEndRun;
         LocksCreditPool = locksCreditPool;
         DefinitionId = definitionId;
@@ -859,6 +866,13 @@ public sealed record RunEventBehaviorSpec
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool LocksCreditPool { get; }
+
+    /// <summary>
+    /// VP-PLAY-COST-MODIFIER: the play cost is lowered by 1 for each piece of ICE protecting this central server (Tailgate:
+    /// HQ), never below zero.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ServerKind? CostLoweredPerIceOn { get; }
 
     private static ReadOnlyCollection<BehaviorRunRezCostModifier>? FreezeRezCostModifiers(
         IReadOnlyList<BehaviorRunRezCostModifier>? modifiers)

@@ -291,11 +291,11 @@ public static partial class GameEngine
             runEventSpec = ValidateRunEventSource(working, initiatingSource.Value, source);
             ValidateRunEventTarget(working, runEventSpec, server);
             ValidateRunEventSuccessDraw(working, source, runEventSpec);
-            if (runner.Credits < runEventSpec.Cost)
+            if (runner.Credits < RunEventPlayCost(working, runEventSpec))
             {
                 throw new ResolutionFailureException(
                     $"The Runner has {runner.Credits} credits but the run event "
-                    + $"'{runEventSpec.DefinitionId.Value}' costs {runEventSpec.Cost} credits to play.");
+                    + $"'{runEventSpec.DefinitionId.Value}' costs {RunEventPlayCost(working, runEventSpec)} credits to play.");
             }
         }
 
@@ -396,14 +396,15 @@ public static partial class GameEngine
         {
             // The wallet pays the printed cost only; hosted credits are already
             // represented in RunState and are untouched by this payment.
-            ApplyCreditDelta(working, runner.Id, -runEventSpec.Cost);
+            int playCost = RunEventPlayCost(working, runEventSpec);
+            ApplyCreditDelta(working, runner.Id, -playCost);
             CardInstanceId eventSourceId = initiatingSource
                 ?? throw new ResolutionFailureException("A run event requires a source card.");
             Emit(working, EngineEventKinds.RunEventPlayed, new RunEventPlayedEventPayload(
                 runId,
                 eventSourceId,
                 runEventSpec.DefinitionId,
-                runEventSpec.Cost,
+                playCost,
                 runEventSpec.HostedCredits,
                 runner.Id,
                 GetPlayer(working, runner.Id).Credits));
@@ -3072,6 +3073,8 @@ public static partial class GameEngine
             true,
             ice.AdvancementCounters));
         Emit(working, EngineEventKinds.IceRezzed, new IceRezzedEventPayload(run.Id, iceId));
+        // VP-RUN-FACTS: recorded only by a catalog with a card that reads it (Underdome Irregulars).
+        RecordOptInTurnEvent(working, TurnEventKind.IceRezzed);
         SetRunTiming(working, run.WithTiming(
             RunTimingStep.ApproachPaidWindow,
             run.CurrentIceIndex,
@@ -3953,6 +3956,17 @@ public static partial class GameEngine
             yield return hosted;
         }
     }
+
+    /// <summary>
+    /// A run event's play cost: its printed cost, less 1 for each piece of ICE protecting the central server it names
+    /// (VP-PLAY-COST-MODIFIER: Tailgate), never below zero.
+    /// </summary>
+    private static int RunEventPlayCost(WorkingState working, RunEventBehaviorSpec spec) =>
+        spec.CostLoweredPerIceOn is { } kind
+        && working.Servers.FirstOrDefault(server => server.Kind == kind && server.Exists) is { } server
+        && working.Zones.FirstOrDefault(zone => zone.Id == server.IceZoneId) is { } iceZone
+            ? Math.Max(0, spec.Cost - iceZone.CardIds.Count)
+            : spec.Cost;
 
     private static bool CanAffordRunCredits(WorkingState working, PlayerState runner, RunState run, int amount) =>
         amount >= 0 && (long)WalletCreditsForRunPayment(working, runner, run) + OutsidePoolCredits(working, run) >= amount;

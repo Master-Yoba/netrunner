@@ -1687,6 +1687,10 @@ public static partial class GameEngine
                     ApplyCreditDeltaIfNonZero(working, payer, -cost.Amount);
                     break;
                 case BehaviorCostKind.Clicks:
+                    // VP-CLICK-COST-MODIFIER: the first Double operation of the turn may cost fewer clicks (Synchrocyclotron).
+                    ApplyClickDelta(working, payer,
+                        -Math.Max(0, cost.Amount - DoubleOperationClickDiscount(working, source, doubleOperationsAlreadyPlayed: 1)));
+                    break;
                 case BehaviorCostKind.LoseClick:
                     ApplyClickDelta(working, payer, -cost.Amount);
                     break;
@@ -1705,6 +1709,9 @@ public static partial class GameEngine
                     MoveBehaviorCardToRemovedFromGame(working, source);
                     source = GetCard(working, frame.SourceCardId);
                     deferredCounterCleanup = true;
+                    break;
+                case BehaviorCostKind.Additional when IsPlayTrashCost(cost):
+                    // VP-TRASH-AS-COST: the play action trashed the card it names.
                     break;
                 default:
                     throw new ResolutionFailureException($"Behavior cost '{cost.Kind}' is not executable.");
@@ -2236,6 +2243,13 @@ public static partial class GameEngine
                 BehaviorAmountKind.SourceAdvancementCounters => GetCard(working, frame.SourceCardId).AdvancementCounters,
                 BehaviorAmountKind.ChosenCardInstallCost => ChosenCardInstallCost(working, frame),
                 BehaviorAmountKind.SourceExcessAdvancement => SourceExcessAdvancement(working, frame.SourceCardId),
+                BehaviorAmountKind.ChosenCardsPrintedRezCost => frame.Bindings
+                    .Where(static binding => string.Equals(binding.Key, "chosen", StringComparison.Ordinal))
+                    .SelectMany(static binding => binding.CardIds)
+                    .Sum(card => working.RuntimeCardCatalog?.TryGet(GetCard(working, card).DefinitionId, out CardRuntimeSpec? rezSpec) == true
+                        ? rezSpec!.RezCost ?? 0
+                        : 0),
+                BehaviorAmountKind.ProtectedRemotesWithRootCards => ProtectedRemotesWithRootCards(working),
                 _ => throw new ResolutionFailureException($"Amount kind '{kind}' is not executable."),
             };
             return checked(counted * operand.Multiplier + operand.Offset);
@@ -2269,6 +2283,12 @@ public static partial class GameEngine
         int count = counter?.Count ?? 0;
         return checked(count * operand.Multiplier + operand.Offset);
     }
+
+    /// <summary>VP-AMOUNT: the remote servers with a card in their root and ICE protecting them.</summary>
+    private static int ProtectedRemotesWithRootCards(WorkingState working) =>
+        working.Servers.Count(server => server.Kind == ServerKind.Remote && server.Exists
+            && working.Zones.FirstOrDefault(zone => zone.Id == server.RootZoneId)?.CardIds.Count > 0
+            && working.Zones.FirstOrDefault(zone => zone.Id == server.IceZoneId)?.CardIds.Count > 0);
 
     private static int ChosenCardInstallCost(WorkingState working, BehaviorResolutionFrame frame)
     {
@@ -4532,7 +4552,7 @@ public static partial class GameEngine
         foreach (CardInstanceId cardId in cardIds)
         {
             CardInstanceState card = GetCard(working, cardId);
-            int advancementCounters = checked(card.AdvancementCounters + instruction.Amount);
+            int advancementCounters = checked(card.AdvancementCounters + StaticOrDynamicAmount(working, frame, instruction));
             ReplaceCard(working, new CardInstanceState(
                 card.Id,
                 card.DefinitionId,

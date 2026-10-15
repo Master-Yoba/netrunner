@@ -11848,7 +11848,8 @@ public static partial class StateInvariantValidator
         PlayCardParameters expected) =>
         actual.CardId == expected.CardId
         && actual.CreditCost == expected.CreditCost
-        && actual.TargetServerId == expected.TargetServerId;
+        && actual.TargetServerId == expected.TargetServerId
+        && actual.TrashCostCardId == expected.TrashCostCardId;
 
     private static bool AdvanceParametersMatch(
         AdvanceCardParameters actual,
