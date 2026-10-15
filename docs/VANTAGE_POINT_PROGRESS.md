@@ -385,6 +385,8 @@ On probe cards 90049 to 90059 (`VantagePointRunGapTests`):
   behavior subroutine runs as the resolving card's child frame. Credit, tag and plain damage subroutines resolve
   directly, and end-the-run subroutines do nothing with no run. A mode offering one is available only while it can
   resolve; subroutines that need an encounter's choice frame aren't offered (Unleash, a ruling for VP.5's binding to
-  revisit against the decks' ICE).
+  revisit against the decks' ICE). Elevation's Mycoweb resolves another ICE's subroutine differently: each pool ICE's
+  subroutines become inline instructions in the source's own frame. That covers pay-or-tag, trash and install
+  subroutines, but the source, not the ICE, is then "this ICE". VP.5 picks per card.
 - **VP-ADVANCEMENT-COST:** existing vocabulary plus the trigger condition `RunOnAnotherServer`: an optional trigger
   requiring its source's advancement counters removes one (Sacrifice Zone Expansion).
