@@ -58,7 +58,10 @@ third registry. Elevation's whole-set figure was 26% of cards needing no Core ch
 - The Cards tests pass in both content lanes (543), with `VantagePointCardDataTests` new.
 - The coverage report is regenerated; its counts are above.
 
-## VP.2 — Primitives A (in progress)
+## VP.2 — Primitives A
+
+VP.2 lands in two parts: **VP.2a** (bad publicity, credit sources, scoring and agendas; below) and **VP.2b** (costs and
+values: play, click and rez cost modifiers, the new amounts, run facts and the uninstall interrupt).
 
 ### Design: bad publicity and credit sources
 
@@ -84,3 +87,34 @@ payment it could otherwise make (an engine ruling, as Elevation's for declared-u
 credits from stealth cards (Corsair, Baker, Lampades) draws only on 3 and 4, in that order. Shackleton Grid's occurrence
 fires whenever a payment's outside share is above zero, so it counts the fund as Null Signal's rules and jinteki.net do.
 While Aircheck is active the Runner's credit pool offers nothing to a payment and can't lose credits.
+
+### VP.2a: what landed (15 October 2026)
+
+No Vantage Point card is registered yet; each primitive is proven on test-only probe cards in the harness
+(`ElevationHarness.VantagePointProbe`), and every existing game, replay and pin keeps its bytes: each new field is omitted
+while unused, and the opt-in turn events are recorded only by a catalog that declares them.
+
+- **VP-BAD-PUBLICITY:** the Corp's counter on `RulesState`, the take and remove instructions with their event, the first
+  each turn as an occurrence, and the run's fund (`RunState.BadPublicityCredits`, filled at step 6.9.1b, spent first,
+  returned at the end).
+- **VP-STEALTH-CREDITS, VP-POOL-LOCK, VP-CREDITS-OUTSIDE-POOL:** as the design above. `CreditSources` computes the outside
+  pool for the engine and the validator alike; costs may name a source subtype (`BehaviorCost.CreditSourceSubtype`); run
+  events may lock the pool (`RunEventBehaviorSpec.LocksCreditPool`); hosted credits restricted to run costs pay any cost
+  during a run; spending from outside the pool is an occurrence a card on the attacked server may trigger on.
+- **VP-SCORE-STEAL-COST:** an agenda's own steal clicks (`AgendaBehaviorSpec.StealClicks`) and active cards' steal credits
+  (`CardBehaviorDefinition.StealCredits`) turn the automatic steal into a paid one, with "no action" declining it
+  (CR 7.1.6a); `StealCosts` computes them for the engine and the validator. A score cost moves a card to the Corp's score
+  area as an agenda (`BehaviorScoreCostAsAgenda`, Word on the Street).
+- **VP-CARD-AS-AGENDA:** `AddSelfToScoreAreaAsAgenda`, recorded in `RulesState.ScoredAsAgendas` with its points and whether
+  it may be forfeited; forfeits read the recorded points, and one that can't be forfeited never matches an agenda filter.
+  An operation that becomes an agenda finishes its play in the score area.
+- **VP-AGENDA-POINTS-MODIFIER:** `AgendaBehaviorSpec.RunnerScoreAreaPoints`, applied when stolen and when it leaves.
+- **VP-SCORING-FACTS:** opt-in turn events (`BehaviorCatalogBuilder.RecordTurnEvents`) for scores and scores of agendas
+  installed earlier; `TurnEventCountAtLeast`, `SourceScoredThisTurn`, and the trigger conditions
+  `SubjectInstalledThisTurn` and `SubjectNotInstalledThisTurn`.
+- **VP-ADVANCED:** `CardAdvanced`, raised by the basic advance action (placing counters by an effect isn't advancing).
+
+**Evidence.** 21 probe tests (`tests/Netrunner.Cards.Tests/VantagePoint/`); the Core, Cards, AI and Match suites pass
+(Match 1,154, including the frozen tactical pins, which caught two definition properties serialized without their
+omit-when-default attributes before they could move a pin).
+
