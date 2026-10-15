@@ -136,6 +136,46 @@ public sealed class CardFormatTests
     }
 
     [Fact]
+    public void VantagePointSimulationDecksAreLegalAndFullyBound()
+    {
+        IReadOnlyList<OfficialPreset> decks = OfficialPresetCatalog.VantagePointSimulation().VantagePointSimulationDecks;
+        Assert.Equal(3, decks.Count(static deck => deck.Side == PlayerSide.Corp));
+        Assert.Equal(2, decks.Count(static deck => deck.Side == PlayerSide.Runner));
+        Assert.DoesNotContain(OfficialPresetCatalog.Embedded().Presets,
+            static preset => preset.PresetId.StartsWith(OfficialPresetCatalog.VantagePointSimulationPrefix, StringComparison.Ordinal));
+        BehaviorCatalog behavior = VantagePointBehaviorCatalog.Create();
+        foreach (OfficialPreset deck in decks)
+        {
+            Assert.All(deck.Cards.Select(static card => card.Code).Append(deck.IdentityCode),
+                code => Assert.True(
+                    behavior.TryGet(new CardDefinitionId(code), out _)
+                    || behavior.TryGetIce(new CardDefinitionId(code), out _)
+                    || behavior.TryGetIcebreaker(new CardDefinitionId(code), out _)
+                    || behavior.TryGetAgenda(new CardDefinitionId(code), out _)
+                    || behavior.TryGetAsset(new CardDefinitionId(code), out _)
+                    || behavior.TryGetRunEvent(new CardDefinitionId(code), out _),
+                    $"{deck.PresetId}: {code} is unbound."));
+        }
+
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode)
+        {
+            return;
+        }
+
+        // Startup 2026's deck rules and ban list, with Vantage Point counted legal: the format itself stays incomplete
+        // until VP.8.
+        CardDataSet pool = CardDataResource.LoadEmbeddedPool(CardPools.Startup.PackCodes);
+        CardFormat startup = CardFormatCatalog.Embedded().Get(CardFormatIds.Startup2026);
+        CardFormat format = startup with { LegalPacks = [.. startup.LegalPacks, .. startup.MissingPacks], MissingPacks = [] };
+        foreach (OfficialPreset deck in decks)
+        {
+            var request = new DeckRequest(DeckRequest.CurrentSchemaVersion, deck.Side, deck.IdentityCode, deck.Cards);
+            DeckValidationResult result = FormatDeckValidator.Validate(request, format, pool);
+            Assert.True(result.IsValid, $"{deck.PresetId}: {string.Join("; ", result.Diagnostics)}");
+        }
+    }
+
+    [Fact]
     public void TheCoreBattleBoxIsTheFormatsDecksLegalAndFullyBound()
     {
         // D-EL-10: lunari's Core Battle Box, four Corp decks and three Runner decks; EL.8's own decks are retired.

@@ -12579,6 +12579,12 @@ public static partial class StateInvariantValidator
                         runtimeCardCatalog,
                         frame,
                         option))
+                .Where(option => GameEngine.IsBehaviorZoneInstallOptionAvailable(
+                    state,
+                    behaviorCatalog,
+                    runtimeCardCatalog,
+                    frame,
+                    option))
                 .Where(option => GameEngine.IsBehaviorChoiceOptionAffordable(
                     state,
                     behaviorCatalog,
@@ -12906,9 +12912,10 @@ public static partial class StateInvariantValidator
         };
     }
 
+    // Mirrors the reducer: only an install of a chosen card in custody is an install option.
     private static bool IsBehaviorInstallOption(BehaviorChoiceOption option) =>
         option.Instructions.Count == 1
-        && option.Instructions[0].Kind == BehaviorInstructionKind.InstallCard;
+        && option.Instructions[0] is { Kind: BehaviorInstructionKind.InstallCard, Target.Kind: BehaviorTargetKind.ChosenCard };
 
     private static bool IsBehaviorInstallOptionAvailable(
         GameState state,

@@ -267,7 +267,9 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
             ActionKind.ChooseBreachCandidate => action.Parameters is BreachCandidateParameters,
             ActionKind.UseAbility => action.Parameters is AbilityActionParameters,
             ActionKind.ChooseBehavior => action.Parameters is BehaviorChoiceParameters,
-            ActionKind.ChooseCard or ActionKind.TrashProgram or ActionKind.StealAgenda => action.Parameters is CardChoiceParameters,
+            ActionKind.ChooseCard or ActionKind.TrashProgram => action.Parameters is CardChoiceParameters,
+            // VP-SCORE-STEAL-COST: a steal with additional costs is a paid steal.
+            ActionKind.StealAgenda => action.Parameters is CardChoiceParameters or RunCardPaymentParameters,
             ActionKind.ChooseNumber => action.Parameters is NumberChoiceParameters,
             ActionKind.UseTrigger or ActionKind.DeclineTrigger => action.Parameters is TriggerChoiceParameters,
             ActionKind.OrderTriggers => action.Parameters is TriggerOrderParameters,

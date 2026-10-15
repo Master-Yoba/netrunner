@@ -94,6 +94,10 @@ public sealed partial class RunnerHeuristicPolicy
                 // Elevation (EL.3): counters, faces, tags, sabotage and additional access.
                 case BehaviorInstructionKind.RemoveCounter: total -= amount * 50; break;
                 case BehaviorInstructionKind.RemoveTags: total += amount * 200; break;
+                // Vantage Point (VP.3): the Corp's bad publicity is a credit on every later run.
+                case BehaviorInstructionKind.TakeBadPublicity: total += amount * 200; break;
+                case BehaviorInstructionKind.RemoveBadPublicity:
+                    total -= Math.Min(amount, (context.Features.Board.Players.Corp.BadPublicity ?? 0)) * 200; break;
                 case BehaviorInstructionKind.FlipSelf: total += 50; break;
                 case BehaviorInstructionKind.GainAllottedClicksNextTurn: total += sign * amount * 90; break;
                 case BehaviorInstructionKind.Sabotage: total += amount * 80; break;

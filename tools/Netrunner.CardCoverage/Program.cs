@@ -820,7 +820,7 @@ internal static class TestMetadataReader
 
             markers.Add(new Marker(
                 isFact,
-                isTrait && first is "GatewayCard" or "ElevationCard"
+                isTrait && first is "GatewayCard" or "ElevationCard" or "VantagePointCard"
                     ? second
                     : isCardMarker ? first : null));
         }

@@ -916,6 +916,10 @@ public sealed class FullGameContractAgent : IGameAgent
             (ActionKind.TrashAccessedCard, RunCardPaymentParameters payment) =>
                 HasStableId(payment.CardId.Value)
                 && payment.HostedCredits >= 0,
+            // VP-SCORE-STEAL-COST: a steal with additional costs (Méliès City Luxury Line, Magistrate Revontulet).
+            (ActionKind.StealAgenda, RunCardPaymentParameters paidSteal) =>
+                HasStableId(paidSteal.CardId.Value)
+                && paidSteal.HostedCredits >= 0,
             (ActionKind.UseAbility, AbilityActionParameters ability) =>
                 IsValidAbilityAction(ability, actionClass),
             (ActionKind.UseBioroidAbility, RunBioroidAbilityParameters bioroid) =>

@@ -109,6 +109,13 @@ public static class RulesFuzzRunner
                 .Select(runner => $"{corp.PresetId}{PairSeparator}{runner.PresetId}"))
             .ToArray();
 
+    /// <summary>VP.3: every pairing of the Vantage Point simulation decks (the batch proofs), on the Startup pool.</summary>
+    public static IReadOnlyList<string> VantagePointContentIds =>
+        OfficialPresetCatalog.VantagePointSimulation().VantagePointSimulationDecks.Where(preset => preset.Side == PlayerSide.Corp)
+            .SelectMany(corp => OfficialPresetCatalog.VantagePointSimulation().VantagePointSimulationDecks.Where(preset => preset.Side == PlayerSide.Runner)
+                .Select(runner => $"{corp.PresetId}{PairSeparator}{runner.PresetId}"))
+            .ToArray();
+
     /// <summary>Every pairing of NSG's Core Sets decks, the deck pool of the NSG Core Sets format.</summary>
     public static IReadOnlyList<string> NsgCoreSetsContentIds =>
         OfficialPresetCatalog.NsgCoreSets().NsgCoreSetsDecks.Where(preset => preset.Side == PlayerSide.Corp)
@@ -118,10 +125,10 @@ public static class RulesFuzzRunner
 
     /// <summary>
     /// The <c>--content</c> options: developer, official (expanded), gateway, elevation (simulation),
-    /// gateway-elevation or nsg-core-sets.
+    /// gateway-elevation, nsg-core-sets or vantage-point (simulation).
     /// </summary>
     public static IReadOnlyList<string> ContentNames { get; } =
-        ["developer", "official", "gateway", "elevation", "gateway-elevation", "nsg-core-sets"];
+        ["developer", "official", "gateway", "elevation", "gateway-elevation", "nsg-core-sets", "vantage-point"];
 
     /// <summary>Whether a content ID is a pairing of one of the official pools (Gateway, the Elevation pools, the expanded decks).</summary>
     public static bool IsKnownContentId(string contentId)
@@ -139,6 +146,7 @@ public static class RulesFuzzRunner
         "elevation" => ElevationContentIds,
         "gateway-elevation" => GatewayElevationContentIds,
         "nsg-core-sets" => NsgCoreSetsContentIds,
+        "vantage-point" => VantagePointContentIds,
         _ => throw new ArgumentException($"Unknown content '{content}'; expected {string.Join(", ", ContentNames)}.", nameof(content)),
     };
 
@@ -155,6 +163,7 @@ public static class RulesFuzzRunner
         // v2: the Core Battle Box replaced our decks (D-EL-10).
         "gateway-elevation" => "gateway-elevation-v2",
         "nsg-core-sets" => "nsg-core-sets-v1",
+        "vantage-point" => "vantage-point-simulation-v1",
         _ => throw new ArgumentException($"Unknown content '{content}'; expected {string.Join(", ", ContentNames)}.", nameof(content)),
     };
 
@@ -211,10 +220,16 @@ public static class RulesFuzzRunner
         if (!string.Equals(CardDataResource.EmbeddedMode, CardDataResource.OfficialMode, StringComparison.Ordinal))
             throw new InvalidOperationException("Official fuzz content requires the embedded official card snapshot.");
         OfficialPresetCatalog presets = CatalogOf(corpPreset);
-        bool elevation = !ReferenceEquals(presets, OfficialPresetCatalog.Embedded());
-        // The Gateway + Elevation pool's packs, not every embedded pack: Vantage Point's cards stay out of these games (VP.1).
-        CardDataSet data = elevation ? CardDataResource.LoadEmbeddedPool(CardPools.GatewayElevation.PackCodes) : CardDataResource.LoadEmbedded();
-        BehaviorCatalog behavior = elevation ? ElevationBehaviorCatalog.Create() : GatewayBehaviorCatalog.Create();
+        bool startup = ReferenceEquals(presets, OfficialPresetCatalog.VantagePointSimulation());
+        bool elevation = !startup && !ReferenceEquals(presets, OfficialPresetCatalog.Embedded());
+        // The Gateway + Elevation pool's packs, not every embedded pack: Vantage Point's cards stay out of these games (VP.1);
+        // the Vantage Point simulation decks play on the Startup pool (VP.3).
+        CardDataSet data = startup ? CardDataResource.LoadEmbeddedPool(CardPools.Startup.PackCodes)
+            : elevation ? CardDataResource.LoadEmbeddedPool(CardPools.GatewayElevation.PackCodes)
+            : CardDataResource.LoadEmbedded();
+        BehaviorCatalog behavior = startup ? VantagePointBehaviorCatalog.Create()
+            : elevation ? ElevationBehaviorCatalog.Create()
+            : GatewayBehaviorCatalog.Create();
         MatchRequest request = MatchRequestComposer.ComposeOfficial(
             corpPreset, runnerPreset, data, seed, presets, behaviorCatalog: behavior);
         return FullMatchDefinition.FromRequest(request, data, behavior, presets);
@@ -244,6 +259,7 @@ public static class RulesFuzzRunner
     /// </summary>
     private static OfficialPresetCatalog CatalogOf(string corpPresetId) =>
         corpPresetId.StartsWith(OfficialPresetCatalog.ElevationSimulationPrefix, StringComparison.Ordinal) ? OfficialPresetCatalog.ElevationSimulation()
+        : corpPresetId.StartsWith(OfficialPresetCatalog.VantagePointSimulationPrefix, StringComparison.Ordinal) ? OfficialPresetCatalog.VantagePointSimulation()
         : OfficialPresetCatalog.IsElevationDeck(corpPresetId) ? OfficialPresetCatalog.GatewayElevation()
         : OfficialPresetCatalog.IsNsgCoreSetsDeck(corpPresetId) ? OfficialPresetCatalog.NsgCoreSets()
         : OfficialPresetCatalog.Embedded();

@@ -555,9 +555,11 @@ public sealed class OfficialPresetCatalog
             if (preset.Kind != GatewayKind) problems.Add($"{path}.kind: expected '{GatewayKind}'.");
             if (string.IsNullOrWhiteSpace(preset.Name) || string.IsNullOrWhiteSpace(preset.Summary) || string.IsNullOrWhiteSpace(preset.SourceUrl))
                 problems.Add($"{path}: a sample deck needs a name, a summary and a source URL.");
-            // Our Elevation decks and NSG's Core Sets decks follow their identity's
+            // Our Elevation and Vantage Point decks and NSG's Core Sets decks follow their identity's
             // minimum (checked against the metadata below), not the Gateway sample sizes.
-            if (!preset.PresetId.StartsWith(ElevationDeckPrefix, StringComparison.Ordinal) && !IsNsgCoreSetsDeck(preset.PresetId)
+            if (!preset.PresetId.StartsWith(ElevationDeckPrefix, StringComparison.Ordinal)
+                && !preset.PresetId.StartsWith(VantagePointSimulationPrefix, StringComparison.Ordinal)
+                && !IsNsgCoreSetsDeck(preset.PresetId)
                 && preset.CardCount != (preset.Side == PlayerSide.Corp ? 44 : 40))
                 problems.Add($"{path}.cards: contains {preset.CardCount} cards; a Gateway sample deck has {(preset.Side == PlayerSide.Corp ? 44 : 40)}.");
             var codes = new HashSet<string>(StringComparer.Ordinal);
@@ -612,6 +614,11 @@ public sealed class OfficialPresetCatalog
     /// <summary>The preset-ID prefix of the Elevation simulation decks.</summary>
     public const string ElevationSimulationPrefix = "elevation-sim-";
 
+    private const string VantagePointSimulationResourceName = "Netrunner.Cards.Data.decks.vantage-point-simulation-decks.json";
+
+    /// <summary>The preset-ID prefix of the Vantage Point simulation decks (VP.3).</summary>
+    public const string VantagePointSimulationPrefix = "vp-sim-";
+
     // EL.8's own decks, retired from the menu and the deck pool (D-EL-10); kept so older saves load and the
     // EL.8 seed-replay regressions still play.
     private const string ElevationDecksResourceName = "Netrunner.Cards.Data.decks.gateway-elevation-decks.json";
@@ -631,6 +638,10 @@ public sealed class OfficialPresetCatalog
 
     private static readonly Lazy<OfficialPresetCatalog> ElevationSimulationCatalog = new(
         () => WithEmbeddedDecks(ElevationSimulationResourceName),
+        LazyThreadSafetyMode.ExecutionAndPublication);
+
+    private static readonly Lazy<OfficialPresetCatalog> VantagePointSimulationCatalog = new(
+        () => WithEmbeddedDecks(VantagePointSimulationResourceName),
         LazyThreadSafetyMode.ExecutionAndPublication);
 
     private static readonly Lazy<OfficialPresetCatalog> GatewayElevationCatalog = new(
@@ -663,6 +674,16 @@ public sealed class OfficialPresetCatalog
     /// <see cref="Embedded"/> so the frozen Gateway preset pins are unchanged.
     /// </summary>
     public static OfficialPresetCatalog ElevationSimulation() => ElevationSimulationCatalog.Value;
+
+    /// <summary>
+    /// The embedded catalog plus the Vantage Point simulation decks: our Startup-pool decks for the batch proofs and
+    /// fuzzing, not menu decks.
+    /// </summary>
+    public static OfficialPresetCatalog VantagePointSimulation() => VantagePointSimulationCatalog.Value;
+
+    /// <summary>The Vantage Point simulation decks alone.</summary>
+    public IReadOnlyList<OfficialPreset> VantagePointSimulationDecks =>
+        Gateway.Where(static preset => preset.PresetId.StartsWith(VantagePointSimulationPrefix, StringComparison.Ordinal)).ToArray();
 
     /// <summary>
     /// The embedded catalog plus the Core Battle Box, the decks of the Gateway + Elevation

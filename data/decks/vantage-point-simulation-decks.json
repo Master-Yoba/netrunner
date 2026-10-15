@@ -1,0 +1,475 @@
+{
+  "schemaVersion": 1,
+  "retrievedDate": "2026-10-15",
+  "publishedSourceUrl": "https://nullsignal.games/products/vantage-point/",
+  "metadataCommitSha": "236140cf84491c23995b028bc791281837520b97",
+  "provenanceNote": "Simulation decks for the Vantage Point batch proofs (ours, not published lists): each exercises the bound Vantage Point cards with System Gateway and Elevation support, within Startup 2026's deck rules.",
+  "decks": [
+    {
+      "presetId": "vp-sim-editorial-corp",
+      "name": "Editorial Division simulation",
+      "summary": "Editorial Division with the bad publicity liabilities, Witch Hunt, Grubber and the Vulture Fund economy.",
+      "side": "corp",
+      "identityCode": "36046",
+      "sourceUrl": "https://github.com/Master-Yoba/netrunner/blob/dev/docs/VANTAGE_POINT_PROGRESS.md",
+      "cards": [
+        {
+          "code": "36047",
+          "quantity": 3
+        },
+        {
+          "code": "35059",
+          "quantity": 3
+        },
+        {
+          "code": "35060",
+          "quantity": 3
+        },
+        {
+          "code": "36050",
+          "quantity": 3
+        },
+        {
+          "code": "35063",
+          "quantity": 3
+        },
+        {
+          "code": "35064",
+          "quantity": 2
+        },
+        {
+          "code": "30055",
+          "quantity": 3
+        },
+        {
+          "code": "30072",
+          "quantity": 2
+        },
+        {
+          "code": "30074",
+          "quantity": 2
+        },
+        {
+          "code": "30073",
+          "quantity": 2
+        },
+        {
+          "code": "36049",
+          "quantity": 3
+        },
+        {
+          "code": "36048",
+          "quantity": 2
+        },
+        {
+          "code": "36038",
+          "quantity": 2
+        },
+        {
+          "code": "36057",
+          "quantity": 2
+        },
+        {
+          "code": "36063",
+          "quantity": 3
+        },
+        {
+          "code": "36054",
+          "quantity": 2
+        },
+        {
+          "code": "30075",
+          "quantity": 3
+        },
+        {
+          "code": "36053",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "presetId": "vp-sim-poetri-corp",
+      "name": "Poétrï Double simulation",
+      "summary": "Poétrï Luxury Brands with Synchrocyclotron, the Double operations, Caveat Emptor and Méliès City Luxury Line.",
+      "side": "corp",
+      "identityCode": "35036",
+      "sourceUrl": "https://github.com/Master-Yoba/netrunner/blob/dev/docs/VANTAGE_POINT_PROGRESS.md",
+      "cards": [
+        {
+          "code": "36026",
+          "quantity": 3
+        },
+        {
+          "code": "35038",
+          "quantity": 3
+        },
+        {
+          "code": "35037",
+          "quantity": 3
+        },
+        {
+          "code": "30036",
+          "quantity": 1
+        },
+        {
+          "code": "30039",
+          "quantity": 2
+        },
+        {
+          "code": "35041",
+          "quantity": 3
+        },
+        {
+          "code": "35042",
+          "quantity": 2
+        },
+        {
+          "code": "30072",
+          "quantity": 3
+        },
+        {
+          "code": "30074",
+          "quantity": 3
+        },
+        {
+          "code": "30073",
+          "quantity": 2
+        },
+        {
+          "code": "36027",
+          "quantity": 3
+        },
+        {
+          "code": "30037",
+          "quantity": 3
+        },
+        {
+          "code": "36033",
+          "quantity": 3
+        },
+        {
+          "code": "36034",
+          "quantity": 2
+        },
+        {
+          "code": "36032",
+          "quantity": 2
+        },
+        {
+          "code": "30075",
+          "quantity": 3
+        },
+        {
+          "code": "30041",
+          "quantity": 2
+        },
+        {
+          "code": "30042",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "presetId": "vp-sim-weyland-corp",
+      "name": "Weyland Myōshu simulation",
+      "summary": "Weyland Consortium: Built to Last with Luana Campos, Vulture Fund and Myōshu.",
+      "side": "corp",
+      "identityCode": "30059",
+      "sourceUrl": "https://github.com/Master-Yoba/netrunner/blob/dev/docs/VANTAGE_POINT_PROGRESS.md",
+      "cards": [
+        {
+          "code": "35071",
+          "quantity": 3
+        },
+        {
+          "code": "35070",
+          "quantity": 3
+        },
+        {
+          "code": "30060",
+          "quantity": 1
+        },
+        {
+          "code": "30068",
+          "quantity": 3
+        },
+        {
+          "code": "30069",
+          "quantity": 1
+        },
+        {
+          "code": "35075",
+          "quantity": 3
+        },
+        {
+          "code": "30062",
+          "quantity": 2
+        },
+        {
+          "code": "30063",
+          "quantity": 2
+        },
+        {
+          "code": "35076",
+          "quantity": 2
+        },
+        {
+          "code": "30072",
+          "quantity": 2
+        },
+        {
+          "code": "30073",
+          "quantity": 2
+        },
+        {
+          "code": "36057",
+          "quantity": 2
+        },
+        {
+          "code": "35072",
+          "quantity": 2
+        },
+        {
+          "code": "30071",
+          "quantity": 3
+        },
+        {
+          "code": "36063",
+          "quantity": 3
+        },
+        {
+          "code": "36061",
+          "quantity": 2
+        },
+        {
+          "code": "30075",
+          "quantity": 3
+        },
+        {
+          "code": "30064",
+          "quantity": 2
+        },
+        {
+          "code": "35077",
+          "quantity": 2
+        },
+        {
+          "code": "35082",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "presetId": "vp-sim-vic-runner",
+      "name": "Vic simulation",
+      "summary": "Virtual Intelligence, P.I. with Sell Out, Tailgate, Borrowed Goods, Underdome Irregulars and Word on the Street.",
+      "side": "runner",
+      "identityCode": "36009",
+      "sourceUrl": "https://github.com/Master-Yoba/netrunner/blob/dev/docs/VANTAGE_POINT_PROGRESS.md",
+      "cards": [
+        {
+          "code": "36011",
+          "quantity": 3
+        },
+        {
+          "code": "36012",
+          "quantity": 3
+        },
+        {
+          "code": "30030",
+          "quantity": 3
+        },
+        {
+          "code": "35014",
+          "quantity": 2
+        },
+        {
+          "code": "30029",
+          "quantity": 2
+        },
+        {
+          "code": "30028",
+          "quantity": 3
+        },
+        {
+          "code": "35015",
+          "quantity": 2
+        },
+        {
+          "code": "30011",
+          "quantity": 1
+        },
+        {
+          "code": "36013",
+          "quantity": 2
+        },
+        {
+          "code": "30013",
+          "quantity": 1
+        },
+        {
+          "code": "30031",
+          "quantity": 2
+        },
+        {
+          "code": "30014",
+          "quantity": 1
+        },
+        {
+          "code": "30015",
+          "quantity": 2
+        },
+        {
+          "code": "30016",
+          "quantity": 2
+        },
+        {
+          "code": "35020",
+          "quantity": 2
+        },
+        {
+          "code": "30032",
+          "quantity": 1
+        },
+        {
+          "code": "36016",
+          "quantity": 3
+        },
+        {
+          "code": "36025",
+          "quantity": 1
+        },
+        {
+          "code": "30018",
+          "quantity": 2
+        },
+        {
+          "code": "35022",
+          "quantity": 2
+        },
+        {
+          "code": "35034",
+          "quantity": 3
+        },
+        {
+          "code": "30033",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "presetId": "vp-sim-tao-runner",
+      "name": "Tāo stealth simulation",
+      "summary": "Tāo Salonga with Methuselah, Touchstone, Corsair, Stowaway and Take a Dive.",
+      "side": "runner",
+      "identityCode": "30019",
+      "sourceUrl": "https://github.com/Master-Yoba/netrunner/blob/dev/docs/VANTAGE_POINT_PROGRESS.md",
+      "cards": [
+        {
+          "code": "30030",
+          "quantity": 3
+        },
+        {
+          "code": "30020",
+          "quantity": 2
+        },
+        {
+          "code": "30021",
+          "quantity": 1
+        },
+        {
+          "code": "30029",
+          "quantity": 2
+        },
+        {
+          "code": "30028",
+          "quantity": 2
+        },
+        {
+          "code": "35026",
+          "quantity": 2
+        },
+        {
+          "code": "36002",
+          "quantity": 1
+        },
+        {
+          "code": "35025",
+          "quantity": 1
+        },
+        {
+          "code": "36020",
+          "quantity": 2
+        },
+        {
+          "code": "36021",
+          "quantity": 2
+        },
+        {
+          "code": "30022",
+          "quantity": 1
+        },
+        {
+          "code": "30031",
+          "quantity": 2
+        },
+        {
+          "code": "36004",
+          "quantity": 2
+        },
+        {
+          "code": "30026",
+          "quantity": 2
+        },
+        {
+          "code": "30025",
+          "quantity": 2
+        },
+        {
+          "code": "35032",
+          "quantity": 1
+        },
+        {
+          "code": "36024",
+          "quantity": 3
+        },
+        {
+          "code": "35031",
+          "quantity": 1
+        },
+        {
+          "code": "35029",
+          "quantity": 1
+        },
+        {
+          "code": "30032",
+          "quantity": 1
+        },
+        {
+          "code": "30027",
+          "quantity": 3
+        },
+        {
+          "code": "35034",
+          "quantity": 2
+        },
+        {
+          "code": "30033",
+          "quantity": 2
+        },
+        {
+          "code": "36025",
+          "quantity": 1
+        },
+        {
+          "code": "35033",
+          "quantity": 1
+        },
+        {
+          "code": "30034",
+          "quantity": 2
+        }
+      ]
+    }
+  ]
+}

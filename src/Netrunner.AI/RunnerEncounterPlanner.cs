@@ -6,6 +6,11 @@ namespace Netrunner.AI;
 /// <summary>Bounded set-cover calculation over the visible encounter, never over engine states.</summary>
 internal static class RunnerEncounterPlanner
 {
+    /// <summary>VP.3: the hosted credits on installed Runner cards with the subtype, which a cost restricted to it may spend.</summary>
+    private static int RestrictedCredits(HeuristicContext context, string subtype) =>
+        context.Features.Board.RunnerRig.Where(card => context.Definition(card)?.Printed.Subtypes.Contains(subtype, StringComparer.Ordinal) == true)
+            .Sum(card => card.Counters.Where(counter => counter.Purpose == CardCounterPurpose.HostedCredit).Sum(counter => counter.Count));
+
     private sealed record Plan(int Mask, int Credits, int Clicks, int Opportunity, ActionId? First, string? Breaker);
     private sealed record Method(AgentCard? Card, IcebreakerBehaviorSpec? Breaker, int CounterLimit, bool Bioroid);
 
@@ -36,14 +41,20 @@ internal static class RunnerEncounterPlanner
             var ability = (AbilityActionParameters)action.Parameters;
             AgentCard? source = context.Card(ability.SourceCardId);
             BehaviorPaidAbility? declaration = context.Definition(source)?.Behavior?.PaidAbilities.SingleOrDefault(value => value.Key == ability.AbilityKey);
+            // VP.3 (misplay sweep): or with credits only from cards of a subtype (Corsair's stealth credits), which pay little
+            // else; that cost was never planned, so Corsair never lowered a barrier.
+            bool counterCost = ability.Costs is [{ Kind: BehaviorCostKind.Counter }];
+            bool restrictedCredits = ability.Costs is [{ Kind: BehaviorCostKind.Credits, CreditSourceSubtype: not null }];
             if (declaration?.Instructions is not { Count: 1 } instructions || instructions[0].Kind != BehaviorInstructionKind.ModifyEncounteredIceStrength
-                || instructions[0].Amount >= 0 || ability.Costs.Count != 1 || ability.Costs[0].Kind != BehaviorCostKind.Counter) continue;
-            int available = source?.Counters.Where(counter => counter.CounterName == ability.Costs[0].CounterName).Sum(counter => counter.Count) ?? 0;
+                || instructions[0].Amount >= 0 || !(counterCost || restrictedCredits)) continue;
+            int available = counterCost
+                ? source?.Counters.Where(counter => counter.CounterName == ability.Costs[0].CounterName).Sum(counter => counter.Count) ?? 0
+                : RestrictedCredits(context, ability.Costs[0].CreditSourceSubtype!);
             int limit = Math.Min(available / ability.Costs[0].Amount, Math.Max(0, strength));
             for (int count = 1; count <= limit; count++)
             {
                 if (!budget.TrySpend()) break;
-                variants.Add((-instructions[0].Amount * count, count * ability.Costs[0].Amount * 25, action.Id));
+                variants.Add((-instructions[0].Amount * count, count * ability.Costs[0].Amount * (counterCost ? 25 : 60), action.Id));
             }
         }
         foreach (var variant in variants)

@@ -162,6 +162,13 @@ public sealed partial class CorpHeuristicPolicy
                 case BehaviorInstructionKind.FlipSelf: total += 50; break;
                 case BehaviorInstructionKind.ForfeitAgenda: total -= 600; break;
                 case BehaviorInstructionKind.GainAllottedClicksNextTurn: total += sign * amount * 90; break;
+                // Vantage Point (VP.3): each bad publicity is a credit for every later run of the Runner's; a card
+                // scored as an agenda is its points (and the game when they win it).
+                case BehaviorInstructionKind.TakeBadPublicity: total -= amount * 200; break;
+                case BehaviorInstructionKind.RemoveBadPublicity:
+                    total += Math.Min(amount, (context.Features.Board.Players.Corp.BadPublicity ?? 0)) * 200; break;
+                case BehaviorInstructionKind.AddSelfToScoreAreaAsAgenda:
+                    total += context.Self.AgendaPoints + amount >= 7 ? 20000 : amount * 650; break;
                 case BehaviorInstructionKind.ProhibitScoringTargetThisTurn: total -= 20; break;
                 case BehaviorInstructionKind.Sabotage: total -= amount * 80; break;
                 case BehaviorInstructionKind.PlaceOnTopOfDeck: total += 60; break;

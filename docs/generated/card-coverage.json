@@ -3,11 +3,11 @@
   "rulesVersion": "CR-26.03",
   "counts": {
     "total": 225,
-    "registered": 159,
-    "tested": 159,
-    "fullTextComplete": 159,
+    "registered": 187,
+    "tested": 187,
+    "fullTextComplete": 187,
     "partial": 0,
-    "unregistered": 66
+    "unregistered": 38
   },
   "sets": [
     {
@@ -105,7 +105,7 @@
         {
           "id": "slice-VP.3",
           "slice": "VP.3",
-          "status": "planned",
+          "status": "complete",
           "cards": 28
         },
         {
@@ -123,11 +123,11 @@
       ],
       "counts": {
         "total": 66,
-        "registered": 0,
-        "tested": 0,
-        "fullTextComplete": 0,
+        "registered": 28,
+        "tested": 28,
+        "fullTextComplete": 28,
         "partial": 0,
-        "unregistered": 66
+        "unregistered": 38
       }
     }
   ],
@@ -4157,13 +4157,16 @@
       "title": "Take a Dive",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1RunnerTests.TakeADiveGivesBadPublicityWhenASubroutineResolvedDuringASuccessfulRun",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1RunnerTests.TakeADiveWithoutAResolvedSubroutineGivesNothingAndIsStillRemoved"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "VP-CR-10.6-bad-publicity",
@@ -4201,13 +4204,16 @@
       "title": "Corsair",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1RunnerTests.CorsairLowersABarrierWithStealthCreditsAndBreaksIt",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1RunnerTests.CorsairsStrengthAbilityCantBePaidFromThePool"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "VP-CR-1.10.4-credit-sources"
@@ -4309,13 +4315,15 @@
       "title": "Virtual Intelligence, P.I.: “You Can Call Me Vic”",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1RunnerTests.VicDrawsAndRemovesATagOncePerTurn"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "VP-CR-10.5-tags"
@@ -4352,13 +4360,15 @@
       "title": "Sell Out",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1RunnerTests.SellOutTrashesAnInstalledResourceToGainAndDraw"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "VP-CR-1.16-costs"
@@ -4373,13 +4383,15 @@
       "title": "Tailgate",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1RunnerTests.TailgateCostsLessPerIceOnHqAndAccessesTwoMore"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "VP-CR-2.3-cost-modifiers"
@@ -4394,13 +4406,15 @@
       "title": "Borrowed Goods",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1RunnerTests.BorrowedGoodsTagsAnUntaggedRunnerOnInstall"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "VP-CR-10.5-tags"
@@ -4459,13 +4473,16 @@
       "title": "Underdome Irregulars",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1RunnerTests.UnderdomeIrregularsIsTrashedOnATurnWithoutIceRezzed",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1RunnerTests.UnderdomeIrregularsRewardsATurnThatSawIceRezzed"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "VP-CR-9.6-conditional"
@@ -4546,13 +4563,15 @@
       "title": "Methuselah",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1RunnerTests.MethuselahTrashesGripHardwareForCreditsSpentDuringTheRun"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "VP-CR-1.10.4-credit-sources",
@@ -4568,13 +4587,15 @@
       "title": "Touchstone",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1RunnerTests.TouchstoneGainsACreditForTheFirstEventEachTurn"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "VP-CR-1.10.4-credit-sources",
@@ -4633,13 +4654,15 @@
       "title": "Stowaway",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1RunnerTests.StowawayGainsOnSuccessfulRunsOnItsHostsServer"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "VP-CR-1.13-hosting",
@@ -4655,13 +4678,15 @@
       "title": "Word on the Street",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1RunnerTests.WordOnTheStreetPaysOutWhenAnEarlierAgendaIsScored"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "VP-CR-1.16.10-steal-score-costs",
@@ -4678,13 +4703,16 @@
       "title": "Méliès City Luxury Line",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1CorpTests.MeliesCityLuxuryLineCostsAClickToSteal",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1CorpTests.ScoringMeliesCityLuxuryLineGainsAClick"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "VP-CR-1.16.10-steal-score-costs",
@@ -4700,13 +4728,15 @@
       "title": "Synchrocyclotron",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1CorpTests.SynchrocyclotronMakesTheFirstDoubleOperationCostAClickLess"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "VP-CR-1.16-costs"
@@ -4808,13 +4838,15 @@
       "title": "Caveat Emptor",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1CorpTests.CaveatEmptorTradesCreditsForTheRunnersNextTurn"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "VP-CR-1.11-clicks"
@@ -4829,13 +4861,16 @@
       "title": "realloc()",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1CorpTests.ReallocGainsTwoIcesPrintedRezCostsAndDerezzesThem",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1CorpTests.ReallocWithOneRezzedIceTakesThatOne"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "VP-CR-8.1.3-derez",
@@ -4851,13 +4886,17 @@
       "title": "Retirement Plan",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1CorpTests.RetirementPlanInstallsIceFromArchives",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1CorpTests.RetirementPlanOffersOnlyTheKindsArchivesHolds",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1CorpTests.RetirementPlanWithNothingToInstallDoesNothing"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "VP-CR-8.5-install",
@@ -4940,13 +4979,16 @@
       "title": "Esca",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1CorpTests.EscaIsRevealedWhenAccessedInRd",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1CorpTests.EscaTakesACreditAndHurtsATaggedRunner"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "VP-CR-7.1-access-abilities",
@@ -5117,13 +5159,15 @@
       "title": "Editorial Division: Ad Nihilum",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1CorpTests.EditorialDivisionSearchesForAGrayOpsTheFirstTimeTheCorpTakesBadPublicity"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "VP-CR-10.6-bad-publicity",
@@ -5139,13 +5183,16 @@
       "title": "Witch Hunt",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1CorpTests.StealingWitchHuntGivesTheCorpBadPublicity",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1CorpTests.WitchHuntGivesBadPublicityAndResetsTheRunnersTagsToThree"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "VP-CR-10.6-bad-publicity",
@@ -5162,13 +5209,15 @@
       "title": "Magistrate Revontulet",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1CorpTests.MagistrateRevontuletChargesThreeToStealAndOnEveryScore"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "VP-CR-1.16.10-steal-score-costs"
@@ -5183,13 +5232,16 @@
       "title": "Nihilo Agent",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1CorpTests.AnEmptyNihiloAgentIsTrashed",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1CorpTests.NihiloAgentCyclesTagsAndBadPublicityUntilEmpty"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "VP-CR-10.6-bad-publicity",
@@ -5206,13 +5258,15 @@
       "title": "Grubber",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1CorpTests.GrubberGivesBadPublicityWhenRezzedOnACentral"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "VP-CR-10.6-bad-publicity"
@@ -5271,13 +5325,15 @@
       "title": "Flood the Market",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1CorpTests.FloodTheMarketAdvancesOncePerProtectedRemoteWithARootCard"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "VP-CR-1.16-costs"
@@ -5292,13 +5348,17 @@
       "title": "Scapegoat",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1CorpTests.ScapegoatWithNothingInstalledShufflesNothing",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1CorpTests.TheRunnerCanRemoveTheCorpsBadPublicityWithScapegoat",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1CorpTests.WithoutBadPublicityScapegoatShufflesAnInstalledRunnerCardIntoTheStack"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "VP-CR-10.6-bad-publicity"
@@ -5358,13 +5418,15 @@
       "title": "Luana Campos",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1CorpTests.LuanaCamposHostsBadPublicityForCreditsAndACardAndReturnsItWhenTrashed"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "VP-CR-10.6-bad-publicity",
@@ -5447,13 +5509,15 @@
       "title": "Myōshu",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1CorpTests.MyoshuJoinsTheScoreAreaAfterAnEarlierAgendaIsScored"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "VP-CR-10.1.3-as-an-agenda",
@@ -5491,13 +5555,15 @@
       "title": "Vulture Fund",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1CorpTests.VultureFundGainsFourteenAndTakesBadPublicity"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "VP-CR-10.6-bad-publicity"
@@ -5558,13 +5624,16 @@
       "title": "Let Them Dream",
       "batch": "slice-VP.3",
       "slice": "VP.3",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1CorpTests.LetThemDreamFindsAnAgendaInRdForHq",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1CorpTests.LetThemDreamIsWorthOneLessToTheRunner"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "VP-CR-8.7-search",
