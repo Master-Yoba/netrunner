@@ -138,6 +138,7 @@ public static partial class GameEngine
         StartNextTurnActionWindow(working, (TurnFrame)working.ResolutionStack[^1]);
         if (card.AdvancementCounters == 0)
             QueueIdentityOccurrence(working, OccurrenceKind.CardAdvancedFromZero, PlayerSide.Corp, card.Id);
+        QueueIdentityOccurrence(working, OccurrenceKind.CardAdvanced, PlayerSide.Corp, card.Id);
     }
 
     /// <summary>
@@ -240,6 +241,8 @@ public static partial class GameEngine
                 "The score action does not match the materialized Corp agenda set.");
         }
 
+        // VP-SCORE-STEAL-COST: additional costs to score are paid first (Word on the Street), before the zones are read.
+        PayScoreCostsAsAgendas(working, parameters.CardId);
         CardInstanceState card = GetCard(working, parameters.CardId);
         CardRuntimeSpec spec = working.RuntimeCardCatalog!.GetSpec(card.DefinitionId);
         ZoneState source = working.Zones.Single(zone => zone.Id == card.ZoneId);
@@ -275,6 +278,12 @@ public static partial class GameEngine
 
         RefreshRemoteLifecycle(working, server.Id);
         RecordActiveTurnEvent(working, TurnEventKind.AgendaScoredOrStolen);
+        // VP-SCORING-FACTS: recorded only by catalogs with a card that reads them, so other games keep their bytes.
+        RecordOptInTurnEvent(working, TurnEventKind.AgendaScored);
+        if (working.Turn.History?.ThisTurn(working.Turn.ActiveSide)?.InstalledCardIds.Contains(card.Id) != true)
+        {
+            RecordOptInTurnEvent(working, TurnEventKind.AgendaScoredNotInstalledThisTurn);
+        }
 
         if (GetPlayer(working, PlayerSide.Corp).AgendaPoints >= RealGameRules.AgendaPointsToWin)
         {

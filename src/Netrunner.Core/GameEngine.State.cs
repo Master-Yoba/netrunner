@@ -68,7 +68,20 @@ public static partial class GameEngine
         {
             TrashHostedDescendants(working, card.Id);
         }
-        if (cleanupCounters
+        // VP-UNINSTALL-INTERRUPT: a card that returns its hosted bad publicity hands it to the Corp as it leaves (Luana
+        // Campos); the counters are read before they are cleared.
+        if (leavesInstalledZone
+            && card.OwnerSide == PlayerSide.Corp
+            && working.BehaviorCatalog.TryGet(card.DefinitionId, out CardBehaviorDefinition? leaving)
+            && leaving.ReturnsHostedBadPublicity
+            && working.RulesState?.Counters.FirstOrDefault(counter => counter.CardId == card.Id
+                && string.Equals(counter.CounterName, CardBehaviorDefinition.HostedBadPublicityCounter, StringComparison.Ordinal)) is { Count: > 0 } hosted)
+        {
+            int returned = hosted.Count;
+            ClearCardCounters(working, card.Id);
+            ApplyBadPublicity(working, returned);
+        }
+        else if (cleanupCounters
             && leavesInstalledZone)
         {
             ClearCardCounters(working, card.Id);

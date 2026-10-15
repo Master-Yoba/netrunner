@@ -76,6 +76,24 @@ public enum OccurrenceKind
 
     /// <summary>EL-ICE-APPROACHED: the Runner approaches a piece of ICE (Mitra Aman); the subject is that ICE.</summary>
     IceApproached,
+
+    /// <summary>VP-BAD-PUBLICITY: the first time this turn the Corp took bad publicity (Editorial Division).</summary>
+    FirstBadPublicityThisTurn,
+
+    /// <summary>
+    /// VP-CREDITS-OUTSIDE-POOL: the Runner spent credits from outside the pool during a run (hosted credits or the bad
+    /// publicity fund; Shackleton Grid).
+    /// </summary>
+    CreditsSpentFromOutsidePool,
+
+    /// <summary>
+    /// VP-ADVANCED: the Corp advanced a card with the basic action (placing counters by an effect isn't advancing); the
+    /// subject is the card (Sacrifice Zone Expansion, with a once-per-turn trigger).
+    /// </summary>
+    CardAdvanced,
+
+    /// <summary>VP-FIRST-EVENT: the first event the Runner played this turn; the subject is the event (Touchstone).</summary>
+    FirstEventPlayedThisTurn,
 }
 
 public enum OccurrencePhase

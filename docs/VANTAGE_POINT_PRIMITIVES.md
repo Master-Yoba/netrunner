@@ -85,15 +85,15 @@ public), and a serializable, replayable frame wherever it can yield, as in the M
 | Code | Title | Type | Batch | New primitives |
 |---|---|---|---|---|
 | 36001 | Chain Reaction | runner event | VP.5 | `VP-RUN-FACTS` |
-| 36002 | Take a Dive | runner event | VP.3 | `VP-BAD-PUBLICITY` |
+| 36002 | Take a Dive | runner event | VP.3 | `VP-BAD-PUBLICITY`, `VP-RUN-EVENT-REMOVED` |
 | 36003 | The Tungsten Tailor | runner hardware | VP.5 | `VP-ALL-ICE-STRENGTH`, `VP-SUBROUTINE-BROKEN` |
-| 36004 | Corsair | runner program | VP.3 | `VP-STEALTH-CREDITS` |
+| 36004 | Corsair | runner program | VP.3 | `VP-STEALTH-CREDITS`, `VP-ENCOUNTER-SUBTYPE` |
 | 36005 | Lampades | runner program | VP.5 | `VP-STEALTH-CREDITS`, `VP-ACCESS-PAID-ABILITY` |
 | 36006 | Hackerspace | runner resource | VP.7 | `VP-HOST-RESOURCES` |
 | 36007 | Nurse Hạnh | runner resource | VP.7 | `VP-ARCHIVES-TURNED-FACEUP` |
 | 36008 | Stick and Poke | runner resource | VP.5 | `VP-ICE-GAINS-SUBROUTINE` |
 | 36009 | Virtual Intelligence, P.I.: “You Can Call Me Vic” | runner identity | VP.3 | existing |
-| 36010 | Kompromat | runner event | VP.3 | `VP-BAD-PUBLICITY` |
+| 36010 | Kompromat | runner event | VP.5 | `VP-BAD-PUBLICITY`, `VP-RUN-EVENT-REMOVED`, `VP-RUN-PROTECTED-SERVER`, `VP-ENDED-RUN-SERVER` |
 | 36011 | Sell Out | runner event | VP.3 | `VP-TRASH-AS-COST` |
 | 36012 | Tailgate | runner event | VP.3 | `VP-PLAY-COST-MODIFIER` |
 | 36013 | Borrowed Goods | runner hardware | VP.3 | existing |
@@ -104,10 +104,10 @@ public), and a serializable, replayable frame wherever it can yield, as in the M
 | 36018 | Aircheck | runner event | VP.5 | `VP-STEALTH-CREDITS`, `VP-POOL-LOCK` |
 | 36019 | Beta Build | runner event | VP.5 | existing |
 | 36020 | Methuselah | runner hardware | VP.3 | `VP-STEALTH-CREDITS`, `VP-TRASH-AS-COST` |
-| 36021 | Touchstone | runner hardware | VP.3 | `VP-STEALTH-CREDITS` |
+| 36021 | Touchstone | runner hardware | VP.3 | `VP-STEALTH-CREDITS`, `VP-FIRST-EVENT` |
 | 36022 | Read-Write Share | runner program | VP.7 | `VP-HOST-FACEDOWN` |
 | 36023 | Sipa | runner program | VP.5 | `VP-ICE-PASSED` |
-| 36024 | Stowaway | runner program | VP.3 | existing |
+| 36024 | Stowaway | runner program | VP.3 | `VP-HOSTED-SERVER` |
 | 36025 | Word on the Street | runner resource | VP.3 | `VP-SCORE-STEAL-COST`, `VP-CARD-AS-AGENDA`, `VP-SCORING-FACTS` |
 | 36026 | Méliès City Luxury Line | corp agenda | VP.3 | `VP-SCORE-STEAL-COST` |
 | 36027 | Synchrocyclotron | corp asset | VP.3 | `VP-CLICK-COST-MODIFIER` |
@@ -115,12 +115,12 @@ public), and a serializable, replayable frame wherever it can yield, as in the M
 | 36029 | Reverb | corp ice | VP.5 | `VP-DYNAMIC-REZ-COST` |
 | 36030 | Sleipnir | corp ice | VP.5 | existing |
 | 36031 | Vertigo | corp ice | VP.5 | `VP-ICE-PASSED`, `VP-CANNOT-STEAL-OR-TRASH` |
-| 36032 | Caveat Emptor | corp operation | VP.3 | existing |
+| 36032 | Caveat Emptor | corp operation | VP.3 | `VP-ALLOTTED-CLICKS` |
 | 36033 | realloc() | corp operation | VP.3 | `VP-AMOUNT` |
 | 36034 | Retirement Plan | corp operation | VP.3 | existing |
 | 36035 | Perfect Recall | corp upgrade | VP.5 | `VP-CANNOT-STEAL-OR-TRASH` |
 | 36036 | Méliès U: Only the Brightest | corp identity | VP.7 | `VP-SECRET-IDENTITY` |
-| 36037 | Lotus Haze | corp agenda | VP.3 | existing |
+| 36037 | Lotus Haze | corp agenda | VP.7 | `VP-MOVE-TO-SERVER` |
 | 36038 | Esca | corp asset | VP.3 | existing |
 | 36039 | ezaM | corp ice | VP.5 | `VP-ALL-ICE-STRENGTH` |
 | 36040 | Knowledge Seeker | corp ice | VP.7 | `VP-ICE-VIRUS-COUNTERS`, `VP-ENCOUNTER-ENDED`, `VP-ARRANGE` |
@@ -133,19 +133,19 @@ public), and a serializable, replayable frame wherever it can yield, as in the M
 | 36047 | Witch Hunt | corp agenda | VP.3 | `VP-BAD-PUBLICITY`, `VP-SCORING-FACTS` |
 | 36048 | Magistrate Revontulet | corp asset | VP.3 | `VP-SCORE-STEAL-COST` |
 | 36049 | Nihilo Agent | corp asset | VP.3 | `VP-BAD-PUBLICITY` |
-| 36050 | Grubber | corp ice | VP.3 | `VP-BAD-PUBLICITY` |
+| 36050 | Grubber | corp ice | VP.3 | `VP-BAD-PUBLICITY`, `VP-REZ-SERVER-KIND` |
 | 36051 | Lethe | corp ice | VP.5 | `VP-ICE-PASSED` |
 | 36052 | Paywall | corp ice | VP.5 | existing |
 | 36053 | Flood the Market | corp operation | VP.3 | `VP-AMOUNT` |
-| 36054 | Scapegoat | corp operation | VP.3 | `VP-BAD-PUBLICITY` |
-| 36055 | Hype Machine | corp upgrade | VP.3 | `VP-DYNAMIC-REZ-COST`, `VP-SCORING-FACTS` |
-| 36056 | Sacrifice Zone Expansion | corp agenda | VP.3 | `VP-ADVANCED` |
-| 36057 | Luana Campos | corp asset | VP.3 | `VP-BAD-PUBLICITY`, `VP-UNINSTALL-INTERRUPT` |
+| 36054 | Scapegoat | corp operation | VP.3 | `VP-BAD-PUBLICITY` (its condition) |
+| 36055 | Hype Machine | corp upgrade | VP.7 | `VP-DYNAMIC-REZ-COST`, `VP-SCORING-FACTS`, `VP-SAME-SERVER-TARGET` |
+| 36056 | Sacrifice Zone Expansion | corp agenda | VP.5 | `VP-ADVANCED`, `VP-INSTALL-FACEUP`, `VP-RUN-ON-OTHER-SERVER`, `VP-SPEND-ADVANCEMENT` |
+| 36057 | Luana Campos | corp asset | VP.3 | `VP-BAD-PUBLICITY` (and its condition), `VP-UNINSTALL-INTERRUPT` |
 | 36058 | Event Horizon | corp ice | VP.5 | existing |
 | 36059 | Flywheel | corp ice | VP.5 | existing |
 | 36060 | Tocsin | corp ice | VP.7 | `VP-ABILITY-FROM-HQ` |
 | 36061 | Myōshu | corp operation | VP.3 | `VP-CARD-AS-AGENDA`, `VP-SCORING-FACTS` |
-| 36062 | Reanimation Protocol | corp operation | VP.3 | `VP-BAD-PUBLICITY` |
+| 36062 | Reanimation Protocol | corp operation | VP.5 | `VP-BAD-PUBLICITY`, `VP-INSTALL-AND-REZ-LESS` |
 | 36063 | Vulture Fund | corp operation | VP.3 | `VP-BAD-PUBLICITY` |
 | 36064 | Flagship | corp upgrade | VP.5 | `VP-NO-SUCCESSFUL-RUN`, `VP-ACCESS-LIMIT` |
 | 36065 | Shackleton Grid | corp upgrade | VP.5 | `VP-CREDITS-OUTSIDE-POOL` |
@@ -157,9 +157,11 @@ are the two large families, and both reach into the run structure and the credit
 
 | Batch | Cards | Using only existing vocabulary |
 |---|---|---|
-| VP.3 | 33 | 7 |
-| VP.5 | 25 | 10 |
-| VP.7 | 8 | 1 |
+| VP.3 | 28 | 4 |
+| VP.5 | 28 | 10 |
+| VP.7 | 10 | 1 |
+
+After the VP.3 binding review (below) the audit stands at **15 of 66 (23%)**; the table counts are the current ones.
 
 ## VP.1 review
 
@@ -175,4 +177,35 @@ information and serialization notes are in `data/vantage-point/batch-registry.js
   primitive needs `VP-BAD-PUBLICITY`'s fund to report its spending (VP.2 lands both).
 - **Méliès U:** the card sets the active copy when the Corp's discard phase ends; jinteki.net chooses at the end of the
   Corp's turn. The card text is followed.
+
+## VP.3 binding review (15 October 2026)
+
+Binding VP.3's cards to specs found primitives the audit missed: it had judged several cards expressible, or named only
+their main primitive. The ones VP.3's cards need landed in **VP.2c**, with VP.2's primitives, before any card was
+registered, each proven on probe cards (`tests/Netrunner.Cards.Tests/VantagePoint/VantagePointAuditMissTests.cs`):
+
+| Id | What | Cards |
+|---|---|---|
+| `VP-BAD-PUBLICITY` (condition) | A condition: the Corp has at least some bad publicity. | Luana Campos, Scapegoat |
+| `VP-ENCOUNTER-SUBTYPE` | The encounter condition may name the ICE subtype, printed or gained. | Corsair |
+| `VP-ALLOTTED-CLICKS` | A negative next-turn allotment, never below zero clicks. | Caveat Emptor |
+| `VP-RUN-EVENT-REMOVED` | A run event removed from the game when its run ends, its run-end abilities still resolving. | Take a Dive, Kompromat |
+| `VP-RUN-PROTECTED-SERVER` | A run event that may target only a server protected by ICE. | Kompromat |
+| `VP-FIRST-EVENT` | An occurrence: the first event the Runner plays each turn, run events included. | Touchstone |
+| `VP-HOSTED-SERVER` | A card hosted on ICE is in its host's server, for "a successful run on this server". | Stowaway |
+| `VP-INSTALL-FACEUP` | An agenda installed faceup, neither rezzed nor unrezzed, its abilities active while installed. | Sacrifice Zone Expansion |
+| `VP-REZ-SERVER-KIND` | A rez trigger may require the server kind of the rezzed card. | Grubber |
+
+Five cards needed more than that, primitives that belong with a later slice's family, so they moved batch (the registry
+records it):
+
+| Card | To | Missing | Why there |
+|---|---|---|---|
+| Kompromat | VP.5 | `VP-ENDED-RUN-SERVER`: the ICE protecting the server of a run that has ended. A run-end ability resolves after the run state is cleared, so the attacked server must be kept for it. | VP.4 is the run primitives slice. |
+| Reanimation Protocol | VP.5 | `VP-INSTALL-AND-REZ-LESS`: an install and a rez sharing one discount, and a condition on the rezzed card's subtype. | VP.4 handles installing and rezzing ICE. |
+| Sacrifice Zone Expansion | VP.5 | `VP-RUN-ON-OTHER-SERVER` (a successful run on a server other than the source's) and `VP-SPEND-ADVANCEMENT` (its own advancement counters as a cost). | VP.4's run occurrences. |
+| Lotus Haze | VP.7 | `VP-MOVE-TO-SERVER`: moving a chosen card, not the source, to the root of a chosen server. Elevation's move takes the source. | VP.6 is the zones slice. |
+| Hype Machine | VP.7 | `VP-SAME-SERVER-TARGET`: a target over the cards in the root of the source's server. | VP.6's zone targets. |
+
+Caveat Emptor, Lotus Haze and Stowaway were counted as existing vocabulary; they aren't. The audit is now 15 of 66.
 

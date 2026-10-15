@@ -39,6 +39,11 @@ public static partial class GameEngine
             BehaviorTriggerCondition.SubjectInstalledWithoutCredits => occurrence.SourceCardId is { } installed
                 && facts?.FreeInstallIds?.Contains(installed) == true,
             BehaviorTriggerCondition.SubroutineResolvedThisRun => working.RunState?.ResolvedSubroutineLedger is { Count: > 0 },
+            // VP-SCORING-FACTS: the turn's installs still name an agenda after it moves to a score area.
+            BehaviorTriggerCondition.SubjectInstalledThisTurn => occurrence.SourceCardId is { } installedNow
+                && facts?.InstalledCardIds.Contains(installedNow) == true,
+            BehaviorTriggerCondition.SubjectNotInstalledThisTurn => occurrence.SourceCardId is { } installedEarlier
+                && facts?.InstalledCardIds.Contains(installedEarlier) != true,
             BehaviorTriggerCondition.TrashedSubjectWasInstalled => occurrence.Effect is GameplayOccurrenceEffect
             {
                 Kind: OccurrenceKind.AccessedCardTrashed,
@@ -93,6 +98,7 @@ public static partial class GameEngine
         ReplaceCard(working, new CardInstanceState(card.Id, card.DefinitionId, card.ZoneId, card.OwnerSide,
             faceUp: true, rezzed: true, card.AdvancementCounters));
         Emit(working, EngineEventKinds.CardRezzed, new CardRezzedEventPayload(card.Id, cost));
+        RecordOptInTurnEvent(working, TurnEventKind.IceRezzed);
         TrashCorpUniqueRezConflicts(working, card.Id);
         QueueCardRezzedOccurrence(working, corp.Id, card.Id, zone.ServerId);
     }
@@ -113,6 +119,7 @@ public static partial class GameEngine
         ReplaceCard(working, new CardInstanceState(card.Id, card.DefinitionId, card.ZoneId, card.OwnerSide,
             faceUp: true, rezzed: true, card.AdvancementCounters));
         Emit(working, EngineEventKinds.CardRezzed, new CardRezzedEventPayload(card.Id, 0));
+        RecordOptInTurnEvent(working, TurnEventKind.IceRezzed);
         TrashCorpUniqueRezConflicts(working, card.Id);
         QueueCardRezzedOccurrence(working, GetPlayer(working, PlayerSide.Corp).Id, card.Id, zone.ServerId);
     }

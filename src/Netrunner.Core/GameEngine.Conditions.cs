@@ -12,10 +12,22 @@ public static partial class GameEngine
     internal static int ThreatLevel(IEnumerable<PlayerState> players) =>
         players.Select(static player => player.AgendaPoints).DefaultIfEmpty(0).Max();
 
+    /// <summary>
+    /// VP-ENCOUNTER-SUBTYPE: the encountered ICE has the subtype, printed or gained (Chromatophores); with no subtype, any
+    /// encounter matches.
+    /// </summary>
+    private static bool EncounteredIceHasSubtype(WorkingState working, string? subtype) =>
+        subtype is null
+        || working.RunState?.Encounter is { } encounter
+            && working.Cards.FirstOrDefault(card => card.Id == encounter.IceId) is { } ice
+            && (IceGainsEveryType(working.Cards, working.BehaviorCatalog, ice.Id)
+                || CardSubtypes(working.RuntimeCardCatalog, ice.DefinitionId).Contains(subtype, StringComparer.Ordinal));
+
     private static bool? SharedConditionMatches(
         WorkingState working,
         PlayerId controllerId,
-        BehaviorCondition condition)
+        BehaviorCondition condition,
+        CardInstanceId? sourceCardId = null)
     {
         PlayerSide controllerSide = GetPlayer(working, controllerId).Side;
         int threshold = condition.Value.GetValueOrDefault();
@@ -31,6 +43,7 @@ public static partial class GameEngine
                     && CardSubtypes(working.RuntimeCardCatalog, card.DefinitionId).Contains(condition.Fact!, StringComparer.Ordinal)),
             BehaviorConditionKind.CreditsAtLeast when condition.SubjectSide is { } creditSide =>
                 GetPlayer(working, creditSide).Credits >= threshold,
+            BehaviorConditionKind.BadPublicityAtLeast => (working.RulesState?.BadPublicity ?? 0) >= threshold,
             BehaviorConditionKind.ThreatLevelAtLeast => ThreatLevel(working.Players) >= threshold,
             BehaviorConditionKind.RunnerTagsAtLeast => RunnerTags(working) >= threshold,
             BehaviorConditionKind.ZoneCountAtMost =>
@@ -48,6 +61,19 @@ public static partial class GameEngine
                 (condition.SubjectSide is not { } turnOf || working.Turn.ActiveSide == turnOf)
                 && Enum.TryParse(condition.Fact, ignoreCase: false, out TurnEventKind eventKind)
                 && ActiveTurnEventCount(working, eventKind) == threshold,
+            BehaviorConditionKind.TurnEventCountAtLeast =>
+                (condition.SubjectSide is not { } atLeastTurnOf || working.Turn.ActiveSide == atLeastTurnOf)
+                && Enum.TryParse(condition.Fact, ignoreCase: false, out TurnEventKind atLeastKind)
+                && ActiveTurnEventCount(working, atLeastKind) >= threshold,
+            BehaviorConditionKind.SuccessfulRunOnEveryCentralThisTurn =>
+                working.Turn.History?.ThisTurn(PlayerSide.Runner) is { } runnerFacts
+                && working.Turn.ActiveSide == PlayerSide.Runner
+                && new[] { ServerKind.Headquarters, ServerKind.RAndD, ServerKind.Archives }.All(central =>
+                    working.Servers.FirstOrDefault(server => server.Kind == central) is { } centralServer
+                    && runnerFacts.SuccessfulRunServerIds.Contains(centralServer.Id)),
+            BehaviorConditionKind.SourceScoredThisTurn => sourceCardId is { } scored
+                && working.Turn.History?.ThisTurn(working.Turn.ActiveSide)?.AgendaTurnChanges.Any(change =>
+                    change.CardId == scored && change.Kind == AgendaTurnChangeKind.Score) == true,
             BehaviorConditionKind.ClicksRemainingAtLeast when condition.SubjectSide is { } clickSide =>
                 GetPlayer(working, clickSide).Clicks >= threshold,
             _ => null,

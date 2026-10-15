@@ -29,6 +29,9 @@ public static class PresentationEventProjector
         [typeof(ClicksAdjustedEventPayload)] = PresentationEventRule.Projected,
         [typeof(DamageDealtEventPayload)] = PresentationEventRule.Projected,
         [typeof(TagsAdjustedEventPayload)] = PresentationEventRule.Projected,
+        // VP-BAD-PUBLICITY: shown through the settled view's Corp count until the client presents it (Vantage Point plan,
+        // section 8).
+        [typeof(BadPublicityAdjustedEventPayload)] = PresentationEventRule.ViewOnly,
         [typeof(MemoryAdjustedEventPayload)] = PresentationEventRule.ViewOnly,
         [typeof(ProgramTrashedForMemoryEventPayload)] = PresentationEventRule.ViewOnly,
         [typeof(CounterAdjustedEventPayload)] = PresentationEventRule.ViewOnly,

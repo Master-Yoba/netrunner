@@ -136,7 +136,8 @@ public static partial class HumanGameReview
         return action => action is null ? null : action.Parameters switch
         {
             PlayCardParameters play => $"Play {Card(play.CardId)}"
-                + (play.TargetServerId is { } target ? $" on {Server(target)}" : string.Empty),
+                + (play.TargetServerId is { } target ? $" on {Server(target)}" : string.Empty)
+                + (play.TrashCostCardId is { } trashed ? $", trashing {Card(trashed)}" : string.Empty),
             InstallCardParameters install => $"Install {Card(install.CardId)}"
                 + (install.CreateNewRemote ? " in a new remote" : install.ServerId is { } server ? $" in {Server(server)}" : string.Empty),
             RezCardParameters rez => $"Rez {Card(rez.CardId)}",

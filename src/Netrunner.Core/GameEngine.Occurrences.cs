@@ -13,6 +13,15 @@ public static partial class GameEngine
     private static void RecordActiveTurnEvent(WorkingState working, TurnEventKind kind) =>
         RecordTurnEvent(working, working.Turn.ActiveSide, kind);
 
+    /// <summary>VP.2: records a turn event only a catalog with a card that reads it records.</summary>
+    private static void RecordOptInTurnEvent(WorkingState working, TurnEventKind kind)
+    {
+        if (working.BehaviorCatalog.RecordsTurnEvent(kind))
+        {
+            RecordActiveTurnEvent(working, kind);
+        }
+    }
+
     private static int ActiveTurnEventCount(WorkingState working, TurnEventKind kind) =>
         working.Turn.History?.ThisTurn(working.Turn.ActiveSide)?.EventCount(kind) ?? 0;
 
@@ -161,7 +170,8 @@ public static partial class GameEngine
         && trigger.Scope == BehaviorTriggerScope.Self
         && subjectCardId == source.Id
         && source.OwnerSide == PlayerSide.Runner
-        && working.Zones.Any(zone => zone.Id == source.ZoneId && zone.Kind == ZoneKind.RunnerHeap)
+        && working.Zones.Any(zone => zone.Id == source.ZoneId
+            && zone.Kind is ZoneKind.RunnerHeap or ZoneKind.RunnerRemovedFromGame)
         && working.BehaviorCatalog.TryGetRunEvent(source.DefinitionId, out _);
 
     /// <summary>Whether a trashed-card occurrence records that its subject was rezzed.</summary>
@@ -209,13 +219,23 @@ public static partial class GameEngine
     private static void GrantNextTurnClicks(WorkingState working, PlayerSide side, int amount)
     {
         TurnState turn = working.Turn;
-        if (amount <= 0 || turn.History?.ThisTurn(side) is not { } facts)
+        if (amount == 0 || turn.History is null)
         {
             return;
         }
 
-        ReplaceTurn(working, turn.ActiveSide, turn.Phase, turn.TurnNumber, turn.Step,
-            turn.History.WithNextTurnExtraClicks(side, checked(facts.NextTurnExtraClicks + amount)));
+        if (turn.History.ThisTurn(side) is { } facts)
+        {
+            ReplaceTurn(working, turn.ActiveSide, turn.Phase, turn.TurnNumber, turn.Step,
+                turn.History.WithNextTurnExtraClicks(side, checked(facts.NextTurnExtraClicks + amount)));
+        }
+        else if (side != turn.ActiveSide && turn.History.ThisTurn(turn.ActiveSide) is { } active)
+        {
+            // VP-ALLOTTED-CLICKS: the opponent hasn't had a turn yet (the Corp's first turn); the active side holds it.
+            ReplaceTurn(working, turn.ActiveSide, turn.Phase, turn.TurnNumber, turn.Step,
+                turn.History.WithOpponentFirstTurnExtraClicks(turn.ActiveSide,
+                    checked(active.OpponentFirstTurnExtraClicks + amount)));
+        }
     }
 
     /// <summary>"You cannot score that card this turn."</summary>
@@ -278,9 +298,10 @@ public static partial class GameEngine
         CardInstanceState stolen = GetCard(working, card.Id);
         ReplaceCard(working, new CardInstanceState(stolen.Id, stolen.DefinitionId, score.Id, stolen.OwnerSide,
             true, false, stolen.AdvancementCounters));
-        AddAgendaPoints(working, PlayerSide.Runner, spec.AgendaPoints);
-        Emit(working, EngineEventKinds.AgendaStolen, new AgendaStolenEventPayload(PlayerSide.Runner, card.Id, spec.AgendaPoints));
-        RecordTurnAgendaChange(working, card.Id, PlayerSide.Runner, spec.AgendaPoints, AgendaTurnChangeKind.Steal);
+        int stolenPoints = spec.PointsIn(PlayerSide.Runner);
+        AddAgendaPoints(working, PlayerSide.Runner, stolenPoints);
+        Emit(working, EngineEventKinds.AgendaStolen, new AgendaStolenEventPayload(PlayerSide.Runner, card.Id, stolenPoints));
+        RecordTurnAgendaChange(working, card.Id, PlayerSide.Runner, stolenPoints, AgendaTurnChangeKind.Steal);
         RecordActiveTurnEvent(working, TurnEventKind.AgendaScoredOrStolen);
         RecordActiveTurnEvent(working, TurnEventKind.CorpCardStolenOrTrashed);
         if (GetPlayer(working, PlayerSide.Runner).AgendaPoints < RealGameRules.AgendaPointsToWin)
@@ -314,14 +335,14 @@ public static partial class GameEngine
         CardInstanceState agenda = GetCard(working, agendaId);
         ZoneState source = ZoneForCard(working, agendaId);
         if (source.Kind != (controller == PlayerSide.Corp ? ZoneKind.CorpScore : ZoneKind.RunnerScore)
-            || working.RuntimeCardCatalog?.TryGet(agenda.DefinitionId, out CardRuntimeSpec? spec) != true
-            || spec!.CardClass != RuntimeCardClass.Agenda)
+            || ForfeitablePoints(working, agenda, controller) is not { } points)
         {
             throw new ResolutionFailureException("Only an agenda in its controller's score area can be forfeited.");
         }
 
         MoveCard(working, agenda, source, GetBehaviorZone(working, BehaviorZone.RemovedFromGame, agenda.OwnerSide));
-        AddAgendaPoints(working, controller, -spec.AgendaPoints);
+        LeaveScoreAreaAsAgenda(working, agenda.Id);
+        AddAgendaPoints(working, controller, -points);
         DeferOccurrence(working, OccurrenceKind.AgendaForfeited, controller, agenda.Id);
     }
 
@@ -349,8 +370,7 @@ public static partial class GameEngine
             ? working.Zones.Single(zone => zone.Id == frozen.OriginalZoneId).Kind
             : source.Kind;
         if (origin != (controller == PlayerSide.Corp ? ZoneKind.CorpScore : ZoneKind.RunnerScore)
-            || working.RuntimeCardCatalog?.TryGet(agenda.DefinitionId, out CardRuntimeSpec? spec) != true
-            || spec!.CardClass != RuntimeCardClass.Agenda)
+            || ForfeitablePoints(working, agenda, controller) is not { } points)
         {
             throw new ResolutionFailureException("Only an agenda in its controller's score area can be forfeited.");
         }
@@ -364,7 +384,8 @@ public static partial class GameEngine
                 sourceZone: BehaviorZone.ScoreArea,
                 destinationZone: BehaviorZone.RemovedFromGame),
             BehaviorTransferKind.Move);
-        AddAgendaPoints(working, controller, -spec.AgendaPoints);
+        LeaveScoreAreaAsAgenda(working, agenda.Id);
+        AddAgendaPoints(working, controller, -points);
         DeferOccurrence(working, OccurrenceKind.AgendaForfeited, controller, agenda.Id);
     }
 

@@ -512,7 +512,10 @@ public static partial class StateInvariantValidator
                     && (
                         (ToyCardBehaviorCatalog.TryGet(card.DefinitionId, out ToyCardBehavior? behavior)
                             && behavior.Kind == ToyCardKind.CorpAgenda)
-                        || behaviorCatalog.TryGetAgenda(card.DefinitionId, out _));
+                        || behaviorCatalog.TryGetAgenda(card.DefinitionId, out _))
+                    // VP-CARD-AS-AGENDA: a card added to a score area as an agenda may be the other side's (Word on the Street).
+                    || zone.Kind is ZoneKind.CorpScore or ZoneKind.RunnerScore
+                        && state.RulesState?.ScoredAsAgendas?.Any(entry => entry.CardId == card.Id) == true;
                 if (zone.OwnerSide.HasValue && card.OwnerSide != zone.OwnerSide.Value && !isStolenCorpAgenda)
                 {
                     Add(
@@ -960,7 +963,10 @@ public static partial class StateInvariantValidator
                     knownPlayers,
                     runtimeCardCatalog,
                     violations,
-                    turn.History.CorpLastTurn?.NextTurnExtraClicks ?? 0);
+                    turn.History.CorpLastTurn is { } corpLast
+                        ? corpLast.NextTurnExtraClicks
+                        : (turn.History.RunnerThisTurn?.OpponentFirstTurnExtraClicks ?? 0)
+                            + (turn.History.RunnerLastTurn?.OpponentFirstTurnExtraClicks ?? 0));
                 ValidateTurnFacts(
                     turn.History.CorpLastTurn,
                     PlayerSide.Corp,
@@ -982,7 +988,10 @@ public static partial class StateInvariantValidator
                     knownPlayers,
                     runtimeCardCatalog,
                     violations,
-                    turn.History.RunnerLastTurn?.NextTurnExtraClicks ?? 0);
+                    turn.History.RunnerLastTurn is { } runnerLast
+                        ? runnerLast.NextTurnExtraClicks
+                        : (turn.History.CorpThisTurn?.OpponentFirstTurnExtraClicks ?? 0)
+                            + (turn.History.CorpLastTurn?.OpponentFirstTurnExtraClicks ?? 0));
                 ValidateTurnFacts(
                     turn.History.RunnerLastTurn,
                     PlayerSide.Runner,
@@ -1165,6 +1174,12 @@ public static partial class StateInvariantValidator
         if (run.RunCredits < 0)
         {
             Add(violations, "run.negative-credits", $"{path}.runCredits", "Run credits must be nonnegative.");
+        }
+
+        if (run.BadPublicityCredits < 0 || run.BadPublicityCredits > run.RunCredits)
+        {
+            Add(violations, "run.bad-publicity-credits", $"{path}.badPublicityCredits",
+                "The bad publicity fund's share must lie between zero and the run credits.");
         }
 
         // A played run event uses the same card identity for both fields. An
@@ -2854,7 +2869,10 @@ public static partial class StateInvariantValidator
             // EL.9: also the first credit gain through an agenda or operation (Greenmail forfeited to rez
             // Biawak mid-run, for The Zwicky Group).
             OccurrenceKind.AgendaForfeited or OccurrenceKind.HostedCreditPoolEmptied
-                or OccurrenceKind.FirstTagRemovalThisTurn or OccurrenceKind.FirstOperationPlayedThisTurn
+                or OccurrenceKind.FirstTagRemovalThisTurn or OccurrenceKind.FirstBadPublicityThisTurn
+                or OccurrenceKind.CreditsSpentFromOutsidePool
+                or OccurrenceKind.FirstOperationPlayedThisTurn
+                or OccurrenceKind.FirstEventPlayedThisTurn
                 or OccurrenceKind.FirstCardCreditGainThisTurn => occurrence.ServerId is null,
             _ => false,
         };
@@ -4415,6 +4433,7 @@ public static partial class StateInvariantValidator
 
                             if (sourceCard is not null
                                 && sourceCard.ZoneId != sourceZone.Id
+                                && state.RulesState?.ScoredAsAgendas?.Any(entry => entry.CardId == sourceCard.Id) != true
                                 && !catalogTriggerDetachedSource
                                 && !(behaviorFrame.TriggerKey is not null && behaviorFrame.CatalogTriggerSourceMovedAfterStart)
                                 && !movedAfterPayment)
@@ -6699,7 +6718,7 @@ public static partial class StateInvariantValidator
                         $"{actionPath}.parameters",
                         "TrashAccessedCard requires RunCardPaymentParameters with the selected hosted-credit portion.");
                     break;
-                case (ActionKind.TrashAccessedCard, RunCardPaymentParameters trashAccessed):
+                case (ActionKind.TrashAccessedCard or ActionKind.StealAgenda, RunCardPaymentParameters trashAccessed):
                     if (pending.Kind != DecisionKind.RunTiming)
                     {
                         Add(violations, "decision.action-kind-mismatch", $"{actionPath}.kind", "Run timing actions require a RunTiming decision.");
@@ -6981,6 +7000,7 @@ public static partial class StateInvariantValidator
                         or ActionKind.ContinueRun
                         or ActionKind.ChooseBreachCandidate
                         or ActionKind.TrashAccessedCard
+                        or ActionKind.StealAgenda
                         or ActionKind.NoAccessAction
                         or ActionKind.UseAbility
                         or ActionKind.UseBioroidAbility))
@@ -8787,6 +8807,15 @@ public static partial class StateInvariantValidator
         }
 
         var expected = new List<(ActionKind Kind, CardInstanceId? Target, int Quantity, int HostedCredits, string Targets)>();
+        // VP-STEALTH-CREDITS, VP-POOL-LOCK: as the engine computes them (CreditSources): every credit outside the pool, and
+        // no pool credits while the active run event locks the pool.
+        int outsidePool = CreditSources.OutsidePool(run, state.Cards, state.Zones, state.RulesState, runtimeCardCatalog);
+        bool poolLocked = run.EndReason is null
+            && run.ActiveRunEventId is { } lockEventId
+            && state.Cards.FirstOrDefault(card => card.Id == lockEventId) is { } lockEvent
+            && behaviorCatalog.TryGetRunEvent(lockEvent.DefinitionId, out RunEventBehaviorSpec? lockSpec)
+            && lockSpec.LocksCreditPool;
+        int Wallet(PlayerState player) => poolLocked ? 0 : player.Credits;
         // Without the runtime card catalog an upgrade's printed trash cost is unknown, so its basic
         // trash may or may not be offered (GameEngine.AccessTrashCost).
         CardInstanceId? unknownTrashCost = null;
@@ -8897,7 +8926,7 @@ public static partial class StateInvariantValidator
                             foreach (EncounteredBioroidAbilitySpec ability in bioroidAbilities)
                             {
                                 if (ability.Cost.Kind == BehaviorCostKind.Credits
-                                        ? (long)runnerPlayer.Credits + run.RunCredits < ability.Cost.Amount
+                                        ? (long)Wallet(runnerPlayer) + outsidePool < ability.Cost.Amount
                                         : runnerPlayer.Clicks < ability.Cost.Amount)
                                 {
                                     continue;
@@ -8961,7 +8990,7 @@ public static partial class StateInvariantValidator
                                         expectedBreakerSpec,
                                         GameEngine.CardSubtypes(runtimeCardCatalog, card.DefinitionId))
                                     && expectedBreakerQuote.EffectiveValue >= iceStrength
-                                    && (long)runnerPlayer.Credits + run.RunCredits >= (GameEngine.ProjectCostQuote(
+                                    && (long)Wallet(runnerPlayer) + outsidePool >= (GameEngine.ProjectCostQuote(
                                         state,
                                         behaviorCatalog,
                                         cardId,
@@ -8982,8 +9011,8 @@ public static partial class StateInvariantValidator
                                     {
                                         int quantity = targets.Count;
                                         foreach (int hostedCredits in LegalHostedCreditSplits(
-                                            runnerPlayer,
-                                            run,
+                                            Wallet(runnerPlayer),
+                                            outsidePool,
                                             expectedBreakCost))
                                         {
                                             expected.Add((
@@ -9013,11 +9042,11 @@ public static partial class StateInvariantValidator
                                 if (runnerPlayer is not null
                                     && expectedBreakerSpec.HasPump
                                     && dynamicPumpAvailable
-                                    && (long)runnerPlayer.Credits + run.RunCredits >= expectedPumpCost)
+                                    && (long)Wallet(runnerPlayer) + outsidePool >= expectedPumpCost)
                                 {
                                     foreach (int hostedCredits in LegalHostedCreditSplits(
-                                        runnerPlayer,
-                                        run,
+                                        Wallet(runnerPlayer),
+                                        outsidePool,
                                         expectedPumpCost))
                                     {
                                         expected.Add((
@@ -9093,11 +9122,11 @@ public static partial class StateInvariantValidator
                         {
                             int trashCost = trashPayment.Remaining;
                             PlayerState? trashRunner = state.Players.FirstOrDefault(player => player?.Side == PlayerSide.Runner);
-                            if (trashRunner is not null && (long)trashRunner.Credits + run.RunCredits >= trashCost)
+                            if (trashRunner is not null && (long)Wallet(trashRunner) + outsidePool >= trashCost)
                             {
                                 foreach (int hostedCredits in LegalHostedCreditSplits(
-                                    trashRunner,
-                                    run,
+                                    Wallet(trashRunner),
+                                    outsidePool,
                                     trashCost))
                                 {
                                     expected.Add((
@@ -9108,6 +9137,24 @@ public static partial class StateInvariantValidator
                                 }
                             }
                         }
+                    }
+                }
+
+                // VP-SCORE-STEAL-COST: as the engine offers it (StealCosts).
+                if (run.ChosenAccessCards.Count > 0
+                    && state.Cards.FirstOrDefault(candidate => candidate?.Id == run.ChosenAccessCards[^1]) is { } stealCandidate
+                    && IsLiveAccessCard(state, run, stealCandidate.Id, requireTrashableSource: false)
+                    && run.RunRestrictions?.Any(restriction => restriction.Kind == RunRestrictionKind.CannotStealOrTrashCorpCards) != true
+                    && behaviorCatalog.TryGetAgenda(stealCandidate.DefinitionId, out _)
+                    && StealCosts.For(state.Cards, state.Zones, behaviorCatalog, stealCandidate.DefinitionId) is var stealCost
+                    && (stealCost.Clicks > 0 || stealCost.Credits > 0)
+                    && state.Players.FirstOrDefault(player => player?.Side == PlayerSide.Runner) is { } stealer
+                    && stealer.Clicks >= stealCost.Clicks
+                    && (long)Wallet(stealer) + outsidePool >= stealCost.Credits)
+                {
+                    foreach (int hostedCredits in LegalHostedCreditSplits(Wallet(stealer), outsidePool, stealCost.Credits))
+                    {
+                        expected.Add((ActionKind.StealAgenda, stealCandidate.Id, 0, hostedCredits, ""));
                     }
                 }
 
@@ -9226,6 +9273,9 @@ public static partial class StateInvariantValidator
                     break;
                 case (ActionKind.TrashAccessedCard, RunCardPaymentParameters trash):
                     actual.Add((action.Kind, trash.CardId, 0, trash.HostedCredits, ""));
+                    break;
+                case (ActionKind.StealAgenda, RunCardPaymentParameters steal):
+                    actual.Add((action.Kind, steal.CardId, 0, steal.HostedCredits, ""));
                     break;
             }
         }
@@ -9346,12 +9396,12 @@ public static partial class StateInvariantValidator
         }
 
         static IEnumerable<int> LegalHostedCreditSplits(
-            PlayerState runner,
-            RunState run,
+            int wallet,
+            int outside,
             int amount)
         {
-            int minimumHosted = Math.Max(0, amount - runner.Credits);
-            int maximumHosted = Math.Min(amount, run.RunCredits);
+            int minimumHosted = Math.Max(0, amount - wallet);
+            int maximumHosted = Math.Min(amount, outside);
             for (int hosted = minimumHosted; hosted <= maximumHosted; hosted++)
             {
                 yield return hosted;
@@ -11805,7 +11855,8 @@ public static partial class StateInvariantValidator
         PlayCardParameters expected) =>
         actual.CardId == expected.CardId
         && actual.CreditCost == expected.CreditCost
-        && actual.TargetServerId == expected.TargetServerId;
+        && actual.TargetServerId == expected.TargetServerId
+        && actual.TrashCostCardId == expected.TrashCostCardId;
 
     private static bool AdvanceParametersMatch(
         AdvanceCardParameters actual,
@@ -13418,10 +13469,11 @@ public static partial class StateInvariantValidator
 
         // EL-EXTRA-CLICKS: "+1 allotted click next turn" (Aggressive
         // Trendsetting) raises a turn's allotment by the previous own turn's
-        // extra clicks; a last turn's own predecessor is gone, so it may only
-        // exceed the base allotment.
-        int expectedClicks = (expectedSide == PlayerSide.Corp ? 3 : 4) + (extraAllottedClicks ?? 0);
-        if (extraAllottedClicks is null ? facts.ClicksAllotted < expectedClicks : facts.ClicksAllotted != expectedClicks)
+        // extra clicks, and VP-ALLOTTED-CLICKS' "-1" (Caveat Emptor) lowers it,
+        // never below zero; a last turn's own predecessor is gone, so its
+        // allotment is unconstrained.
+        int expectedClicks = Math.Max(0, (expectedSide == PlayerSide.Corp ? 3 : 4) + (extraAllottedClicks ?? 0));
+        if (extraAllottedClicks is not null && facts.ClicksAllotted != expectedClicks)
         {
             Add(violations, "turn.facts-allotment-mismatch", $"{path}.clicksAllotted", $"'{expectedSide}' turn facts must record {expectedClicks} allotted clicks.");
         }

@@ -388,8 +388,12 @@ public sealed record GameplayOccurrenceEffect : EffectInstruction
                 or OccurrenceKind.RunBegan
                 or OccurrenceKind.AgendaForfeited
                 or OccurrenceKind.FirstTagRemovalThisTurn
+                or OccurrenceKind.FirstBadPublicityThisTurn
+                or OccurrenceKind.CreditsSpentFromOutsidePool
+                or OccurrenceKind.CardAdvanced
                 or OccurrenceKind.FirstCardCreditGainThisTurn
                 or OccurrenceKind.FirstOperationPlayedThisTurn
+                or OccurrenceKind.FirstEventPlayedThisTurn
                 or OccurrenceKind.DamageDone
                 or OccurrenceKind.CardsTrashedFromHq
                 or OccurrenceKind.HandSizeDiscarded))
@@ -716,8 +720,12 @@ public static class EffectInstructionValidator
                 or OccurrenceKind.RunBegan
                 or OccurrenceKind.AgendaForfeited
                 or OccurrenceKind.FirstTagRemovalThisTurn
+                or OccurrenceKind.FirstBadPublicityThisTurn
+                or OccurrenceKind.CreditsSpentFromOutsidePool
+                or OccurrenceKind.CardAdvanced
                 or OccurrenceKind.FirstCardCreditGainThisTurn
                 or OccurrenceKind.FirstOperationPlayedThisTurn
+                or OccurrenceKind.FirstEventPlayedThisTurn
                 or OccurrenceKind.DamageDone
                 or OccurrenceKind.CardsTrashedFromHq
                 or OccurrenceKind.HandSizeDiscarded))

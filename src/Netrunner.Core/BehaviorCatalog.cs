@@ -86,6 +86,12 @@ public interface IBehaviorCatalog
     /// never read them, so their states keep their historical bytes.
     /// </summary>
     bool TracksTurnEvents => false;
+
+    /// <summary>
+    /// VP.2: whether the engine records this turn event, which only a catalog with a card that reads it does (Vantage
+    /// Point's scoring and run facts), so other catalogs' states keep their historical bytes.
+    /// </summary>
+    bool RecordsTurnEvent(TurnEventKind kind) => false;
 }
 
 /// <summary>
@@ -101,7 +107,8 @@ public sealed record BehaviorCost
         string? counterName = null,
         string? additionalKey = null,
         BehaviorTarget? additionalTarget = null,
-        BehaviorAdditionalCostKind? additionalKind = null)
+        BehaviorAdditionalCostKind? additionalKind = null,
+        string? creditSourceSubtype = null)
     {
         if (!Enum.IsDefined(kind))
         {
@@ -153,6 +160,16 @@ public sealed record BehaviorCost
         {
             throw new ArgumentOutOfRangeException(nameof(additionalKind));
         }
+
+        if (creditSourceSubtype is not null
+            && (kind != BehaviorCostKind.Credits || !StableIdentifier.TryValidate(creditSourceSubtype)))
+        {
+            throw new ArgumentException(
+                "Only a credit cost may restrict its credits to cards of a subtype, named by a stable identifier.",
+                nameof(creditSourceSubtype));
+        }
+
+        CreditSourceSubtype = creditSourceSubtype;
 
         if (kind != BehaviorCostKind.Counter && counterName is not null)
         {
@@ -237,6 +254,13 @@ public sealed record BehaviorCost
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public BehaviorAdditionalCostKind? AdditionalKind { get; }
 
+    /// <summary>
+    /// VP-STEALTH-CREDITS: a credit cost payable only with credits from cards of this printed subtype ("stealth": Corsair,
+    /// Lampades, Baker), never from the Runner's pool or the bad publicity fund. Null for an ordinary credit cost.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? CreditSourceSubtype { get; }
+
     private static bool IsStructuredCardTrash(BehaviorTarget? target) =>
         target is
         {
@@ -292,6 +316,7 @@ public sealed record BehaviorCondition
                 or BehaviorConditionKind.NotTagged
                 or BehaviorConditionKind.ClicksRemainingAtLeast
                 or BehaviorConditionKind.TurnEventCountIs
+                or BehaviorConditionKind.TurnEventCountAtLeast
                 or BehaviorConditionKind.CreditsAtLeast))
         {
             throw new ArgumentException(
@@ -316,12 +341,22 @@ public sealed record BehaviorCondition
             throw new ArgumentException("A credit condition names a side and a nonnegative amount.", nameof(value));
         }
 
+        if (kind == BehaviorConditionKind.BadPublicityAtLeast && (value is null or < 0 || fact is not null))
+        {
+            throw new ArgumentException("A bad publicity condition names a nonnegative amount.", nameof(value));
+        }
+
+        if (kind == BehaviorConditionKind.Encountering && (value is not null || fact is not null && !StableIdentifier.TryValidate(fact)))
+        {
+            throw new ArgumentException("An encounter condition may name one ICE subtype.", nameof(fact));
+        }
+
         if (kind == BehaviorConditionKind.ChoseCards && (!StableIdentifier.TryValidate(fact) || value is not null))
         {
             throw new ArgumentException("A chose-cards condition names its stable choice key.", nameof(fact));
         }
 
-        if (kind == BehaviorConditionKind.TurnEventCountIs
+        if (kind is BehaviorConditionKind.TurnEventCountIs or BehaviorConditionKind.TurnEventCountAtLeast
             && (fact is null || !Enum.TryParse<TurnEventKind>(fact, ignoreCase: false, out _)
                 || value is null or < 0))
         {
@@ -379,7 +414,9 @@ public sealed record BehaviorCondition
                 or BehaviorConditionKind.SuccessfulRunDuringRunnerLastTurn
                 or BehaviorConditionKind.RunEventActive
                 or BehaviorConditionKind.PlayedThisTurn
-                or BehaviorConditionKind.NoActionFinishedThisTurn)
+                or BehaviorConditionKind.NoActionFinishedThisTurn
+                or BehaviorConditionKind.SourceScoredThisTurn
+                or BehaviorConditionKind.SuccessfulRunOnEveryCentralThisTurn)
             && (fact is not null || value is not null))
         {
             throw new ArgumentException(
@@ -434,6 +471,21 @@ public sealed record BehaviorCondition
     /// </summary>
     public static BehaviorCondition TurnEventCountIs(TurnEventKind kind, int count, PlayerSide? duringTurnOf = null) =>
         new(BehaviorConditionKind.TurnEventCountIs, fact: kind.ToString(), value: count, subjectSide: duringTurnOf);
+
+    /// <summary>VP-SCORING-FACTS: the active turn's count of a typed event is at least the value.</summary>
+    public static BehaviorCondition TurnEventCountAtLeast(TurnEventKind kind, int count, PlayerSide? duringTurnOf = null) =>
+        new(BehaviorConditionKind.TurnEventCountAtLeast, fact: kind.ToString(), value: count, subjectSide: duringTurnOf);
+
+    /// <summary>VP-SCORING-FACTS: the source agenda was scored this turn.</summary>
+    public static BehaviorCondition SourceScoredThisTurn() => new(BehaviorConditionKind.SourceScoredThisTurn);
+
+    /// <summary>VP-BAD-PUBLICITY: the Corp has at least the given bad publicity.</summary>
+    public static BehaviorCondition BadPublicityAtLeast(int minimum) =>
+        new(BehaviorConditionKind.BadPublicityAtLeast, value: minimum);
+
+    /// <summary>VP-ENCOUNTER-SUBTYPE: the Runner is encountering ICE with the subtype ("the barrier you are encountering").</summary>
+    public static BehaviorCondition EncounteringSubtype(string subtype) =>
+        new(BehaviorConditionKind.Encountering, fact: subtype);
 
     /// <summary>A player (by default the behavior controller) has at least the value in clicks.</summary>
     public static BehaviorCondition ClicksAtLeast(int threshold, PlayerSide? side) =>
@@ -606,6 +658,18 @@ public enum BehaviorConditionKind
     /// cost equal to the value (Detente's access: the trash option per cost).
     /// </summary>
     ChosenTrashCostIs,
+
+    /// <summary>VP-SCORING-FACTS: the active turn's count of a typed event is at least the value (Hype Machine, Myōshu).</summary>
+    TurnEventCountAtLeast,
+
+    /// <summary>VP-SCORING-FACTS: the source agenda was scored this turn (Witch Hunt).</summary>
+    SourceScoredThisTurn,
+
+    /// <summary>VP-RUN-FACTS: this turn the Runner made a successful run on HQ, on R&amp;D and on Archives (Chain Reaction).</summary>
+    SuccessfulRunOnEveryCentralThisTurn,
+
+    /// <summary>VP-BAD-PUBLICITY: the Corp has at least the value in bad publicity (Luana Campos, Scapegoat).</summary>
+    BadPublicityAtLeast,
 }
 
 /// <summary>A typed target selector; IDs are resolved by Core at runtime.</summary>
@@ -945,6 +1009,9 @@ public sealed record BehaviorRunOperand
 /// <summary>One inert, typed instruction in a compiled behavior program.</summary>
 public sealed record BehaviorInstruction
 {
+    /// <summary>VP-CARD-AS-AGENDA: the argument of a card added as an agenda that can't be forfeited (Word on the Street).</summary>
+    public const string CannotForfeitArgument = "cannot-forfeit";
+
     [JsonConstructor]
     public BehaviorInstruction(
         BehaviorInstructionKind kind,
@@ -972,10 +1039,18 @@ public sealed record BehaviorInstruction
             throw new ArgumentOutOfRangeException(nameof(kind));
         }
 
+        // VP-ALLOTTED-CLICKS: "-1 allotted click for their next turn" (Caveat Emptor) is a negative grant.
         if (kind is not (BehaviorInstructionKind.ModifyEncounteredIceStrength
-            or BehaviorInstructionKind.ModifySourceStrength))
+            or BehaviorInstructionKind.ModifySourceStrength
+            or BehaviorInstructionKind.AddSelfToScoreAreaAsAgenda
+            or BehaviorInstructionKind.GainAllottedClicksNextTurn))
         {
             ArgumentOutOfRangeException.ThrowIfNegative(amount);
+        }
+
+        if (kind == BehaviorInstructionKind.AddSelfToScoreAreaAsAgenda && argument is not (null or CannotForfeitArgument))
+        {
+            throw new ArgumentException("A card added as an agenda takes only the cannot-forfeit argument.", nameof(argument));
         }
 
         Kind = kind;
@@ -1222,10 +1297,11 @@ public sealed record BehaviorInstruction
                 or BehaviorInstructionKind.LoseCredits
                 or BehaviorInstructionKind.Draw
                 or BehaviorInstructionKind.RemoveTags
-                or BehaviorInstructionKind.AddCounter))
+                or BehaviorInstructionKind.AddCounter
+                or BehaviorInstructionKind.AdvanceCard))
         {
             throw new ArgumentException(
-                "A dynamic amount operand is valid only for credit, draw, counter and tag-removal instructions.",
+                "A dynamic amount operand is valid only for credit, draw, counter, advancement and tag-removal instructions.",
                 nameof(AmountOperand));
         }
 
@@ -1303,7 +1379,9 @@ public sealed record BehaviorInstruction
                 or BehaviorInstructionKind.Draw
                 or BehaviorInstructionKind.LoseClicks
                 or BehaviorInstructionKind.AdvanceCard
-                or BehaviorInstructionKind.RemoveTags)
+                or BehaviorInstructionKind.RemoveTags
+                or BehaviorInstructionKind.TakeBadPublicity
+                or BehaviorInstructionKind.RemoveBadPublicity)
             && AmountOperand is null
             && Amount <= 0)
         {
@@ -1794,6 +1872,19 @@ public enum BehaviorInstructionKind
     /// </summary>
     MoveRunnerToServer,
 
+    /// <summary>VP-BAD-PUBLICITY: the Corp takes the amount in bad publicity (CR 26.03 10.6).</summary>
+    TakeBadPublicity,
+
+    /// <summary>VP-BAD-PUBLICITY: the Corp removes up to the amount of its bad publicity.</summary>
+    RemoveBadPublicity,
+
+    /// <summary>
+    /// VP-CARD-AS-AGENDA: the source card goes to the recipient's score area as an agenda worth the amount, which may be
+    /// negative (CR 26.03 10.1.3; Myōshu, Word on the Street). The argument
+    /// <see cref="BehaviorInstruction.CannotForfeitArgument"/> marks it as one that can't be forfeited.
+    /// </summary>
+    AddSelfToScoreAreaAsAgenda,
+
     // Short aliases keep the contract pleasant for callers while the longer
     // names remain unambiguous in serialized/fingerprint output.
     Shuffle = ShuffleIntoDeck,
@@ -1918,6 +2009,12 @@ public enum BehaviorHostedCreditUseKind
     RezInServer,
 }
 
+/// <summary>
+/// VP-SCORE-STEAL-COST: the card goes to the Corp's score area as an agenda worth the points as an additional cost to score
+/// (Word on the Street: -1, can't be forfeited, only for agendas installed this turn).
+/// </summary>
+public sealed record BehaviorScoreCostAsAgenda(int Points, bool CannotForfeit, bool OnlyAgendasInstalledThisTurn);
+
 /// <summary>One declared use of a card's hosted credits.</summary>
 public sealed record BehaviorHostedCreditUse
 {
@@ -2040,7 +2137,9 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
                     or OccurrenceKind.RunEnded
                     or OccurrenceKind.ServerApproached
                     or OccurrenceKind.IceEncountered
-                    or OccurrenceKind.IceApproached)))
+                    or OccurrenceKind.IceApproached
+                    // VP-REZ-SERVER-KIND: the server of the rezzed card (Grubber: "if it is protecting a central server").
+                    or OccurrenceKind.CardRezzed)))
         {
             throw new ArgumentException(
                 "A server-kind requirement is valid only for run server occurrences and must name a defined server kind.",
@@ -2048,7 +2147,8 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
         }
 
         if (requireSourceOnAttackedServer
-            && occurrence is not (OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered or OccurrenceKind.IceApproached or OccurrenceKind.CardRezzed or OccurrenceKind.RunEnded or OccurrenceKind.AgendaScoredOrStolen))
+            && occurrence is not (OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered or OccurrenceKind.IceApproached or OccurrenceKind.CardRezzed or OccurrenceKind.RunEnded or OccurrenceKind.AgendaScoredOrStolen
+                or OccurrenceKind.CreditsSpentFromOutsidePool or OccurrenceKind.RunSuccessful))
         {
             throw new ArgumentException(
                 "Requiring the source to occupy the attacked server is valid only for ServerApproached, IceEncountered, or CardRezzed triggers.",
@@ -2222,7 +2322,9 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
         or OccurrenceKind.AccessedCardTrashed
         or OccurrenceKind.AgendaForfeited
         or OccurrenceKind.FirstCardCreditGainThisTurn
-        or OccurrenceKind.FirstOperationPlayedThisTurn;
+        or OccurrenceKind.FirstOperationPlayedThisTurn
+        or OccurrenceKind.FirstEventPlayedThisTurn
+        or OccurrenceKind.CardAdvanced;
 
     private static ReadOnlyCollection<BehaviorInstruction> Freeze(
         IEnumerable<BehaviorInstruction> values)
@@ -2282,8 +2384,32 @@ public sealed class CardBehaviorDefinition
         IReadOnlyList<BehaviorCondition>? rezRequirements = null,
         bool hostedCardsPlayAsGrip = false,
         int rezForfeitDiscount = 0,
-        int hostIcebreakerStrength = 0)
+        int hostIcebreakerStrength = 0,
+        int stealCredits = 0,
+        BehaviorScoreCostAsAgenda? scoreCostAsAgenda = null,
+        int firstDoubleOperationClickDiscount = 0,
+        bool returnsHostedBadPublicity = false)
     {
+        if (returnsHostedBadPublicity && controller != PlayerSide.Corp)
+        {
+            throw new ArgumentException("Only a Corp card hosts bad publicity.", nameof(returnsHostedBadPublicity));
+        }
+
+        ReturnsHostedBadPublicity = returnsHostedBadPublicity;
+        if (firstDoubleOperationClickDiscount < 0 || firstDoubleOperationClickDiscount > 0 && controller != PlayerSide.Corp)
+        {
+            throw new ArgumentException("Only a Corp card lowers a Double operation's click cost, by a nonnegative amount.",
+                nameof(firstDoubleOperationClickDiscount));
+        }
+
+        FirstDoubleOperationClickDiscount = firstDoubleOperationClickDiscount;
+        ScoreCostAsAgenda = scoreCostAsAgenda;
+        if (stealCredits < 0 || stealCredits > 0 && controller != PlayerSide.Corp)
+        {
+            throw new ArgumentException("Only a Corp card adds a nonnegative credit cost to stealing.", nameof(stealCredits));
+        }
+
+        StealCredits = stealCredits;
         DefinitionId = definitionId;
         ArgumentOutOfRangeException.ThrowIfNegative(hostIcebreakerStrength);
         if (hostIcebreakerStrength > 0 && controller != PlayerSide.Runner)
@@ -2428,6 +2554,37 @@ public sealed class CardBehaviorDefinition
     /// <summary>What this card's hosted credits can be spent on (Azimat, Open Market, Mahkota Langit Grid).</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<BehaviorHostedCreditUse>? HostedCreditUses { get; }
+
+    /// <summary>
+    /// VP-SCORE-STEAL-COST: while the card is active, stealing any agenda costs the Runner this many more credits
+    /// (Magistrate Revontulet).
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int StealCredits { get; }
+
+    /// <summary>
+    /// VP-SCORE-STEAL-COST: while the card is active, scoring an agenda (one installed this turn, when so declared) costs
+    /// the Corp adding this card to its score area as an agenda (Word on the Street).
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public BehaviorScoreCostAsAgenda? ScoreCostAsAgenda { get; }
+
+    /// <summary>
+    /// VP-CLICK-COST-MODIFIER: while the card is active, the first Double operation the Corp plays each turn costs this
+    /// many clicks less (Synchrocyclotron).
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int FirstDoubleOperationClickDiscount { get; }
+
+    /// <summary>
+    /// VP-UNINSTALL-INTERRUPT: when the card would be uninstalled, the Corp takes the bad publicity hosted on it
+    /// (<see cref="HostedBadPublicityCounter"/>; Luana Campos).
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool ReturnsHostedBadPublicity { get; }
+
+    /// <summary>VP-BAD-PUBLICITY: the name of the counter for bad publicity hosted on a card.</summary>
+    public const string HostedBadPublicityCounter = "bad-publicity";
 
     public IReadOnlyList<BehaviorCost> Costs { get; }
 
@@ -2692,6 +2849,12 @@ public sealed class BehaviorCatalog : IBehaviorCatalog, IBehaviorCardClassificat
     private readonly ReadOnlyDictionary<CardDefinitionId, BehaviorCardType> _cardTypes;
     private readonly ReadOnlyDictionary<CardDefinitionId, IReadOnlyList<string>> _cardSubtypes;
     private readonly ConcurrentDictionary<CardDefinitionId, string> _definitionFingerprints = new();
+    private readonly HashSet<TurnEventKind> _recordedTurnEvents;
+
+    /// <summary>VP.2: the opt-in turn events this catalog's cards read (see <see cref="IBehaviorCatalog.RecordsTurnEvent"/>).</summary>
+    public IReadOnlyCollection<TurnEventKind> RecordedTurnEvents => _recordedTurnEvents;
+
+    public bool RecordsTurnEvent(TurnEventKind kind) => _recordedTurnEvents.Contains(kind);
 
     internal BehaviorCatalog(
         string version,
@@ -2703,10 +2866,12 @@ public sealed class BehaviorCatalog : IBehaviorCatalog, IBehaviorCardClassificat
         IReadOnlyDictionary<CardDefinitionId, CardBehaviorDefinition> generic,
         IReadOnlyDictionary<CardDefinitionId, BehaviorCardType>? cardTypes = null,
         IReadOnlyDictionary<CardDefinitionId, IReadOnlyList<string>>? cardSubtypes = null,
-        bool tracksTurnEvents = false)
+        bool tracksTurnEvents = false,
+        IReadOnlyCollection<TurnEventKind>? recordedTurnEvents = null)
     {
         Version = ValidateVersion(version);
         TracksTurnEvents = tracksTurnEvents;
+        _recordedTurnEvents = recordedTurnEvents is { Count: > 0 } ? recordedTurnEvents.ToHashSet() : [];
         BehaviorRegistryVersion = Version;
         _ice = Freeze(ice);
         _icebreakers = Freeze(icebreakers);
@@ -3038,6 +3203,7 @@ public sealed class BehaviorCatalogBuilder
     private readonly Dictionary<CardDefinitionId, BehaviorCardType> _cardTypes = new();
     private readonly Dictionary<CardDefinitionId, IReadOnlyList<string>> _cardSubtypes = new();
     private bool _tracksTurnEvents;
+    private readonly HashSet<TurnEventKind> _recordedTurnEvents = [];
     private readonly Dictionary<CardDefinitionId, string> _typedFamilies = new();
 
     public BehaviorCatalogBuilder(string version)
@@ -3073,6 +3239,10 @@ public sealed class BehaviorCatalogBuilder
         }
 
         _tracksTurnEvents = baseCatalog.TracksTurnEvents;
+        if (baseCatalog is BehaviorCatalog withEvents)
+        {
+            _recordedTurnEvents.UnionWith(withEvents.RecordedTurnEvents);
+        }
         if (baseCatalog is BehaviorCatalog compiled)
         {
             foreach (CardDefinitionId definitionId in compiled.SubtypedDefinitionIds)
@@ -3168,6 +3338,15 @@ public sealed class BehaviorCatalogBuilder
         return this;
     }
 
+    /// <summary>VP.2: opts the catalog into recording turn events that only some cards read.</summary>
+    public BehaviorCatalogBuilder RecordTurnEvents(params TurnEventKind[] kinds)
+    {
+        ArgumentNullException.ThrowIfNull(kinds);
+        _tracksTurnEvents = true;
+        _recordedTurnEvents.UnionWith(kinds);
+        return this;
+    }
+
     public BehaviorCatalog Build() => new(
         Version,
         _ice,
@@ -3178,7 +3357,8 @@ public sealed class BehaviorCatalogBuilder
         _generic,
         _cardTypes,
         _cardSubtypes,
-        _tracksTurnEvents);
+        _tracksTurnEvents,
+        _recordedTurnEvents);
 
     private BehaviorCatalogBuilder AddTyped<T>(
         Dictionary<CardDefinitionId, T> map,
@@ -3305,6 +3485,10 @@ internal static class BehaviorCatalogStructure
                 && a.HostedCardsPlayAsGrip == b.HostedCardsPlayAsGrip
                 && a.RezForfeitDiscount == b.RezForfeitDiscount
                 && a.HostIcebreakerStrength == b.HostIcebreakerStrength
+                && a.StealCredits == b.StealCredits
+                && a.ScoreCostAsAgenda == b.ScoreCostAsAgenda
+                && a.FirstDoubleOperationClickDiscount == b.FirstDoubleOperationClickDiscount
+                && a.ReturnsHostedBadPublicity == b.ReturnsHostedBadPublicity
                 && SequenceEquals(a.HostedCreditUses ?? [], b.HostedCreditUses ?? [])
                 && a.Hosting == b.Hosting
                 && SequenceEquals(a.Costs, b.Costs)
@@ -3499,7 +3683,14 @@ internal static class BehaviorCatalogFingerprint
 
     private static void AppendAsset(StringBuilder builder, AssetBehaviorSpec value) => builder.Append(value.TrashCost);
 
-    private static void AppendAgenda(StringBuilder builder, AgendaBehaviorSpec value) => builder.Append(value.AgendaPoints);
+    private static void AppendAgenda(StringBuilder builder, AgendaBehaviorSpec value)
+    {
+        builder.Append(value.AgendaPoints);
+        // Vantage Point's declarations are emitted only when used, so other agendas keep their bytes.
+        if (value.RunnerScoreAreaPoints is { } runnerPoints) builder.Append("|runnerScoreAreaPoints=").Append(runnerPoints);
+        if (value.StealClicks != 0) builder.Append("|stealClicks=").Append(value.StealClicks);
+        if (value.InstallsFaceUp) builder.Append("|installsFaceUp=1");
+    }
 
     private static void AppendRunEvent(StringBuilder builder, RunEventBehaviorSpec value)
     {
@@ -3551,6 +3742,26 @@ internal static class BehaviorCatalogFingerprint
         if (value.PreventFirstEndRun)
         {
             builder.Append("|preventFirstEndRun=1");
+        }
+
+        if (value.LocksCreditPool)
+        {
+            builder.Append("|locksCreditPool=1");
+        }
+
+        if (value.CostLoweredPerIceOn is { } perIce)
+        {
+            builder.Append("|costLoweredPerIceOn=").Append((int)perIce);
+        }
+
+        if (value.RemovedFromGameAfterRun)
+        {
+            builder.Append("|removedFromGameAfterRun=1");
+        }
+
+        if (value.TargetMustBeProtected)
+        {
+            builder.Append("|targetMustBeProtected=1");
         }
     }
 
@@ -3604,6 +3815,24 @@ internal static class BehaviorCatalogFingerprint
         {
             builder.Append(",rezRequirements=");
             AppendSequence(builder, rezRequirements, AppendCondition);
+        }
+        if (value.StealCredits != 0)
+        {
+            builder.Append(",stealCredits=").Append(value.StealCredits);
+        }
+        if (value.ReturnsHostedBadPublicity)
+        {
+            builder.Append(",returnsHostedBadPublicity=1");
+        }
+        if (value.FirstDoubleOperationClickDiscount != 0)
+        {
+            builder.Append(",firstDoubleClickDiscount=").Append(value.FirstDoubleOperationClickDiscount);
+        }
+        if (value.ScoreCostAsAgenda is { } scoreCost)
+        {
+            builder.Append(",scoreCostAsAgenda=").Append(scoreCost.Points)
+                .Append(':').Append(scoreCost.CannotForfeit ? 1 : 0)
+                .Append(':').Append(scoreCost.OnlyAgendasInstalledThisTurn ? 1 : 0);
         }
         if (value.HostedCreditUses is { } uses)
         {
@@ -3805,6 +4034,12 @@ internal static class BehaviorCatalogFingerprint
         if (value.AdditionalKind is { } additionalKind)
         {
             builder.Append(",additionalKind=").Append((int)additionalKind);
+        }
+
+        if (value.CreditSourceSubtype is not null)
+        {
+            builder.Append(",creditSource=");
+            AppendString(builder, value.CreditSourceSubtype);
         }
     }
 

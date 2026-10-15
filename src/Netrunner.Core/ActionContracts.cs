@@ -177,7 +177,8 @@ public sealed record PurgeVirusCountersParameters : ActionParameters
 public sealed record PlayCardParameters : ActionParameters
 {
     [JsonConstructor]
-    public PlayCardParameters(CardInstanceId cardId, int creditCost, ServerId? targetServerId = null)
+    public PlayCardParameters(CardInstanceId cardId, int creditCost, ServerId? targetServerId = null,
+        CardInstanceId? trashCostCardId = null)
     {
         if (creditCost < 0)
         {
@@ -187,6 +188,7 @@ public sealed record PlayCardParameters : ActionParameters
         CardId = cardId;
         CreditCost = creditCost;
         TargetServerId = targetServerId;
+        TrashCostCardId = trashCostCardId;
     }
 
     [JsonInclude]
@@ -209,6 +211,14 @@ public sealed record PlayCardParameters : ActionParameters
     /// <summary>Compatibility alias for callers that name the target server simply ServerId.</summary>
     [JsonIgnore]
     public ServerId? ServerId => TargetServerId;
+
+    /// <summary>
+    /// VP-TRASH-AS-COST: the card trashed to pay the play's additional cost (Sell Out); null, and omitted, for a play
+    /// without one. A play is issued once for each card that may pay it.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public CardInstanceId? TrashCostCardId { get; private set; }
 }
 
 /// <summary>
@@ -257,10 +267,10 @@ public sealed record RezCardParameters : ActionParameters
             }
 
             if (costQuote.Adjustments.Any(adjustment =>
-                adjustment.Kind != BehaviorCostModifierKind.IceRezCreditCost))
+                adjustment.Kind is not (BehaviorCostModifierKind.IceRezCreditCost or BehaviorCostModifierKind.SelfRezCreditCost)))
             {
                 throw new ArgumentException(
-                    "A rez action cost quote may contain only ICE rez-cost adjustments.",
+                    "A rez action cost quote may contain only ICE rez-cost and self rez-cost adjustments.",
                     nameof(costQuote));
             }
         }
@@ -497,10 +507,10 @@ public sealed record RunIceParameters : ActionParameters
     {
         if (costQuote is not null
             && costQuote.Adjustments.Any(adjustment =>
-                adjustment.Kind != BehaviorCostModifierKind.IceRezCreditCost))
+                adjustment.Kind is not (BehaviorCostModifierKind.IceRezCreditCost or BehaviorCostModifierKind.SelfRezCreditCost)))
         {
             throw new ArgumentException(
-                "An ICE rez quote may contain only ICE rez-cost adjustments.",
+                "An ICE rez quote may contain only ICE rez-cost and self rez-cost adjustments.",
                 nameof(costQuote));
         }
 
@@ -1566,7 +1576,8 @@ public sealed class PendingDecision
             trashTaggedResource.ClickCost,
             trashTaggedResource.CreditCost),
         PurgeVirusCountersParameters purgeVirusCounters => new PurgeVirusCountersParameters(purgeVirusCounters.ClickCost),
-        PlayCardParameters playCard => new PlayCardParameters(playCard.CardId, playCard.CreditCost, playCard.TargetServerId),
+        PlayCardParameters playCard => new PlayCardParameters(playCard.CardId, playCard.CreditCost, playCard.TargetServerId,
+            playCard.TrashCostCardId),
         RunServerParameters runServer => new RunServerParameters(runServer.ServerId),
         RezCardParameters rezCard => new RezCardParameters(rezCard.CardId, rezCard.CreditCost, rezCard.CostQuote, rezCard.ForfeitAgendaId),
         AdvanceCardParameters advanceCard => new AdvanceCardParameters(advanceCard.CardId, advanceCard.CreditCost),

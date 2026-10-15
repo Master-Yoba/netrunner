@@ -21,4 +21,10 @@ public enum BehaviorTriggerCondition
     /// information: its server is recorded (Aggressive Trendsetting).
     /// </summary>
     TrashedSubjectWasInstalled,
+
+    /// <summary>VP-SCORING-FACTS: the occurrence's subject (a scored agenda) was installed this turn (Word on the Street).</summary>
+    SubjectInstalledThisTurn,
+
+    /// <summary>VP-SCORING-FACTS: the occurrence's subject was not installed this turn (Word on the Street's payoff).</summary>
+    SubjectNotInstalledThisTurn,
 }

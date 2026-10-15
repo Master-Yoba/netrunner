@@ -868,7 +868,8 @@ public sealed class FullGameContractAgent : IGameAgent
                 actionClass == FullGameActionClass.TurnAction
                 && HasStableId(play.CardId.Value)
                 && play.CreditCost >= 0
-                && (play.TargetServerId is null || HasStableId(play.TargetServerId.Value.Value)),
+                && (play.TargetServerId is null || HasStableId(play.TargetServerId.Value.Value))
+                && (play.TrashCostCardId is null || HasStableId(play.TrashCostCardId.Value.Value)),
             (ActionKind.StartRun, RunServerParameters run) =>
                 actionClass == FullGameActionClass.TurnAction
                 && HasStableId(run.ServerId.Value),
@@ -1528,7 +1529,8 @@ public sealed class FullGameContractAgent : IGameAgent
             $"number:{number.Value.ToString(CultureInfo.InvariantCulture)}",
         PlayCardParameters play =>
             $"play:{play.CardId.Value}:target:{play.TargetServerId?.Value ?? string.Empty}"
-            + $":cost:{play.CreditCost.ToString(CultureInfo.InvariantCulture)}",
+            + $":cost:{play.CreditCost.ToString(CultureInfo.InvariantCulture)}"
+            + (play.TrashCostCardId is { } trashed ? $":trash:{trashed.Value}" : string.Empty),
         RunServerParameters run => $"run:{run.ServerId.Value}",
         AdvanceCardParameters advance =>
             $"advance:{advance.CardId.Value}:{advance.CreditCost.ToString(CultureInfo.InvariantCulture)}",

@@ -57,3 +57,119 @@ third registry. Elevation's whole-set figure was 26% of cards needing no Core ch
 - The official build is clean.
 - The Cards tests pass in both content lanes (543), with `VantagePointCardDataTests` new.
 - The coverage report is regenerated; its counts are above.
+
+## VP.2 — Primitives A
+
+VP.2 lands in two parts: **VP.2a** (bad publicity, credit sources, scoring and agendas; below) and **VP.2b** (costs and
+values: play, click and rez cost modifiers, the new amounts, run facts and the uninstall interrupt).
+
+### Design: bad publicity and credit sources
+
+**Bad publicity** is one counter on the Corp (CR 1.9.5d), kept on `RulesState` and omitted from serialization while it is
+zero, so every existing state, replay and pin keeps its bytes. Taking and removing it are instructions with an event, a
+cost kind removes it (CR 1.14.3a), and the first time each turn the Corp takes it is an occurrence (Editorial Division).
+Bad publicity hosted on a card (Luana Campos) is a card counter, which has no effect while hosted (CR 1.13.3).
+
+**The bad publicity fund** is a run-scoped pool on `RunState`, also omitted while zero: at step 6.9.1b the Runner adds a
+credit for each bad publicity the Corp has, and at step 6.9.6b what is left returns to the bank (CR 10.6.3).
+
+**Credits from outside the pool.** A Runner payment during a run already chooses how much comes from the credit pool and
+how much from run-scoped credits (Overclock's). That one choice stays, and its second share becomes "credits from
+outside the pool", spent in a fixed order:
+
+1. the bad publicity fund;
+2. credits on the active run event that isn't stealth (Overclock);
+3. credits on the active run event that is stealth (Aircheck);
+4. hosted credits on installed stealth cards that may be spent during runs (Methuselah, Touchstone).
+
+Non-stealth credits go before stealth ones and expiring credits before lasting ones, so the order never costs the Runner a
+payment it could otherwise make (an engine ruling, as Elevation's for declared-use credits). A cost payable only with
+credits from stealth cards (Corsair, Baker, Lampades) draws only on 3 and 4, in that order. Shackleton Grid's occurrence
+fires whenever a payment's outside share is above zero, so it counts the fund as Null Signal's rules and jinteki.net do.
+While Aircheck is active the Runner's credit pool offers nothing to a payment and can't lose credits.
+
+### VP.2a: what landed (15 October 2026)
+
+No Vantage Point card is registered yet; each primitive is proven on test-only probe cards in the harness
+(`ElevationHarness.VantagePointProbe`), and every existing game, replay and pin keeps its bytes: each new field is omitted
+while unused, and the opt-in turn events are recorded only by a catalog that declares them.
+
+- **VP-BAD-PUBLICITY:** the Corp's counter on `RulesState`, the take and remove instructions with their event, the first
+  each turn as an occurrence, and the run's fund (`RunState.BadPublicityCredits`, filled at step 6.9.1b, spent first,
+  returned at the end).
+- **VP-STEALTH-CREDITS, VP-POOL-LOCK, VP-CREDITS-OUTSIDE-POOL:** as the design above. `CreditSources` computes the outside
+  pool for the engine and the validator alike; costs may name a source subtype (`BehaviorCost.CreditSourceSubtype`); run
+  events may lock the pool (`RunEventBehaviorSpec.LocksCreditPool`); hosted credits restricted to run costs pay any cost
+  during a run; spending from outside the pool is an occurrence a card on the attacked server may trigger on.
+- **VP-SCORE-STEAL-COST:** an agenda's own steal clicks (`AgendaBehaviorSpec.StealClicks`) and active cards' steal credits
+  (`CardBehaviorDefinition.StealCredits`) turn the automatic steal into a paid one, with "no action" declining it
+  (CR 7.1.6a); `StealCosts` computes them for the engine and the validator. A score cost moves a card to the Corp's score
+  area as an agenda (`BehaviorScoreCostAsAgenda`, Word on the Street).
+- **VP-CARD-AS-AGENDA:** `AddSelfToScoreAreaAsAgenda`, recorded in `RulesState.ScoredAsAgendas` with its points and whether
+  it may be forfeited; forfeits read the recorded points, and one that can't be forfeited never matches an agenda filter.
+  An operation that becomes an agenda finishes its play in the score area.
+- **VP-AGENDA-POINTS-MODIFIER:** `AgendaBehaviorSpec.RunnerScoreAreaPoints`, applied when stolen and when it leaves.
+- **VP-SCORING-FACTS:** opt-in turn events (`BehaviorCatalogBuilder.RecordTurnEvents`) for scores and scores of agendas
+  installed earlier; `TurnEventCountAtLeast`, `SourceScoredThisTurn`, and the trigger conditions
+  `SubjectInstalledThisTurn` and `SubjectNotInstalledThisTurn`.
+- **VP-ADVANCED:** `CardAdvanced`, raised by the basic advance action (placing counters by an effect isn't advancing).
+
+**Evidence.** 21 probe tests (`tests/Netrunner.Cards.Tests/VantagePoint/`); the Core, Cards, AI and Match suites pass
+(Match 1,154, including the frozen tactical pins, which caught two definition properties serialized without their
+omit-when-default attributes before they could move a pin).
+
+
+### VP.2b: what landed (15 October 2026)
+
+Again on probe cards only (`ElevationHarness.VantagePointProbe`, codes 90013 to 90023), with every existing game, replay
+and pin keeping its bytes.
+
+- **VP-TRASH-AS-COST:** a card play may carry the existing structured additional cost `TrashCards` for one card of a kind
+  (Sell Out's installed resource). The play action names the card (`PlayCardParameters.TrashCostCardId`, omitted while
+  null), so a play is issued once for each card that may pay it, and is not offered when none may. Trashing a card from
+  the grip as the cost of an optional trigger (Methuselah) is already expressible: a choice option with the same cost
+  over the grip. A play by an effect has no action to name the card, so a card with a trash cost can't be played that
+  way (an engine limit; no Vantage Point card plays another card that has one).
+- **VP-DYNAMIC-REZ-COST:** the cost modifier `SelfRezCreditCost`, counting other installed Corp cards matching a filter
+  (Reverb) or applying under a turn-event condition (Hype Machine); ICE and non-ICE rez quotes include it.
+- **VP-PLAY-COST-MODIFIER:** `RunEventBehaviorSpec.CostLoweredPerIceOn`, a run event's play cost lowered for each piece of
+  ICE protecting a named server (Tailgate), in the affordability check, the issued cost and the payment alike.
+- **VP-CLICK-COST-MODIFIER:** `CardBehaviorDefinition.FirstDoubleOperationClickDiscount`, the first Double operation each
+  turn costing a click less (Synchrocyclotron), from the opt-in turn event `DoubleOperationPlayed`.
+- **VP-AMOUNT:** `ChosenCardsPrintedRezCost` (realloc()) and `ProtectedRemotesWithRootCards` (Flood the Market); the
+  advance instruction accepts a dynamic amount.
+- **VP-RUN-FACTS:** the condition `SuccessfulRunOnEveryCentralThisTurn` from the Runner's turn facts, and the opt-in turn
+  event `IceRezzed`, recorded by every ICE rez (on approach, by an effect, ignoring costs).
+- **VP-UNINSTALL-INTERRUPT:** `CardBehaviorDefinition.ReturnsHostedBadPublicity`: when the card leaves an installed zone,
+  the Corp takes the bad publicity it hosts before its counters are cleared (Luana Campos).
+
+**Evidence.** 11 further probe tests (`VantagePointCostTests`, 32 Vantage Point tests in all); the Core, Cards, AI, Match
+and CLI suites pass.
+
+### VP.2c: the audit's misses (15 October 2026)
+
+Binding VP.3's cards found primitives the audit had missed (the primitive audit's "VP.3 binding review" lists them). The
+nine VP.3 needs landed here, before any card was registered, on probe cards 90024 to 90031:
+
+- **VP-BAD-PUBLICITY**, its condition: `BehaviorCondition.BadPublicityAtLeast` (Luana Campos, Scapegoat).
+- **VP-ENCOUNTER-SUBTYPE:** `BehaviorCondition.EncounteringSubtype`, the encountered ICE's printed or gained subtype
+  (Corsair).
+- **VP-ALLOTTED-CLICKS:** a negative `GainAllottedClicksNextTurn`, never below zero clicks (Caveat Emptor).
+- **VP-RUN-EVENT-REMOVED** and **VP-RUN-PROTECTED-SERVER:** `RunEventBehaviorSpec.RemovedFromGameAfterRun` and
+  `TargetMustBeProtected` (Take a Dive, Kompromat); an ended event's run-end abilities still resolve from removed-from-game.
+- **VP-FIRST-EVENT:** `OccurrenceKind.FirstEventPlayedThisTurn`, from every play path (Touchstone).
+- **VP-HOSTED-SERVER:** a RunSuccessful trigger may require its source in the attacked server, and a card hosted on ICE
+  is in its host's server (Stowaway).
+- **VP-INSTALL-FACEUP:** `AgendaBehaviorSpec.InstallsFaceUp`; such an agenda's triggers are active while it is installed
+  (Sacrifice Zone Expansion, now in VP.5).
+- **VP-REZ-SERVER-KIND:** a CardRezzed trigger may name the server kind (Grubber).
+
+Five cards moved to later batches whose primitive slices own what they lack: Kompromat, Reanimation Protocol and
+Sacrifice Zone Expansion to VP.5; Lotus Haze and Hype Machine to VP.7. VP.3 is 28 cards.
+
+**Review (PR #152).** Codex's four findings, all fixed:
+- an advance by a dynamic amount reported the static amount (zero) in its event;
+- an unrestricted run payment could spend stealth credits before non-stealth ones, leaving a later stealth-only cost
+  unpayable;
+- hosted credits spendable on any cost weren't offered for run costs;
+- a null card scored as an agenda was accepted when a state was read.

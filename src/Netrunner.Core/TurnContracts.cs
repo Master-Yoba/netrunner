@@ -114,8 +114,10 @@ public sealed record TurnFactsState
         IReadOnlyList<DeferredOccurrence>? deferredOccurrences = null,
         int nextTurnExtraClicks = 0,
         IReadOnlyList<CardInstanceId>? handSizeDiscardIds = null,
-        IReadOnlyList<CardInstanceId>? freeInstallIds = null)
+        IReadOnlyList<CardInstanceId>? freeInstallIds = null,
+        int opponentFirstTurnExtraClicks = 0)
     {
+        OpponentFirstTurnExtraClicks = opponentFirstTurnExtraClicks;
         Version = version;
         Side = side;
         TurnNumber = turnNumber;
@@ -187,7 +189,7 @@ public sealed record TurnFactsState
             })
             .ToArray();
         DeferredOccurrences = deferred.Length == 0 ? null : new ReadOnlyCollection<DeferredOccurrence>(deferred);
-        ArgumentOutOfRangeException.ThrowIfNegative(nextTurnExtraClicks);
+        // VP-ALLOTTED-CLICKS: negative when a player gets fewer allotted clicks next turn (Caveat Emptor).
         NextTurnExtraClicks = nextTurnExtraClicks;
         HandSizeDiscardIds = handSizeDiscardIds is null or { Count: 0 }
             ? null
@@ -380,6 +382,32 @@ public sealed record TurnFactsState
     [JsonInclude]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public int NextTurnExtraClicks { get; private set; }
+
+    /// <summary>
+    /// VP-ALLOTTED-CLICKS: extra (or, negative, fewer) clicks the opponent is allotted on its first turn, granted before it
+    /// had one (Caveat Emptor on the Corp's first turn), so it has no turn facts of its own to hold them.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int OpponentFirstTurnExtraClicks { get; private set; }
+
+    internal TurnFactsState WithOpponentFirstTurnExtraClicks(int extra) => New(
+        turnBegan: TurnBegan,
+        mandatoryDrawPerformed: MandatoryDrawPerformed,
+        actionPhaseEnded: ActionPhaseEnded,
+        discardPhaseEnded: DiscardPhaseEnded,
+        clicksLost: ClicksLost,
+        installedCardIds: InstalledCardIds,
+        successfulRun: SuccessfulRun,
+        usedAbilityKeys: UsedAbilityKeys,
+        attemptedRunServerIds: AttemptedRunServerIds,
+        successfulRunServerIds: SuccessfulRunServerIds,
+        accessedCardOccurrenceIds: AccessedCardOccurrenceIds,
+        trashedCardOccurrenceIds: TrashedCardOccurrenceIds,
+        agendaTurnChanges: AgendaTurnChanges,
+        tagTurnChanges: TagTurnChanges,
+        firstXUseKeys: FirstXUseKeys,
+        opponentFirstTurnExtraClicks: extra);
 
     internal TurnFactsState WithDeferredOccurrences(IReadOnlyList<DeferredOccurrence> deferred) => New(
         turnBegan: TurnBegan,
@@ -768,7 +796,8 @@ public sealed record TurnFactsState
         IReadOnlyList<DeferredOccurrence>? deferredOccurrences = null,
         int? nextTurnExtraClicks = null,
         IReadOnlyList<CardInstanceId>? handSizeDiscardIds = null,
-        IReadOnlyList<CardInstanceId>? freeInstallIds = null) => new(
+        IReadOnlyList<CardInstanceId>? freeInstallIds = null,
+        int? opponentFirstTurnExtraClicks = null) => new(
         Version,
         Side,
         TurnNumber,
@@ -795,7 +824,8 @@ public sealed record TurnFactsState
         deferredOccurrences ?? DeferredOccurrences,
         nextTurnExtraClicks ?? NextTurnExtraClicks,
         handSizeDiscardIds ?? HandSizeDiscardIds,
-        freeInstallIds ?? FreeInstallIds);
+        freeInstallIds ?? FreeInstallIds,
+        opponentFirstTurnExtraClicks ?? OpponentFirstTurnExtraClicks);
 
 }
 
@@ -996,6 +1026,9 @@ public sealed record TurnHistoryState
 
     internal TurnHistoryState WithNextTurnExtraClicks(PlayerSide side, int extra) =>
         ReplaceCurrent(side, RequireCurrent(side).WithNextTurnExtraClicks(extra));
+
+    internal TurnHistoryState WithOpponentFirstTurnExtraClicks(PlayerSide side, int extra) =>
+        ReplaceCurrent(side, RequireCurrent(side).WithOpponentFirstTurnExtraClicks(extra));
 
     internal TurnHistoryState RecordEvent(PlayerSide side, TurnEventKind kind)
     {
@@ -1201,6 +1234,21 @@ public enum TurnEventKind
 
     /// <summary>The Corp gained credits through an ability on an agenda or operation.</summary>
     CardCreditGain,
+
+    /// <summary>VP-BAD-PUBLICITY: the Corp took bad publicity.</summary>
+    BadPublicityTaken,
+
+    /// <summary>VP-SCORING-FACTS: the Corp scored an agenda.</summary>
+    AgendaScored,
+
+    /// <summary>VP-SCORING-FACTS: the Corp scored an agenda it had not installed this turn (Myōshu).</summary>
+    AgendaScoredNotInstalledThisTurn,
+
+    /// <summary>VP-RUN-FACTS: a piece of ICE was rezzed (Underdome Irregulars).</summary>
+    IceRezzed,
+
+    /// <summary>VP-CLICK-COST-MODIFIER: the Corp played a Double operation (Synchrocyclotron).</summary>
+    DoubleOperationPlayed,
 }
 
 /// <summary>

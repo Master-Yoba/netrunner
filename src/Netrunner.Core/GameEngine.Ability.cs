@@ -987,7 +987,8 @@ public static partial class GameEngine
             {
                 Step: RunTimingStep.Encounter or RunTimingStep.EncounterPaidWindow,
                 Encounter: { Status: RunEncounterStatus.Initialized },
-            },
+            }
+                && EncounteredIceHasSubtype(working, condition.Fact),
             BehaviorConditionKind.CounterAtLeast => CurrentCounter(working, source.Id, condition.Fact!) >= condition.Value.GetValueOrDefault(),
             BehaviorConditionKind.FactEquals => AbilityFactEquals(working, source, controllerId, condition),
             // A paid ability has no search continuation; a forged declaration
@@ -995,7 +996,7 @@ public static partial class GameEngine
             BehaviorConditionKind.FoundCard => false,
             BehaviorConditionKind.SourceHostsAtLeast or BehaviorConditionKind.RezzedInstalledCopy
                 => OptionConditionMatches(working, controllerId, source.Id, condition),
-            _ => SharedConditionMatches(working, controllerId, condition) ?? false,
+            _ => SharedConditionMatches(working, controllerId, condition, source.Id) ?? false,
         };
     }
 
@@ -1046,10 +1047,15 @@ public static partial class GameEngine
             long tags = 0;
             long hostedCredits = 0;
             var counters = new Dictionary<string, long>(StringComparer.Ordinal);
+            var restrictedCredits = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
             foreach (BehaviorCost cost in ability.Costs)
             {
                 switch (cost.Kind)
                 {
+                    case BehaviorCostKind.Credits when cost.CreditSourceSubtype is { } subtype:
+                        restrictedCredits.TryGetValue(subtype, out long restrictedCost);
+                        restrictedCredits[subtype] = checked(restrictedCost + cost.Amount);
+                        break;
                     case BehaviorCostKind.Credits:
                         credits = checked(credits + cost.Amount);
                         break;
@@ -1106,7 +1112,10 @@ public static partial class GameEngine
                 }
             }
 
+            // VP-STEALTH-CREDITS: source-restricted credits are checked on their own. An ability with both kinds of credit
+            // cost would check them against overlapping sources; no card has one.
             return credits <= AvailableCreditsForPayment(working, controllerId)
+                && restrictedCredits.All(pair => pair.Value <= SourceRestrictedCredits(working, controllerId, pair.Key))
                 && clicks <= controller.Clicks
                 && tags <= availableTags
                 && counters.All(pair => CurrentAbilityCounter(working, source.Id, pair.Key) >= pair.Value);
@@ -1618,6 +1627,9 @@ public static partial class GameEngine
             BehaviorCost cost = frame.Costs[costIndex];
             switch (cost.Kind)
             {
+                case BehaviorCostKind.Credits when cost.CreditSourceSubtype is { } subtype:
+                    PaySourceRestrictedCredits(working, frame.Controller, cost.Amount, subtype);
+                    break;
                 case BehaviorCostKind.Credits:
                     PayCreditCost(working, frame.Controller, cost.Amount);
                     break;

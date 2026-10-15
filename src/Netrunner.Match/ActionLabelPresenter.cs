@@ -24,7 +24,8 @@ public static class ActionLabelPresenter
             case PlayCardParameters play:
                 return $"Play {Card(play.CardId)}"
                     + (play.TargetServerId is { } target ? $" → Run {serverName(target.Value)}" : "")
-                    + $" · {Count(play.CreditCost, "credit")}";
+                    + $" · {Count(play.CreditCost, "credit")}"
+                    + (play.TrashCostCardId is { } trashed ? $" · Trash {Card(trashed)}" : "");
             case InstallCardParameters install:
                 string label = $"{(install.FinalizeSelection ? "Install" : "Choose install")} {Card(install.CardId)} → "
                     + Destination(install.DestinationKind, install.ServerId, install.CreateNewRemote)

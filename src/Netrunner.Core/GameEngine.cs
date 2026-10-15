@@ -829,6 +829,7 @@ public static partial class GameEngine
             case (ActionKind.ContinueRun, NoActionParameters):
             case (ActionKind.ChooseBreachCandidate, BreachCandidateParameters):
             case (ActionKind.TrashAccessedCard, RunCardPaymentParameters):
+            case (ActionKind.StealAgenda, RunCardPaymentParameters):
             case (ActionKind.NoAccessAction, NoActionParameters):
                 ConsumeRunAction(working, action.Kind, action.Parameters);
                 return;

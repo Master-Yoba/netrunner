@@ -703,10 +703,21 @@ public sealed record AssetBehaviorSpec
 /// </summary>
 public sealed record AgendaBehaviorSpec
 {
-    public AgendaBehaviorSpec(CardDefinitionId definitionId, int agendaPoints)
+    public AgendaBehaviorSpec(CardDefinitionId definitionId, int agendaPoints, int? runnerScoreAreaPoints = null, int stealClicks = 0,
+        bool installsFaceUp = false)
     {
+        InstallsFaceUp = installsFaceUp;
+        ArgumentOutOfRangeException.ThrowIfNegative(stealClicks);
+        StealClicks = stealClicks;
         DefinitionId = definitionId;
         AgendaPoints = agendaPoints;
+        if (runnerScoreAreaPoints is <= 0)
+        {
+            throw new ArgumentException(
+                $"Card '{definitionId}' must be worth positive agenda points in the Runner's score area.", nameof(runnerScoreAreaPoints));
+        }
+
+        RunnerScoreAreaPoints = runnerScoreAreaPoints;
         if (agendaPoints <= 0)
         {
             throw new ArgumentException(
@@ -718,6 +729,28 @@ public sealed record AgendaBehaviorSpec
 
     /// <summary>Agenda points granted when the agenda is scored.</summary>
     public int AgendaPoints { get; }
+
+    /// <summary>
+    /// VP-AGENDA-POINTS-MODIFIER: what the agenda is worth while in the Runner's score area, when that differs (Let Them
+    /// Dream: one less). Null for an ordinary agenda.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? RunnerScoreAreaPoints { get; }
+
+    /// <summary>VP-SCORE-STEAL-COST: the clicks the Runner spends as an additional cost to steal it (Méliès City Luxury Line).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int StealClicks { get; }
+
+    /// <summary>
+    /// VP-INSTALL-FACEUP: the agenda is installed faceup, neither rezzed nor unrezzed, and its abilities are active while
+    /// it is installed (Sacrifice Zone Expansion).
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool InstallsFaceUp { get; }
+
+    /// <summary>The points the agenda is worth in a side's score area.</summary>
+    public int PointsIn(PlayerSide scoreAreaSide) =>
+        scoreAreaSide == PlayerSide.Runner && RunnerScoreAreaPoints is { } runnerPoints ? runnerPoints : AgendaPoints;
 }
 
 /// <summary>
@@ -738,9 +771,22 @@ public sealed record RunEventBehaviorSpec
         BehaviorRunBreachAccessModifier? breachAccessModifier = null,
         int additionalClicks = 0,
         ServerKind? redirectApproachTo = null,
-        bool preventFirstEndRun = false)
+        bool preventFirstEndRun = false,
+        bool locksCreditPool = false,
+        ServerKind? costLoweredPerIceOn = null,
+        bool removedFromGameAfterRun = false,
+        bool targetMustBeProtected = false)
     {
+        RemovedFromGameAfterRun = removedFromGameAfterRun;
+        TargetMustBeProtected = targetMustBeProtected;
+        if (costLoweredPerIceOn is not (null or ServerKind.Headquarters or ServerKind.RAndD or ServerKind.Archives))
+        {
+            throw new ArgumentException("A per-ICE play-cost discount names a central server.", nameof(costLoweredPerIceOn));
+        }
+
+        CostLoweredPerIceOn = costLoweredPerIceOn;
         PreventFirstEndRun = preventFirstEndRun;
+        LocksCreditPool = locksCreditPool;
         DefinitionId = definitionId;
         Cost = cost;
         HostedCredits = hostedCredits;
@@ -826,6 +872,28 @@ public sealed record RunEventBehaviorSpec
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool PreventFirstEndRun { get; }
+
+    /// <summary>
+    /// VP-POOL-LOCK: while the event is active the Runner can neither spend nor lose credits from their pool, only the
+    /// event's hosted credits and other credits from outside the pool (Aircheck).
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool LocksCreditPool { get; }
+
+    /// <summary>
+    /// VP-PLAY-COST-MODIFIER: the play cost is lowered by 1 for each piece of ICE protecting this central server (Tailgate:
+    /// HQ), never below zero.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ServerKind? CostLoweredPerIceOn { get; }
+
+    /// <summary>VP-RUN-EVENT-REMOVED: when its run ends the event is removed from the game, not trashed (Take a Dive).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool RemovedFromGameAfterRun { get; }
+
+    /// <summary>VP-RUN-PROTECTED-SERVER: the event may run only a server protected by ICE (Kompromat).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool TargetMustBeProtected { get; }
 
     private static ReadOnlyCollection<BehaviorRunRezCostModifier>? FreezeRezCostModifiers(
         IReadOnlyList<BehaviorRunRezCostModifier>? modifiers)

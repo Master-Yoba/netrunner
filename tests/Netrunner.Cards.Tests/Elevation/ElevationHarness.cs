@@ -23,6 +23,36 @@ internal static class ElevationHarness
     internal const string RunnerFillerResource = "90007";
     internal const string RunnerFillerHardware = "90008";
 
+    /// <summary>VP.2 probes: test-only cards with printed stealth subtypes, and a Corp upgrade.</summary>
+    internal const string StealthHardware = "90009";
+    internal const string StealthRunEvent = "90010";
+    internal const string CorpProbeUpgrade = "90011";
+    internal const string CorpProbeOperation = "90012";
+
+    /// <summary>VP.2b probes: costs and values.</summary>
+    internal const string ProbeReverbIce = "90013";
+    internal const string ProbeHypeUpgrade = "90014";
+    internal const string ProbeTailgateEvent = "90015";
+    internal const string ProbeDoubleDiscountAsset = "90016";
+    internal const string ProbeDoubleOperation = "90017";
+    internal const string ProbeReallocOperation = "90018";
+    internal const string ProbeFloodOperation = "90019";
+    internal const string ProbeCentralsEvent = "90020";
+    internal const string ProbeIceRezzedEvent = "90021";
+    internal const string ProbeLuanaAsset = "90022";
+    internal const string ProbeSellOutEvent = "90023";
+
+    /// <summary>VP.2c probes: the primitives VP.3's binding found missing.</summary>
+    internal const string ProbeBadPublicityOperation = "90024";
+    internal const string ProbeBarrierResource = "90025";
+    internal const string ProbeCaveatOperation = "90026";
+    internal const string ProbeDiveEvent = "90027";
+    internal const string ProbeTouchstoneResource = "90028";
+    internal const string ProbeStowawayProgram = "90029";
+    internal const string ProbePublicAgenda = "90030";
+    internal const string ProbeGrubberIce = "90031";
+    internal const string ProbeFloodAdvanceOperation = "90032";
+
     /// <summary>The neutral Gateway identities a match board gets by default.</summary>
     internal const string CorpNeutralIdentity = "30077";
 
@@ -34,6 +64,13 @@ internal static class ElevationHarness
 
     private static readonly Lazy<BehaviorCatalog> LazyProbe = new(CreateProbe);
 
+    private static readonly Lazy<BehaviorCatalog> LazyVantagePointProbe = new(CreateVantagePointProbe);
+
+    private static readonly Lazy<BehaviorCatalog> LazyStartup = new(VantagePointBehaviorCatalog.Create);
+
+    /// <summary>The Startup catalog: Gateway, Elevation and the registered Vantage Point cards.</summary>
+    public static BehaviorCatalog Startup => LazyStartup.Value;
+
     public static BehaviorCatalog Behavior => LazyBehavior.Value;
 
     /// <summary>
@@ -44,9 +81,257 @@ internal static class ElevationHarness
     /// </summary>
     public static BehaviorCatalog Probe => LazyProbe.Value;
 
+    /// <summary>
+    /// VP.2: the Elevation catalog plus test-only probe behaviors for Vantage Point primitives no registered card uses yet:
+    /// the filler operation (<see cref="CorpFiller"/>) takes 2 bad publicity, and the filler asset
+    /// (<see cref="CorpFillerAsset"/>) gains a credit the first time each turn the Corp takes bad publicity. The stealth
+    /// hardware (<see cref="StealthHardware"/>) has an access ability costing 1 credit from stealth cards that draws a card;
+    /// the stealth run event (<see cref="StealthRunEvent"/>) carries 2 credits and locks the pool; the Corp upgrade
+    /// (<see cref="CorpProbeUpgrade"/>) gains the Corp a credit when the Runner spends credits from outside the pool during a
+    /// run on its server, and once a turn when the Corp advances a card. VP.2 step 3: the filler agenda is worth 1 point in
+    /// the Runner's score area and costs a click more to steal; the filler asset makes every steal cost 2 credits more; the
+    /// filler resource is a score cost as Word on the Street's (-1, can't be forfeited, agendas installed this turn); the
+    /// probe operation is playable once the Corp scored an agenda it didn't install this turn, and becomes a 2-point
+    /// agenda (Myōshu). VP.2 step 4: the cost and value probes (90013 to 90023); VP.2c: the probes 90024 to 90032 for the primitives VP.3's
+    /// binding found missing, the probe Luana's trash cost, and the filler
+    /// ICE as a 1-strength barrier ending the run.
+    /// </summary>
+    public static BehaviorCatalog VantagePointProbe => LazyVantagePointProbe.Value;
+
     /// <summary>The catalog a state was built with, by fingerprint.</summary>
     public static BehaviorCatalog CatalogFor(GameState state) =>
-        string.Equals(state.BehaviorCatalogFingerprint, Probe.Fingerprint, StringComparison.Ordinal) ? Probe : Behavior;
+        string.Equals(state.BehaviorCatalogFingerprint, Probe.Fingerprint, StringComparison.Ordinal) ? Probe
+        : string.Equals(state.BehaviorCatalogFingerprint, VantagePointProbe.Fingerprint, StringComparison.Ordinal) ? VantagePointProbe
+        : string.Equals(state.BehaviorCatalogFingerprint, Startup.Fingerprint, StringComparison.Ordinal) ? Startup
+        : Behavior;
+
+    private static BehaviorCatalog CreateVantagePointProbe() =>
+        new BehaviorCatalogBuilder("vantage-point-probe", Behavior)
+            .RecordTurnEvents(TurnEventKind.AgendaScored, TurnEventKind.AgendaScoredNotInstalledThisTurn,
+                TurnEventKind.IceRezzed, TurnEventKind.DoubleOperationPlayed)
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeReverbIce),
+                PlayerSide.Corp,
+                costModifiers:
+                [
+                    BehaviorCostModifier.Always(BehaviorCostModifierKind.SelfRezCreditCost, -1, "probe-reverb",
+                        new BehaviorCardFilter(BehaviorCardType.Ice, rezzed: false)),
+                ]))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeHypeUpgrade),
+                PlayerSide.Corp,
+                costModifiers:
+                [
+                    new BehaviorCostModifier(BehaviorCostModifierKind.SelfRezCreditCost, -2,
+                        BehaviorCondition.TurnEventCountAtLeast(TurnEventKind.AgendaScoredOrStolen, 1), "probe-hype"),
+                ]))
+            .AddRunEvent(new RunEventBehaviorSpec(new CardDefinitionId(ProbeTailgateEvent), 3, 0,
+                allowedTargetServers: [ServerKind.Headquarters], costLoweredPerIceOn: ServerKind.Headquarters))
+            .Add(new CardBehaviorDefinition(new CardDefinitionId(ProbeDoubleDiscountAsset), PlayerSide.Corp, firstDoubleOperationClickDiscount: 1))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeDoubleOperation),
+                PlayerSide.Corp,
+                costs: [new BehaviorCost(BehaviorCostKind.Clicks, 1)],
+                instructions: [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 3)]))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeReallocOperation),
+                PlayerSide.Corp,
+                instructions:
+                [
+                    new BehaviorInstruction(BehaviorInstructionKind.Choose, choice: new BehaviorChoiceSpec(
+                        "chosen",
+                        BehaviorChooser.Controller,
+                        BehaviorChoiceMode.Mandatory,
+                        BehaviorChoiceCardinality.Exactly(1),
+                        target: new BehaviorTarget(
+                            BehaviorTargetKind.InstalledCard,
+                            filter: new BehaviorCardFilter(BehaviorCardType.Ice, ownerSide: PlayerSide.Corp, rezzed: true)))),
+                    new BehaviorInstruction(BehaviorInstructionKind.GainCredits,
+                        amountOperand: BehaviorAmountOperand.Of(BehaviorAmountKind.ChosenCardsPrintedRezCost, 1)),
+                ]))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeFloodOperation),
+                PlayerSide.Corp,
+                instructions:
+                [
+                    new BehaviorInstruction(BehaviorInstructionKind.GainCredits,
+                        amountOperand: BehaviorAmountOperand.Of(BehaviorAmountKind.ProtectedRemotesWithRootCards, 1)),
+                ]))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeCentralsEvent),
+                PlayerSide.Runner,
+                conditions: [new BehaviorCondition(BehaviorConditionKind.SuccessfulRunOnEveryCentralThisTurn)],
+                instructions: [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 5)]))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeIceRezzedEvent),
+                PlayerSide.Runner,
+                conditions: [BehaviorCondition.TurnEventCountAtLeast(TurnEventKind.IceRezzed, 1)],
+                instructions: [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 5)]))
+            .Add(new CardBehaviorDefinition(new CardDefinitionId(ProbeLuanaAsset), PlayerSide.Corp, returnsHostedBadPublicity: true))
+            .AddAsset(new AssetBehaviorSpec(new CardDefinitionId(ProbeLuanaAsset), trashCost: 3))
+            .AddIce(new IceBehaviorSpec(new CardDefinitionId(CorpFillerIce), 1, IceType.Barrier, 1, [new EndRunSubroutineSpec()], []))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeFloodAdvanceOperation),
+                PlayerSide.Corp,
+                instructions:
+                [
+                    new BehaviorInstruction(BehaviorInstructionKind.Choose, choice: new BehaviorChoiceSpec(
+                        "probe-flood-target",
+                        BehaviorChooser.Controller,
+                        BehaviorChoiceMode.Mandatory,
+                        BehaviorChoiceCardinality.Exactly(1),
+                        target: new BehaviorTarget(
+                            BehaviorTargetKind.InstalledCard,
+                            filter: new BehaviorCardFilter(BehaviorCardType.Advanceable, ownerSide: PlayerSide.Corp)))),
+                    new BehaviorInstruction(BehaviorInstructionKind.AdvanceCard,
+                        target: new BehaviorTarget(BehaviorTargetKind.ChosenCard, selector: "probe-flood-target"),
+                        amountOperand: BehaviorAmountOperand.Of(BehaviorAmountKind.ProtectedRemotesWithRootCards, 1)),
+                ]))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeBadPublicityOperation),
+                PlayerSide.Corp,
+                conditions: [BehaviorCondition.BadPublicityAtLeast(1)],
+                instructions: [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 1)]))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeBarrierResource),
+                PlayerSide.Runner,
+                paidAbilities:
+                [
+                    new BehaviorPaidAbility(
+                        "probe-barrier-strength",
+                        BehaviorAbilityTiming.EncounterPaidWindow,
+                        BehaviorAbilityActivation.PaidAbility,
+                        [new BehaviorCost(BehaviorCostKind.Credits, 1)],
+                        [BehaviorCondition.EncounteringSubtype("barrier")],
+                        [],
+                        [new BehaviorInstruction(BehaviorInstructionKind.ModifyEncounteredIceStrength, amount: -1, argument: "probe-barrier-strength")],
+                        BehaviorAbilityUsageLimit.Unlimited),
+                ]))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeCaveatOperation),
+                PlayerSide.Corp,
+                instructions: [new BehaviorInstruction(BehaviorInstructionKind.GainAllottedClicksNextTurn, amount: -1, recipient: BehaviorPlayerSelector.Runner)]))
+            .AddRunEvent(new RunEventBehaviorSpec(new CardDefinitionId(ProbeDiveEvent), 0, 0,
+                removedFromGameAfterRun: true, targetMustBeProtected: true))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeTouchstoneResource),
+                PlayerSide.Runner,
+                triggers:
+                [
+                    new BehaviorTrigger("probe-first-event", OccurrenceKind.FirstEventPlayedThisTurn, TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Controller, null, [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 1)]),
+                ]))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeStowawayProgram),
+                PlayerSide.Runner,
+                triggers:
+                [
+                    new BehaviorTrigger("probe-hosted-success", OccurrenceKind.RunSuccessful, TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Controller, null, [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 2)],
+                        requireSourceOnAttackedServer: true),
+                ],
+                hosting: new HostingBehaviorSpec()))
+            .AddAgenda(new AgendaBehaviorSpec(new CardDefinitionId(ProbePublicAgenda), 2, installsFaceUp: true))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbePublicAgenda),
+                PlayerSide.Corp,
+                triggers:
+                [
+                    new BehaviorTrigger("probe-public-advanced", OccurrenceKind.CardAdvanced, TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Self, null, [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 1)]),
+                ]))
+            .AddIce(new IceBehaviorSpec(new CardDefinitionId(ProbeGrubberIce), 1, IceType.Barrier, 0, [new EndRunSubroutineSpec()], []))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeGrubberIce),
+                PlayerSide.Corp,
+                triggers:
+                [
+                    new BehaviorTrigger("probe-rez-on-hq", OccurrenceKind.CardRezzed, TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Self, null, [new BehaviorInstruction(BehaviorInstructionKind.TakeBadPublicity, amount: 1)],
+                        serverKindRequirement: ServerKind.Headquarters),
+                ]))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeSellOutEvent),
+                PlayerSide.Runner,
+                costs:
+                [
+                    new BehaviorCost(
+                        BehaviorCostKind.Additional,
+                        amount: 1,
+                        additionalKey: "probe-sell-out-trash",
+                        additionalTarget: BehaviorTarget.CardsInZone(
+                            BehaviorZone.Rig,
+                            new BehaviorCardFilter(BehaviorCardType.Resource, ownerSide: PlayerSide.Runner)),
+                        additionalKind: BehaviorAdditionalCostKind.TrashCards),
+                ],
+                instructions: [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 4)]))
+            .AddAgenda(new AgendaBehaviorSpec(new CardDefinitionId(CorpFillerAgenda), 2, runnerScoreAreaPoints: 1, stealClicks: 1))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(RunnerFillerResource),
+                PlayerSide.Runner,
+                scoreCostAsAgenda: new BehaviorScoreCostAsAgenda(-1, CannotForfeit: true, OnlyAgendasInstalledThisTurn: true)))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(CorpProbeOperation),
+                PlayerSide.Corp,
+                conditions: [BehaviorCondition.TurnEventCountAtLeast(TurnEventKind.AgendaScoredNotInstalledThisTurn, 1)],
+                instructions: [new BehaviorInstruction(BehaviorInstructionKind.AddSelfToScoreAreaAsAgenda, amount: 2)]))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(CorpFiller),
+                PlayerSide.Corp,
+                instructions: [new BehaviorInstruction(BehaviorInstructionKind.TakeBadPublicity, amount: 2)]))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(CorpFillerAsset),
+                PlayerSide.Corp,
+                stealCredits: 2,
+                triggers:
+                [
+                    new BehaviorTrigger(
+                        "probe-first-bad-publicity",
+                        OccurrenceKind.FirstBadPublicityThisTurn,
+                        TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Controller,
+                        null,
+                        [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 1)]),
+                ]))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(StealthHardware),
+                PlayerSide.Runner,
+                paidAbilities:
+                [
+                    new BehaviorPaidAbility(
+                        "probe-stealth-access",
+                        BehaviorAbilityTiming.BreachAccessPaidWindow,
+                        BehaviorAbilityActivation.PaidAbility,
+                        [new BehaviorCost(BehaviorCostKind.Credits, 1, creditSourceSubtype: "stealth")],
+                        [],
+                        [],
+                        [new BehaviorInstruction(BehaviorInstructionKind.Draw, amount: 1)],
+                        BehaviorAbilityUsageLimit.Unlimited),
+                ]))
+            .AddRunEvent(new RunEventBehaviorSpec(new CardDefinitionId(StealthRunEvent), 0, 2, locksCreditPool: true))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(CorpProbeUpgrade),
+                PlayerSide.Corp,
+                triggers:
+                [
+                    new BehaviorTrigger(
+                        "probe-outside-credits",
+                        OccurrenceKind.CreditsSpentFromOutsidePool,
+                        TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Any,
+                        null,
+                        [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 1)],
+                        requireSourceOnAttackedServer: true),
+                    new BehaviorTrigger(
+                        "probe-advanced",
+                        OccurrenceKind.CardAdvanced,
+                        TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Any,
+                        null,
+                        [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 1)],
+                        oncePerTurn: true),
+                ]))
+            .Build();
 
     private static BehaviorCatalog CreateProbe() =>
         new BehaviorCatalogBuilder("elevation-probe", Behavior)
@@ -89,6 +374,7 @@ internal static class ElevationHarness
         [
             Pack("sg-test", ElevationTestMetadata.Gateway),
             Pack("elev-test", ElevationTestMetadata.Elevation),
+            Pack("vp-test", ElevationTestMetadata.VantagePoint),
             Pack("fixture-test",
             [
                 new(RunnerFiller, "Filler Event", "runner", "neutral-runner", "event", [], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
@@ -99,6 +385,30 @@ internal static class ElevationHarness
                 new(RunnerFillerProgram, "Filler Program", "runner", "neutral-runner", "program", [], 3, 3, false, 1, null, 1, null, null, null, 0, null, null, null),
                 new(RunnerFillerResource, "Filler Resource", "runner", "neutral-runner", "resource", [], 3, 3, false, 1, null, null, null, null, null, 0, null, null, null),
                 new(RunnerFillerHardware, "Filler Hardware", "runner", "neutral-runner", "hardware", [], 3, 3, false, 1, null, null, null, null, null, 0, null, null, null),
+                new(StealthHardware, "Stealth Hardware", "runner", "neutral-runner", "hardware", ["Stealth"], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(StealthRunEvent, "Stealth Run Event", "runner", "neutral-runner", "event", ["Run", "Stealth"], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(CorpProbeUpgrade, "Probe Upgrade", "corp", "neutral-corp", "upgrade", [], 3, 3, false, 0, null, null, 2, null, null, 0, null, null, null),
+                new(CorpProbeOperation, "Probe Operation", "corp", "neutral-corp", "operation", [], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(ProbeReverbIce, "Probe Reverb", "corp", "neutral-corp", "ice", ["Barrier"], 3, 3, false, 4, 2, null, null, null, null, 0, null, null, null),
+                new(ProbeHypeUpgrade, "Probe Hype", "corp", "neutral-corp", "upgrade", [], 3, 3, false, 3, null, null, 2, null, null, 0, null, null, null),
+                new(ProbeTailgateEvent, "Probe Tailgate", "runner", "neutral-runner", "event", ["Run"], 3, 3, false, 3, null, null, null, null, null, 0, null, null, null),
+                new(ProbeDoubleDiscountAsset, "Probe Synchrocyclotron", "corp", "neutral-corp", "asset", [], 3, 3, false, 0, null, null, 3, null, null, 0, null, null, null),
+                new(ProbeDoubleOperation, "Probe Double", "corp", "neutral-corp", "operation", ["Double"], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(ProbeReallocOperation, "Probe realloc", "corp", "neutral-corp", "operation", [], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(ProbeFloodOperation, "Probe Flood", "corp", "neutral-corp", "operation", [], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(ProbeCentralsEvent, "Probe Chain", "runner", "neutral-runner", "event", [], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(ProbeIceRezzedEvent, "Probe Underdome", "runner", "neutral-runner", "event", [], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(ProbeLuanaAsset, "Probe Luana", "corp", "neutral-corp", "asset", [], 3, 3, false, 1, null, null, 3, null, null, 0, null, null, null),
+                new(ProbeSellOutEvent, "Probe Sell Out", "runner", "neutral-runner", "event", [], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(ProbeBadPublicityOperation, "Probe Scapegoat", "corp", "neutral-corp", "operation", [], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(ProbeBarrierResource, "Probe Corsair", "runner", "neutral-runner", "resource", [], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(ProbeCaveatOperation, "Probe Caveat", "corp", "neutral-corp", "operation", [], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(ProbeDiveEvent, "Probe Dive", "runner", "neutral-runner", "event", ["Run"], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(ProbeTouchstoneResource, "Probe Touchstone", "runner", "neutral-runner", "resource", [], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(ProbeStowawayProgram, "Probe Stowaway", "runner", "neutral-runner", "program", ["Trojan"], 3, 3, false, 0, null, 1, null, null, null, 0, null, null, null),
+                new(ProbePublicAgenda, "Probe Public Agenda", "corp", "neutral-corp", "agenda", ["Public"], 3, 3, false, null, null, null, null, 2, 3, null, null, null, null),
+                new(ProbeGrubberIce, "Probe Grubber", "corp", "neutral-corp", "ice", ["Barrier"], 3, 3, false, 0, 1, null, null, null, null, 0, null, null, null),
+                new(ProbeFloodAdvanceOperation, "Probe Flood Advance", "corp", "neutral-corp", "operation", [], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
             ]),
         ]);
         return GatewayRuntimeCardCatalog.Create(pool);
@@ -355,6 +665,9 @@ internal sealed class ElevationBoard
 
     public int Tags { get; set; }
 
+    /// <summary>VP-BAD-PUBLICITY: the Corp's bad publicity at the start.</summary>
+    public int BadPublicity { get; set; }
+
     public int CorpPoints { get; set; }
 
     public int RunnerPoints { get; set; }
@@ -450,6 +763,9 @@ internal sealed class ElevationBoard
                 {
                     "credit" => CardCounterState.CreateHostedCredit(card.Id, count),
                     "declared-credit" => CardCounterState.CreateHostedCredit(card.Id, count, HostedCreditSpendRestriction.DeclaredUseOnly),
+                    // VP-STEALTH-CREDITS: hosted credits that may be spent during runs (Methuselah, Touchstone).
+                    "run-credit" => CardCounterState.CreateHostedCredit(card.Id, count, HostedCreditSpendRestriction.RunCost),
+                    "any-credit" => CardCounterState.CreateHostedCredit(card.Id, count, HostedCreditSpendRestriction.AnyCost),
                     _ => new CardCounterState(card.Id, name, count),
                 });
             }
@@ -472,7 +788,7 @@ internal sealed class ElevationBoard
         RulesState rules = new(1, players.Select(player => new PlayerRulesState(player.Id, 5, 0,
             player.Side == PlayerSide.Runner ? Tags : 0, 4,
             player.Side == PlayerSide.Runner ? programs.Sum(static program => program.MemoryCost) : 0)).ToArray(),
-            programs, counters, []);
+            programs, counters, [], badPublicity: BadPublicity);
         int allotted = Active == PlayerSide.Corp ? 3 : 4;
         TurnFactsState facts = new(1, Active, TurnNumber, allotted, 0, true, Active == PlayerSide.Corp, false, false);
         // During the Runner's turn the Corp's facts are those of its finished turn.

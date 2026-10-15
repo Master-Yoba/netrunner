@@ -9,6 +9,7 @@ public static class EngineEventKinds
     public const string ClicksAdjusted = "clicks-adjusted";
     public const string DamageDealt = "damage-dealt";
     public const string TagsAdjusted = "tags-adjusted";
+    public const string BadPublicityAdjusted = "bad-publicity-adjusted";
     public const string MemoryAdjusted = "memory-adjusted";
     public const string ProgramTrashedForMemory = "program-trashed-for-memory";
     public const string CounterAdjusted = "counter-adjusted";
@@ -85,6 +86,7 @@ public enum HostedCreditPoolOperation
 [JsonDerivedType(typeof(ClicksAdjustedEventPayload), "clicks-adjusted")]
 [JsonDerivedType(typeof(DamageDealtEventPayload), "damage-dealt")]
 [JsonDerivedType(typeof(TagsAdjustedEventPayload), "tags-adjusted")]
+[JsonDerivedType(typeof(BadPublicityAdjustedEventPayload), "bad-publicity-adjusted")]
 [JsonDerivedType(typeof(MemoryAdjustedEventPayload), "memory-adjusted")]
 [JsonDerivedType(typeof(ProgramTrashedForMemoryEventPayload), "program-trashed-for-memory")]
 [JsonDerivedType(typeof(CounterAdjustedEventPayload), "counter-adjusted")]
@@ -289,6 +291,31 @@ public sealed record DamageDealtEventPayload : EngineEventPayload
     [JsonInclude]
     [JsonRequired]
     public bool Flatlined { get; private set; }
+}
+
+/// <summary>VP-BAD-PUBLICITY: the Corp's bad publicity changed by <see cref="Delta"/> (CR 26.03 10.6).</summary>
+public sealed record BadPublicityAdjustedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public BadPublicityAdjustedEventPayload(int version, int delta, int badPublicityAfter)
+        : base(version)
+    {
+        Delta = delta;
+        BadPublicityAfter = badPublicityAfter;
+    }
+
+    public BadPublicityAdjustedEventPayload(int delta, int badPublicityAfter)
+        : this(1, delta, badPublicityAfter)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int Delta { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int BadPublicityAfter { get; private set; }
 }
 
 public sealed record TagsAdjustedEventPayload : EngineEventPayload
@@ -2296,6 +2323,7 @@ public sealed record EngineEvent
         ClicksAdjustedEventPayload value => new EngineEvent(Version, Sequence, Kind, new ClicksAdjustedEventPayload(value.Version, value.Target, value.Delta, value.ClicksAfter)),
         DamageDealtEventPayload value => new EngineEvent(Version, Sequence, Kind, new DamageDealtEventPayload(value.Version, value.Target, value.Kind, value.Amount, value.CardsTrashed, value.CoreDamageAfter, value.Flatlined, value.SourceCardId, value.FlatlineRisk, value.TrashedCardPrintedCost, value.ConditionalEndRun)),
         TagsAdjustedEventPayload value => new EngineEvent(Version, Sequence, Kind, new TagsAdjustedEventPayload(value.Version, value.Target, value.Delta, value.TagsAfter)),
+        BadPublicityAdjustedEventPayload value => new EngineEvent(Version, Sequence, Kind, new BadPublicityAdjustedEventPayload(value.Version, value.Delta, value.BadPublicityAfter)),
         MemoryAdjustedEventPayload value => new EngineEvent(Version, Sequence, Kind, new MemoryAdjustedEventPayload(value.Version, value.Target, value.BaseMemory, value.UsedMemory)),
         ProgramTrashedForMemoryEventPayload value => new EngineEvent(Version, Sequence, Kind, new ProgramTrashedForMemoryEventPayload(value.Version, value.CardId, value.Owner, value.MemoryCost)),
         CounterAdjustedEventPayload value => new EngineEvent(Version, Sequence, Kind, new CounterAdjustedEventPayload(value.Version, value.CardId, value.CounterName, value.Delta, value.CountAfter)),
@@ -2422,6 +2450,10 @@ public static class EngineEventValidator
                 RequireNumber(value.Amount, $"{path}.payload.amount", "Damage amount", violations, strictlyPositive: true);
                 RequireNumber(value.CardsTrashed, $"{path}.payload.cardsTrashed", "Trashed cards", violations);
                 RequireNumber(value.CoreDamageAfter, $"{path}.payload.coreDamageAfter", "Core damage", violations);
+                break;
+            case BadPublicityAdjustedEventPayload value:
+                RequireKind(@event, EngineEventKinds.BadPublicityAdjusted, path, violations);
+                RequireNumber(value.BadPublicityAfter, $"{path}.payload.badPublicityAfter", "Bad publicity", violations);
                 break;
             case TagsAdjustedEventPayload value:
                 RequireKind(@event, EngineEventKinds.TagsAdjusted, path, violations);

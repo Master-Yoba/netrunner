@@ -307,7 +307,10 @@ public static partial class GameEngine
                 // A player loses only the credits they have (CR 1.10); the
                 // realized loss is what a recorded amount reads.
                 PlayerId loser = ResolveBehaviorRecipient(working, frame, instruction);
-                int lost = Math.Min(GetPlayer(working, loser).Credits, StaticOrDynamicAmount(working, frame, instruction));
+                // VP-POOL-LOCK: a locked pool loses nothing (Aircheck).
+                int lost = GetPlayer(working, loser).Side == PlayerSide.Runner && CreditPoolLocked(working, working.RunState)
+                    ? 0
+                    : Math.Min(GetPlayer(working, loser).Credits, StaticOrDynamicAmount(working, frame, instruction));
                 ApplyCreditDeltaIfNonZero(working, loser, -lost);
                 AdvanceBehaviorCursor(working, RecordBehaviorAmount(frame, instruction.RecordAs, lost));
                 return;
@@ -321,6 +324,17 @@ public static partial class GameEngine
                         new EffectBundle(new TagAdjustmentEffect(tagged, -removed))));
                 }
 
+                return;
+            case BehaviorInstructionKind.AddSelfToScoreAreaAsAgenda:
+                AddSourceToScoreAreaAsAgenda(working, frame, instruction);
+                return;
+            case BehaviorInstructionKind.TakeBadPublicity:
+                ApplyBadPublicity(working, StaticOrDynamicAmount(working, frame, instruction));
+                AdvanceBehaviorCursor(working, frame);
+                return;
+            case BehaviorInstructionKind.RemoveBadPublicity:
+                ApplyBadPublicity(working, -Math.Min(RequireRulesState(working).BadPublicity, StaticOrDynamicAmount(working, frame, instruction)));
+                AdvanceBehaviorCursor(working, frame);
                 return;
             case BehaviorInstructionKind.GainClicks:
                 ApplyClickDelta(working, frame.Controller, instruction.Amount);
@@ -1586,11 +1600,19 @@ public static partial class GameEngine
                 frame,
                 source,
                 currentSourceZone);
-            bool validLifecycleZone = frame.TriggerKey is not null
+            // VP-CARD-AS-AGENDA: the behavior moved its own source to a score area as an agenda (Myōshu); it finishes there.
+            bool movedToScoreAreaAsAgenda = currentSourceZone.Kind is ZoneKind.CorpScore or ZoneKind.RunnerScore
+                && ScoreAreaAgendaEntry(working, source.Id) is not null
+                && BehaviorInstructionPath.HasReached(
+                    rootInstructions,
+                    frame.Continuation,
+                    frame.InstructionCursor,
+                    BehaviorInstructionKind.AddSelfToScoreAreaAsAgenda);
+            bool validLifecycleZone = movedToScoreAreaAsAgenda || (frame.TriggerKey is not null
                 ? catalogTriggerDetachedSource || catalogTriggerBegan || catalogTriggerLifecycleZone || hostedCreditOccurrenceAuthorized
                 : (selfTrash && IsAbilityTrashZone(currentSourceZone, source))
                     || (selfRemove && IsAbilityRemoveZone(currentSourceZone, source))
-                    || hostedCreditOccurrenceAuthorized;
+                    || hostedCreditOccurrenceAuthorized);
             if (!validLifecycleZone
                 || frame.Stage != BehaviorResolutionStage.Execute
                 || (selfTrash && selfRemove))
@@ -1665,6 +1687,10 @@ public static partial class GameEngine
                     ApplyCreditDeltaIfNonZero(working, payer, -cost.Amount);
                     break;
                 case BehaviorCostKind.Clicks:
+                    // VP-CLICK-COST-MODIFIER: the first Double operation of the turn may cost fewer clicks (Synchrocyclotron).
+                    ApplyClickDelta(working, payer,
+                        -Math.Max(0, cost.Amount - DoubleOperationClickDiscount(working, source, doubleOperationsAlreadyPlayed: 1)));
+                    break;
                 case BehaviorCostKind.LoseClick:
                     ApplyClickDelta(working, payer, -cost.Amount);
                     break;
@@ -1683,6 +1709,9 @@ public static partial class GameEngine
                     MoveBehaviorCardToRemovedFromGame(working, source);
                     source = GetCard(working, frame.SourceCardId);
                     deferredCounterCleanup = true;
+                    break;
+                case BehaviorCostKind.Additional when IsPlayTrashCost(cost):
+                    // VP-TRASH-AS-COST: the play action trashed the card it names.
                     break;
                 default:
                     throw new ResolutionFailureException($"Behavior cost '{cost.Kind}' is not executable.");
@@ -2037,7 +2066,8 @@ public static partial class GameEngine
             BehaviorConditionKind.SuccessfulRunDuringRunnerLastTurn => working.Turn.History?.RunnerThisTurn?.SuccessfulRun == true,
             BehaviorConditionKind.SuccessfulRunThisTurn => CurrentFacts(working, frame.Controller)?.SuccessfulRun == true,
             BehaviorConditionKind.SourceController => GetCard(working, frame.SourceCardId).OwnerSide == controller.Side,
-            BehaviorConditionKind.Encountering => working.RunState?.Step == RunTimingStep.Encounter,
+            BehaviorConditionKind.Encountering => working.RunState?.Step == RunTimingStep.Encounter
+                && EncounteredIceHasSubtype(working, condition.Fact),
             BehaviorConditionKind.CounterAtLeast => CurrentCounter(working, frame.SourceCardId, condition.Fact!) >= condition.Value.GetValueOrDefault(),
             BehaviorConditionKind.FactEquals => BehaviorFactEquals(working, frame, condition),
             BehaviorConditionKind.FoundCard => FoundCardConditionMatches(working, frame),
@@ -2053,7 +2083,7 @@ public static partial class GameEngine
                 && AccessTrashCost(working.BehaviorCatalog, working.RuntimeCardCatalog, GetCard(working, chosen.CardIds[0]).DefinitionId)
                     == condition.Value,
             BehaviorConditionKind.SourceHostsAtLeast => OptionConditionMatches(working, frame.Controller, frame.SourceCardId, condition),
-            _ => SharedConditionMatches(working, frame.Controller, condition) ?? false,
+            _ => SharedConditionMatches(working, frame.Controller, condition, frame.SourceCardId) ?? false,
         };
     }
 
@@ -2214,6 +2244,13 @@ public static partial class GameEngine
                 BehaviorAmountKind.SourceAdvancementCounters => GetCard(working, frame.SourceCardId).AdvancementCounters,
                 BehaviorAmountKind.ChosenCardInstallCost => ChosenCardInstallCost(working, frame),
                 BehaviorAmountKind.SourceExcessAdvancement => SourceExcessAdvancement(working, frame.SourceCardId),
+                BehaviorAmountKind.ChosenCardsPrintedRezCost => frame.Bindings
+                    .Where(static binding => string.Equals(binding.Key, "chosen", StringComparison.Ordinal))
+                    .SelectMany(static binding => binding.CardIds)
+                    .Sum(card => working.RuntimeCardCatalog?.TryGet(GetCard(working, card).DefinitionId, out CardRuntimeSpec? rezSpec) == true
+                        ? rezSpec!.RezCost ?? 0
+                        : 0),
+                BehaviorAmountKind.ProtectedRemotesWithRootCards => ProtectedRemotesWithRootCards(working),
                 _ => throw new ResolutionFailureException($"Amount kind '{kind}' is not executable."),
             };
             return checked(counted * operand.Multiplier + operand.Offset);
@@ -2247,6 +2284,12 @@ public static partial class GameEngine
         int count = counter?.Count ?? 0;
         return checked(count * operand.Multiplier + operand.Offset);
     }
+
+    /// <summary>VP-AMOUNT: the remote servers with a card in their root and ICE protecting them.</summary>
+    private static int ProtectedRemotesWithRootCards(WorkingState working) =>
+        working.Servers.Count(server => server.Kind == ServerKind.Remote && server.Exists
+            && working.Zones.FirstOrDefault(zone => zone.Id == server.RootZoneId)?.CardIds.Count > 0
+            && working.Zones.FirstOrDefault(zone => zone.Id == server.IceZoneId)?.CardIds.Count > 0);
 
     private static int ChosenCardInstallCost(WorkingState working, BehaviorResolutionFrame frame)
     {
@@ -2847,10 +2890,17 @@ public static partial class GameEngine
             PlayerState payer = GetPlayer(working, owner);
             long credits = 0;
             long clicks = 0;
+            long restricted = 0;
+            string? restrictedSubtype = null;
             foreach (BehaviorCost cost in option.Costs ?? [])
             {
                 switch (cost.Kind)
                 {
+                    case BehaviorCostKind.Credits when cost.CreditSourceSubtype is { } subtype:
+                        // VP-STEALTH-CREDITS: an option payable only with credits from cards of a subtype (Baker).
+                        restricted = checked(restricted + cost.Amount);
+                        restrictedSubtype = subtype;
+                        break;
                     case BehaviorCostKind.Credits:
                         credits = checked(credits + cost.Amount);
                         break;
@@ -2867,6 +2917,7 @@ public static partial class GameEngine
             }
 
             return credits <= int.MaxValue && credits <= AvailableCreditsForPayment(working, owner)
+                && (restrictedSubtype is null || restricted <= SourceRestrictedCredits(working, owner, restrictedSubtype))
                 && clicks <= payer.Clicks
                 && (!HasBehaviorChoiceAdditionalCardCost(option)
                     || EnumerateBehaviorChoiceAdditionalSelections(working, option).Any());
@@ -3156,10 +3207,16 @@ public static partial class GameEngine
         PlayerState payer = GetPlayer(working, owner);
         long credits = 0;
         long clicks = 0;
+        long restricted = 0;
+        string? restrictedSubtype = null;
         foreach (BehaviorCost cost in option.Costs ?? [])
         {
             switch (cost.Kind)
             {
+                case BehaviorCostKind.Credits when cost.CreditSourceSubtype is { } subtype:
+                    restricted = checked(restricted + cost.Amount);
+                    restrictedSubtype = subtype;
+                    break;
                 case BehaviorCostKind.Credits:
                     credits = checked(credits + cost.Amount);
                     break;
@@ -3174,7 +3231,8 @@ public static partial class GameEngine
             }
         }
 
-        if (credits > int.MaxValue || credits > AvailableCreditsForPayment(working, owner) || clicks > payer.Clicks)
+        if (credits > int.MaxValue || credits > AvailableCreditsForPayment(working, owner) || clicks > payer.Clicks
+            || restrictedSubtype is not null && restricted > SourceRestrictedCredits(working, owner, restrictedSubtype))
         {
             throw new ResolutionFailureException(
                 "The behavior option cost is no longer affordable by its chooser.");
@@ -3185,6 +3243,11 @@ public static partial class GameEngine
         if (credits != 0)
         {
             PayCreditCost(working, owner, (int)credits);
+        }
+
+        if (restrictedSubtype is not null && restricted != 0)
+        {
+            PaySourceRestrictedCredits(working, owner, (int)restricted, restrictedSubtype);
         }
 
         if (clicks != 0)
@@ -3539,6 +3602,16 @@ public static partial class GameEngine
         if (filter.OwnerSide.HasValue && card.OwnerSide != filter.OwnerSide.Value)
         {
             return false;
+        }
+
+        // VP-CARD-AS-AGENDA (CR 26.03 10.1.3): a card added to a score area as an agenda has only an agenda's properties.
+        // One that can't be forfeited never matches an agenda filter, so no forfeit is offered it.
+        if (ScoreAreaAgendaEntry(working, cardId) is { } converted)
+        {
+            return filter.Subtype is null
+                && (filter.AgendaPoints is not { } convertedPoints || converted.Points == convertedPoints)
+                && (filter.CardType == BehaviorCardType.Any
+                    || filter.CardType is BehaviorCardType.Agenda or BehaviorCardType.Advanceable && !converted.CannotForfeit);
         }
 
         // Once a runtime catalog is present it is the sole authority for
@@ -4477,10 +4550,13 @@ public static partial class GameEngine
             ValidateChosenAdvanceTargets(working, frame, instruction.Target, cardIds);
         }
 
-        foreach (CardInstanceId cardId in cardIds)
+        // VP-AMOUNT: a dynamic amount (Flood the Market) is resolved once, may be zero (placing nothing), and is the
+        // event's amount (PR #152's review).
+        int amount = StaticOrDynamicAmount(working, frame, instruction);
+        foreach (CardInstanceId cardId in amount > 0 ? cardIds : [])
         {
             CardInstanceState card = GetCard(working, cardId);
-            int advancementCounters = checked(card.AdvancementCounters + instruction.Amount);
+            int advancementCounters = checked(card.AdvancementCounters + amount);
             ReplaceCard(working, new CardInstanceState(
                 card.Id,
                 card.DefinitionId,
@@ -4491,7 +4567,7 @@ public static partial class GameEngine
                 advancementCounters));
             Emit(working, EngineEventKinds.BehaviorCardAdvanced, new BehaviorCardAdvancedEventPayload(
                 card.Id,
-                instruction.Amount,
+                amount,
                 advancementCounters));
         }
 
@@ -4976,6 +5052,6 @@ public static partial class GameEngine
                 && card.Rezzed
                 && card.DefinitionId.Value == condition.Fact
                 && IsInstalledCard(working, card.Id)),
-            _ => SharedConditionMatches(working, owner, condition) ?? false,
+            _ => SharedConditionMatches(working, owner, condition, sourceCardId) ?? false,
         };
 }

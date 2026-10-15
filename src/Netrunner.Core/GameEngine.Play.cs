@@ -116,6 +116,16 @@ public static partial class GameEngine
                 continue;
             }
 
+            if (PlayTrashCost(plan.Definition) is { } trashCost)
+            {
+                foreach (CardInstanceId trashed in PlayTrashCostCandidates(working, trashCost))
+                {
+                    materialized.Add(new PlayCardParameters(plan.Card.Id, plan.CreditCost, trashCostCardId: trashed));
+                }
+
+                continue;
+            }
+
             materialized.Add(new PlayCardParameters(plan.Card.Id, plan.CreditCost));
         }
 
@@ -191,8 +201,8 @@ public static partial class GameEngine
             foreach (BehaviorCost behaviorCost in definition.Costs)
             {
                 // A "Double" card's additional cost spends a click on top of
-                // the click of the play action itself.
-                if (behaviorCost.Kind == BehaviorCostKind.Clicks)
+                // the click of the play action itself; a trash cost is paid by the play action.
+                if (behaviorCost.Kind == BehaviorCostKind.Clicks || IsPlayTrashCost(behaviorCost))
                 {
                     continue;
                 }
@@ -212,7 +222,7 @@ public static partial class GameEngine
 
         if (cost != printedCost
             || GetPlayer(working, side).Credits < cost
-            || GetPlayer(working, side).Clicks < 1 + AdditionalPlayClicks(definition))
+            || GetPlayer(working, side).Clicks < 1 + AdditionalPlayClicks(working, card, definition))
         {
             return false;
         }
@@ -224,6 +234,12 @@ public static partial class GameEngine
 
         if (validateBehaviorTargets
             && !AreBehaviorPlayTargetsAvailable(working, definition))
+        {
+            return false;
+        }
+
+        if (definition.Costs.Count(IsPlayTrashCost) > 1
+            || (PlayTrashCost(definition) is { } trashCost && PlayTrashCostCandidates(working, trashCost).Length == 0))
         {
             return false;
         }
@@ -259,7 +275,7 @@ public static partial class GameEngine
             || printedCost < 0
             || runEvent.Cost != printedCost
             || GetPlayer(working, PlayerSide.Runner).Clicks < 1 + runEvent.AdditionalClicks
-            || GetPlayer(working, PlayerSide.Runner).Credits < runEvent.Cost
+            || GetPlayer(working, PlayerSide.Runner).Credits < RunEventPlayCost(working, runEvent)
             || (playArea is not null && playArea.CardIds.Count != 0))
         {
             return false;
@@ -279,6 +295,12 @@ public static partial class GameEngine
             targetServers = targetServers.Where(server => allowed.Contains(server.Kind));
         }
 
+        if (runEvent.TargetMustBeProtected)
+        {
+            targetServers = targetServers.Where(server =>
+                working.Zones.FirstOrDefault(zone => zone.Id == server.IceZoneId)?.CardIds.Count > 0);
+        }
+
         plans = targetServers
             .Select(server => new RunEventPlayPlan(
                 card,
@@ -288,7 +310,7 @@ public static partial class GameEngine
                 playArea,
                 discard,
                 server,
-                runEvent.Cost))
+                RunEventPlayCost(working, runEvent)))
             .ToArray();
         return true;
     }
@@ -429,6 +451,10 @@ public static partial class GameEngine
 
         PlayerState player = GetPlayer(working, side);
         SpendClick(working, player.Id);
+        if (parameters.TrashCostCardId is { } trashCostCardId)
+        {
+            PayPlayTrashCost(working, trashCostCardId);
+        }
 
         CardInstanceState sourceCard = GetCard(working, plan.Card.Id);
         ReplaceCard(working, new CardInstanceState(
@@ -449,9 +475,19 @@ public static partial class GameEngine
             playArea.Id,
             plan.CreditCost));
         RecordTurnEvent(working, side, side == PlayerSide.Corp ? TurnEventKind.OperationPlayed : TurnEventKind.EventPlayed);
+        if (side == PlayerSide.Corp && CardSubtypes(working.RuntimeCardCatalog, sourceCard.DefinitionId).Contains("double", StringComparer.OrdinalIgnoreCase))
+        {
+            RecordOptInTurnEvent(working, TurnEventKind.DoubleOperationPlayed);
+        }
+
         if (side == PlayerSide.Corp && ActiveTurnEventCount(working, TurnEventKind.OperationPlayed) == 1)
         {
             DeferOccurrence(working, OccurrenceKind.FirstOperationPlayedThisTurn, PlayerSide.Corp, plan.Card.Id);
+        }
+
+        if (side == PlayerSide.Runner && ActiveTurnEventCount(working, TurnEventKind.EventPlayed) == 1)
+        {
+            DeferOccurrence(working, OccurrenceKind.FirstEventPlayedThisTurn, PlayerSide.Runner, plan.Card.Id);
         }
 
         PushBehaviorChild(
@@ -510,6 +546,11 @@ public static partial class GameEngine
         }
 
         RecordTurnEvent(working, PlayerSide.Runner, TurnEventKind.EventPlayed);
+        if (ActiveTurnEventCount(working, TurnEventKind.EventPlayed) == 1)
+        {
+            DeferOccurrence(working, OccurrenceKind.FirstEventPlayedThisTurn, PlayerSide.Runner, parameters.CardId);
+        }
+
         StartRunInWorkingState(
             working,
             targetServerId,
@@ -519,16 +560,23 @@ public static partial class GameEngine
 
     private static void StepCardPlay(WorkingState working, CardPlayFrame frame)
     {
-        _ = ValidateCardPlayFrame(working, frame);
+        // VP-CARD-AS-AGENDA: an operation that added itself to a score area as an agenda (Myōshu) stays there.
+        bool becameAgenda = ScoreAreaAgendaEntry(working, frame.CardId) is not null
+            && ZoneForCard(working, frame.CardId).Kind is ZoneKind.CorpScore or ZoneKind.RunnerScore;
+        if (!becameAgenda)
+        {
+            _ = ValidateCardPlayFrame(working, frame);
+        }
+
         CardInstanceState card = GetCard(working, frame.CardId);
         ZoneState playArea = working.Zones.Single(zone => zone.Id == frame.PlayAreaZoneId);
         ZoneState discard = working.Zones.Single(zone => zone.Id == frame.DiscardZoneId);
 
-        if (frame.RemoveAfterResolution)
+        if (!becameAgenda && frame.RemoveAfterResolution)
         {
             MoveCard(working, card, playArea, GetBehaviorZone(working, BehaviorZone.RemovedFromGame, card.OwnerSide));
         }
-        else
+        else if (!becameAgenda)
         {
             TrashCard(working, card, playArea, discard);
         }
@@ -688,7 +736,7 @@ public static partial class GameEngine
         {
             foreach (BehaviorCost cost in definition.Costs)
             {
-                if (cost.Kind == BehaviorCostKind.Clicks)
+                if (cost.Kind == BehaviorCostKind.Clicks || IsPlayTrashCost(cost))
                 {
                     continue;
                 }
@@ -714,14 +762,80 @@ public static partial class GameEngine
         return new PlayCardPlan(card, spec, definition, source, playArea, discard, behaviorCost);
     }
 
+    /// <summary>VP-TRASH-AS-COST: an additional cost to trash one card of a kind, paid by the play action.</summary>
+    private static bool IsPlayTrashCost(BehaviorCost cost) =>
+        cost is { Kind: BehaviorCostKind.Additional, AdditionalKind: BehaviorAdditionalCostKind.TrashCards, Amount: 1 };
+
+    private static BehaviorCost? PlayTrashCost(CardBehaviorDefinition definition) =>
+        definition.Costs.FirstOrDefault(IsPlayTrashCost);
+
+    /// <summary>The cards that may pay a play's trash cost, in their zone's order.</summary>
+    private static CardInstanceId[] PlayTrashCostCandidates(WorkingState working, BehaviorCost cost)
+    {
+        if (cost.AdditionalTarget is not { Kind: BehaviorTargetKind.ZoneCards, Zone: { } zoneKind, Filter: { } filter }
+            || filter.OwnerSide is not { } owner
+            || !TryGetExistingBehaviorZone(working, zoneKind, owner, out ZoneState? zone)
+            || zone is null
+            || !BehaviorZoneMatches(zoneKind, zone.Kind, owner))
+        {
+            return [];
+        }
+
+        return zone.CardIds
+            .Where(cardId => GetCard(working, cardId).OwnerSide == owner && BehaviorCardMatches(working, cardId, filter))
+            .ToArray();
+    }
+
+    private static void PayPlayTrashCost(WorkingState working, CardInstanceId cardId)
+    {
+        CardInstanceState card = GetCard(working, cardId);
+        ZoneState source = ZoneForCard(working, cardId);
+        ZoneState destination = GetBehaviorZone(
+            working,
+            card.OwnerSide == PlayerSide.Corp ? BehaviorZone.Archives : BehaviorZone.Heap,
+            card.OwnerSide);
+        TrashCard(working, card, source, destination);
+        CardInstanceState trashed = GetCard(working, cardId);
+        ReplaceCard(working, new CardInstanceState(trashed.Id, trashed.DefinitionId, trashed.ZoneId, trashed.OwnerSide,
+            faceUp: true, rezzed: false, trashed.AdvancementCounters));
+    }
+
     private static bool PlayParametersMatch(PlayCardParameters actual, PlayCardParameters expected) =>
         actual.CardId == expected.CardId
         && actual.CreditCost == expected.CreditCost
-        && actual.TargetServerId == expected.TargetServerId;
+        && actual.TargetServerId == expected.TargetServerId
+        && actual.TrashCostCardId == expected.TrashCostCardId;
 
-    /// <summary>Clicks a "Double" card's additional cost spends beyond the play action's click.</summary>
-    private static int AdditionalPlayClicks(CardBehaviorDefinition definition) =>
-        definition.Costs.Where(static cost => cost.Kind == BehaviorCostKind.Clicks).Sum(static cost => cost.Amount);
+    /// <summary>
+    /// Clicks a "Double" card's additional cost spends beyond the play action's click, less a discount for the first
+    /// Double operation of the turn (VP-CLICK-COST-MODIFIER).
+    /// </summary>
+    private static int AdditionalPlayClicks(WorkingState working, CardInstanceState card, CardBehaviorDefinition definition)
+    {
+        int clicks = definition.Costs.Where(static cost => cost.Kind == BehaviorCostKind.Clicks).Sum(static cost => cost.Amount);
+        return Math.Max(0, clicks - DoubleOperationClickDiscount(working, card, doubleOperationsAlreadyPlayed: 0));
+    }
+
+    /// <summary>
+    /// VP-CLICK-COST-MODIFIER: the clicks active Corp cards take off a Double operation's cost when it is the first the
+    /// Corp plays this turn: before the play none was played, and while it pays its costs it is the one played.
+    /// </summary>
+    private static int DoubleOperationClickDiscount(WorkingState working, CardInstanceState card, int doubleOperationsAlreadyPlayed)
+    {
+        if (card.OwnerSide != PlayerSide.Corp
+            || !CardSubtypes(working.RuntimeCardCatalog, card.DefinitionId).Contains("double", StringComparer.OrdinalIgnoreCase)
+            || !working.BehaviorCatalog.RecordsTurnEvent(TurnEventKind.DoubleOperationPlayed)
+            || ActiveTurnEventCount(working, TurnEventKind.DoubleOperationPlayed) != doubleOperationsAlreadyPlayed)
+        {
+            return 0;
+        }
+
+        return working.Cards
+            .Where(source => source.OwnerSide == PlayerSide.Corp && RuntimeCardActivity.IsActive(source, working.Zones))
+            .Sum(source => working.BehaviorCatalog.TryGet(source.DefinitionId, out CardBehaviorDefinition? sourceDefinition)
+                ? sourceDefinition.FirstDoubleOperationClickDiscount
+                : 0);
+    }
 
     /// <summary>The zones a card played from inside a behavior may come from: HQ, Archives, the grip or the heap.</summary>
     internal static bool IsNestedPlaySourceKind(PlayerSide side, ZoneKind kind) => side switch
@@ -785,12 +899,14 @@ public static partial class GameEngine
         }
 
         int creditCost = definition.Costs.Where(static cost => cost.Kind == BehaviorCostKind.Credits).Sum(static cost => cost.Amount);
-        int clickCost = AdditionalPlayClicks(definition);
+        int clickCost = AdditionalPlayClicks(working, card, definition);
         bool playable = (playArea is null || playArea.CardIds.Count == 0)
             && player.Credits >= creditCost
             && player.Clicks >= clickCost
             && AreBehaviorPlayTargetsAvailable(working, definition)
-            && AbilityConditionsMatch(working, card, player.Id, definition.Conditions);
+            && AbilityConditionsMatch(working, card, player.Id, definition.Conditions)
+            // A play by an effect has no action to name the card a trash cost trashes (an engine limit, VP.2).
+            && PlayTrashCost(definition) is null;
         if (!playable)
         {
             // A card that can't be played now (a restriction, its costs) stays where it is.
@@ -837,9 +953,19 @@ public static partial class GameEngine
         Emit(working, EngineEventKinds.CardPlayStarted, new CardPlayStartedEventPayload(
             side, card.Id, card.DefinitionId, current.Id, playArea.Id, creditCost));
         RecordTurnEvent(working, side, side == PlayerSide.Corp ? TurnEventKind.OperationPlayed : TurnEventKind.EventPlayed);
+        if (side == PlayerSide.Corp && CardSubtypes(working.RuntimeCardCatalog, card.DefinitionId).Contains("double", StringComparer.OrdinalIgnoreCase))
+        {
+            RecordOptInTurnEvent(working, TurnEventKind.DoubleOperationPlayed);
+        }
+
         if (side == PlayerSide.Corp && ActiveTurnEventCount(working, TurnEventKind.OperationPlayed) == 1)
         {
             DeferOccurrence(working, OccurrenceKind.FirstOperationPlayedThisTurn, PlayerSide.Corp, card.Id);
+        }
+
+        if (side == PlayerSide.Runner && ActiveTurnEventCount(working, TurnEventKind.EventPlayed) == 1)
+        {
+            DeferOccurrence(working, OccurrenceKind.FirstEventPlayedThisTurn, PlayerSide.Runner, card.Id);
         }
 
         PushBehaviorChild(working, new BehaviorInvocationContext(card.Id, player.Id, player.Id), definition, playArea);

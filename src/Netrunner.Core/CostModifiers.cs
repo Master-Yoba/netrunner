@@ -16,6 +16,12 @@ public enum BehaviorCostModifierKind
 
     /// <summary>The credit cost of an icebreaker's printed strength pump.</summary>
     IcebreakerPumpCreditCost,
+
+    /// <summary>
+    /// VP-DYNAMIC-REZ-COST: the card's own rez cost, lowered per other installed Corp card matching the filter (Reverb:
+    /// each other unrezzed ICE) or while a turn-event condition holds (Hype Machine: an agenda scored or stolen this turn).
+    /// </summary>
+    SelfRezCreditCost,
 }
 
 /// <summary>
@@ -208,7 +214,9 @@ public sealed record BehaviorCostModifier
 
         // A cost modifier is unconditional, or conditional on a successful run
         // this turn (Carmen) or on an active run event (Sang Kancil).
+        bool selfRez = kind == BehaviorCostModifierKind.SelfRezCreditCost;
         if (condition is not null
+            && !(selfRez && condition.Kind == BehaviorConditionKind.TurnEventCountAtLeast)
             && (condition.Kind is not (BehaviorConditionKind.SuccessfulRunThisTurn or BehaviorConditionKind.RunEventActive)
                 || condition.Fact is not null
                 || condition.Value is not null
@@ -219,8 +227,9 @@ public sealed record BehaviorCostModifier
                 nameof(condition));
         }
 
+        // A self rez-cost multiplier may also count by rezzed state (Reverb counts unrezzed ICE).
         if (perInstalledFilter is not null
-            && (perInstalledFilter.DefinitionId is not null || perInstalledFilter.Rezzed is not null))
+            && (perInstalledFilter.DefinitionId is not null || perInstalledFilter.Rezzed is not null && !selfRez))
         {
             throw new ArgumentException(
                 "A per-installed cost multiplier may filter by owner, card class and subtype only.",
@@ -639,7 +648,7 @@ public static partial class GameEngine
             ArgumentOutOfRangeException.ThrowIfNegative(baseCost);
 
             IReadOnlyList<RunRezCostModifier> modifiers = working.RunState?.RezCostModifiers ?? [];
-            CostAdjustment[] installedAdjustments = InstalledIceRezAdjustments(working);
+            CostAdjustment[] installedAdjustments = [.. InstalledIceRezAdjustments(working), .. SelfRezAdjustments(working, target)];
             if (modifiers.Count == 0 && installedAdjustments.Length == 0
                 || target.OwnerSide != PlayerSide.Corp
                 || target.Rezzed)
@@ -666,6 +675,51 @@ public static partial class GameEngine
                 .ThenBy(static adjustment => adjustment.Delta)
                 .ToArray();
             return new CostQuote(baseCost, adjustments);
+        }
+
+        /// <summary>
+        /// VP-DYNAMIC-REZ-COST: the card's own rez-cost modifiers. A per-installed count includes every other installed
+        /// Corp card matching the filter, rezzed or not as the filter says.
+        /// </summary>
+        internal static CostAdjustment[] SelfRezAdjustments(WorkingState working, CardInstanceState target)
+        {
+            if (target.OwnerSide != PlayerSide.Corp
+                || target.Rezzed
+                || !working.BehaviorCatalog.TryGet(target.DefinitionId, out CardBehaviorDefinition? definition)
+                || definition.CostModifiers is not { Count: > 0 } modifiers)
+            {
+                return [];
+            }
+
+            var adjustments = new List<CostAdjustment>();
+            foreach (BehaviorCostModifier modifier in modifiers.Where(static value => value.Kind == BehaviorCostModifierKind.SelfRezCreditCost))
+            {
+                if (modifier.Condition is { Kind: BehaviorConditionKind.TurnEventCountAtLeast } condition
+                    && !(Enum.TryParse(condition.Fact, ignoreCase: false, out TurnEventKind eventKind)
+                        && (working.Turn.History?.ThisTurn(working.Turn.ActiveSide)?.EventCount(eventKind) ?? 0) >= condition.Value.GetValueOrDefault()))
+                {
+                    continue;
+                }
+
+                int delta = modifier.Delta;
+                if (modifier.PerInstalledFilter is { } filter)
+                {
+                    int count = working.Cards.Count(card => card.Id != target.Id
+                        && card.OwnerSide == PlayerSide.Corp
+                        && IsInstalledCard(working, card.Id)
+                        && BehaviorCardMatches(working, card.Id, filter));
+                    if (count == 0)
+                    {
+                        continue;
+                    }
+
+                    delta = checked(delta * count);
+                }
+
+                adjustments.Add(new CostAdjustment(modifier.Kind, delta, modifier.ReasonKey, target.DefinitionId, target.Id));
+            }
+
+            return [.. adjustments];
         }
 
         /// <summary>EL-REZ-COST-MODIFIER: rez-cost changes of every ICE from installed Runner cards.</summary>

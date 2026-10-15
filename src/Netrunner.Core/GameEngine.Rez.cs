@@ -226,11 +226,14 @@ public static partial class GameEngine
             CardInstanceState? card = working.Cards.FirstOrDefault(candidate => candidate.Id == cardId);
             int assetCost = 0;
             int upgradeCost = 0;
+            CostQuote? assetQuote = null;
+            CostQuote? upgradeQuote = null;
             bool isAsset = card is not null
-                && TryGetRezCost(working, card, RuntimeCardClass.Asset, out assetCost);
+                && TryGetRezCostQuote(working, card, RuntimeCardClass.Asset, out assetCost, out assetQuote);
             bool isUpgrade = card is not null
-                && TryGetRezCost(working, card, RuntimeCardClass.Upgrade, out upgradeCost);
+                && TryGetRezCostQuote(working, card, RuntimeCardClass.Upgrade, out upgradeCost, out upgradeQuote);
             int cost = isAsset ? assetCost : upgradeCost;
+            CostQuote? quote = isAsset ? assetQuote : upgradeQuote;
             if (card is null
                 || card.ZoneId != root.Id
                 || card.OwnerSide != PlayerSide.Corp
@@ -243,7 +246,7 @@ public static partial class GameEngine
                 continue;
             }
 
-            materialized.Add(new RezCardParameters(card.Id, cost));
+            materialized.Add(new RezCardParameters(card.Id, cost, quote));
         }
     }
 
@@ -282,9 +285,12 @@ public static partial class GameEngine
             return false;
         }
 
+        // VP-DYNAMIC-REZ-COST: an asset or upgrade quotes only its own rez-cost modifiers (Hype Machine).
         quote = expectedClass == RuntimeCardClass.Ice
             ? CostModifierProjection.IceRez(working, card, baseCost)
-            : null;
+            : CostModifierProjection.SelfRezAdjustments(working, card) is { Length: > 0 } selfAdjustments
+                ? new CostQuote(baseCost, selfAdjustments)
+                : null;
         effectiveCost = quote?.EffectiveCost ?? baseCost;
         return true;
     }
@@ -344,6 +350,11 @@ public static partial class GameEngine
         Emit(working, EngineEventKinds.CardRezzed, new CardRezzedEventPayload(
             parameters.CardId,
             effectiveCost));
+        if (working.RuntimeCardCatalog?.TryGet(card.DefinitionId, out CardRuntimeSpec? rezzedSpec) == true
+            && rezzedSpec.CardClass == RuntimeCardClass.Ice)
+        {
+            RecordOptInTurnEvent(working, TurnEventKind.IceRezzed);
+        }
         TrashCorpUniqueRezConflicts(working, card.Id);
 
         if (turnParent is { } frame)

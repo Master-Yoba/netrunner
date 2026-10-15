@@ -3,6 +3,10 @@ namespace Netrunner.Core;
 /// <summary>Install and agenda play reducers for the legacy toy rules.</summary>
 public static partial class GameEngine
 {
+    /// <summary>VP-INSTALL-FACEUP: an agenda installed faceup, neither rezzed nor unrezzed (Sacrifice Zone Expansion).</summary>
+    private static bool InstallsFaceUp(WorkingState working, CardDefinitionId definitionId) =>
+        working.BehaviorCatalog.TryGetAgenda(definitionId, out AgendaBehaviorSpec? agenda) && agenda.InstallsFaceUp;
+
     private sealed record InstallPlan(
         CardInstanceState Card,
         CardRuntimeSpec Spec,
@@ -459,8 +463,13 @@ public static partial class GameEngine
         PayCreditsWithDeclaredHosted(working, player.Id, BehaviorHostedCreditUseKind.InstallResource, GetCard(working, frame.CardId), cost);
         if (plan.Source.Kind is ZoneKind.CorpScore or ZoneKind.RunnerScore && plan.Spec.AgendaPoints > 0)
         {
-            // EL-INSTALL-FROM-SCORE-AREA: the agenda's points leave that score area with it.
-            AddAgendaPoints(working, plan.Source.Kind == ZoneKind.CorpScore ? PlayerSide.Corp : PlayerSide.Runner, -plan.Spec.AgendaPoints);
+            // EL-INSTALL-FROM-SCORE-AREA: the agenda's points leave that score area with it, at their value there
+            // (VP-AGENDA-POINTS-MODIFIER: Let Them Dream is worth one less in the Runner's).
+            PlayerSide scoreSide = plan.Source.Kind == ZoneKind.CorpScore ? PlayerSide.Corp : PlayerSide.Runner;
+            int leaving = working.BehaviorCatalog.TryGetAgenda(GetCard(working, frame.CardId).DefinitionId, out AgendaBehaviorSpec? leavingSpec)
+                ? leavingSpec.PointsIn(scoreSide)
+                : plan.Spec.AgendaPoints;
+            AddAgendaPoints(working, scoreSide, -leaving);
         }
         if (frame.InitiationKind == InstallInitiationKind.BasicAction)
         {
@@ -481,7 +490,8 @@ public static partial class GameEngine
             installed.DefinitionId,
             installed.ZoneId,
             installed.OwnerSide,
-            frame.CardClass is RuntimeCardClass.Program or RuntimeCardClass.Hardware or RuntimeCardClass.Resource,
+            frame.CardClass is RuntimeCardClass.Program or RuntimeCardClass.Hardware or RuntimeCardClass.Resource
+                || InstallsFaceUp(working, installed.DefinitionId),
             false,
             installed.AdvancementCounters, frame.HostCardId));
         MarkInstalledThisTurn(working, frame.CardId);
@@ -875,7 +885,7 @@ public static partial class GameEngine
             installed.DefinitionId,
             installed.ZoneId,
             installed.OwnerSide,
-            faceUp: false,
+            faceUp: InstallsFaceUp(working, installed.DefinitionId),
             rezzed: false,
             installed.AdvancementCounters));
         MarkInstalledThisTurn(working, plan.Card.Id);
@@ -1483,7 +1493,9 @@ public static partial class GameEngine
             defaults.Counters,
             defaults.LingeringEffects,
             defaults.Triggers,
-            defaults.Interrupts);
+            defaults.Interrupts,
+            defaults.BadPublicity,
+            defaults.ScoredAsAgendas);
     }
 
     private static bool IsBasicInstallClass(PlayerSide side, RuntimeCardClass cardClass) =>
