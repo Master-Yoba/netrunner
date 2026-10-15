@@ -956,6 +956,9 @@ public enum DamageSubroutineFollowUp
     None,
     EndRunIfTrashedCostOdd,
     OfferJackOut,
+
+    /// <summary>VP-ICE-GAINS-SUBROUTINE: after the damage, the Runner draws 1 card (Stick and Poke's gained subroutine).</summary>
+    RunnerDrawsOne,
 }
 
 public sealed record DamageSubroutineSpec : IceSubroutineSpec

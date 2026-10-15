@@ -71,6 +71,9 @@ public enum RunEndReason
     JackedOut,
     BreachCompleted,
     EndedByRule,
+
+    /// <summary>VP-NO-SUCCESSFUL-RUN: the run reached its success step but couldn't be declared successful (Flagship).</summary>
+    NotDeclaredSuccessful,
 }
 
 public enum RunAccessState
@@ -386,6 +389,163 @@ public sealed record RunRezCostModifier
 
     internal RunRezCostModifier Copy() =>
         new(SourceDefinitionId, SourceCardId, Delta, ReasonKey);
+}
+
+/// <summary>
+/// VP-CANNOT-STEAL-OR-TRASH: a restriction a card ability (not an ICE subroutine) set for the rest of the run: the source
+/// card and its behavior key are its provenance (Vertigo); a named definition limits it to copies of that card (Perfect
+/// Recall).
+/// </summary>
+public sealed record RunBehaviorRestriction
+{
+    [JsonConstructor]
+    public RunBehaviorRestriction(
+        RunRestrictionKind kind,
+        CardInstanceId sourceCardId,
+        CardDefinitionId sourceDefinitionId,
+        string reasonKey,
+        CardDefinitionId? namedDefinitionId = null)
+    {
+        if (!Enum.IsDefined(kind))
+        {
+            throw new ArgumentOutOfRangeException(nameof(kind));
+        }
+
+        if (!StableIdentifier.TryValidate(sourceCardId.Value) || !StableIdentifier.TryValidate(sourceDefinitionId.Value))
+        {
+            throw new ArgumentException("A behavior restriction requires a stable source card.", nameof(sourceCardId));
+        }
+
+        if (!StableIdentifier.TryValidate(reasonKey))
+        {
+            throw new ArgumentException("A behavior restriction requires a stable reason.", nameof(reasonKey));
+        }
+
+        if (namedDefinitionId is { } named && !StableIdentifier.TryValidate(named.Value))
+        {
+            throw new ArgumentException("A named restriction requires a stable definition.", nameof(namedDefinitionId));
+        }
+
+        Kind = kind;
+        SourceCardId = sourceCardId;
+        SourceDefinitionId = sourceDefinitionId;
+        ReasonKey = reasonKey;
+        NamedDefinitionId = namedDefinitionId;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public RunRestrictionKind Kind { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId SourceCardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardDefinitionId SourceDefinitionId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string ReasonKey { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public CardDefinitionId? NamedDefinitionId { get; private set; }
+
+    internal RunBehaviorRestriction Copy() => new(Kind, SourceCardId, SourceDefinitionId, ReasonKey, NamedDefinitionId);
+}
+
+/// <summary>
+/// VP-ALL-ICE-STRENGTH: a strength change on every piece of ICE for the rest of the run, with the card ability that made
+/// it (ezaM's subroutine).
+/// </summary>
+public sealed record RunAllIceStrengthModifier
+{
+    [JsonConstructor]
+    public RunAllIceStrengthModifier(CardDefinitionId sourceDefinitionId, CardInstanceId sourceCardId, int delta, string reasonKey)
+    {
+        if (!StableIdentifier.TryValidate(sourceCardId.Value) || !StableIdentifier.TryValidate(sourceDefinitionId.Value))
+        {
+            throw new ArgumentException("An all-ICE strength modifier requires a stable source card.", nameof(sourceCardId));
+        }
+
+        if (delta == 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(delta), "An all-ICE strength modifier is nonzero.");
+        }
+
+        if (!StableIdentifier.TryValidate(reasonKey))
+        {
+            throw new ArgumentException("An all-ICE strength modifier requires a stable reason.", nameof(reasonKey));
+        }
+
+        SourceDefinitionId = sourceDefinitionId;
+        SourceCardId = sourceCardId;
+        Delta = delta;
+        ReasonKey = reasonKey;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardDefinitionId SourceDefinitionId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId SourceCardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int Delta { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string ReasonKey { get; private set; }
+
+    internal RunAllIceStrengthModifier Copy() => new(SourceDefinitionId, SourceCardId, Delta, ReasonKey);
+}
+
+/// <summary>
+/// VP-ICE-GAINS-SUBROUTINE: a subroutine an encountered ICE gained for the rest of that encounter, before its other
+/// subroutines: its encounter ordinal follows the printed ones, and its declaration is the source card's
+/// <see cref="CardBehaviorDefinition.GainedIceSubroutine"/> (Stick and Poke).
+/// </summary>
+public sealed record RunGainedSubroutine
+{
+    [JsonConstructor]
+    public RunGainedSubroutine(EncounterId encounterId, int ordinal, CardInstanceId sourceCardId, CardDefinitionId sourceDefinitionId)
+    {
+        if (!StableIdentifier.TryValidate(encounterId.Value)
+            || !StableIdentifier.TryValidate(sourceCardId.Value)
+            || !StableIdentifier.TryValidate(sourceDefinitionId.Value))
+        {
+            throw new ArgumentException("A gained subroutine requires a stable encounter and source.", nameof(encounterId));
+        }
+
+        ArgumentOutOfRangeException.ThrowIfNegative(ordinal);
+        EncounterId = encounterId;
+        Ordinal = ordinal;
+        SourceCardId = sourceCardId;
+        SourceDefinitionId = sourceDefinitionId;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public EncounterId EncounterId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int Ordinal { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId SourceCardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardDefinitionId SourceDefinitionId { get; private set; }
+
+    internal RunGainedSubroutine Copy() => new(EncounterId, Ordinal, SourceCardId, SourceDefinitionId);
 }
 
 /// <summary>The hidden Corp pool a random breach candidate is drawn from.</summary>
@@ -1010,12 +1170,27 @@ public sealed record RunState
         RunPersistentContext? persistentContext = null,
         ServerId? pendingMoveServerId = null,
         bool pendingBypass = false,
-        int badPublicityCredits = 0)
+        int badPublicityCredits = 0,
+        IReadOnlyList<RunBehaviorRestriction>? behaviorRestrictions = null,
+        IReadOnlyList<RunAllIceStrengthModifier>? allIceStrengthModifiers = null,
+        IReadOnlyList<RunGainedSubroutine>? gainedSubroutines = null)
     {
         ArgumentNullException.ThrowIfNull(breachCandidates);
         PendingMoveServerId = pendingMoveServerId;
         PendingBypass = pendingBypass;
         BadPublicityCredits = badPublicityCredits;
+        BehaviorRestrictions = behaviorRestrictions is { Count: > 0 }
+            ? new ReadOnlyCollection<RunBehaviorRestriction>(behaviorRestrictions.Select(static value =>
+                value?.Copy() ?? throw new ArgumentException("Behavior restrictions cannot contain null.", nameof(behaviorRestrictions))).ToArray())
+            : null;
+        AllIceStrengthModifiers = allIceStrengthModifiers is { Count: > 0 }
+            ? new ReadOnlyCollection<RunAllIceStrengthModifier>(allIceStrengthModifiers.Select(static value =>
+                value?.Copy() ?? throw new ArgumentException("All-ICE strength modifiers cannot contain null.", nameof(allIceStrengthModifiers))).ToArray())
+            : null;
+        GainedSubroutines = gainedSubroutines is { Count: > 0 }
+            ? new ReadOnlyCollection<RunGainedSubroutine>(gainedSubroutines.Select(static value =>
+                value?.Copy() ?? throw new ArgumentException("Gained subroutines cannot contain null.", nameof(gainedSubroutines))).ToArray())
+            : null;
         ArgumentNullException.ThrowIfNull(chosenAccessCards);
         ArgumentNullException.ThrowIfNull(accessedCards);
         ArgumentNullException.ThrowIfNull(lingeringEffects);
@@ -1221,6 +1396,72 @@ public sealed record RunState
     public int BadPublicityCredits { get; private set; }
 
     /// <summary>
+    /// VP-CANNOT-STEAL-OR-TRASH: the restrictions card abilities set for the rest of the run; omitted while empty, so runs
+    /// without them keep their bytes.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<RunBehaviorRestriction>? BehaviorRestrictions { get; private set; }
+
+    /// <summary>VP-ALL-ICE-STRENGTH: strength changes on every piece of ICE for the rest of the run; omitted while empty.</summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<RunAllIceStrengthModifier>? AllIceStrengthModifiers { get; private set; }
+
+    internal RunState WithAllIceStrengthModifiers(IReadOnlyList<RunAllIceStrengthModifier> modifiers) =>
+        this with { AllIceStrengthModifiers = modifiers.Count > 0 ? modifiers.ToArray() : null };
+
+    /// <summary>
+    /// VP-ICE-GAINS-SUBROUTINE: the subroutines encountered ICE gained during this run, kept for the run so its resolved
+    /// subroutine ledger stays readable; omitted while empty.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<RunGainedSubroutine>? GainedSubroutines { get; private set; }
+
+    internal RunState WithGainedSubroutines(IReadOnlyList<RunGainedSubroutine> gained) =>
+        this with { GainedSubroutines = gained.Count > 0 ? gained.ToArray() : null };
+
+    /// <summary>
+    /// VP-ICE-GAINS-SUBROUTINE: the declaration of the subroutine at an encounter ordinal: printed on the ICE, or gained in
+    /// that encounter. Null for neither. Shared by the engine and the validator.
+    /// </summary>
+    internal IceSubroutineSpec? EncounterSubroutineSpec(IBehaviorCatalog catalog, IceBehaviorSpec ice, EncounterId encounterId, int ordinal)
+    {
+        if (ordinal < 0)
+        {
+            return null;
+        }
+
+        if (ordinal < ice.Subroutines.Count)
+        {
+            return ice.Subroutines[ordinal];
+        }
+
+        return GainedSubroutines?.FirstOrDefault(gained => gained.EncounterId == encounterId && gained.Ordinal == ordinal) is { } match
+            && catalog.TryGet(match.SourceDefinitionId, out CardBehaviorDefinition? source)
+                ? source.GainedIceSubroutine
+                : null;
+    }
+
+    internal RunState WithBehaviorRestrictions(IReadOnlyList<RunBehaviorRestriction> restrictions) =>
+        this with { BehaviorRestrictions = restrictions.Count > 0 ? restrictions.ToArray() : null };
+
+    /// <summary>
+    /// VP-CANNOT-STEAL-OR-TRASH: the run forbids the Runner to steal or trash a Corp card with the definition: an ICE's
+    /// restriction, a card ability's, or one naming that definition. Shared by the engine and the validator.
+    /// </summary>
+    internal bool ForbidsStealOrTrash(CardDefinitionId? definition) =>
+        RunRestrictions?.Any(static restriction => restriction.Kind == RunRestrictionKind.CannotStealOrTrashCorpCards) == true
+        || BehaviorRestrictions?.Any(restriction => restriction.Kind == RunRestrictionKind.CannotStealOrTrashCorpCards
+            && (restriction.NamedDefinitionId is not { } named || named == definition)) == true;
+
+    /// <summary>VP-CANNOT-STEAL-OR-TRASH: a restriction of any provenance is active, for the public run cue.</summary>
+    internal bool HasStealOrTrashRestriction =>
+        RunRestrictions?.Any(static restriction => restriction.Kind == RunRestrictionKind.CannotStealOrTrashCorpCards) == true
+        || BehaviorRestrictions?.Any(static restriction => restriction.Kind == RunRestrictionKind.CannotStealOrTrashCorpCards) == true;
+
+    /// <summary>
     /// The run event played to start this run, kept faceup in the public
     /// RunnerPlayArea for the run's duration and trashed to the public heap
     /// faceup at run end.
@@ -1322,7 +1563,10 @@ public sealed record RunState
         PersistentContext,
         PendingMoveServerId,
         PendingBypass,
-        BadPublicityCredits);
+        BadPublicityCredits,
+        BehaviorRestrictions,
+        AllIceStrengthModifiers,
+        GainedSubroutines);
 
     /// <summary>
     /// Creates the next immutable timing cursor while retaining the run's
@@ -1369,7 +1613,10 @@ public sealed record RunState
         PersistentContext,
         PendingMoveServerId,
         PendingBypass,
-        BadPublicityCredits);
+        BadPublicityCredits,
+        BehaviorRestrictions,
+        AllIceStrengthModifiers,
+        GainedSubroutines);
 
     /// <summary>
     /// Replaces the run's encounter while retaining every other field; the
@@ -1413,7 +1660,10 @@ public sealed record RunState
         PersistentContext,
         PendingMoveServerId,
         PendingBypass,
-        BadPublicityCredits);
+        BadPublicityCredits,
+        BehaviorRestrictions,
+        AllIceStrengthModifiers,
+        GainedSubroutines);
 
     /// <summary>
     /// Replaces the run's run-scoped hosted credits while retaining every
@@ -1450,7 +1700,10 @@ public sealed record RunState
         PersistentContext,
         PendingMoveServerId,
         PendingBypass,
-        BadPublicityCredits);
+        BadPublicityCredits,
+        BehaviorRestrictions,
+        AllIceStrengthModifiers,
+        GainedSubroutines);
 
     /// <summary>
     /// Replaces the live run priority cursor while retaining the exact run
@@ -1488,7 +1741,10 @@ public sealed record RunState
         PersistentContext,
         PendingMoveServerId,
         PendingBypass,
-        BadPublicityCredits);
+        BadPublicityCredits,
+        BehaviorRestrictions,
+        AllIceStrengthModifiers,
+        GainedSubroutines);
 
     internal RunState WithEncounter(RunEncounterState encounter) => new(
         Version,
@@ -1521,7 +1777,10 @@ public sealed record RunState
         PersistentContext,
         PendingMoveServerId,
         PendingBypass,
-        BadPublicityCredits);
+        BadPublicityCredits,
+        BehaviorRestrictions,
+        AllIceStrengthModifiers,
+        GainedSubroutines);
 
     /// <summary>
     /// Replaces the run's breach candidate/access fields while retaining every
@@ -1563,7 +1822,10 @@ public sealed record RunState
         PersistentContext,
         PendingMoveServerId,
         PendingBypass,
-        BadPublicityCredits);
+        BadPublicityCredits,
+        BehaviorRestrictions,
+        AllIceStrengthModifiers,
+        GainedSubroutines);
 
     /// <summary>
     /// Replaces the immutable breach-access snapshot after the authoritative
@@ -1601,7 +1863,10 @@ public sealed record RunState
         PersistentContext,
         PendingMoveServerId,
         PendingBypass,
-        BadPublicityCredits);
+        BadPublicityCredits,
+        BehaviorRestrictions,
+        AllIceStrengthModifiers,
+        GainedSubroutines);
 
     /// <summary>Replaces the run-scoped typed restrictions immutably.</summary>
     internal RunState WithRunRestrictions(IReadOnlyList<RunRestriction>? runRestrictions) => new(
@@ -1635,7 +1900,10 @@ public sealed record RunState
         PersistentContext,
         PendingMoveServerId,
         PendingBypass,
-        BadPublicityCredits);
+        BadPublicityCredits,
+        BehaviorRestrictions,
+        AllIceStrengthModifiers,
+        GainedSubroutines);
 
     /// <summary>Replaces the structural history of resolved unbroken subroutines.</summary>
     internal RunState WithResolvedSubroutineLedger(
@@ -1670,7 +1938,10 @@ public sealed record RunState
         PersistentContext,
         PendingMoveServerId,
         PendingBypass,
-        BadPublicityCredits);
+        BadPublicityCredits,
+        BehaviorRestrictions,
+        AllIceStrengthModifiers,
+        GainedSubroutines);
 
     private static ReadOnlyCollection<CardInstanceId> FreezeIds(IEnumerable<CardInstanceId> values) =>
         new(values.ToArray());

@@ -83,6 +83,8 @@ public static partial class GameEngine
                     change.CardId == scored && change.Kind == AgendaTurnChangeKind.Score) == true,
             BehaviorConditionKind.ClicksRemainingAtLeast when condition.SubjectSide is { } clickSide =>
                 GetPlayer(working, clickSide).Clicks >= threshold,
+            BehaviorConditionKind.ClicksRemainingAtMost when condition.SubjectSide is { } atMostSide =>
+                GetPlayer(working, atMostSide).Clicks <= threshold,
             _ => null,
         };
     }

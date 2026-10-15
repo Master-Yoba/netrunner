@@ -328,6 +328,26 @@ public static partial class GameEngine
             case BehaviorInstructionKind.AddSelfToScoreAreaAsAgenda:
                 AddSourceToScoreAreaAsAgenda(working, frame, instruction);
                 return;
+            case BehaviorInstructionKind.ModifyAllIceStrengthForRun:
+                if (working.RunState is { } strengthRun)
+                {
+                    CardInstanceState strengthSource = GetCard(working, frame.SourceCardId);
+                    working.RunState = strengthRun.WithAllIceStrengthModifiers((strengthRun.AllIceStrengthModifiers ?? [])
+                        .Append(new RunAllIceStrengthModifier(strengthSource.DefinitionId, strengthSource.Id, instruction.Amount,
+                            frame.TriggerKey ?? frame.AbilityKey ?? CardBehaviorRestrictionReason))
+                        .ToArray());
+                }
+
+                AdvanceBehaviorCursor(working, frame);
+                return;
+            case BehaviorInstructionKind.EncounteredIceGainsSubroutine:
+                EncounteredIceGainsSubroutine(working, frame);
+                AdvanceBehaviorCursor(working, frame);
+                return;
+            case BehaviorInstructionKind.RestrictRun:
+                RestrictRunFromBehavior(working, frame, instruction);
+                AdvanceBehaviorCursor(working, frame);
+                return;
             case BehaviorInstructionKind.RemoveAdvancementCounters:
                 foreach (CardInstanceId advancedId in ResolveBehaviorCards(working, frame, instruction.Target))
                 {
@@ -789,6 +809,9 @@ public static partial class GameEngine
             case BehaviorInstructionKind.EndRun:
                 ResolveBehaviorEndRun(working, frame);
                 return;
+            case BehaviorInstructionKind.JackOut:
+                ResolveBehaviorEndRun(working, frame, jackOut: true);
+                return;
             case BehaviorInstructionKind.DealDamage:
                 ResolveBehaviorDamage(working, frame, instruction);
                 return;
@@ -913,7 +936,8 @@ public static partial class GameEngine
     /// </summary>
     private static void ResolveBehaviorEndRun(
         WorkingState working,
-        BehaviorResolutionFrame frame)
+        BehaviorResolutionFrame frame,
+        bool jackOut = false)
     {
         // EL-ABILITY-END-RUN: a paid ability used during the run (LEO
         // Construction) ends it as a reaction does.
@@ -978,7 +1002,7 @@ public static partial class GameEngine
                 "EndRun requires a current run-owned catalog reaction occurrence.");
         }
 
-        if (PreventsRunEnd(working, run))
+        if (!jackOut && PreventsRunEnd(working, run))
         {
             // EL-PREVENT-END-RUN (Shred): the run goes on.
             AdvanceBehaviorCursor(working, frame);
@@ -991,7 +1015,8 @@ public static partial class GameEngine
             null,
             run.Successful,
             true,
-            RunEndReason.EndedByRule,
+            // VP-UNLESS-JACK-OUT: jacking out ends the run as the Runner's own act (CR 26.03 6.1.5).
+            jackOut ? RunEndReason.JackedOut : RunEndReason.EndedByRule,
             null,
             run.Encounter,
             run.AccessState);
@@ -2085,6 +2110,9 @@ public static partial class GameEngine
             BehaviorConditionKind.ClicksRemainingAtLeast => (condition.SubjectSide is { } clickSide
                 ? GetPlayer(working, clickSide)
                 : controller).Clicks >= condition.Value.GetValueOrDefault(),
+            BehaviorConditionKind.ClicksRemainingAtMost => (condition.SubjectSide is { } atMostSide
+                ? GetPlayer(working, atMostSide)
+                : controller).Clicks <= condition.Value.GetValueOrDefault(),
             BehaviorConditionKind.Installed => IsInstalledCard(working, frame.SourceCardId),
             BehaviorConditionKind.InstalledThisTurn => CurrentFacts(working, frame.Controller)?.InstalledCardIds.Contains(frame.SourceCardId) == true,
             BehaviorConditionKind.SuccessfulRun => working.RunState?.Successful == true,
@@ -5118,6 +5146,8 @@ public static partial class GameEngine
                 && GetCard(working, advanced).AdvancementCounters >= condition.Value.GetValueOrDefault(),
             BehaviorConditionKind.ClicksRemainingAtLeast =>
                 GetPlayer(working, condition.SubjectSide ?? GetPlayer(working, owner).Side).Clicks >= condition.Value.GetValueOrDefault(),
+            BehaviorConditionKind.ClicksRemainingAtMost =>
+                GetPlayer(working, condition.SubjectSide ?? GetPlayer(working, owner).Side).Clicks <= condition.Value.GetValueOrDefault(),
             BehaviorConditionKind.SourceInZone => sourceCardId is { } inZone && SourceZoneMatches(working, inZone, condition.Fact!),
             BehaviorConditionKind.SourceNotInZone => sourceCardId is { } notInZone && !SourceZoneMatches(working, notInZone, condition.Fact!),
             BehaviorConditionKind.SourceHostsAtLeast => sourceCardId is { } host

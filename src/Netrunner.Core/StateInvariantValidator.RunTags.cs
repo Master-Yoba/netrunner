@@ -16,10 +16,10 @@ public static partial class StateInvariantValidator
             || ledger[^1] is not { } entry
             || entry.EncounterId != encounter.Id || entry.IceId != encounter.IceId
             || !catalog.TryGetIce(entry.IceDefinitionId, out IceBehaviorSpec? ice)
-            || entry.Ordinal < 0 || entry.Ordinal >= ice.Subroutines.Count
+            || run.EncounterSubroutineSpec(catalog, ice, entry.EncounterId, entry.Ordinal) is not { } declared
             || !encounter.Subroutines.Any(subroutine => subroutine.Id == entry.SubroutineId
                 && subroutine.Resolved && !subroutine.Broken)) return false;
-        return ice.Subroutines[entry.Ordinal] switch
+        return declared switch
         {
             GiveTagsSubroutineSpec printed => tag.Delta == printed.Amount,
             PayCreditsOrTagSubroutineSpec printed => tag.Delta == printed.TagAmount,

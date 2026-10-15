@@ -158,7 +158,7 @@ public sealed partial class RunnerHeuristicPolicy
                     total += context.Features.Board.Run?.Breach.Chosen.Where(card => card is not null).Select(card => RunnerValues.Trash(context, card)).DefaultIfEmpty(0).Max() ?? 0;
                     break;
                 case BehaviorInstructionKind.SwapInstalledIce: total += BestSwap(context, []); break;
-                case BehaviorInstructionKind.EndRun: total -= Math.Max(300, RunnerValues.Server(context, RunnerValues.Attacked(context))); break;
+                case BehaviorInstructionKind.EndRun or BehaviorInstructionKind.JackOut: total -= Math.Max(300, RunnerValues.Server(context, RunnerValues.Attacked(context))); break;
                 case BehaviorInstructionKind.AddTags: total -= RunnerValues.TagRisk(context, amount); break;
                 // v23: a card choice from a grip that holds nothing it takes chooses nothing (Madani's empty hosting).
                 case BehaviorInstructionKind.Choose when instruction.Choice is { Options.Count: 0, Target: { Zone: BehaviorZone.Grip } emptyTarget }

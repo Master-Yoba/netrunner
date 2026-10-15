@@ -521,8 +521,7 @@ public static partial class ObservationBuilder
         // learns that a restriction/ability/effect is active without gaining
         // hidden provenance.  Keep the additive envelope absent when no cue is
         // active to preserve unaffected legacy observation shapes.
-        bool runRestrictionActive = run.RunRestrictions?.Any(restriction =>
-            restriction.Kind == RunRestrictionKind.CannotStealOrTrashCorpCards) == true;
+        bool runRestrictionActive = run.HasStealOrTrashRestriction;
         bool bioroidAbilityReady = IsBioroidAbilityReady(state, run, behaviorCatalog);
         bool mayflyBreakArmed = run.LingeringEffects.Any(effect =>
             effect.Kind == RunLingeringEffectKind.IcebreakerRunEndCleanup

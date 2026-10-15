@@ -108,12 +108,22 @@ public sealed record BehaviorCost
         string? additionalKey = null,
         BehaviorTarget? additionalTarget = null,
         BehaviorAdditionalCostKind? additionalKind = null,
-        string? creditSourceSubtype = null)
+        string? creditSourceSubtype = null,
+        bool accessedCardPrintedCost = false)
     {
         if (!Enum.IsDefined(kind))
         {
             throw new ArgumentOutOfRangeException(nameof(kind));
         }
+
+        if (accessedCardPrintedCost && (kind != BehaviorCostKind.Credits || amount != 0))
+        {
+            throw new ArgumentException(
+                "The accessed card's printed cost is a credit cost with no declared amount.",
+                nameof(accessedCardPrintedCost));
+        }
+
+        AccessedCardPrintedCost = accessedCardPrintedCost;
 
         if (kind == BehaviorCostKind.Credits && amount < 0)
         {
@@ -255,6 +265,14 @@ public sealed record BehaviorCost
     public BehaviorAdditionalCostKind? AdditionalKind { get; }
 
     /// <summary>
+    /// VP-ACCESS-PAID-ABILITY: the credits are the printed rez or play cost of the card being accessed, known only when the
+    /// ability is used ("pay the printed rez or play cost of the card you are accessing": Lampades). A card with neither
+    /// can't pay it.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool AccessedCardPrintedCost { get; }
+
+    /// <summary>
     /// VP-STEALTH-CREDITS: a credit cost payable only with credits from cards of this printed subtype ("stealth": Corsair,
     /// Lampades, Baker), never from the Runner's pool or the bad publicity fund. Null for an ordinary credit cost.
     /// </summary>
@@ -315,6 +333,7 @@ public sealed record BehaviorCondition
             && kind is not (BehaviorConditionKind.Tagged
                 or BehaviorConditionKind.NotTagged
                 or BehaviorConditionKind.ClicksRemainingAtLeast
+                or BehaviorConditionKind.ClicksRemainingAtMost
                 or BehaviorConditionKind.TurnEventCountIs
                 or BehaviorConditionKind.TurnEventCountAtLeast
                 or BehaviorConditionKind.CreditsAtLeast))
@@ -383,7 +402,7 @@ public sealed record BehaviorCondition
                 nameof(fact));
         }
 
-        if (kind == BehaviorConditionKind.ClicksRemainingAtLeast)
+        if (kind is BehaviorConditionKind.ClicksRemainingAtLeast or BehaviorConditionKind.ClicksRemainingAtMost)
         {
             if (value is null || value < 0)
             {
@@ -492,6 +511,10 @@ public sealed record BehaviorCondition
     /// <summary>A player (by default the behavior controller) has at least the value in clicks.</summary>
     public static BehaviorCondition ClicksAtLeast(int threshold, PlayerSide? side) =>
         new(BehaviorConditionKind.ClicksRemainingAtLeast, value: threshold, subjectSide: side);
+
+    /// <summary>VP-ICE-PASSED: a player has at most the value in clicks ("if they have no [click] remaining", Vertigo).</summary>
+    public static BehaviorCondition ClicksAtMost(int threshold, PlayerSide side) =>
+        new(BehaviorConditionKind.ClicksRemainingAtMost, value: threshold, subjectSide: side);
 
     public static BehaviorCondition SourceIn(BehaviorZone zone) =>
         new(BehaviorConditionKind.SourceInZone, fact: zone.ToString());
@@ -681,6 +704,9 @@ public enum BehaviorConditionKind
     /// Expansion).
     /// </summary>
     RunAgainstAnotherServer,
+
+    /// <summary>VP-ICE-PASSED: the subject side (by default the controller) has at most the value in clicks (Vertigo).</summary>
+    ClicksRemainingAtMost,
 }
 
 /// <summary>A typed target selector; IDs are resolved by Core at runtime.</summary>
@@ -1054,9 +1080,15 @@ public sealed record BehaviorInstruction
         if (kind is not (BehaviorInstructionKind.ModifyEncounteredIceStrength
             or BehaviorInstructionKind.ModifySourceStrength
             or BehaviorInstructionKind.AddSelfToScoreAreaAsAgenda
-            or BehaviorInstructionKind.GainAllottedClicksNextTurn))
+            or BehaviorInstructionKind.GainAllottedClicksNextTurn
+            or BehaviorInstructionKind.ModifyAllIceStrengthForRun))
         {
             ArgumentOutOfRangeException.ThrowIfNegative(amount);
+        }
+
+        if (kind == BehaviorInstructionKind.ModifyAllIceStrengthForRun && amount == 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(amount), "An all-ICE strength change is nonzero.");
         }
 
         if (kind == BehaviorInstructionKind.AddSelfToScoreAreaAsAgenda && argument is not (null or CannotForfeitArgument))
@@ -1499,6 +1531,12 @@ public sealed record BehaviorInstruction
             }
         }
 
+        if (Kind == BehaviorInstructionKind.RestrictRun
+            && (Argument is null || !Enum.TryParse<RunRestrictionKind>(Argument, ignoreCase: false, out _)))
+        {
+            throw new ArgumentException("A run restriction names a typed restriction kind.", nameof(Argument));
+        }
+
         switch (Kind)
         {
             case BehaviorInstructionKind.Reveal:
@@ -1523,6 +1561,7 @@ public sealed record BehaviorInstruction
             case BehaviorInstructionKind.AddToHand:
                 if (SourceZone is { } addSource)
                 {
+                    // VP.4: the rig too, an installed Runner card returned to the grip (Lethe).
                     RequireZone(
                         addSource,
                         nameof(SourceZone),
@@ -1531,7 +1570,8 @@ public sealed record BehaviorInstruction
                         BehaviorZone.Archives,
                         BehaviorZone.Stack,
                         BehaviorZone.Heap,
-                        BehaviorZone.HostedFaceUp);
+                        BehaviorZone.HostedFaceUp,
+                        BehaviorZone.Rig);
                 }
 
                 RequireDestination(nameof(DestinationZone), BehaviorZone.Headquarters, BehaviorZone.Grip);
@@ -1906,6 +1946,32 @@ public enum BehaviorInstructionKind
     /// Zone Expansion: "remove 1 hosted advancement counter").
     /// </summary>
     RemoveAdvancementCounters,
+
+    /// <summary>
+    /// VP-CANNOT-STEAL-OR-TRASH: for the rest of the run, the restriction the argument names (a
+    /// <see cref="RunRestrictionKind"/>); with a target, only copies of the targeted card (Vertigo, Perfect Recall). Outside
+    /// a run it does nothing.
+    /// </summary>
+    RestrictRun,
+
+    /// <summary>
+    /// VP-ALL-ICE-STRENGTH: for the rest of the run, every piece of ICE gets the amount (nonzero, may be negative) of
+    /// strength ("Each piece of ice gets +1 strength for the remainder of this run": ezaM). Outside a run it does nothing.
+    /// </summary>
+    ModifyAllIceStrengthForRun,
+
+    /// <summary>
+    /// VP-UNLESS-JACK-OUT: the Runner jacks out (CR 26.03 6.1.5): the run ends, unsuccessful, which no "prevent the run from
+    /// ending" stops ("unless the Runner jacks out": Lionsmane, as a Runner's choice option).
+    /// </summary>
+    JackOut,
+
+    /// <summary>
+    /// VP-ICE-GAINS-SUBROUTINE: the encountered ICE gains the source's <see cref="CardBehaviorDefinition.GainedIceSubroutine"/>
+    /// before its other subroutines, for the rest of the encounter (Stick and Poke). Outside an encounter, or once a
+    /// subroutine has resolved, it does nothing.
+    /// </summary>
+    EncounteredIceGainsSubroutine,
 
     // Short aliases keep the contract pleasant for callers while the longer
     // names remain unambiguous in serialized/fingerprint output.
@@ -2346,7 +2412,12 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
         or OccurrenceKind.FirstCardCreditGainThisTurn
         or OccurrenceKind.FirstOperationPlayedThisTurn
         or OccurrenceKind.FirstEventPlayedThisTurn
-        or OccurrenceKind.CardAdvanced;
+        or OccurrenceKind.CardAdvanced
+        or OccurrenceKind.IcePassed
+        or OccurrenceKind.IceBypassed
+        or OccurrenceKind.IceFullyBroken
+        or OccurrenceKind.SubroutineBroken
+        or OccurrenceKind.EncounterEnded;
 
     private static ReadOnlyCollection<BehaviorInstruction> Freeze(
         IEnumerable<BehaviorInstruction> values)
@@ -2411,8 +2482,35 @@ public sealed class CardBehaviorDefinition
         BehaviorScoreCostAsAgenda? scoreCostAsAgenda = null,
         int firstDoubleOperationClickDiscount = 0,
         bool returnsHostedBadPublicity = false,
-        IReadOnlyList<ServerKind>? installServerKinds = null)
+        IReadOnlyList<ServerKind>? installServerKinds = null,
+        int allIceStrength = 0,
+        bool runsCannotSucceed = false,
+        int runAccessLimitBesidesSelf = 0,
+        IceSubroutineSpec? gainedIceSubroutine = null)
     {
+        // VP-ICE-GAINS-SUBROUTINE: a typed subroutine; a behavior subroutine names a trigger on the ICE's own definition.
+        if (gainedIceSubroutine is BehaviorSubroutineSpec)
+        {
+            throw new ArgumentException("A gained ICE subroutine is a typed subroutine, not a behavior key.", nameof(gainedIceSubroutine));
+        }
+
+        GainedIceSubroutine = gainedIceSubroutine;
+        AllIceStrength = allIceStrength;
+        ArgumentOutOfRangeException.ThrowIfNegative(runAccessLimitBesidesSelf);
+        if ((runsCannotSucceed || runAccessLimitBesidesSelf > 0) && controller != PlayerSide.Corp)
+        {
+            throw new ArgumentException("Only a Corp card stops runs on its server succeeding or limits their accesses.", nameof(runsCannotSucceed));
+        }
+
+        // VP-ACCESS-LIMIT: every breach follows a successful run, which the card's own clause forbids while it is rezzed,
+        // and the Corp can't rez between success and the breach; so the limit alone could never apply (Flagship).
+        if (runAccessLimitBesidesSelf > 0 && !runsCannotSucceed)
+        {
+            throw new ArgumentException("An access limit is declared only beside the no-successful-run clause.", nameof(runAccessLimitBesidesSelf));
+        }
+
+        RunsCannotSucceed = runsCannotSucceed;
+        RunAccessLimitBesidesSelf = runAccessLimitBesidesSelf;
         if (installServerKinds is { Count: > 0 } && (controller != PlayerSide.Corp
             || installServerKinds.Any(static kind => !Enum.IsDefined(kind)) || installServerKinds.Distinct().Count() != installServerKinds.Count))
         {
@@ -2619,6 +2717,34 @@ public sealed class CardBehaviorDefinition
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<ServerKind>? InstallServerKinds { get; }
+
+    /// <summary>
+    /// VP-ALL-ICE-STRENGTH: while the card is active and installed, every piece of ICE gets this strength ("Each piece of
+    /// ice gets −1 strength": The Tungsten Tailor). Zero for none.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int AllIceStrength { get; }
+
+    /// <summary>
+    /// VP-NO-SUCCESSFUL-RUN: while the card is rezzed in a server's root, runs against that server can't be declared
+    /// successful, and don't become unsuccessful (Flagship).
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool RunsCannotSucceed { get; }
+
+    /// <summary>
+    /// VP-ACCESS-LIMIT: the most cards besides this one the Runner may access during a run against its server (Flagship).
+    /// Declared for the card's record; no breach can meet it (see the constructor).
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int RunAccessLimitBesidesSelf { get; }
+
+    /// <summary>
+    /// VP-ICE-GAINS-SUBROUTINE: the subroutine this card's <see cref="BehaviorInstructionKind.EncounteredIceGainsSubroutine"/>
+    /// gives the encountered ICE (Stick and Poke). Null for none.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IceSubroutineSpec? GainedIceSubroutine { get; }
 
     /// <summary>VP-BAD-PUBLICITY: the name of the counter for bad publicity hosted on a card.</summary>
     public const string HostedBadPublicityCounter = "bad-publicity";
@@ -3527,6 +3653,10 @@ internal static class BehaviorCatalogStructure
                 && a.FirstDoubleOperationClickDiscount == b.FirstDoubleOperationClickDiscount
                 && a.ReturnsHostedBadPublicity == b.ReturnsHostedBadPublicity
                 && SequenceEquals(a.InstallServerKinds ?? [], b.InstallServerKinds ?? [])
+                && a.AllIceStrength == b.AllIceStrength
+                && a.RunsCannotSucceed == b.RunsCannotSucceed
+                && a.RunAccessLimitBesidesSelf == b.RunAccessLimitBesidesSelf
+                && Equals(a.GainedIceSubroutine, b.GainedIceSubroutine)
                 && SequenceEquals(a.HostedCreditUses ?? [], b.HostedCreditUses ?? [])
                 && a.Hosting == b.Hosting
                 && SequenceEquals(a.Costs, b.Costs)
@@ -3866,6 +3996,23 @@ internal static class BehaviorCatalogFingerprint
         {
             builder.Append(",installServerKinds=").Append(string.Join("+", installKinds.Select(static kind => (int)kind)));
         }
+        if (value.AllIceStrength != 0)
+        {
+            builder.Append(",allIceStrength=").Append(value.AllIceStrength);
+        }
+        if (value.RunsCannotSucceed)
+        {
+            builder.Append(",runsCannotSucceed=1");
+        }
+        if (value.RunAccessLimitBesidesSelf != 0)
+        {
+            builder.Append(",runAccessLimitBesidesSelf=").Append(value.RunAccessLimitBesidesSelf);
+        }
+        if (value.GainedIceSubroutine is { } gained)
+        {
+            builder.Append(",gainedIceSubroutine=");
+            AppendString(builder, gained.ToString());
+        }
         if (value.FirstDoubleOperationClickDiscount != 0)
         {
             builder.Append(",firstDoubleClickDiscount=").Append(value.FirstDoubleOperationClickDiscount);
@@ -4082,6 +4229,11 @@ internal static class BehaviorCatalogFingerprint
         {
             builder.Append(",creditSource=");
             AppendString(builder, value.CreditSourceSubtype);
+        }
+
+        if (value.AccessedCardPrintedCost)
+        {
+            builder.Append(",accessedCardPrintedCost=1");
         }
     }
 

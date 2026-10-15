@@ -33,6 +33,7 @@ public static class PresentationEventProjector
         // section 8).
         [typeof(BadPublicityAdjustedEventPayload)] = PresentationEventRule.ViewOnly,
         [typeof(AdvancementCountersRemovedEventPayload)] = PresentationEventRule.ViewOnly,
+        [typeof(IceGainedSubroutineEventPayload)] = PresentationEventRule.ViewOnly,
         [typeof(MemoryAdjustedEventPayload)] = PresentationEventRule.ViewOnly,
         [typeof(ProgramTrashedForMemoryEventPayload)] = PresentationEventRule.ViewOnly,
         [typeof(CounterAdjustedEventPayload)] = PresentationEventRule.ViewOnly,

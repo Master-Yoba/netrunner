@@ -1457,6 +1457,10 @@ public static partial class StateInvariantValidator
 
         ValidateRunRestrictions(state, behaviorCatalog, run, path, violations);
 
+        ValidateRunBehaviorRestrictions(state, behaviorCatalog, run, path, violations);
+
+        ValidateRunGainedSubroutines(state, behaviorCatalog, run, path, violations);
+
         if (!installedRunSource && run.InitiatingSource != run.ActiveRunEventId)
         {
             Add(
@@ -2371,6 +2375,107 @@ public static partial class StateInvariantValidator
                 && card.ZoneId != iceZone.Id);
     }
 
+    /// <summary>
+    /// VP-CANNOT-STEAL-OR-TRASH: a card ability's restriction keeps its source card, with the catalogued definition, and
+    /// names an existing definition when it names one; it never repeats.
+    /// </summary>
+    private static void ValidateRunBehaviorRestrictions(
+        GameState state,
+        IBehaviorCatalog behaviorCatalog,
+        RunState run,
+        string path,
+        List<StateInvariantViolation> violations)
+    {
+        if (run.BehaviorRestrictions is null)
+        {
+            return;
+        }
+
+        string restrictionPath = $"{path}.behaviorRestrictions";
+        if (run.BehaviorRestrictions.Count == 0)
+        {
+            Add(violations, "run.behavior-restrictions-empty", restrictionPath, "An empty behavior restriction list is omitted.");
+        }
+
+        if (run.BehaviorRestrictions.Distinct().Count() != run.BehaviorRestrictions.Count)
+        {
+            Add(violations, "run.duplicate-behavior-restriction", restrictionPath, "Behavior restrictions must not repeat.");
+        }
+
+        foreach (RunBehaviorRestriction restriction in run.BehaviorRestrictions)
+        {
+            bool sourceKnown = state.Cards.Any(card => card?.Id == restriction.SourceCardId
+                    && card.DefinitionId == restriction.SourceDefinitionId)
+                && (behaviorCatalog.TryGet(restriction.SourceDefinitionId, out _)
+                    || behaviorCatalog.TryGetIce(restriction.SourceDefinitionId, out _));
+            bool namedKnown = restriction.NamedDefinitionId is not { } named
+                || state.Cards.Any(card => card?.DefinitionId == named && card.OwnerSide == PlayerSide.Corp);
+            if (!sourceKnown || !namedKnown)
+            {
+                Add(
+                    violations,
+                    "run.behavior-restriction-source-invalid",
+                    restrictionPath,
+                    "A behavior restriction must keep its catalogued source card, and name only a Corp card's definition.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// VP-ICE-GAINS-SUBROUTINE: each gained subroutine names a source that declares one, never repeats, and in the live
+    /// encounter sits past the printed ordinals; every live ordinal past them is a gained one.
+    /// </summary>
+    private static void ValidateRunGainedSubroutines(
+        GameState state,
+        IBehaviorCatalog behaviorCatalog,
+        RunState run,
+        string path,
+        List<StateInvariantViolation> violations)
+    {
+        string gainedPath = $"{path}.gainedSubroutines";
+        IReadOnlyList<RunGainedSubroutine> gained = run.GainedSubroutines ?? [];
+        if (run.GainedSubroutines is { Count: 0 })
+        {
+            Add(violations, "run.gained-subroutines-empty", gainedPath, "An empty gained subroutine list is omitted.");
+        }
+
+        if (gained.Select(static value => (value.EncounterId, value.Ordinal)).Distinct().Count() != gained.Count)
+        {
+            Add(violations, "run.duplicate-gained-subroutine", gainedPath, "A gained subroutine's encounter ordinal is unique.");
+        }
+
+        foreach (RunGainedSubroutine entry in gained)
+        {
+            if (!state.Cards.Any(card => card?.Id == entry.SourceCardId && card.DefinitionId == entry.SourceDefinitionId)
+                || !behaviorCatalog.TryGet(entry.SourceDefinitionId, out CardBehaviorDefinition? source)
+                || source.GainedIceSubroutine is null)
+            {
+                Add(violations, "run.gained-subroutine-source-invalid", gainedPath, "A gained subroutine keeps a source that declares it.");
+            }
+        }
+
+        if (run.Encounter is not { } encounter
+            || state.Cards.FirstOrDefault(card => card?.Id == encounter.IceId) is not { } ice
+            || !behaviorCatalog.TryGetIce(ice.DefinitionId, out IceBehaviorSpec? iceSpec))
+        {
+            return;
+        }
+
+        foreach (RunSubroutineState? subroutine in encounter.Subroutines)
+        {
+            if (subroutine is null)
+            {
+                continue;
+            }
+
+            bool isGained = gained.Any(value => value.EncounterId == encounter.Id && value.Ordinal == subroutine.Ordinal);
+            if (isGained == subroutine.Ordinal < iceSpec.Subroutines.Count)
+            {
+                Add(violations, "run.gained-subroutine-ordinal", gainedPath, "Only gained subroutines sit past the printed ordinals.");
+            }
+        }
+    }
+
     private static void ValidateRunRestrictions(
         GameState state,
         IBehaviorCatalog behaviorCatalog,
@@ -2536,8 +2641,7 @@ public static partial class StateInvariantValidator
             }
 
             if (!behaviorCatalog.TryGetIce(entry.IceDefinitionId, out IceBehaviorSpec? iceSpec)
-                || entry.Ordinal < 0
-                || entry.Ordinal >= iceSpec.Subroutines.Count)
+                || run.EncounterSubroutineSpec(behaviorCatalog, iceSpec, entry.EncounterId, entry.Ordinal) is null)
             {
                 Add(violations, "run.resolved-subroutine-ledger-declaration-invalid", entryPath, "Resolved-subroutine ledger entries must point at a declared ICE subroutine.");
                 continue;
@@ -2633,8 +2737,8 @@ public static partial class StateInvariantValidator
                 && damageChild.Effects.Instructions.Count == 1
                 && damageChild.Effects.Instructions[0] is DamageEffect damage
                 && behaviorCatalog.TryGetIce(damageParent.IceDefinitionId, out IceBehaviorSpec? damageIce)
-                && damageParent.Ordinal < damageIce.Subroutines.Count
-                && damageIce.Subroutines[damageParent.Ordinal] is DamageSubroutineSpec printedDamage
+                && run.EncounterSubroutineSpec(behaviorCatalog, damageIce, damageParent.EncounterId, damageParent.Ordinal)
+                    is DamageSubroutineSpec printedDamage
                 && damage.Kind == printedDamage.Kind && damage.Amount == printedDamage.Amount
                 && state.Players.Any(player => player.Side == PlayerSide.Runner && player.Id == damage.Target);
             // EL-GENERIC-SUBROUTINE: the behavior child of a generic
@@ -2874,6 +2978,22 @@ public static partial class StateInvariantValidator
                 or OccurrenceKind.FirstOperationPlayedThisTurn
                 or OccurrenceKind.FirstEventPlayedThisTurn
                 or OccurrenceKind.FirstCardCreditGainThisTurn => occurrence.ServerId is null,
+            // VP-ICE-PASSED, VP-ENCOUNTER-ENDED: the passed or bypassed ICE is the run's current ICE, as the run moves on
+            // (or ends, for an encounter that ended the run).
+            OccurrenceKind.IcePassed or OccurrenceKind.IceBypassed or OccurrenceKind.EncounterEnded =>
+                run.Step is RunTimingStep.MovementPaidWindow or RunTimingStep.RunEnd
+                && frame.Controller == run.InitiatingPlayer
+                && occurrence.Controller == run.InitiatingPlayer
+                && occurrence.SubjectCardId is { } passedIce
+                && run.CurrentIceId == passedIce
+                && occurrence.ServerId == run.AttackedServer,
+            // VP-SUBROUTINE-BROKEN, VP-ICE-PASSED (fully broken): raised in the encounter's paid window by a break.
+            OccurrenceKind.SubroutineBroken or OccurrenceKind.IceFullyBroken => run.Step == RunTimingStep.EncounterPaidWindow
+                && frame.Controller == run.InitiatingPlayer
+                && occurrence.Controller == run.InitiatingPlayer
+                && occurrence.SubjectCardId is { } brokenIce
+                && run.Encounter?.IceId == brokenIce
+                && occurrence.ServerId == run.AttackedServer,
             _ => false,
         };
     }
@@ -4146,8 +4266,8 @@ public static partial class StateInvariantValidator
                         && (!cardsById.TryGetValue(damageVictim, out CardInstanceState? victimCard)
                             || victimCard.OwnerSide != PlayerSide.Runner
                             || !behaviorCatalog.TryGetIce(iceFrame.IceDefinitionId, out IceBehaviorSpec? victimIce)
-                            || iceFrame.Ordinal >= victimIce.Subroutines.Count
-                            || victimIce.Subroutines[iceFrame.Ordinal] is not DamageSubroutineSpec))
+                            || state.RunState?.EncounterSubroutineSpec(behaviorCatalog, victimIce, iceFrame.EncounterId, iceFrame.Ordinal)
+                                is not DamageSubroutineSpec))
                     {
                         Add(violations, "resolution.subroutine-damage-victim-mismatch", path,
                             "Only a damage subroutine may retain an existing Runner card as its actual damage victim.");
@@ -9111,8 +9231,7 @@ public static partial class StateInvariantValidator
                         && behaviorCatalog.TryGetAgenda(accessedCard!.DefinitionId, out _);
                     if (trashableAccess
                         && !accessedAgenda
-                        && run.RunRestrictions?.Any(restriction =>
-                            restriction.Kind == RunRestrictionKind.CannotStealOrTrashCorpCards) != true)
+                        && !run.ForbidsStealOrTrash(accessedCard!.DefinitionId))
                     {
                         if (runtimeCardCatalog is null && !behaviorCatalog.TryGetAsset(accessedCard!.DefinitionId, out _))
                         {
@@ -9144,7 +9263,7 @@ public static partial class StateInvariantValidator
                 if (run.ChosenAccessCards.Count > 0
                     && state.Cards.FirstOrDefault(candidate => candidate?.Id == run.ChosenAccessCards[^1]) is { } stealCandidate
                     && IsLiveAccessCard(state, run, stealCandidate.Id, requireTrashableSource: false)
-                    && run.RunRestrictions?.Any(restriction => restriction.Kind == RunRestrictionKind.CannotStealOrTrashCorpCards) != true
+                    && !run.ForbidsStealOrTrash(stealCandidate.DefinitionId)
                     && behaviorCatalog.TryGetAgenda(stealCandidate.DefinitionId, out _)
                     && StealCosts.For(state.Cards, state.Zones, behaviorCatalog, stealCandidate.DefinitionId) is var stealCost
                     && (stealCost.Clicks > 0 || stealCost.Credits > 0)
@@ -9356,8 +9475,9 @@ public static partial class StateInvariantValidator
         try
         {
             expectedAbilities = GameEngine.MaterializeAbilityActionParameters(state, behaviorCatalog, runtimeCardCatalog);
-            if (run.RunRestrictions?.Any(restriction =>
-                    restriction.Kind == RunRestrictionKind.CannotStealOrTrashCorpCards) == true)
+            if (run.ForbidsStealOrTrash(run.ChosenAccessCards.Count > 0
+                    ? state.Cards.FirstOrDefault(card => card?.Id == run.ChosenAccessCards[^1])?.DefinitionId
+                    : null))
             {
                 // Mirror the reducer's declaration-authenticated filter: an
                 // access ability is suppressed only if its typed behavior can
