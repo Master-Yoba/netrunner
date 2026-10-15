@@ -63,7 +63,7 @@ public sealed record BehaviorDynamicPumpDeclaration
         ArgumentNullException.ThrowIfNull(installedFilter);
         if (installedFilter.CardType != BehaviorCardType.Icebreaker
             || installedFilter.OwnerSide != PlayerSide.Runner
-            || installedFilter.Subtype is not null)
+            || installedFilter.NamesSubtype)
         {
             throw new ArgumentException(
                 "Dynamic breaker pumps require a Runner-owned icebreaker filter without subtype metadata.",
@@ -1563,9 +1563,9 @@ public static class EncounterStrength
             return false;
         }
 
-        if (filter.Subtype is not null
+        if (filter.NamesSubtype
             && !(behaviorCatalog.TryGetCardSubtypes(card.DefinitionId, out IReadOnlyList<string> subtypes)
-                && subtypes.Contains(filter.Subtype, StringComparer.Ordinal)))
+                && filter.SubtypesMatch(subtypes.ToArray())))
         {
             // Subtype metadata is never inferred from titles or rules text;
             // only a composition-registered subtype matches.

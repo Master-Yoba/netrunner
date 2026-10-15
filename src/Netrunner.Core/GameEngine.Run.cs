@@ -1970,6 +1970,25 @@ public static partial class GameEngine
             working.RunState = run;
         }
 
+        // VP-PAID-REDIRECT: "when you would approach" reactions first; the step approaches when it resumes (Baker).
+        if (!run.ServerApproachRaised
+            && HasActiveCatalogTrigger(working, OccurrenceKind.ServerWouldBeApproached, run.AttackedServer))
+        {
+            working.RunState = run.WithServerApproachRaised(true);
+            working.ResolutionStack.Add(new EffectResolutionFrame(
+                run.InitiatingPlayer,
+                new CostBundle(),
+                new EffectBundle(new GameplayOccurrenceEffect(OccurrenceKind.ServerWouldBeApproached, run.InitiatingPlayer,
+                    serverId: run.AttackedServer))));
+            return;
+        }
+
+        if (run.ServerApproachRaised)
+        {
+            run = run.WithServerApproachRaised(false);
+            working.RunState = run;
+        }
+
         Emit(working, EngineEventKinds.ServerApproached, new ServerApproachedEventPayload(
             run.Id,
             run.AttackedServer));
@@ -2643,7 +2662,8 @@ public static partial class GameEngine
         RunPersistentContext accessContext = run.PersistentContext
             ?? new RunPersistentContext(run.Id, run.AttackedServer, [], []);
         run = run.WithPersistentContext(new RunPersistentContext(run.Id, run.AttackedServer,
-            accessContext.StolenAgendas, accessContext.Abilities, checked(accessContext.AccessOccurrenceCount + 1)));
+            accessContext.StolenAgendas, accessContext.Abilities, checked(accessContext.AccessOccurrenceCount + 1),
+            accessContext.RememberedCards));
         Emit(working, EngineEventKinds.CardAccessed, new CardAccessedEventPayload(run.Id, server.Id, cardId));
         run = run.WithTiming(
             RunTimingStep.BreachAccessAbility,
@@ -2872,7 +2892,8 @@ public static partial class GameEngine
         RunPersistentContext context = run.PersistentContext
             ?? new RunPersistentContext(run.Id, run.AttackedServer, [], []);
         run = run.WithPersistentContext(new RunPersistentContext(run.Id, run.AttackedServer,
-            context.StolenAgendas.Append(card.Id).ToArray(), context.Abilities, context.AccessOccurrenceCount));
+            context.StolenAgendas.Append(card.Id).ToArray(), context.Abilities, context.AccessOccurrenceCount,
+            context.RememberedCards));
         working.RunState = run;
         // VP-AGENDA-POINTS-MODIFIER: an agenda may be worth less in the Runner's score area (Let Them Dream).
         int stolenPoints = spec.PointsIn(PlayerSide.Runner);

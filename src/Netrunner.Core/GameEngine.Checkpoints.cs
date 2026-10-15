@@ -1020,6 +1020,7 @@ public static partial class GameEngine
                 or OccurrenceKind.IceFullyBroken
                 or OccurrenceKind.SubroutineBroken
                 or OccurrenceKind.EncounterEnded
+                or OccurrenceKind.ServerWouldBeApproached
                 or OccurrenceKind.DamageDone
                 or OccurrenceKind.CardsTrashedFromHq
                 or OccurrenceKind.HandSizeDiscarded))
@@ -1031,7 +1032,8 @@ public static partial class GameEngine
         var materialized = new List<TriggerInvocation>();
         foreach (CardInstanceState source in working.Cards.OrderBy(card => card.Id.Value, StringComparer.Ordinal))
         {
-            bool activeRunEventSource = occurrence.Kind == OccurrenceKind.RunSuccessful
+            // VP-RETURN-AT-RUN-END: a run event's own abilities as its run begins too (Beta Build's install).
+            bool activeRunEventSource = occurrence.Kind is OccurrenceKind.RunSuccessful or OccurrenceKind.RunBegan
                 && IsActiveRunEventSource(working, source);
             if (!working.BehaviorCatalog.TryGet(source.DefinitionId, out CardBehaviorDefinition? definition)
                 || definition.Controller != source.OwnerSide)
@@ -1210,7 +1212,7 @@ public static partial class GameEngine
     {
         foreach (CardInstanceState source in working.Cards)
         {
-            bool activeRunEventSource = occurrenceKind == OccurrenceKind.RunSuccessful
+            bool activeRunEventSource = occurrenceKind is OccurrenceKind.RunSuccessful or OccurrenceKind.RunBegan
                 && IsActiveRunEventSource(working, source);
             if (!working.BehaviorCatalog.TryGet(source.DefinitionId, out CardBehaviorDefinition? definition)
                 || definition.Controller != source.OwnerSide)
@@ -1384,8 +1386,7 @@ public static partial class GameEngine
                 return false;
             }
 
-            if (filter.Subtype is not null
-                && !runtime.Subtypes.Contains(filter.Subtype, StringComparer.Ordinal))
+            if (!filter.SubtypesMatch(runtime.Subtypes))
             {
                 return false;
             }
@@ -1415,7 +1416,7 @@ public static partial class GameEngine
             };
         }
 
-        if (filter.Subtype is not null)
+        if (filter.NamesSubtype)
         {
             return false;
         }

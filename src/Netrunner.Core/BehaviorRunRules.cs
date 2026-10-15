@@ -120,6 +120,23 @@ internal static class BehaviorRunRules
         }
     }
 
+    /// <summary>VP-RESOLVE-SUBROUTINE: some ability, trigger or play of the definition holds the instruction kind.</summary>
+    internal static bool DeclaresInstruction(CardBehaviorDefinition definition, BehaviorInstructionKind kind) =>
+        Flatten(definition.Instructions
+                .Concat(definition.Triggers.SelectMany(static trigger => trigger.Instructions))
+                .Concat(definition.PaidAbilities.SelectMany(static ability => ability.Instructions)))
+            .Any(instruction => instruction.Kind == kind);
+
+    /// <summary>
+    /// VP-PAID-REDIRECT: the definition's would-approach reaction may change the attacked server to the kind (Baker's
+    /// click run on Archives may become a run on HQ or R&amp;D).
+    /// </summary>
+    internal static bool DefinitionRedirectsTo(CardBehaviorDefinition definition, ServerKind serverKind) =>
+        Flatten(definition.Triggers.Where(static trigger => trigger.Occurrence == OccurrenceKind.ServerWouldBeApproached)
+                .SelectMany(static trigger => trigger.Instructions))
+            .Any(instruction => instruction.Kind == BehaviorInstructionKind.ChangeAttackedServer
+                && string.Equals(instruction.Argument, serverKind.ToString(), StringComparison.Ordinal));
+
     internal static bool HasBreachAccessModifierDeclaration(
         CardBehaviorDefinition definition,
         ServerKind serverKind,

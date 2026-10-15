@@ -340,6 +340,35 @@ public static partial class GameEngine
 
                 AdvanceBehaviorCursor(working, frame);
                 return;
+            case BehaviorInstructionKind.ResolveIceSubroutine:
+                ResolveIceSubroutineOutsideEncounter(working, frame, instruction);
+                return;
+            case BehaviorInstructionKind.ChangeAttackedServer:
+                if (working.RunState is { Step: RunTimingStep.ApproachServer, ServerApproachRaised: true } redirecting
+                    && working.Servers.FirstOrDefault(server => server.Kind == Enum.Parse<ServerKind>(instruction.Argument!) && server.Exists)
+                        is { } redirect
+                    && redirect.Id != redirecting.AttackedServer)
+                {
+                    working.RunState = redirecting.WithAttackedServer(redirect.Id);
+                }
+
+                AdvanceBehaviorCursor(working, frame);
+                return;
+            case BehaviorInstructionKind.RunAfterRun:
+                QueueRunAfterRun(working, frame, instruction);
+                AdvanceBehaviorCursor(working, frame);
+                return;
+            case BehaviorInstructionKind.RememberForRun:
+                if (working.RunState is { } rememberingRun
+                    && ResolveBehaviorCards(working, frame, instruction.Target) is [var remembered])
+                {
+                    working.RunState = rememberingRun.WithPersistentContext(
+                        (rememberingRun.PersistentContext ?? new RunPersistentContext(rememberingRun.Id, rememberingRun.AttackedServer, [], []))
+                            .WithRemembered(new RunRememberedCard(frame.SourceCardId, instruction.Argument!, remembered)));
+                }
+
+                AdvanceBehaviorCursor(working, frame);
+                return;
             case BehaviorInstructionKind.EncounteredIceGainsSubroutine:
                 EncounteredIceGainsSubroutine(working, frame);
                 AdvanceBehaviorCursor(working, frame);
@@ -928,6 +957,150 @@ public static partial class GameEngine
     }
 
     /// <summary>
+    /// VP-RESOLVE-SUBROUTINE: the subroutine at the position on a rezzed installed piece of ICE, when it can resolve
+    /// outside an encounter: a behavior subroutine, a credit, tag or plain damage subroutine, or one ending the run (which
+    /// does nothing with no run). Subroutines that need an encounter's choice frame can't.
+    /// </summary>
+    private static IceSubroutineSpec? ResolvableIceSubroutine(WorkingState working, CardInstanceState ice, int ordinal) =>
+        ice.Rezzed
+        && IsInstalledCard(working, ice.Id)
+        && working.BehaviorCatalog.TryGetIce(ice.DefinitionId, out IceBehaviorSpec? spec)
+        && ordinal >= 0
+        && ordinal < spec.Subroutines.Count
+        && spec.Subroutines[ordinal] is BehaviorSubroutineSpec or GainCreditsSubroutineSpec or LoseCreditsSubroutineSpec
+            or GiveTagsSubroutineSpec or DamageSubroutineSpec { FollowUp: DamageSubroutineFollowUp.None }
+            or EndRunSubroutineSpec or EndRunIfCreditsAtMostSubroutineSpec or RunRestrictionSubroutineSpec
+            ? spec.Subroutines[ordinal]
+            : null;
+
+    private static void ResolveIceSubroutineOutsideEncounter(
+        WorkingState working,
+        BehaviorResolutionFrame frame,
+        BehaviorInstruction instruction)
+    {
+        IceSubroutineSpec? subroutine = ResolveBehaviorCards(working, frame, instruction.Target) is [var iceId]
+            ? ResolvableIceSubroutine(working, GetCard(working, iceId), instruction.Amount)
+            : null;
+        AdvanceBehaviorCursor(working, frame);
+        PlayerId corp = GetPlayer(working, PlayerSide.Corp).Id;
+        PlayerId runner = GetPlayer(working, PlayerSide.Runner).Id;
+        switch (subroutine)
+        {
+            case BehaviorSubroutineSpec behavior:
+                PushIceSubroutineBehavior(working, GetCard(working, ResolveBehaviorCards(working, frame, instruction.Target)[0]), behavior);
+                break;
+            case GainCreditsSubroutineSpec gain:
+                ApplyCreditDelta(working, GetPlayer(working, gain.Target).Id, gain.Amount);
+                break;
+            case LoseCreditsSubroutineSpec lose:
+                PlayerState debtor = GetPlayer(working, lose.Target);
+                int loss = Math.Min(lose.Amount, debtor.Credits);
+                if (loss > 0)
+                {
+                    ApplyCreditDelta(working, debtor.Id, -loss);
+                }
+
+                break;
+            case GiveTagsSubroutineSpec tags:
+                working.ResolutionStack.Add(new EffectResolutionFrame(corp, new CostBundle(),
+                    new EffectBundle(new TagAdjustmentEffect(runner, tags.Amount))));
+                break;
+            case DamageSubroutineSpec damage:
+                working.ResolutionStack.Add(new EffectResolutionFrame(corp, new CostBundle(),
+                    new EffectBundle(new DamageEffect(runner, damage.Kind, damage.Amount))));
+                break;
+        }
+    }
+
+    /// <summary>
+    /// VP-RESOLVE-SUBROUTINE: a behavior subroutine resolved by another card's instruction, outside an encounter: the
+    /// child of a behavior frame whose card declares the instruction.
+    /// </summary>
+    private static bool IsEffectResolvedIceSubroutineFrame(WorkingState working, BehaviorResolutionFrame parent, BehaviorResolutionFrame frame) =>
+        frame.TriggerKey is { } key
+        && working.BehaviorCatalog.TryGet(frame.DefinitionId, out CardBehaviorDefinition? ice)
+        && ice.Triggers.Any(trigger => trigger.Occurrence == OccurrenceKind.IceSubroutine && string.Equals(trigger.Key, key, StringComparison.Ordinal))
+        && working.BehaviorCatalog.TryGet(parent.DefinitionId, out CardBehaviorDefinition? resolver)
+        && BehaviorRunRules.DeclaresInstruction(resolver, BehaviorInstructionKind.ResolveIceSubroutine);
+
+    /// <summary>VP-RUN-AFTER-RUN: the card is installed in a remote server, root or ICE. Shared with the validator.</summary>
+    internal static bool IsInRemoteServer(IReadOnlyList<ServerState?> servers, IReadOnlyList<ZoneState?> zones, CardInstanceState card) =>
+        zones.FirstOrDefault(zone => zone?.Id == card.ZoneId) is { ServerId: { } serverId, Kind: ZoneKind.ServerRoot or ZoneKind.ServerIce }
+        && servers.Any(server => server?.Id == serverId && server.Kind == ServerKind.Remote && server.Exists);
+
+    /// <summary>
+    /// VP-RUN-AFTER-RUN: a run-end ability on the Runner's turn marks the turn frame to run the targeted card's remote
+    /// server next; with no live run, an action-priority Runner turn frame and a remote card, otherwise nothing.
+    /// </summary>
+    private static void QueueRunAfterRun(WorkingState working, BehaviorResolutionFrame frame, BehaviorInstruction instruction)
+    {
+        if (working.RunState is not null
+            || working.ResolutionStack.Count == 0
+            || working.ResolutionStack[0] is not TurnFrame { ActiveSide: PlayerSide.Runner, Stage: TurnFrameStage.ActionPriority } turn
+            || ResolveBehaviorCards(working, frame, instruction.Target) is not [var chosen]
+            || !IsInRemoteServer(working.Servers, working.Zones, GetCard(working, chosen)))
+        {
+            return;
+        }
+
+        working.ResolutionStack[0] = turn.WithFollowUpRun(ZoneForCard(working, chosen).ServerId);
+    }
+
+    /// <summary>
+    /// VP-RETURN-AT-RUN-END: the cards a source remembered under a key: from the live run, or, once it has ended, from the
+    /// run-ended occurrence resolving. Shared with the validator.
+    /// </summary>
+    internal static IEnumerable<CardInstanceId> RememberedCards(
+        RunState? run,
+        IReadOnlyList<ResolutionFrame?> stack,
+        CardInstanceId source,
+        string key)
+    {
+        RunPersistentContext? context = run?.PersistentContext;
+        for (int index = stack.Count - 1; run is null && index >= 0; index--)
+        {
+            if (stack[index] is EffectCheckpointFrame
+                {
+                    Occurrence.Effect: GameplayOccurrenceEffect { Kind: OccurrenceKind.RunEnded, RunContext: { } ended },
+                })
+            {
+                context = ended;
+                break;
+            }
+        }
+
+        return (context?.RememberedCards ?? [])
+            .Where(value => value.SourceCardId == source && string.Equals(value.Key, key, StringComparison.Ordinal))
+            .Select(static value => value.CardId);
+    }
+
+    /// <summary>
+    /// VP-ENDED-RUN-SERVER: the attacked server, or, with no live run, the server of the run-ended occurrence resolving: a
+    /// run-end ability still names "the attacked server" after the run state is cleared (Kompromat). Shared with the
+    /// validator.
+    /// </summary>
+    internal static ServerId? AttackedOrEndedRunServer(RunState? run, IReadOnlyList<ResolutionFrame?> stack)
+    {
+        if (run is not null)
+        {
+            return run.AttackedServer;
+        }
+
+        for (int index = stack.Count - 1; index >= 0; index--)
+        {
+            if (stack[index] is EffectCheckpointFrame
+                {
+                    Occurrence.Effect: GameplayOccurrenceEffect { Kind: OccurrenceKind.RunEnded, ServerId: { } server },
+                })
+            {
+                return server;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Ends a live run from an engine-owned catalog reaction. The behavior
     /// child is deliberately allowed to sit above the run timing frame (and
     /// its occurrence/checkpoint parents), so ending the run must first
@@ -1448,8 +1621,9 @@ public static partial class GameEngine
             }
         }
         else if (working.ResolutionStack.Count >= 2
-            && working.ResolutionStack[^2] is RunTimingFrame
-            && IsEncounteredIceSubroutineFrame(working, frame))
+            && (working.ResolutionStack[^2] is RunTimingFrame && IsEncounteredIceSubroutineFrame(working, frame)
+                || working.ResolutionStack[^2] is BehaviorResolutionFrame resolver
+                    && IsEffectResolvedIceSubroutineFrame(working, resolver, frame)))
         {
             // A generic ICE subroutine is keyed by its trigger declaration but
             // runs directly above the encounter, not under a checkpoint.
@@ -3034,6 +3208,20 @@ public static partial class GameEngine
         BehaviorResolutionFrame frame,
         BehaviorChoiceOption option)
     {
+        // VP-RESOLVE-SUBROUTINE: a mode resolving a subroutine is offered only while that subroutine can resolve.
+        if (option.Instructions is [{ Kind: BehaviorInstructionKind.ResolveIceSubroutine, Target: { } subroutineIce } resolve])
+        {
+            try
+            {
+                return ResolveBehaviorCards(working, frame, subroutineIce) is [var iceId]
+                    && ResolvableIceSubroutine(working, GetCard(working, iceId), resolve.Amount) is not null;
+            }
+            catch (ResolutionFailureException)
+            {
+                return false;
+            }
+        }
+
         if (option.Instructions is not [{ Kind: BehaviorInstructionKind.InstallCard, IsZoneInstall: true, Target: { } target }])
         {
             return true;
@@ -3566,8 +3754,9 @@ public static partial class GameEngine
                     && (!target.IsOther || card.Id != excludedCardId)
                     && (!target.IsCopyOfArchives || IsCopyOfFaceUpArchivesCard(working.Cards, working.Zones, card))
                     && (!target.IsNotAi || !GameEngine.CardSubtypes(working.RuntimeCardCatalog, card.DefinitionId).Contains("ai", StringComparer.Ordinal))
-                    && (!target.IsInAttackedServer || working.RunState is { } attacked
-                        && working.Zones.FirstOrDefault(zone => zone.Id == card.ZoneId)?.ServerId == attacked.AttackedServer)
+                    && (!target.IsInRemoteServer || IsInRemoteServer(working.Servers, working.Zones, card))
+                    && (!target.IsInAttackedServer || AttackedOrEndedRunServer(working.RunState, working.ResolutionStack) is { } attacked
+                        && working.Zones.FirstOrDefault(zone => zone.Id == card.ZoneId)?.ServerId == attacked)
                     && (target.Kind != BehaviorTargetKind.InstalledCardNotThisTurn
                         || !IsInstalledThisTurn(working, card.Id, owner))
                     && BehaviorCardMatches(working, card.Id, target.Filter))
@@ -3753,8 +3942,7 @@ public static partial class GameEngine
                 return false;
             }
 
-            if (filter.Subtype is not null
-                && !runtimeSpec.Subtypes.Contains(filter.Subtype, StringComparer.Ordinal))
+            if (!filter.SubtypesMatch(runtimeSpec.Subtypes))
             {
                 return false;
             }
@@ -4291,7 +4479,8 @@ public static partial class GameEngine
             if (instruction.Target is { Kind: BehaviorTargetKind.ChosenCard }
                     && IsProvenEmptyChosenCard(frame, instruction.Target)
                 || instruction.Target is { IsHostedOnSource: true }
-                || instruction.Target is { TopCount: not null })
+                || instruction.Target is { TopCount: not null }
+                || instruction.Target is { Kind: BehaviorTargetKind.RememberedCard })
             {
                 AdvanceBehaviorCursor(working, frame);
                 return;
@@ -4860,6 +5049,10 @@ public static partial class GameEngine
             case BehaviorTargetKind.ZoneCard:
             case BehaviorTargetKind.ZoneCards:
                 return MaterializeBehaviorCandidates(working, target, hostSourceId: frame.SourceCardId);
+            case BehaviorTargetKind.RememberedCard:
+                return RememberedCards(working.RunState, working.ResolutionStack, frame.SourceCardId, target.Selector!)
+                    .Where(card => IsInstalledCard(working, card))
+                    .ToArray();
             default:
                 throw new ResolutionFailureException($"Card target kind '{target.Kind}' is not executable.");
         }

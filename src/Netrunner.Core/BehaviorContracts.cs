@@ -118,8 +118,15 @@ public sealed class BehaviorCardFilter : IEquatable<BehaviorCardFilter>
         PlayerSide? ownerSide = null,
         string? subtype = null,
         bool? rezzed = null,
-        int? agendaPoints = null)
+        int? agendaPoints = null,
+        string? excludedSubtype = null)
     {
+        if (excludedSubtype is not null && !StableIdentifier.TryValidate(excludedSubtype))
+        {
+            throw new ArgumentException("An excluded subtype must be a stable identifier.", nameof(excludedSubtype));
+        }
+
+        ExcludedSubtype = excludedSubtype;
         if (!Enum.IsDefined(cardType))
         {
             throw new ArgumentOutOfRangeException(nameof(cardType));
@@ -171,6 +178,18 @@ public sealed class BehaviorCardFilter : IEquatable<BehaviorCardFilter>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? AgendaPoints { get; }
 
+    /// <summary>VP-EXCLUDED-SUBTYPE: a subtype the card must not have ("non-liability", "non-virus").</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ExcludedSubtype { get; }
+
+    /// <summary>The filter's subtype terms against a card's printed subtypes.</summary>
+    internal bool SubtypesMatch(IReadOnlyCollection<string> subtypes) =>
+        (Subtype is null || subtypes.Contains(Subtype, StringComparer.Ordinal))
+        && (ExcludedSubtype is null || !subtypes.Contains(ExcludedSubtype, StringComparer.Ordinal));
+
+    /// <summary>The filter names a subtype, to have or to lack.</summary>
+    internal bool NamesSubtype => Subtype is not null || ExcludedSubtype is not null;
+
     public static BehaviorCardFilter Any { get; } = new();
 
     public bool Equals(BehaviorCardFilter? other) =>
@@ -180,7 +199,8 @@ public sealed class BehaviorCardFilter : IEquatable<BehaviorCardFilter>
         && DefinitionId == other.DefinitionId
         && OwnerSide == other.OwnerSide
         && AgendaPoints == other.AgendaPoints
-        && string.Equals(Subtype, other.Subtype, StringComparison.Ordinal);
+        && string.Equals(Subtype, other.Subtype, StringComparison.Ordinal)
+        && string.Equals(ExcludedSubtype, other.ExcludedSubtype, StringComparison.Ordinal);
 
     public override bool Equals(object? obj) => Equals(obj as BehaviorCardFilter);
 
@@ -353,6 +373,13 @@ public enum BehaviorAmountKind
 
     /// <summary>VP-RUNNER-TAGS: the Runner's tags when the instruction resolves (Vicsek's X).</summary>
     RunnerTags,
+
+    /// <summary>
+    /// VP-INSTALL-AND-REZ-LESS: a discount shared with the install, what is left of it (the offset) after the install tax the
+    /// rez's target ICE paid (the ICE inside it in its server, times the multiplier), never below zero (Reanimation
+    /// Protocol: offset 10). Only a rez paying less reads it.
+    /// </summary>
+    DiscountLeftAfterIceInstallTax,
 }
 
 /// <summary>

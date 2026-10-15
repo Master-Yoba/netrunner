@@ -46,6 +46,9 @@ public static partial class GameEngine
                 && facts?.InstalledCardIds.Contains(installedEarlier) != true,
             BehaviorTriggerCondition.SubjectOutermostFullyBroken => occurrence.SourceCardId is { } passed
                 && IsOutermostFullyBrokenIce(working, passed),
+            BehaviorTriggerCondition.RunStartedBySource => working.RunState?.InitiatingSource == source.Id,
+            BehaviorTriggerCondition.RunOnAnotherServer => working.RunState is { } otherRun
+                && SourceServerId(working, source) != otherRun.AttackedServer,
             BehaviorTriggerCondition.SubjectStrengthAtMostZero => occurrence.SourceCardId is { } broken
                 && EncounteredIceStrength(working, broken) is <= 0,
             BehaviorTriggerCondition.TrashedSubjectWasInstalled => occurrence.Effect is GameplayOccurrenceEffect
@@ -118,19 +121,31 @@ public static partial class GameEngine
         BehaviorInstruction instruction)
     {
         IReadOnlyList<CardInstanceId> selected = ResolveBehaviorCards(working, frame, instruction.Target);
-        AdvanceBehaviorCursor(working, frame);
-        if (selected.Count == 0) return;
+        if (selected.Count == 0)
+        {
+            AdvanceBehaviorCursor(working, RecordBehaviorAmount(frame, instruction.RecordAs, 0));
+            return;
+        }
+
         if (selected.Count != 1) throw new ResolutionFailureException("A rez instruction requires one selected ICE.");
         CardInstanceState card = GetCard(working, selected[0]);
         ZoneState zone = ZoneForCard(working, card.Id);
         if (zone.Kind != ZoneKind.ServerIce || card.OwnerSide != PlayerSide.Corp
             || working.RuntimeCardCatalog?.GetSpec(card.DefinitionId).CardClass != RuntimeCardClass.Ice)
             throw new ResolutionFailureException("The selected rez target must be installed Corp ICE.");
-        if (card.Rezzed || !TryGetRezCostQuote(working, card, RuntimeCardClass.Ice, out int fullCost, out _)) return;
-        int cost = Math.Max(0, fullCost - instruction.Amount);
+        // VP-INSTALL-AND-REZ-LESS: what a shared discount leaves after the install tax, never below zero.
+        int discount = instruction.AmountOperand is { Kind: BehaviorAmountKind.DiscountLeftAfterIceInstallTax } shared
+            ? Math.Max(0, checked(shared.Offset - zone.CardIds.TakeWhile(id => id != card.Id).Count() * shared.Multiplier))
+            : instruction.Amount;
+        int fullCost = 0;
+        bool rezzes = !card.Rezzed && TryGetRezCostQuote(working, card, RuntimeCardClass.Ice, out fullCost, out _);
+        int cost = Math.Max(0, fullCost - discount);
         PlayerState corp = GetPlayer(working, PlayerSide.Corp);
         // Paid like an ordinary rez: the wallet and declared hosted credits (EL.6 review).
-        if (corp.Credits + DeclaredHostedCredits(working, PlayerSide.Corp, BehaviorHostedCreditUseKind.RezInServer, card) < cost) return;
+        rezzes &= corp.Credits + DeclaredHostedCredits(working, PlayerSide.Corp, BehaviorHostedCreditUseKind.RezInServer, card) >= cost;
+        AdvanceBehaviorCursor(working, RecordBehaviorAmount(frame, instruction.RecordAs,
+            rezzes && (instruction.Filter is null || BehaviorCardMatches(working, card.Id, instruction.Filter)) ? 1 : 0));
+        if (!rezzes) return;
         PayCreditsWithDeclaredHosted(working, corp.Id, BehaviorHostedCreditUseKind.RezInServer, card, cost);
         ReplaceCard(working, new CardInstanceState(card.Id, card.DefinitionId, card.ZoneId, card.OwnerSide,
             faceUp: true, rezzed: true, card.AdvancementCounters));

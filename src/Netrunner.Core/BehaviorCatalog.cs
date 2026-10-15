@@ -725,6 +725,11 @@ public sealed record BehaviorTarget
             throw new ArgumentOutOfRangeException(nameof(kind));
         }
 
+        if (kind == BehaviorTargetKind.RememberedCard && !StableIdentifier.TryValidate(selector))
+        {
+            throw new ArgumentException("A remembered-card target names its stable key.", nameof(selector));
+        }
+
         if (kind == BehaviorTargetKind.NamedCard && string.IsNullOrWhiteSpace(selector))
         {
             throw new ArgumentException("Named-card targets require a selector.", nameof(selector));
@@ -760,7 +765,7 @@ public sealed record BehaviorTarget
             // (EL-INSTALLED-SUBTYPE: Bumi's trojan, LEO's rezzed bioroid).
             if (filter is not null
                 && (filter.DefinitionId is not null
-                    || filter.Subtype is not null
+                    || filter.NamesSubtype
                         && filter.OwnerSide != PlayerSide.Runner
                         && filter.Rezzed != true))
             {
@@ -783,7 +788,7 @@ public sealed record BehaviorTarget
 
             if (filter is not null
                 && (filter.DefinitionId is not null
-                    || filter.Subtype is not null
+                    || filter.NamesSubtype
                     || filter.Rezzed is not null))
             {
                 throw new ArgumentException(
@@ -857,6 +862,15 @@ public sealed record BehaviorTarget
 
     [JsonIgnore]
     public bool IsNotAi => string.Equals(Selector, NotAiSelector, StringComparison.Ordinal);
+
+    /// <summary>
+    /// VP-RUN-AFTER-RUN: an installed-card target over only cards in a remote server, root or ICE; a remote exists only
+    /// while it holds a card, so choosing one chooses its server (Aircheck's "run a remote server").
+    /// </summary>
+    public const string RemoteServerSelector = "remote-server";
+
+    [JsonIgnore]
+    public bool IsInRemoteServer => string.Equals(Selector, RemoteServerSelector, StringComparison.Ordinal);
 
     [JsonIgnore]
     public bool IsCopyOfArchives => string.Equals(Selector, CopyOfArchivesSelector, StringComparison.Ordinal);
@@ -951,6 +965,12 @@ public enum BehaviorTargetKind
     ChosenCard,
     ZoneCard,
     ZoneCards,
+
+    /// <summary>
+    /// VP-RETURN-AT-RUN-END: the card the source remembered for its run under the selector key, while it is still
+    /// installed; none once it was uninstalled (Beta Build).
+    /// </summary>
+    RememberedCard,
 }
 
 /// <summary>
@@ -1222,10 +1242,11 @@ public sealed record BehaviorInstruction
 
         if (RecordAs is not null
             && (!StableIdentifier.TryValidate(RecordAs)
-                || Kind is not (BehaviorInstructionKind.LoseCredits or BehaviorInstructionKind.RemoveTags)))
+                || Kind is not (BehaviorInstructionKind.LoseCredits or BehaviorInstructionKind.RemoveTags
+                    or BehaviorInstructionKind.RezPayingLess)))
         {
             throw new ArgumentException(
-                "Only credit-loss and tag-removal instructions may record a stable amount key.",
+                "Only credit-loss, tag-removal and rez instructions may record a stable amount key.",
                 nameof(RecordAs));
         }
 
@@ -1342,11 +1363,19 @@ public sealed record BehaviorInstruction
                 or BehaviorInstructionKind.RemoveTags
                 or BehaviorInstructionKind.AddCounter
                 or BehaviorInstructionKind.AdvanceCard
-                or BehaviorInstructionKind.AddTags))
+                or BehaviorInstructionKind.AddTags
+                or BehaviorInstructionKind.TakeBadPublicity
+                or BehaviorInstructionKind.RezPayingLess))
         {
             throw new ArgumentException(
-                "A dynamic amount operand is valid only for credit, draw, counter, advancement and tag instructions.",
+                "A dynamic amount operand is valid only for credit, draw, counter, advancement, tag, bad publicity and rez instructions.",
                 nameof(AmountOperand));
+        }
+
+        // VP-INSTALL-AND-REZ-LESS: the discount an install left is known only beside the rez of the installed ICE.
+        if ((AmountOperand?.Kind == BehaviorAmountKind.DiscountLeftAfterIceInstallTax) != (Kind == BehaviorInstructionKind.RezPayingLess && AmountOperand is not null))
+        {
+            throw new ArgumentException("A rez paying less takes only the target ICE's install tax as a dynamic amount.", nameof(AmountOperand));
         }
 
         if (AmountOperand is not null && Amount != 0)
@@ -1531,6 +1560,17 @@ public sealed record BehaviorInstruction
             }
         }
 
+        if (Kind == BehaviorInstructionKind.ChangeAttackedServer
+            && (!Enum.TryParse(Argument, ignoreCase: false, out ServerKind redirect) || redirect == ServerKind.Remote))
+        {
+            throw new ArgumentException("A changed attacked server names a central server kind.", nameof(Argument));
+        }
+
+        if (Kind == BehaviorInstructionKind.RememberForRun && (!StableIdentifier.TryValidate(Argument) || Target is null))
+        {
+            throw new ArgumentException("Remembering a card names its stable key and its target.", nameof(Argument));
+        }
+
         if (Kind == BehaviorInstructionKind.RestrictRun
             && (Argument is null || !Enum.TryParse<RunRestrictionKind>(Argument, ignoreCase: false, out _)))
         {
@@ -1682,7 +1722,8 @@ public sealed record BehaviorInstruction
                 nameof(Condition));
         }
 
-        if (Kind != BehaviorInstructionKind.Search && Filter is not null)
+        // VP-INSTALL-AND-REZ-LESS: a rez's filter names the rezzed cards its RecordAs counts (Reanimation Protocol).
+        if (Kind is not (BehaviorInstructionKind.Search or BehaviorInstructionKind.RezPayingLess) && Filter is not null)
         {
             throw new ArgumentException(
                 "Typed filters are currently supported only for search instructions.",
@@ -1743,7 +1784,10 @@ public sealed record BehaviorInstruction
             or BehaviorInstructionKind.ChooseAtRandom
             or BehaviorInstructionKind.StealAgenda
             or BehaviorInstructionKind.RemoveAdvancementCounters
-            or BehaviorInstructionKind.RestrictRun)
+            or BehaviorInstructionKind.RestrictRun
+            or BehaviorInstructionKind.RememberForRun
+            or BehaviorInstructionKind.RunAfterRun
+            or BehaviorInstructionKind.ResolveIceSubroutine)
             && Target is not null)
         {
             throw new ArgumentException(
@@ -1974,6 +2018,30 @@ public enum BehaviorInstructionKind
     /// subroutine has resolved, it does nothing.
     /// </summary>
     EncounteredIceGainsSubroutine,
+
+    /// <summary>
+    /// VP-RETURN-AT-RUN-END: the run remembers the targeted card under the argument's key, for the source's run-end
+    /// ability (a <see cref="BehaviorTargetKind.RememberedCard"/> target). Outside a run it does nothing.
+    /// </summary>
+    RememberForRun,
+
+    /// <summary>
+    /// VP-RUN-AFTER-RUN: once the ended run's reactions finish, the Runner runs the server of the targeted installed card,
+    /// as part of the same action (Aircheck). Only from a run-end ability on the Runner's turn.
+    /// </summary>
+    RunAfterRun,
+
+    /// <summary>
+    /// VP-PAID-REDIRECT: while the Runner would approach the attacked server, the attacked server becomes the central
+    /// server the argument names (a <see cref="ServerKind"/>), and the Runner approaches it instead (Baker).
+    /// </summary>
+    ChangeAttackedServer,
+
+    /// <summary>
+    /// VP-RESOLVE-SUBROUTINE: the subroutine at the amount's position on the targeted ICE resolves, outside an
+    /// encounter (Unleash). A mode option holding only this is offered while that subroutine can resolve so.
+    /// </summary>
+    ResolveIceSubroutine,
 
     // Short aliases keep the contract pleasant for callers while the longer
     // names remain unambiguous in serialized/fingerprint output.
@@ -2419,7 +2487,8 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
         or OccurrenceKind.IceBypassed
         or OccurrenceKind.IceFullyBroken
         or OccurrenceKind.SubroutineBroken
-        or OccurrenceKind.EncounterEnded;
+        or OccurrenceKind.EncounterEnded
+        or OccurrenceKind.ServerWouldBeApproached;
 
     private static ReadOnlyCollection<BehaviorInstruction> Freeze(
         IEnumerable<BehaviorInstruction> values)
@@ -4534,6 +4603,11 @@ internal static class BehaviorCatalogFingerprint
         AppendString(builder, value.Subtype);
         if (value.Rezzed is { } rezzed) builder.Append(",rezzed=").Append(rezzed ? 1 : 0);
         if (value.AgendaPoints is { } points) builder.Append(",agendaPoints=").Append(points);
+        if (value.ExcludedSubtype is { } excluded)
+        {
+            builder.Append(",excludedSubtype=");
+            AppendString(builder, excluded);
+        }
     }
 
     private static void AppendCardDefinitionId(StringBuilder builder, CardDefinitionId? value) =>

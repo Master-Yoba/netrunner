@@ -72,6 +72,19 @@ internal static class ElevationHarness
     internal const string ProbeLetheIce = "90048";
     internal const string ProbeEncounterWatcherResource = "90060";
 
+    /// <summary>VP.5a: the probes for the primitives binding VP.5's cards found missing.</summary>
+    internal const string ProbeKompromatEvent = "90049";
+    internal const string ProbeReanimationOperation = "90050";
+    internal const string ProbeLiabilityIce = "90051";
+    internal const string ProbeCostlyIce = "90052";
+    internal const string ProbeBetaBuildEvent = "90053";
+    internal const string ProbeVirusProgram = "90054";
+    internal const string ProbeAircheckEvent = "90055";
+    internal const string ProbeBakerProgram = "90056";
+    internal const string ProbeUnleashOperation = "90057";
+    internal const string ProbeUnleashIce = "90058";
+    internal const string ProbeSacrificeZoneAgenda = "90059";
+
     /// <summary>The neutral Gateway identities a match board gets by default.</summary>
     internal const string CorpNeutralIdentity = "30077";
 
@@ -501,6 +514,215 @@ internal static class ElevationHarness
                         BehaviorTriggerScope.Controller, null, [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 1)]),
                 ]))
             .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeReanimationOperation),
+                PlayerSide.Corp,
+                instructions:
+                [
+                    new BehaviorInstruction(BehaviorInstructionKind.InstallCard, amount: 10, argument: "probe-reanimation-ice",
+                        target: BehaviorTarget.CardInZone(BehaviorZone.Archives, new BehaviorCardFilter(BehaviorCardType.Ice, ownerSide: PlayerSide.Corp)),
+                        sourceZone: BehaviorZone.Archives, costRule: BehaviorInstallCostRule.Normal),
+                    new BehaviorInstruction(BehaviorInstructionKind.RezPayingLess,
+                        target: new BehaviorTarget(BehaviorTargetKind.ChosenCard, selector: "probe-reanimation-ice"),
+                        filter: new BehaviorCardFilter(BehaviorCardType.Ice, excludedSubtype: "liability"),
+                        amountOperand: new BehaviorAmountOperand(null, 1, BehaviorAmountKind.DiscountLeftAfterIceInstallTax, offset: 10),
+                        recordAs: "probe-reanimation-rezzed"),
+                    new BehaviorInstruction(BehaviorInstructionKind.TakeBadPublicity,
+                        amountOperand: new BehaviorAmountOperand(null, 1, BehaviorAmountKind.Recorded, recordedKey: "probe-reanimation-rezzed")),
+                ]))
+            .AddIce(new IceBehaviorSpec(new CardDefinitionId(ProbeLiabilityIce), 1, IceType.Barrier, 8, [new EndRunSubroutineSpec()], []))
+            .AddIce(new IceBehaviorSpec(new CardDefinitionId(ProbeCostlyIce), 1, IceType.Barrier, 8, [new EndRunSubroutineSpec()], []))
+            .AddRunEvent(new RunEventBehaviorSpec(new CardDefinitionId(ProbeBetaBuildEvent), 0, 0))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeBetaBuildEvent),
+                PlayerSide.Runner,
+                triggers:
+                [
+                    new BehaviorTrigger("probe-beta-install", OccurrenceKind.RunBegan, TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Controller, null,
+                        [
+                            new BehaviorInstruction(BehaviorInstructionKind.InstallCard, argument: "probe-beta-program",
+                                target: BehaviorTarget.CardInZone(BehaviorZone.Stack,
+                                    new BehaviorCardFilter(BehaviorCardType.Program, ownerSide: PlayerSide.Runner, excludedSubtype: "virus")),
+                                sourceZone: BehaviorZone.Stack, costRule: BehaviorInstallCostRule.IgnoreAllCosts),
+                            new BehaviorInstruction(BehaviorInstructionKind.RememberForRun, argument: "probe-beta-program",
+                                target: new BehaviorTarget(BehaviorTargetKind.ChosenCard, selector: "probe-beta-program")),
+                        ]),
+                    new BehaviorTrigger("probe-beta-return", OccurrenceKind.RunEnded, TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Self, null,
+                        [
+                            new BehaviorInstruction(BehaviorInstructionKind.PlaceOnTopOfDeck,
+                                target: new BehaviorTarget(BehaviorTargetKind.RememberedCard, selector: "probe-beta-program")),
+                        ]),
+                ]))
+            .AddAgenda(new AgendaBehaviorSpec(new CardDefinitionId(ProbeSacrificeZoneAgenda), 4, installsFaceUp: true))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeSacrificeZoneAgenda),
+                PlayerSide.Corp,
+                triggers:
+                [
+                    new BehaviorTrigger("probe-sacrifice-zone", OccurrenceKind.RunSuccessful, TriggerMode.Optional,
+                        BehaviorTriggerScope.Any, null,
+                        [
+                            new BehaviorInstruction(BehaviorInstructionKind.RemoveAdvancementCounters, amount: 1,
+                                target: new BehaviorTarget(BehaviorTargetKind.Self)),
+                            new BehaviorInstruction(BehaviorInstructionKind.DealDamage, amount: 1, damageKind: DamageKind.Meat,
+                                recipient: BehaviorPlayerSelector.Runner),
+                        ],
+                        oncePerTurn: true,
+                        condition: BehaviorTriggerCondition.RunOnAnotherServer,
+                        requirement: BehaviorCondition.SourceAdvancementAtLeast(1)),
+                ]))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeUnleashOperation),
+                PlayerSide.Corp,
+                instructions:
+                [
+                    new BehaviorInstruction(BehaviorInstructionKind.Choose, choice: new BehaviorChoiceSpec(
+                        "probe-unleash-ice",
+                        BehaviorChooser.Controller,
+                        BehaviorChoiceMode.Mandatory,
+                        BehaviorChoiceCardinality.Exactly(1),
+                        target: new BehaviorTarget(BehaviorTargetKind.InstalledCard,
+                            filter: new BehaviorCardFilter(BehaviorCardType.Ice, ownerSide: PlayerSide.Corp)))),
+                    new BehaviorInstruction(BehaviorInstructionKind.RezIgnoringCosts,
+                        target: new BehaviorTarget(BehaviorTargetKind.ChosenCard, selector: "probe-unleash-ice")),
+                    new BehaviorInstruction(BehaviorInstructionKind.Choose, choice: new BehaviorChoiceSpec(
+                        "probe-unleash-subroutine",
+                        BehaviorChooser.Controller,
+                        BehaviorChoiceMode.Mode,
+                        BehaviorChoiceCardinality.Exactly(1),
+                        options:
+                        [
+                                    new BehaviorChoiceOption("sub-0", [new BehaviorInstruction(BehaviorInstructionKind.ResolveIceSubroutine, amount: 0,
+                                        target: new BehaviorTarget(BehaviorTargetKind.ChosenCard, selector: "probe-unleash-ice"))]),
+                                    new BehaviorChoiceOption("sub-1", [new BehaviorInstruction(BehaviorInstructionKind.ResolveIceSubroutine, amount: 1,
+                                        target: new BehaviorTarget(BehaviorTargetKind.ChosenCard, selector: "probe-unleash-ice"))]),
+                                    new BehaviorChoiceOption("sub-2", [new BehaviorInstruction(BehaviorInstructionKind.ResolveIceSubroutine, amount: 2,
+                                        target: new BehaviorTarget(BehaviorTargetKind.ChosenCard, selector: "probe-unleash-ice"))]),
+                            new BehaviorChoiceOption("decline", [], semantic: BehaviorChoiceOptionSemantic.Fallback),
+                        ])),
+                ]))
+            .AddIce(new IceBehaviorSpec(new CardDefinitionId(ProbeUnleashIce), 1, IceType.Sentry, 5,
+            [
+                new GiveTagsSubroutineSpec(1),
+                new BehaviorSubroutineSpec("probe-unleash-gain"),
+                new DamageSubroutineSpec(DamageKind.Net, 1, DamageSubroutineFollowUp.OfferJackOut),
+            ], []))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeUnleashIce),
+                PlayerSide.Corp,
+                triggers:
+                [
+                    new BehaviorTrigger("probe-unleash-gain", OccurrenceKind.IceSubroutine, TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Controller, null,
+                        [
+                            new BehaviorInstruction(BehaviorInstructionKind.Choose, choice: new BehaviorChoiceSpec(
+                                "probe-unleash-gain-choice",
+                                BehaviorChooser.Corp,
+                                BehaviorChoiceMode.Mode,
+                                BehaviorChoiceCardinality.Exactly(1),
+                                options:
+                                [
+                                    new BehaviorChoiceOption("gain-2", [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 2)]),
+                                    new BehaviorChoiceOption("gain-1", [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 1)]),
+                                ])),
+                        ]),
+                ]))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeBakerProgram),
+                PlayerSide.Runner,
+                triggers:
+                [
+                    new BehaviorTrigger("probe-baker-redirect", OccurrenceKind.ServerWouldBeApproached, TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Controller, null,
+                        [
+                            new BehaviorInstruction(BehaviorInstructionKind.Choose, choice: new BehaviorChoiceSpec(
+                                "probe-baker-server",
+                                BehaviorChooser.Controller,
+                                BehaviorChoiceMode.Mode,
+                                BehaviorChoiceCardinality.Exactly(1),
+                                options:
+                                [
+                                    new BehaviorChoiceOption("hq",
+                                        [new BehaviorInstruction(BehaviorInstructionKind.ChangeAttackedServer, argument: nameof(ServerKind.Headquarters))],
+                                        costs: [new BehaviorCost(BehaviorCostKind.Credits, 1)]),
+                                    new BehaviorChoiceOption("rd",
+                                        [new BehaviorInstruction(BehaviorInstructionKind.ChangeAttackedServer, argument: nameof(ServerKind.RAndD))],
+                                        costs: [new BehaviorCost(BehaviorCostKind.Credits, 1)]),
+                                    new BehaviorChoiceOption("decline", [], semantic: BehaviorChoiceOptionSemantic.Fallback),
+                                ])),
+                        ],
+                        condition: BehaviorTriggerCondition.RunStartedBySource),
+                ],
+                paidAbilities:
+                [
+                    new BehaviorPaidAbility(
+                        "probe-baker-run",
+                        BehaviorAbilityTiming.ActionPhase,
+                        BehaviorAbilityActivation.ClickAction,
+                        [new BehaviorCost(BehaviorCostKind.Clicks, 1)],
+                        [],
+                        [],
+                        [new BehaviorInstruction(BehaviorInstructionKind.StartRun, runOperand: new BehaviorRunOperand(ServerKind.Archives))],
+                        BehaviorAbilityUsageLimit.OncePerTurn),
+                ]))
+            .AddRunEvent(new RunEventBehaviorSpec(new CardDefinitionId(ProbeAircheckEvent), 0, 0,
+                allowedTargetServers: [ServerKind.Headquarters, ServerKind.RAndD]))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeAircheckEvent),
+                PlayerSide.Runner,
+                triggers:
+                [
+                    new BehaviorTrigger("probe-aircheck-again", OccurrenceKind.RunEnded, TriggerMode.Optional,
+                        BehaviorTriggerScope.Self, null,
+                        [
+                            new BehaviorInstruction(BehaviorInstructionKind.Choose, choice: new BehaviorChoiceSpec(
+                                "probe-aircheck-server",
+                                BehaviorChooser.Controller,
+                                BehaviorChoiceMode.Mandatory,
+                                BehaviorChoiceCardinality.Exactly(1),
+                                target: new BehaviorTarget(BehaviorTargetKind.InstalledCard, BehaviorTarget.RemoteServerSelector))),
+                            new BehaviorInstruction(BehaviorInstructionKind.RunAfterRun,
+                                target: new BehaviorTarget(BehaviorTargetKind.ChosenCard, selector: "probe-aircheck-server")),
+                        ],
+                        runOutcomeRequirement: RunOutcomeRequirement.Successful),
+                ]))
+            .AddRunEvent(new RunEventBehaviorSpec(new CardDefinitionId(ProbeKompromatEvent), 0, 0,
+                removedFromGameAfterRun: true, targetMustBeProtected: true))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeKompromatEvent),
+                PlayerSide.Runner,
+                triggers:
+                [
+                    new BehaviorTrigger("probe-kompromat-ended", OccurrenceKind.RunEnded, TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Self, null,
+                        [
+                            new BehaviorInstruction(BehaviorInstructionKind.Choose, choice: new BehaviorChoiceSpec(
+                                "probe-kompromat-unless",
+                                BehaviorChooser.Corp,
+                                BehaviorChoiceMode.Mode,
+                                BehaviorChoiceCardinality.Exactly(1),
+                                options:
+                                [
+                                    new BehaviorChoiceOption("derez",
+                                    [
+                                        new BehaviorInstruction(BehaviorInstructionKind.Choose, choice: new BehaviorChoiceSpec(
+                                            "probe-kompromat-ice",
+                                            BehaviorChooser.Corp,
+                                            BehaviorChoiceMode.Mandatory,
+                                            BehaviorChoiceCardinality.Exactly(1),
+                                            target: new BehaviorTarget(BehaviorTargetKind.InstalledCard, BehaviorTarget.AttackedServerSelector,
+                                                filter: new BehaviorCardFilter(BehaviorCardType.Ice, ownerSide: PlayerSide.Corp, rezzed: true)))),
+                                        new BehaviorInstruction(BehaviorInstructionKind.Derez,
+                                            target: new BehaviorTarget(BehaviorTargetKind.ChosenCard, selector: "probe-kompromat-ice")),
+                                    ]),
+                                    new BehaviorChoiceOption("bad-publicity",
+                                        [new BehaviorInstruction(BehaviorInstructionKind.TakeBadPublicity, amount: 1)]),
+                                ])),
+                        ],
+                        runOutcomeRequirement: RunOutcomeRequirement.Successful),
+                ]))
+            .Add(new CardBehaviorDefinition(
                 new CardDefinitionId(ProbeSellOutEvent),
                 PlayerSide.Runner,
                 costs:
@@ -676,6 +898,17 @@ internal static class ElevationHarness
                 new(ProbeSeekerIce, "Probe Knowledge Seeker", "corp", "neutral-corp", "ice", ["Code Gate"], 3, 3, false, 0, 1, null, null, null, null, 0, null, null, null),
                 new(ProbeLetheIce, "Probe Lethe", "corp", "neutral-corp", "ice", ["Barrier"], 3, 3, false, 0, 1, null, null, null, null, 0, null, null, null),
                 new(ProbeEncounterWatcherResource, "Probe Encounter Watcher", "runner", "neutral-runner", "resource", [], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(ProbeKompromatEvent, "Probe Kompromat", "runner", "neutral-runner", "event", ["Run"], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(ProbeReanimationOperation, "Probe Reanimation", "corp", "neutral-corp", "operation", [], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(ProbeLiabilityIce, "Probe Liability Ice", "corp", "neutral-corp", "ice", ["Barrier", "Liability"], 3, 3, false, 8, 1, null, null, null, null, 0, null, null, null),
+                new(ProbeCostlyIce, "Probe Costly Ice", "corp", "neutral-corp", "ice", ["Barrier"], 3, 3, false, 8, 1, null, null, null, null, 0, null, null, null),
+                new(ProbeBetaBuildEvent, "Probe Beta Build", "runner", "neutral-runner", "event", ["Run"], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(ProbeVirusProgram, "Probe Virus", "runner", "neutral-runner", "program", ["Virus"], 3, 3, false, 3, null, 1, null, null, null, 0, null, null, null),
+                new(ProbeAircheckEvent, "Probe Aircheck", "runner", "neutral-runner", "event", ["Run"], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(ProbeBakerProgram, "Probe Baker", "runner", "neutral-runner", "program", [], 3, 3, false, 0, null, 1, null, null, null, 0, null, null, null),
+                new(ProbeUnleashOperation, "Probe Unleash", "corp", "neutral-corp", "operation", [], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(ProbeUnleashIce, "Probe Unleash Ice", "corp", "neutral-corp", "ice", ["Sentry"], 3, 3, false, 5, 1, null, null, null, null, 0, null, null, null),
+                new(ProbeSacrificeZoneAgenda, "Probe Sacrifice Zone", "corp", "neutral-corp", "agenda", ["Public"], 3, 3, false, null, null, null, null, 4, 2, null, null, null, null),
             ]),
         ]);
         return GatewayRuntimeCardCatalog.Create(pool);

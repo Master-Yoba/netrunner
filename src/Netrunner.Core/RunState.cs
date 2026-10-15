@@ -1185,8 +1185,10 @@ public sealed record RunState
         int badPublicityCredits = 0,
         IReadOnlyList<RunBehaviorRestriction>? behaviorRestrictions = null,
         IReadOnlyList<RunAllIceStrengthModifier>? allIceStrengthModifiers = null,
-        IReadOnlyList<RunGainedSubroutine>? gainedSubroutines = null)
+        IReadOnlyList<RunGainedSubroutine>? gainedSubroutines = null,
+        bool serverApproachRaised = false)
     {
+        ServerApproachRaised = serverApproachRaised;
         ArgumentNullException.ThrowIfNull(breachCandidates);
         PendingMoveServerId = pendingMoveServerId;
         PendingBypass = pendingBypass;
@@ -1456,6 +1458,16 @@ public sealed record RunState
                 : null;
     }
 
+    /// <summary>
+    /// VP-PAID-REDIRECT: the would-approach occurrence was raised at this approach step, so the step approaches when it
+    /// resumes. Omitted while false.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool ServerApproachRaised { get; private set; }
+
+    internal RunState WithServerApproachRaised(bool raised) => this with { ServerApproachRaised = raised };
+
     internal RunState WithBehaviorRestrictions(IReadOnlyList<RunBehaviorRestriction> restrictions) =>
         this with { BehaviorRestrictions = restrictions.Count > 0 ? restrictions.ToArray() : null };
 
@@ -1578,7 +1590,8 @@ public sealed record RunState
         BadPublicityCredits,
         BehaviorRestrictions,
         AllIceStrengthModifiers,
-        GainedSubroutines);
+        GainedSubroutines,
+        ServerApproachRaised);
 
     /// <summary>
     /// Creates the next immutable timing cursor while retaining the run's
@@ -1628,7 +1641,8 @@ public sealed record RunState
         BadPublicityCredits,
         BehaviorRestrictions,
         AllIceStrengthModifiers,
-        GainedSubroutines);
+        GainedSubroutines,
+        ServerApproachRaised);
 
     /// <summary>
     /// Replaces the run's encounter while retaining every other field; the
@@ -1675,7 +1689,8 @@ public sealed record RunState
         BadPublicityCredits,
         BehaviorRestrictions,
         AllIceStrengthModifiers,
-        GainedSubroutines);
+        GainedSubroutines,
+        ServerApproachRaised);
 
     /// <summary>
     /// Replaces the run's run-scoped hosted credits while retaining every
@@ -1715,7 +1730,8 @@ public sealed record RunState
         BadPublicityCredits,
         BehaviorRestrictions,
         AllIceStrengthModifiers,
-        GainedSubroutines);
+        GainedSubroutines,
+        ServerApproachRaised);
 
     /// <summary>
     /// Replaces the live run priority cursor while retaining the exact run
@@ -1756,7 +1772,8 @@ public sealed record RunState
         BadPublicityCredits,
         BehaviorRestrictions,
         AllIceStrengthModifiers,
-        GainedSubroutines);
+        GainedSubroutines,
+        ServerApproachRaised);
 
     internal RunState WithEncounter(RunEncounterState encounter) => new(
         Version,
@@ -1792,7 +1809,8 @@ public sealed record RunState
         BadPublicityCredits,
         BehaviorRestrictions,
         AllIceStrengthModifiers,
-        GainedSubroutines);
+        GainedSubroutines,
+        ServerApproachRaised);
 
     /// <summary>
     /// Replaces the run's breach candidate/access fields while retaining every
@@ -1837,7 +1855,8 @@ public sealed record RunState
         BadPublicityCredits,
         BehaviorRestrictions,
         AllIceStrengthModifiers,
-        GainedSubroutines);
+        GainedSubroutines,
+        ServerApproachRaised);
 
     /// <summary>
     /// Replaces the immutable breach-access snapshot after the authoritative
@@ -1878,7 +1897,8 @@ public sealed record RunState
         BadPublicityCredits,
         BehaviorRestrictions,
         AllIceStrengthModifiers,
-        GainedSubroutines);
+        GainedSubroutines,
+        ServerApproachRaised);
 
     /// <summary>Replaces the run-scoped typed restrictions immutably.</summary>
     internal RunState WithRunRestrictions(IReadOnlyList<RunRestriction>? runRestrictions) => new(
@@ -1915,7 +1935,8 @@ public sealed record RunState
         BadPublicityCredits,
         BehaviorRestrictions,
         AllIceStrengthModifiers,
-        GainedSubroutines);
+        GainedSubroutines,
+        ServerApproachRaised);
 
     /// <summary>Replaces the structural history of resolved unbroken subroutines.</summary>
     internal RunState WithResolvedSubroutineLedger(
@@ -1953,7 +1974,8 @@ public sealed record RunState
         BadPublicityCredits,
         BehaviorRestrictions,
         AllIceStrengthModifiers,
-        GainedSubroutines);
+        GainedSubroutines,
+        ServerApproachRaised);
 
     private static ReadOnlyCollection<CardInstanceId> FreezeIds(IEnumerable<CardInstanceId> values) =>
         new(values.ToArray());

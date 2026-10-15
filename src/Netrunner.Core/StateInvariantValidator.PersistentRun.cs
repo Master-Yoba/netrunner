@@ -58,5 +58,11 @@ public static partial class StateInvariantValidator
                             && definition.RootAssetTrashCostIncrease > 0)))
                 Add(violations, "run.persistent-source", "runPersistentContext.abilities", "Persistent source provenance must match its installed object and catalog declaration.");
         }
+        // VP-RETURN-AT-RUN-END: a remembered card and the source that remembered it are cards of the game.
+        foreach (RunRememberedCard remembered in context.RememberedCards ?? [])
+        {
+            if (!state.Cards.Any(value => value.Id == remembered.SourceCardId) || !state.Cards.Any(value => value.Id == remembered.CardId))
+                Add(violations, "run.remembered-card", "runPersistentContext.rememberedCards", "A remembered card and its source must exist.");
+        }
     }
 }

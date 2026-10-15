@@ -36,4 +36,10 @@ public enum BehaviorTriggerCondition
 
     /// <summary>VP-SUBROUTINE-BROKEN: the encountered ICE (the subject) has 0 or less strength (The Tungsten Tailor).</summary>
     SubjectStrengthAtMostZero,
+
+    /// <summary>VP-PAID-REDIRECT: the live run was started by the trigger's source, an ability's "Run Archives" (Baker).</summary>
+    RunStartedBySource,
+
+    /// <summary>VP-ADVANCEMENT-COST: the live run is against a server other than the source's (Sacrifice Zone Expansion).</summary>
+    RunOnAnotherServer,
 }
