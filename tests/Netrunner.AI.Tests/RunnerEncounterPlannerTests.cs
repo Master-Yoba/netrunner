@@ -97,6 +97,24 @@ public sealed class RunnerEncounterPlannerTests
         Assert.Equal("action:pass", await fixture.Choose());
     }
 
+    /// <summary>
+    /// VP-ICE-GAINS-SUBROUTINE (PR #154's seventh review): survival is checked hit by hit. Stick and Poke's gained one damage
+    /// and a draw, then a printed one damage, leave a one-card grip alive with a card to draw, not worth 3 credits to break;
+    /// with nothing to draw, the second hit flatlines the Runner.
+    /// </summary>
+    [Theory]
+    [InlineData(1, "action:pass")]
+    [InlineData(0, "action:break-printed")]
+    public async Task AGainedSubroutinesDrawCountsTowardSurvival(int stack, string expected)
+    {
+        var fixture = new PlannerFixture(credits: 3, iceStrength: 1, [new DamageSubroutineSpec(DamageKind.Net, 1)]);
+        fixture.Breaker("decoder", strength: 3, pumpCost: 1, pumpStrength: 1, breakCost: 3);
+        fixture.Gained("stick-and-poke", new DamageSubroutineSpec(DamageKind.Net, 1, DamageSubroutineFollowUp.RunnerDrawsOne));
+        fixture.Cards(grip: 1, stack: stack);
+        fixture.Action("break-printed", ActionKind.BreakSubroutines, new RunBreakParameters(new("card:decoder"), 1, subroutineOrdinals: [0]));
+        Assert.Equal(expected, await fixture.Choose());
+    }
+
     private sealed class PlannerFixture : ICardEvaluationCatalog
     {
         private readonly Dictionary<CardDefinitionId, CardEvaluationDescriptor> _definitions = [];
@@ -105,6 +123,8 @@ public sealed class RunnerEncounterPlannerTests
         private readonly int _credits, _strength, _runCredits;
         private readonly IceSubroutineSpec[] _subroutines;
         private string? _gainedFrom;
+        private (int Grip, int Stack)? _cards;
+        public void Cards(int grip, int stack) => _cards = (grip, stack);
         public PlannerFixture(int credits, int iceStrength, IceSubroutineSpec[] subroutines, int runCredits = 0)
         {
             _credits = credits; _strength = iceStrength; _subroutines = subroutines; _runCredits = runCredits;
@@ -174,6 +194,17 @@ public sealed class RunnerEncounterPlannerTests
                 Servers = [new("server:hq", ServerKind.Headquarters, [ice], [])],
                 Players = baseline.Board.Players with { Runner = baseline.Self with { Credits = _credits, Clicks = 0 } },
             };
+            if (_cards is { } cards)
+            {
+                board = board with { HiddenZoneCounts = board.HiddenZoneCounts with { RunnerGrip = cards.Grip, RunnerStack = cards.Stack } };
+                observation = observation with
+                {
+                    PrivateState = EngineJson.Deserialize<Dictionary<string, object?>>(EngineJson.Serialize(new AgentPrivateCards
+                    {
+                        Grip = Enumerable.Range(0, cards.Grip).Select(index => new AgentCard { Id = $"card:grip-{index}", DefinitionId = "test:grip" }).ToImmutableArray(),
+                    })),
+                };
+            }
             observation = observation with
             {
                 DecisionId = decision.Id.Value,

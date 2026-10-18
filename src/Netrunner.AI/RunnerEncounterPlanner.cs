@@ -153,7 +153,10 @@ internal static class RunnerEncounterPlanner
             int personal = Math.Max(0, plan.Credits - run.RunCredits);
             int balance = context.Self.Credits - personal;
             int damage = 0, loss = 0, tags = 0;
-            bool ends = false, restricted = false;
+            // The grip as the subroutines resolve, in order: a hit larger than it flatlines the Runner, and a draw after a
+            // hit (Stick and Poke's gained subroutine, VP-ICE-GAINS-SUBROUTINE) refills it before the next.
+            int grip = context.Features.Hand.Length, stack = context.Features.Board.HiddenZoneCounts.RunnerStack;
+            bool ends = false, restricted = false, lethal = false;
             foreach (var pair in remaining.Select((subroutine, index) => (subroutine, index)))
             {
                 if ((plan.Mask & (1 << pair.index)) != 0 || ends) continue;
@@ -165,7 +168,12 @@ internal static class RunnerEncounterPlanner
                 {
                     case EndRunSubroutineSpec: ends = true; break;
                     case EndRunIfCreditsAtMostSubroutineSpec conditional: ends = balance <= conditional.CreditLimit; break;
-                    case DamageSubroutineSpec hit: damage += hit.Amount; break;
+                    case DamageSubroutineSpec hit:
+                        damage += hit.Amount;
+                        lethal |= hit.Amount > grip;
+                        grip -= hit.Amount;
+                        if (hit.FollowUp == DamageSubroutineFollowUp.RunnerDrawsOne && stack > 0 && !lethal) { grip++; stack--; }
+                        break;
                     case LoseCreditsSubroutineSpec drain:
                         int lost = Math.Min(balance, drain.Amount); balance -= lost; loss += lost * context.CreditValue; break;
                     case GiveTagsSubroutineSpec tag: tags += tag.Amount; break;
@@ -185,13 +193,14 @@ internal static class RunnerEncounterPlanner
                             context.Features.Hand.Length);
                         ends |= effect.EndsRun;
                         damage += effect.Damage;
+                        lethal |= effect.Damage > grip;
+                        grip -= effect.Damage;
                         tags += effect.Tags;
                         int drained = Math.Min(balance, effect.CreditsLost); balance -= drained; loss += drained * context.CreditValue;
                         if (effect.InstallsIce) loss += 30;
                         break;
                 }
             }
-            bool lethal = damage > context.Features.Hand.Length;
             bool winning = !ends && !restricted && RunnerValues.Winning(context, RunnerValues.Attacked(context));
             int continuation = ends ? 0 : restricted ? 80 : Math.Max(600, RunnerValues.Server(context, RunnerValues.Attacked(context)));
             int score = continuation - damage * 160 - loss - (tags > 0 ? RunnerValues.TagRisk(context, tags) : 0)

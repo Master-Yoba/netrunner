@@ -356,3 +356,6 @@ trigger resolves, so an optional one can ask (probe 90060).
 
 The sixth review's one: a move ending the encounter (Proprionegation) expires the encounter's effects before its
 reactions resolve, as the other ways an encounter ends do.
+
+The seventh review's one: the encounter planner checks survival hit by hit, in order, so a gained subroutine's draw
+refills the grip before the next hit. Without draws this is the old total check, so no existing game moves.
