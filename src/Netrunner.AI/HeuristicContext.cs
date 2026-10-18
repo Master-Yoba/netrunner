@@ -68,6 +68,13 @@ internal sealed class HeuristicContext
     /// Bot loop 1's deferred fixes (Runner v24, Corp v28): an Elevation subroutine written as a behavior (N-Pot, Lamplighter,
     /// Semak-samun) does what its instructions do; earlier versions saw it as harmless.
     /// </summary>
+    /// <summary>
+    /// An ability action's credit cost: the declared credits, or the whole cost the engine resolved when one is the accessed
+    /// card's printed cost (VP-ACCESS-PAID-ABILITY, Lampades).
+    /// </summary>
+    internal static int CreditCost(AbilityActionParameters ability) => ability.ResolvedCreditCost
+        ?? ability.Costs.Where(cost => cost.Kind == BehaviorCostKind.Credits).Sum(cost => cost.Amount);
+
     public bool ReadsBehaviorSubroutines => Features.Side == PlayerSide.Runner ? Generation >= 20 : Generation >= 23;
 
     /// <summary>Bot loop 2 (Runner v25, Corp v29): Scatter Field's +4 strength while it is its server's only ICE is seen.</summary>

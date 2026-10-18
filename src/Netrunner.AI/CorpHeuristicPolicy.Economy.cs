@@ -27,14 +27,14 @@ public sealed partial class CorpHeuristicPolicy
         if (declaration.Instructions.Any(instruction => instruction.Kind == BehaviorInstructionKind.PlayCard
                 && instruction.Target?.Kind == BehaviorTargetKind.Self)
             && (context.Definition(card)?.Printed.PlayCost ?? 0) > context.Self.Credits
-                - ability.Costs.Where(cost => cost.Kind == BehaviorCostKind.Credits).Sum(cost => cost.Amount))
+                - HeuristicContext.CreditCost(ability))
             return Value(-100, "ability/play-it-cannot-pay-for", approximate: true);
         int benefit = Effects(context, declaration.Instructions, card, context.Features.Side);
         // v30: Petty Cash from Archives refunds its click: a free gain, and only before the turn's first action finishes.
         if (NowOrNever(declaration.Conditions) && context.Definition(card)?.Behavior?.Instructions is { } played
             && HeuristicContext.Flatten(played).Any(instruction => instruction.Kind == BehaviorInstructionKind.GainClicks))
             benefit += NowOrNeverBonus;
-        int costs = ability.Costs.Where(cost => cost.Kind == BehaviorCostKind.Credits).Sum(cost => cost.Amount) * context.CreditValue;
+        int costs = HeuristicContext.CreditCost(ability) * context.CreditValue;
         costs += ability.Costs.Where(cost => cost.Kind == BehaviorCostKind.TrashSelf
             || cost.Kind == BehaviorCostKind.RemoveSelfFromGame).Sum(_ => context.CardValue(card, installed: true));
         return Value(benefit - costs, "ability/payoff-minus-cost", approximate: true);

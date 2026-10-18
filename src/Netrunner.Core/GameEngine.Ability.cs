@@ -160,7 +160,8 @@ public static partial class GameEngine
                         definitionFingerprint,
                         sourceZone.Id,
                         sourceZone.Kind,
-                        selections));
+                        selections,
+                        ResolvedAbilityCreditCost(working, ability)));
                 }
             }
         }
@@ -1051,6 +1052,12 @@ public static partial class GameEngine
                 ? printed.RezCost ?? printed.PlayCost
                 : null;
     }
+
+    /// <summary>The whole credit cost an action offers, published only when one is the accessed card's printed cost.</summary>
+    private static int? ResolvedAbilityCreditCost(WorkingState working, BehaviorPaidAbility ability) =>
+        ability.Costs.Any(static cost => cost.AccessedCardPrintedCost)
+            ? ability.Costs.Where(static cost => cost.Kind == BehaviorCostKind.Credits).Sum(cost => AbilityCreditCost(working, cost) ?? 0)
+            : null;
 
     private static int RequiredAbilityCreditCost(WorkingState working, BehaviorCost cost) =>
         AbilityCreditCost(working, cost)
@@ -1956,7 +1963,8 @@ public static partial class GameEngine
         && string.Equals(actual.CatalogFingerprint, expected.CatalogFingerprint, StringComparison.Ordinal)
         && string.Equals(actual.DefinitionFingerprint, expected.DefinitionFingerprint, StringComparison.Ordinal)
         && actual.SourceZoneId == expected.SourceZoneId
-        && actual.SourceZoneKind == expected.SourceZoneKind;
+        && actual.SourceZoneKind == expected.SourceZoneKind
+        && actual.ResolvedCreditCost == expected.ResolvedCreditCost;
 
     private static bool AbilityFramesMatch(
         AbilityFrame actual,

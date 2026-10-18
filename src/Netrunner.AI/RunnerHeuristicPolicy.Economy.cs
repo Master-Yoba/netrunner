@@ -52,7 +52,7 @@ public sealed partial class RunnerHeuristicPolicy
                     .Sum(_ => RunnerValues.Card(context, card));
             return Run(context, server, extraValue: access * 140 + payout * context.CreditValue
                 - (access == 0 && payout == 0 ? 30 : 0) - consumables,
-                upfrontCost: ability.Costs.Where(cost => cost.Kind == BehaviorCostKind.Credits).Sum(cost => cost.Amount));
+                upfrontCost: HeuristicContext.CreditCost(ability));
         }
         int benefit = Effects(context, declaration.Instructions, card, PlayerSide.Runner);
         // v35 (bot plan H3 batch 11): hosting on a console whose cards don't play from the grip (Madani) only saves the
@@ -63,7 +63,7 @@ public sealed partial class RunnerHeuristicPolicy
         // v19 (Codex review, 1 October): credits the ability puts in the wallet now are worth what as many basic credits are,
         // saving for a breaker included (Pennyshaver's 2 lost to a basic credit's 1). Only v19: it lost to Codex where v18
         // won, and v20 leaves it out.
-        int cost = ability.Costs.Where(cost => cost.Kind == BehaviorCostKind.Credits).Sum(cost => cost.Amount) * context.CreditValue;
+        int cost = HeuristicContext.CreditCost(ability) * context.CreditValue;
         cost += ability.AdditionalCostSelectionsOrEmpty.SelectMany(selection => selection.CardIds).Sum(id => RunnerValues.Card(context, context.Card(id)));
         cost += ability.Costs.Where(cost => cost.Kind is BehaviorCostKind.TrashSelf or BehaviorCostKind.RemoveSelfFromGame)
             .Sum(_ => RunnerValues.Card(context, card));

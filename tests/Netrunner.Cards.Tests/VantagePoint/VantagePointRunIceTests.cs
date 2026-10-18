@@ -141,6 +141,9 @@ public sealed class VantagePointRunIceTests
         state = RoundTrip(RunTo(state, ElevationBoard.Remote, InEncounter));
         RunSubroutineState[] subroutines = state.RunState!.Encounter!.Subroutines.ToArray();
         Assert.Equal([1, 0], subroutines.Select(static subroutine => subroutine.Ordinal));
+        // PR #154's fourth review: the Runner's view names the gained subroutine's source, so the bots can read it.
+        Assert.Contains($"\"gainedFrom\":\"{ProbeStickAndPokeResource}\"",
+            EngineJson.Serialize(ObservationBuilder.Build(state, PlayerSide.Runner, VantagePointProbe)), StringComparison.Ordinal);
 
         // The gained one resolves first: 1 net damage and a draw, then the printed one ends the run.
         state = PassUntil(state, static value => value.RunState is null);
@@ -210,6 +213,10 @@ public sealed class VantagePointRunIceTests
         Assert.Equal(usable, CanUse(state, ProbeLampadesProgram));
         if (usable)
         {
+            // PR #154's fourth review: the offered action names the 3 credits it costs, for its label and the bots.
+            AbilityActionParameters offered = state.PendingDecision!.LegalActions.Select(static action => action.Parameters)
+                .OfType<AbilityActionParameters>().Single(use => use.SourceCardId == Card(state, ProbeLampadesProgram));
+            Assert.Equal(3, offered.ResolvedCreditCost);
             state = RoundTrip(PassUntil(Use(state, ProbeLampadesProgram), static value => value.RunState is null));
             Assert.Equal(ZoneKind.CorpDiscard, ZoneOf(state, ProbeHypeUpgrade));
             Assert.Equal(0, Player(state, PlayerSide.Runner).Credits);

@@ -343,3 +343,9 @@ The third review's four:
 - an install that trashes the encountered ICE (CR 8.5.10) ends the encounter, as an occurrence;
 - the bots' run model reads jacking out as ending the run;
 - the Runner bot values a server whose runs can't succeed (a rezzed Flagship) at nothing.
+
+The fourth review's two:
+- an ability whose cost is the accessed card's printed cost (Lampades) offers its resolved credit cost on the action,
+  authenticated with it, so the label and the bots read what will be paid;
+- the Runner's view names a gained subroutine's source, and the encounter planner reads it from that source, before the
+  printed subroutines, as the encounter resolves them.

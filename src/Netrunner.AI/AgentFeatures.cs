@@ -196,7 +196,8 @@ public sealed record AgentEncounter
     public AgentValueQuote? StrengthQuote { get; init; }
     public ImmutableArray<AgentBreakerStrength> BreakerStrengths { get; init; } = [];
 }
-public sealed record AgentSubroutine(int Ordinal, bool Broken, bool Resolved);
+/// <param name="GainedFrom">VP-ICE-GAINS-SUBROUTINE: the definition of the card that gave the ICE this subroutine, else null.</param>
+public sealed record AgentSubroutine(int Ordinal, bool Broken, bool Resolved, string? GainedFrom = null);
 public sealed record AgentBreakerStrength(string CardId, AgentValueQuote StrengthQuote);
 public sealed record AgentValueQuote
 {

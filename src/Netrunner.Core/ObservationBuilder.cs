@@ -615,12 +615,23 @@ public static partial class ObservationBuilder
                 : null,
             ["status"] = encounter.Status,
             ["subroutines"] = encounter.Subroutines.Select(subroutine =>
-                new Dictionary<string, object?>
+            {
+                var entry = new Dictionary<string, object?>
                 {
                     ["ordinal"] = subroutine.Ordinal,
                     ["broken"] = subroutine.Broken,
                     ["resolved"] = subroutine.Resolved,
-                }).ToArray(),
+                };
+                // VP-ICE-GAINS-SUBROUTINE (PR #154's fourth review): a gained subroutine names the public card whose
+                // declaration it is (Stick and Poke), so a reader can tell what it does.
+                if (run.GainedSubroutines?.FirstOrDefault(gained => gained.EncounterId == encounter.Id
+                    && gained.Ordinal == subroutine.Ordinal) is { } gainedFrom)
+                {
+                    entry["gainedFrom"] = gainedFrom.SourceDefinitionId.Value;
+                }
+
+                return entry;
+            }).ToArray(),
             ["strengthQuote"] = iceQuote is null
                 ? null
                 : ValueQuoteView(state, iceQuote, viewer, accessVisible),

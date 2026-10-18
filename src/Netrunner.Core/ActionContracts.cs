@@ -1120,11 +1120,17 @@ public sealed record AbilityActionParameters : ActionParameters
         string definitionFingerprint,
         ZoneId sourceZoneId,
         ZoneKind sourceZoneKind,
-        IReadOnlyList<AbilityAdditionalCostSelection>? additionalCostSelections = null)
+        IReadOnlyList<AbilityAdditionalCostSelection>? additionalCostSelections = null,
+        int? resolvedCreditCost = null)
     {
         if (!StableIdentifier.TryValidate(sourceCardId.Value))
         {
             throw new ArgumentException("An ability action requires a stable source card ID.", nameof(sourceCardId));
+        }
+
+        if (resolvedCreditCost < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(resolvedCreditCost));
         }
 
         if (!StableIdentifier.TryValidate(definitionId.Value))
@@ -1187,7 +1193,16 @@ public sealed record AbilityActionParameters : ActionParameters
         SourceZoneId = sourceZoneId;
         SourceZoneKind = sourceZoneKind;
         AdditionalCostSelections = FreezeAdditionalCostSelections(additionalCostSelections);
+        ResolvedCreditCost = resolvedCreditCost;
     }
+
+    /// <summary>
+    /// VP-ACCESS-PAID-ABILITY: when a credit cost is the accessed card's printed cost (Lampades), the ability's whole credit
+    /// cost as offered, so a label or a bot reads what will be paid. Omitted for every fixed cost.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? ResolvedCreditCost { get; private set; }
 
     [JsonInclude]
     [JsonRequired]
@@ -1644,7 +1659,8 @@ public sealed class PendingDecision
             ability.DefinitionFingerprint,
             ability.SourceZoneId,
             ability.SourceZoneKind,
-            ability.AdditionalCostSelections),
+            ability.AdditionalCostSelections,
+            ability.ResolvedCreditCost),
         BehaviorInstallChoiceParameters behaviorInstall => new BehaviorInstallChoiceParameters(
             behaviorInstall.FrameIdentity,
             behaviorInstall.Choice),

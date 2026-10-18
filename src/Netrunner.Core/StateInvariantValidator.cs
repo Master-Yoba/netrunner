@@ -12115,7 +12115,8 @@ public static partial class StateInvariantValidator
         && string.Equals(actual.CatalogFingerprint, expected.CatalogFingerprint, StringComparison.Ordinal)
         && string.Equals(actual.DefinitionFingerprint, expected.DefinitionFingerprint, StringComparison.Ordinal)
         && actual.SourceZoneId == expected.SourceZoneId
-        && actual.SourceZoneKind == expected.SourceZoneKind;
+        && actual.SourceZoneKind == expected.SourceZoneKind
+        && actual.ResolvedCreditCost == expected.ResolvedCreditCost;
 
     private static bool AbilityAdditionalCostSelectionsMatch(
         IReadOnlyList<AbilityAdditionalCostSelection>? actual,
