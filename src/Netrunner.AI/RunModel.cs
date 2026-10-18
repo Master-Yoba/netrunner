@@ -346,7 +346,20 @@ public static class RunModel
         if (context.SeesOnlyIceStrength && server.Ice.Length == 1)
             strength += (ice.ValueModifiers ?? []).Where(modifier => modifier.Source == BehaviorValueSourceKind.OnlyIceProtectingServer)
                 .Sum(modifier => modifier.Delta);
-        return strength;
+        // VP-ALL-ICE-STRENGTH (PR #154's eighth review): what changes every ICE's strength, as the engine's quote has it.
+        return strength + AllIceStrength(context);
+    }
+
+    /// <summary>
+    /// The change to every ICE's strength: each active card declaring one (a Runner card in the rig, a rezzed Corp card;
+    /// The Tungsten Tailor), and the run's own (Ezam).
+    /// </summary>
+    internal static int AllIceStrength(HeuristicContext context)
+    {
+        AgentBoard board = context.Features.Board;
+        IEnumerable<AgentCard?> corp = board.Servers.SelectMany(server => server.Ice.Concat(server.Root)).Where(card => card is { Rezzed: true });
+        return corp.Concat(board.RunnerRig).Sum(card => context.Definition(card)?.Behavior?.AllIceStrength ?? 0)
+            + (board.Run?.AllIceStrength ?? 0);
     }
 
     /// <summary>A breaker's strength: the live quote while encountering, else base plus per-installed-card modifiers.</summary>

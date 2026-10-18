@@ -359,3 +359,6 @@ reactions resolve, as the other ways an encounter ends do.
 
 The seventh review's one: the encounter planner checks survival hit by hit, in order, so a gained subroutine's draw
 refills the grip before the next hit. Without draws this is the old total check, so no existing game moves.
+
+The eighth review's one: the bots' whole-run forecast reads changes to every ICE's strength, from active cards and, through
+the observation (`allIceStrength`, absent while none), from the run itself.

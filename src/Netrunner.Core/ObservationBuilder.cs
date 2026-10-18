@@ -515,6 +515,9 @@ public static partial class ObservationBuilder
         };
         // VP-BAD-PUBLICITY: the fund's share of the run credits, public, and absent while zero.
         if (run.BadPublicityCredits != 0) view["badPublicityCredits"] = run.BadPublicityCredits;
+        // VP-ALL-ICE-STRENGTH (PR #154's eighth review): the run's change to every ICE's strength, public, and absent while
+        // there is none.
+        if (run.AllIceStrengthModifiers is { Count: > 0 } allIce) view["allIceStrength"] = allIce.Sum(static modifier => modifier.Delta);
 
         // Slice 4.5 exposes only public, typed status cues.  The cue envelope
         // intentionally omits source ICE/breaker identities, so an observer

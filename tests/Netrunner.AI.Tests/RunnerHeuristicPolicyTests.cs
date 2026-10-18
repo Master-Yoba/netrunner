@@ -188,6 +188,46 @@ public sealed class RunnerHeuristicPolicyTests
     }
 
     /// <summary>
+    /// VP-ALL-ICE-STRENGTH (PR #154's eighth review): the whole-run forecast reads a change to every ICE's strength, from an
+    /// installed card (The Tungsten Tailor's -1) and from the run itself (Ezam's +2), as the engine's quote does.
+    /// </summary>
+    [Theory]
+    [InlineData(false, 0, 3)]
+    [InlineData(true, 0, 3 - 1)]
+    [InlineData(true, 2, 3 - 1 + 2)]
+    public void TheRunModelReadsChangesToEveryIcesStrength(bool tailor, int runChange, int expected)
+    {
+        CardDefinitionId ice = new("test:ice"), lowerer = new("test:tailor");
+        IceBehaviorSpec spec = new(ice, 3, IceType.Barrier, 1, [new EndRunSubroutineSpec()], []);
+        var catalog = new ScenarioCatalog(
+            new CardEvaluationDescriptor(new(ice, PlayerSide.Corp, RuntimeCardClass.Ice, rezCost: 1), null, spec, null, null, null, null, [], false),
+            new CardEvaluationDescriptor(new(lowerer, PlayerSide.Runner, RuntimeCardClass.Resource, installCost: 1),
+                new CardBehaviorDefinition(lowerer, PlayerSide.Runner, allIceStrength: -1), null, null, null, null, null, [], false));
+        Observation observation = Decision(new LegalAction(new("action:credit"), ActionKind.GainCredit, "ignored", new NoActionParameters()));
+        AgentFeatures read = ObservationReader.Read(observation);
+        AgentCard iceCard = new() { Id = "card:ice", DefinitionId = ice.Value, Rezzed = true };
+        AgentServer server = new("server:remote", ServerKind.Remote, [iceCard], []);
+        AgentFeatures features = read with
+        {
+            Board = read.Board with
+            {
+                Servers = [server],
+                RunnerRig = tailor ? [new AgentCard { Id = "card:tailor", DefinitionId = lowerer.Value }] : [],
+                Run = runChange == 0 ? null : new AgentRun
+                {
+                    Id = "run:test",
+                    AttackedServer = "server:hq",
+                    Breach = new([], null, null, [], [], RunAccessState.NotStarted),
+                    AllIceStrength = runChange,
+                },
+            },
+        };
+        var context = new HeuristicContext(features, catalog, RunnerPolicyProfiles.Create("standard", 54, RunnerHeuristicPolicy.V37), HeuristicContext.PunisherGeneration);
+
+        Assert.Equal(expected, RunModel.IceStrength(context, server, iceCard, spec));
+    }
+
+    /// <summary>
     /// VP-NO-SUCCESSFUL-RUN (PR #154's third review): a rezzed root card stopping runs from succeeding (Flagship) leaves the
     /// server worth nothing, an agenda beside it included; unrezzed, it doesn't.
     /// </summary>

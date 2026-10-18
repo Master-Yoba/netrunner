@@ -421,6 +421,9 @@ public sealed class VantagePointRunIceTests
             .Add(ProbeEzamIce, Place.Ice, rezzed: true)
             .Begin(catalog: VantagePointProbe);
         state = RunTo(state, ElevationBoard.Remote, static value => value.RunState?.AllIceStrengthModifiers is { Count: 1 });
+        // PR #154's eighth review: the run's change is public, for the bots' whole-run forecast.
+        Assert.Contains("\"allIceStrength\":1", EngineJson.Serialize(ObservationBuilder.Build(state, PlayerSide.Runner, VantagePointProbe)),
+            StringComparison.Ordinal);
 
         AssertForgeryCaught(state, "\"delta\":1,\"reasonKey\":\"probe-ezam-strength\"",
             "\"delta\":5,\"reasonKey\":\"probe-ezam-strength\"", "run.all-ice-strength-undeclared");

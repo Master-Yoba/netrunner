@@ -184,6 +184,9 @@ public sealed record AgentRun
     public AgentRunCues? Slice45Cues { get; init; }
     public ImmutableArray<AgentLingeringEffect> LingeringEffects { get; init; } = [];
     public ImmutableArray<AgentBreachModifier> BreachAccessModifiers { get; init; } = [];
+    /// <summary>VP-ALL-ICE-STRENGTH: what the run adds to every ICE's strength (Ezam), absent while nothing.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? AllIceStrength { get; init; }
 }
 public sealed record AgentRunPriority(RunPriorityWindowKind Window, PlayerSide Holder, int ConsecutivePasses,
     bool CorpMayRezApproachedIce, bool CorpMayRezNonIce);
