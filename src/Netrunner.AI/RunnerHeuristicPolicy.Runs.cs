@@ -207,7 +207,7 @@ public sealed partial class RunnerHeuristicPolicy
                 {
                     if (choice.Chooser != BehaviorChooser.ActingPlayer
                         || !choice.Options.Any(option => option.Semantic == BehaviorChoiceOptionSemantic.Fallback
-                            && option.Instructions.Any(instruction => instruction.Kind == BehaviorInstructionKind.EndRun))) continue;
+                            && option.Instructions.Any(instruction => instruction.Kind is BehaviorInstructionKind.EndRun or BehaviorInstructionKind.JackOut))) continue;
                     (int Credits, int Clicks)? best = null;
                     foreach (BehaviorChoiceOption option in choice.Options.Where(option => option.Semantic != BehaviorChoiceOptionSemantic.Fallback))
                     {

@@ -2446,7 +2446,43 @@ public static partial class StateInvariantValidator
                     restrictionPath,
                     "A behavior restriction must keep its catalogued source card, and name only a Corp card's definition.");
             }
+
+            // PR #154's third review: the source could have resolved it. It is installed, or in Archives if it left play
+            // after resolving (the restriction lasts the run), and a once-per-turn trigger or ability shows its use.
+            if (sourceKnown && !RunBehaviorRestrictionActivated(state, behaviorCatalog, restriction))
+            {
+                Add(
+                    violations,
+                    "run.behavior-restriction-not-activated",
+                    restrictionPath,
+                    "A behavior restriction's source must be installed (or trashed since), with any once-per-turn use recorded.");
+            }
         }
+    }
+
+    private static bool RunBehaviorRestrictionActivated(
+        GameState state,
+        IBehaviorCatalog behaviorCatalog,
+        RunBehaviorRestriction restriction)
+    {
+        CardInstanceState source = state.Cards.First(card => card?.Id == restriction.SourceCardId)!;
+        ZoneKind? zone = state.Zones.FirstOrDefault(value => value?.Id == source.ZoneId)?.Kind;
+        if (zone is not (ZoneKind.ServerIce or ZoneKind.ServerRoot or ZoneKind.RunnerRig or ZoneKind.CorpDiscard))
+        {
+            return false;
+        }
+
+        if (!behaviorCatalog.TryGet(restriction.SourceDefinitionId, out CardBehaviorDefinition? definition))
+        {
+            return false;
+        }
+
+        bool oncePerTurn = definition.Triggers.Any(trigger => trigger.OncePerTurn
+                && string.Equals(trigger.Key, restriction.ReasonKey, StringComparison.Ordinal))
+            || definition.PaidAbilities.Any(ability => ability.UsageLimit == BehaviorAbilityUsageLimit.OncePerTurn
+                && string.Equals(ability.Key, restriction.ReasonKey, StringComparison.Ordinal));
+        return !oncePerTurn
+            || state.Turn.History?.ThisTurn(state.Turn.ActiveSide)?.HasUsedAbility(source.Id, restriction.ReasonKey) == true;
     }
 
     /// <summary>
@@ -3022,10 +3058,15 @@ public static partial class StateInvariantValidator
                 && frame.Controller == run.InitiatingPlayer
                 && occurrence.Controller == run.InitiatingPlayer
                 && occurrence.SubjectCardId is { } passedIce
-                // An ability ending the run mid-encounter clears the cursor but keeps the encounter.
+                // An ability ending the run mid-encounter clears the cursor but keeps the encounter, and so does an
+                // install trashing the encountered ICE (CR 8.5.10).
                 && (run.CurrentIceId == passedIce
                     || occurrence.Kind == OccurrenceKind.EncounterEnded && run.Step == RunTimingStep.RunEnd
-                        && run.Encounter?.IceId == passedIce)
+                        && run.Encounter?.IceId == passedIce
+                    || occurrence.Kind == OccurrenceKind.EncounterEnded && run.Step == RunTimingStep.MovementPaidWindow
+                        && run.Encounter is { Status: RunEncounterStatus.Complete } trashedFrom
+                        && trashedFrom.IceId == passedIce
+                        && !IsInstalledCard(state, passedIce))
                 && occurrence.ServerId == run.AttackedServer
             // A pending move ends the encounter in whatever window moved it (Proprionegation).
             || occurrence.Kind == OccurrenceKind.EncounterEnded

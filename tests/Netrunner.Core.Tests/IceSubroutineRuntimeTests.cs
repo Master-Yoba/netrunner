@@ -311,6 +311,62 @@ public sealed partial class IceSubroutineRuntimeTests
         Assert.Null(continued.State.RunState.CurrentIceId);
     }
 
+    // VP-ENCOUNTER-ENDED (PR #154's third review): an install trashing the encountered ICE ends its encounter, so a
+    // Runner card waiting on an encounter's end (here gaining a credit) resolves at the pass.
+    [Fact]
+    public void TrashingTheEncounteredIceByAnInstallEndsTheEncounter()
+    {
+        BehaviorCatalog behavior = new BehaviorCatalogBuilder("fixture:ice-choice-encounter-ended")
+            .AddIce(new IceBehaviorSpec(NormalInstallIce, 0, IceType.Barrier, 0, [new InstallCardSubroutineSpec()], []))
+            .Add(new CardBehaviorDefinition(
+                RunnerResource,
+                PlayerSide.Runner,
+                triggers:
+                [
+                    new BehaviorTrigger("fixture-encounter-ended", OccurrenceKind.EncounterEnded, TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Controller, null, [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 1)]),
+                ]))
+            .Build();
+        RuntimeCardCatalog runtime = RuntimeCatalog(
+            new CardRuntimeSpec(NormalInstallIce, PlayerSide.Corp, RuntimeCardClass.Ice, rezCost: 0),
+            new CardRuntimeSpec(CorpIce, PlayerSide.Corp, RuntimeCardClass.Ice, rezCost: 0),
+            new CardRuntimeSpec(RunnerResource, PlayerSide.Runner, RuntimeCardClass.Resource, installCost: 0));
+        GameState choice = ReachIceChoice(
+            BuildState(
+                behavior,
+                runtime,
+                NormalInstallIce,
+                placements: [(CorpIce, PlayerSide.Corp, ZoneKind.CorpHand), (RunnerResource, PlayerSide.Runner, ZoneKind.RunnerRig)],
+                corpCredits: 3),
+            behavior,
+            runtime);
+        CardInstanceId currentIce = choice.RunState!.Encounter!.IceId;
+        CardInstanceId corpIceId = FindCard(choice, CorpIce).Id;
+        GameState state = Apply(choice, Assert.Single(choice.PendingDecision!.LegalActions, action =>
+            action.Parameters is IceSubroutineChoiceParameters { Choice: IceSubroutineChoiceKind.InstallCard } parameters
+                && parameters.CardId == corpIceId
+                && parameters.DestinationKind == InstallDestinationKind.ServerIce
+                && parameters.ServerId == choice.RunState.AttackedServer
+                && !parameters.CreateNewRemote), behavior, runtime).State;
+        state = Apply(state, Assert.Single(state.PendingDecision!.LegalActions, action =>
+            action.Parameters is InstallCardParameters { FinalizeSelection: false } parameters
+                && parameters.SelectedReplacementCardIds.SequenceEqual([currentIce])), behavior, runtime).State;
+        ApplyResult committed = Apply(state, Assert.Single(state.PendingDecision!.LegalActions, action =>
+            action.Parameters is InstallCardParameters { FinalizeSelection: true } parameters
+                && parameters.SelectedReplacementCardIds.SequenceEqual([currentIce])), behavior, runtime);
+        Assert.True(committed.Accepted, committed.Rejection?.Message);
+        state = committed.State;
+        while (state.Players.Single(player => player.Side == PlayerSide.Runner).Credits == 8
+            && state.PendingDecision?.LegalActions.SingleOrDefault(action => action.Kind == ActionKind.PassPriority) is { } pass)
+        {
+            Assert.Empty(StateInvariantValidator.Collect(state, behavior, runtime));
+            state = Apply(state, pass, behavior, runtime).State;
+        }
+
+        Assert.Equal(8 + 1, state.Players.Single(player => player.Side == PlayerSide.Runner).Credits);
+        Assert.Empty(StateInvariantValidator.Collect(state, behavior, runtime));
+    }
+
     [Fact]
     public void InwardInstallPlacesNewIceBeforeBranAndItIsApproachedNext()
     {

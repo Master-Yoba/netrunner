@@ -365,6 +365,24 @@ public sealed class VantagePointRunIceTests
         AssertForgeryCaught(state, declared, forged, violation);
     }
 
+    // PR #154's third review: a restriction whose source never resolved it (a copy still in HQ) is refused.
+    [Fact]
+    public void ARunRestrictionFromAnUninstalledCopyIsInvalid()
+    {
+        GameState state = new ElevationBoard(PlayerSide.Runner) { RunnerClicks = 3 }
+            .Add(ProbeVertigoIce, Place.Ice, rezzed: true)
+            .Add(ProbeVertigoIce, Place.Hq)
+            .Add(CorpFillerAgenda, Place.Root)
+            .Begin(catalog: VantagePointProbe);
+        state = Apply(state, static action => action.Kind == ActionKind.GainCredit).State;
+        state = RunTo(ToAction(state), ElevationBoard.Remote, static value => value.RunState?.BehaviorRestrictions is { Count: 1 });
+        CardInstanceId installed = state.RunState!.BehaviorRestrictions![0].SourceCardId;
+        CardInstanceId inHq = state.Cards.Single(card => card.DefinitionId.Value == ProbeVertigoIce && card.Id != installed).Id;
+
+        AssertForgeryCaught(state, $"\"sourceCardId\":\"{installed.Value}\",\"sourceDefinitionId\"",
+            $"\"sourceCardId\":\"{inHq.Value}\",\"sourceDefinitionId\"", "run.behavior-restriction-not-activated");
+    }
+
     [Fact]
     public void AForgedAllIceStrengthChangeIsInvalid()
     {

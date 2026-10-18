@@ -327,3 +327,19 @@ cards, as VP.2c did for VP.3:
 - an optional cost of the source's advancement counters (Sacrifice Zone Expansion).
 
 **Client.** A gained subroutine's ordinal follows the printed ones; VP.8's client shows its text from the source card.
+
+**Review (PR #154).** Codex's four findings, all fixed:
+- a saved run's all-ICE strength changes, and its card-ability restrictions, are now authenticated against the declaration
+  their reason key names;
+- a run never declared successful ends with neither outcome, so "if the run was unsuccessful" triggers don't fire;
+- a run ended mid-encounter by an ability (end the run, jacking out, a typed subroutine's end) ends the encounter too.
+
+The second review's three: an all-ICE strength change may not repeat beyond the resolutions that made it; a gained
+subroutine records the key of the trigger that gave it; moving the Runner mid-encounter ends the encounter first.
+
+The third review's four:
+- a saved restriction's source must be installed, or in Archives if it left play after resolving, and a once-per-turn
+  trigger or ability must show its use this turn;
+- an install that trashes the encountered ICE (CR 8.5.10) ends the encounter, as an occurrence;
+- the bots' run model reads jacking out as ending the run;
+- the Runner bot values a server whose runs can't succeed (a rezzed Flagship) at nothing.

@@ -665,6 +665,12 @@ public static partial class GameEngine
                 player.Id,
                 frame.CardId,
                 destination.ServerId);
+            if (encounteredIceRemoved)
+            {
+                // VP-ENCOUNTER-ENDED (PR #154's third review): trashing the encountered ICE ended its encounter.
+                QueueRunIceOccurrence(working, working.RunState!, OccurrenceKind.EncounterEnded, encounter.IceId);
+            }
+
             return;
         }
 

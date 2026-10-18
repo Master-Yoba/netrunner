@@ -77,7 +77,7 @@ public sealed record SubroutineEffect(bool EndsRun, int? EndsRunIfCreditsAtMost,
                 bool runner = instruction.Recipient is not BehaviorPlayerSelector.Corp;
                 effect = instruction.Kind switch
                 {
-                    BehaviorInstructionKind.EndRun => effect with { EndsRun = true },
+                    BehaviorInstructionKind.EndRun or BehaviorInstructionKind.JackOut => effect with { EndsRun = true },
                     BehaviorInstructionKind.DealDamage => effect with { Damage = effect.Damage + instruction.Amount },
                     BehaviorInstructionKind.AddTags when runner => effect with { Tags = effect.Tags + instruction.Amount },
                     BehaviorInstructionKind.LoseCredits when runner => effect with { CreditsLost = effect.CreditsLost + instruction.Amount },
