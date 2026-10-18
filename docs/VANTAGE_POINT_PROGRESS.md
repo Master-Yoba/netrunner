@@ -353,3 +353,6 @@ The fourth review's two:
 The fifth review's two: a printed subroutine's feature bytes omit the gained source, so saved games' digests hold; and a
 behavior ending the run mid-encounter completes the encounter and keeps its ICE as the cursor while an "encounter ends"
 trigger resolves, so an optional one can ask (probe 90060).
+
+The sixth review's one: a move ending the encounter (Proprionegation) expires the encounter's effects before its
+reactions resolve, as the other ways an encounter ends do.

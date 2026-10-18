@@ -475,6 +475,36 @@ public sealed class VantagePointRunIceTests
         Assert.Equal(5 + 1, Player(state, PlayerSide.Corp).Credits);
     }
 
+    // PR #154's sixth review: a move ending the encounter expires its effects (a breaker's pump) before an optional
+    // EncounterEnded trigger asks, as the other ways an encounter ends do.
+    [Fact]
+    public void MovingTheRunnerExpiresEncounterEffectsBeforeItsReactions()
+    {
+        GameState state = new ElevationBoard(PlayerSide.Runner) { RunnerCredits = 5 }
+            .Add("35048", Place.CorpScore, counters: new Dictionary<string, int> { ["agenda"] = 1 })
+            .Add(Cleaver, Place.Rig)
+            .Add(ProbeEncounterWatcherResource, Place.Rig)
+            .Add(CorpFillerIce, Place.Ice, rezzed: true)
+            .Add(CorpFillerIce, Place.Ice, server: ElevationBoard.ArchivesServer)
+            .Begin(catalog: VantagePointProbe);
+        state = RunTo(state, ElevationBoard.Remote, InEncounter);
+        state = RoundTrip(Apply(state, action => action.Kind == ActionKind.PumpBreaker
+            && action.Parameters is RunBreakerParameters pump && pump.BreakerId == Card(state, Cleaver)).State);
+        Assert.Contains(state.RunState!.LingeringEffects, static effect => effect.Expiry == RunLingeringEffectExpiry.Encounter);
+        int credits = Player(state, PlayerSide.Runner).Credits;
+        // The Runner passes, and the Corp moves the run with Proprionegation.
+        state = PassUntil(state, static value => value.RunState is null || value.PendingDecision?.LegalActions.Any(static action =>
+            action.Parameters is AbilityActionParameters { AbilityKey: "proprionegation-move" }) == true);
+        ApplyResult moved = Apply(state, static action => action.Parameters is AbilityActionParameters { AbilityKey: "proprionegation-move" });
+        Assert.True(moved.Accepted, moved.Rejection?.Message);
+        state = RoundTrip(PassUntil(moved.State, static value => value.RunState is null
+            || value.PendingDecision?.LegalActions.Any(static action => action.Kind == ActionKind.UseTrigger) == true));
+        Assert.DoesNotContain(state.RunState!.LingeringEffects, static effect => effect.Expiry == RunLingeringEffectExpiry.Encounter);
+
+        state = RoundTrip(Apply(state, static action => action.Kind == ActionKind.UseTrigger).State);
+        Assert.Equal(credits + 1, Player(state, PlayerSide.Runner).Credits);
+    }
+
     private static void AssertForgeryCaught(GameState state, string declared, string forged, string violation)
     {
         string json = EngineJson.Serialize(state);

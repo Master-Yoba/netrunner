@@ -744,8 +744,13 @@ public static partial class GameEngine
             if (run.Encounter is { Status: RunEncounterStatus.Initialized } live
                 && HasActiveCatalogTrigger(working, OccurrenceKind.EncounterEnded, run.AttackedServer, live.IceId))
             {
+                // PR #154's sixth review: its effects expire with it (a pump, a Leech reduction), before the reactions.
                 RunState ended = run.WithEncounter(new RunEncounterState(live.Version, live.Id, live.IceId,
-                    RunEncounterStatus.Complete, live.Subroutines));
+                        RunEncounterStatus.Complete, live.Subroutines))
+                    .WithLingeringEffects(run.LingeringEffects
+                        .Where(effect => effect.Expiry != RunLingeringEffectExpiry.Encounter)
+                        .ToArray());
+                Emit(working, EngineEventKinds.EncounterCompleted, new EncounterCompletedEventPayload(run.Id, live.Id));
                 working.RunState = ended;
                 QueueRunIceOccurrence(working, ended, OccurrenceKind.EncounterEnded, live.IceId);
                 return;
