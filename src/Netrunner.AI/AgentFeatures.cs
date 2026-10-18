@@ -197,7 +197,8 @@ public sealed record AgentEncounter
     public ImmutableArray<AgentBreakerStrength> BreakerStrengths { get; init; } = [];
 }
 /// <param name="GainedFrom">VP-ICE-GAINS-SUBROUTINE: the definition of the card that gave the ICE this subroutine, else null.</param>
-public sealed record AgentSubroutine(int Ordinal, bool Broken, bool Resolved, string? GainedFrom = null);
+public sealed record AgentSubroutine(int Ordinal, bool Broken, bool Resolved,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? GainedFrom = null);
 public sealed record AgentBreakerStrength(string CardId, AgentValueQuote StrengthQuote);
 public sealed record AgentValueQuote
 {

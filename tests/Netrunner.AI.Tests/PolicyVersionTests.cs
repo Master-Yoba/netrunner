@@ -124,6 +124,15 @@ public sealed class PolicyVersionTests
         }
     }
 
+    // PR #154's fifth review: a printed subroutine serializes, and so digests, as it did before gained subroutines.
+    [Fact]
+    public void APrintedSubroutineKeepsItsFeatureBytes()
+    {
+        Assert.Equal("{\"broken\":false,\"ordinal\":0,\"resolved\":true}", CanonicalJson.Serialize(new AgentSubroutine(0, false, true)));
+        Assert.Contains("\"gainedFrom\":\"test:giver\"", CanonicalJson.Serialize(new AgentSubroutine(1, false, false, "test:giver")),
+            StringComparison.Ordinal);
+    }
+
     [Fact]
     public void HiddenAdvancementsAreReadOnlyByTheNewFeatureVersion()
     {

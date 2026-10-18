@@ -349,3 +349,7 @@ The fourth review's two:
   authenticated with it, so the label and the bots read what will be paid;
 - the Runner's view names a gained subroutine's source, and the encounter planner reads it from that source, before the
   printed subroutines, as the encounter resolves them.
+
+The fifth review's two: a printed subroutine's feature bytes omit the gained source, so saved games' digests hold; and a
+behavior ending the run mid-encounter completes the encounter and keeps its ICE as the cursor while an "encounter ends"
+trigger resolves, so an optional one can ask (probe 90060).

@@ -70,6 +70,7 @@ internal static class ElevationHarness
     internal const string ProbeBounceIce = "90046";
     internal const string ProbeSeekerIce = "90047";
     internal const string ProbeLetheIce = "90048";
+    internal const string ProbeEncounterWatcherResource = "90060";
 
     /// <summary>The neutral Gateway identities a match board gets by default.</summary>
     internal const string CorpNeutralIdentity = "30077";
@@ -492,6 +493,14 @@ internal static class ElevationHarness
                         [new BehaviorInstruction(BehaviorInstructionKind.AddTags, amount: 1, recipient: BehaviorPlayerSelector.Runner)]),
                 ]))
             .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeEncounterWatcherResource),
+                PlayerSide.Runner,
+                triggers:
+                [
+                    new BehaviorTrigger("probe-watcher-ended", OccurrenceKind.EncounterEnded, TriggerMode.Optional,
+                        BehaviorTriggerScope.Controller, null, [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 1)]),
+                ]))
+            .Add(new CardBehaviorDefinition(
                 new CardDefinitionId(ProbeSellOutEvent),
                 PlayerSide.Runner,
                 costs:
@@ -666,6 +675,7 @@ internal static class ElevationHarness
                 new(ProbeBounceIce, "Probe Bounce", "corp", "neutral-corp", "ice", ["Sentry"], 3, 3, false, 0, 1, null, null, null, null, 0, null, null, null),
                 new(ProbeSeekerIce, "Probe Knowledge Seeker", "corp", "neutral-corp", "ice", ["Code Gate"], 3, 3, false, 0, 1, null, null, null, null, 0, null, null, null),
                 new(ProbeLetheIce, "Probe Lethe", "corp", "neutral-corp", "ice", ["Barrier"], 3, 3, false, 0, 1, null, null, null, null, 0, null, null, null),
+                new(ProbeEncounterWatcherResource, "Probe Encounter Watcher", "runner", "neutral-runner", "resource", [], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
             ]),
         ]);
         return GatewayRuntimeCardCatalog.Create(pool);

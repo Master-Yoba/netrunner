@@ -1036,8 +1036,22 @@ public static partial class GameEngine
         if (run.Encounter is { Status: RunEncounterStatus.Initialized } live
             && HasActiveCatalogTrigger(working, OccurrenceKind.EncounterEnded, run.AttackedServer, live.IceId))
         {
-            SetRunTiming(working, ending);
-            QueueRunIceOccurrence(working, ending, OccurrenceKind.EncounterEnded, live.IceId);
+            // PR #154's fifth review: as FinishIceSubroutineRun does, the encounter completes and keeps its ICE as the
+            // cursor while the reactions resolve, so a trigger's decision shows a valid state.
+            RunState completing = run.WithLingeringEffects(run.LingeringEffects
+                .Where(effect => effect.Expiry != RunLingeringEffectExpiry.Encounter).ToArray());
+            Emit(working, EngineEventKinds.EncounterCompleted, new EncounterCompletedEventPayload(run.Id, live.Id));
+            SetRunTiming(working, completing.WithTiming(
+                RunTimingStep.RunEnd,
+                run.CurrentIceIndex,
+                run.CurrentIceId,
+                run.Successful,
+                true,
+                ending.EndReason,
+                null,
+                new RunEncounterState(live.Version, live.Id, live.IceId, RunEncounterStatus.Complete, live.Subroutines),
+                run.AccessState));
+            QueueRunIceOccurrence(working, working.RunState!, OccurrenceKind.EncounterEnded, live.IceId);
             return;
         }
 

@@ -174,6 +174,29 @@ public sealed class VantagePointRunIceTests
         Assert.Equal(5 + 1, Player(after, PlayerSide.Corp).Credits);
     }
 
+    // PR #154's fifth review: jacking out mid-encounter keeps a valid encounter cursor while an optional EncounterEnded
+    // trigger (the probe watcher's credit) asks whether to use it.
+    [Fact]
+    public void AnOptionalEncounterEndedTriggerCanBeUsedAfterJackingOut()
+    {
+        GameState state = new ElevationBoard(PlayerSide.Runner) { GripFiller = 3 }
+            .Add(ProbeEncounterWatcherResource, Place.Rig)
+            .Add(ProbeLionsmaneIce, Place.Ice, rezzed: true)
+            .Begin(catalog: VantagePointProbe);
+        state = RunTo(state, ElevationBoard.Remote, static value => value.PendingDecision?.Kind == DecisionKind.BehaviorChoice);
+        int credits = Player(state, PlayerSide.Runner).Credits;
+        ApplyResult chosen = Apply(state, static action => action.Parameters is BehaviorChoiceParameters choice
+            && choice.OptionKeys.SequenceEqual(["jack-out"]));
+        Assert.True(chosen.Accepted, chosen.Rejection?.Message);
+        state = RoundTrip(PassUntil(chosen.State, static value => value.RunState is null
+            || value.PendingDecision?.LegalActions.Any(static action => action.Kind == ActionKind.UseTrigger) == true));
+        Assert.Equal(RunEncounterStatus.Complete, state.RunState!.Encounter!.Status);
+
+        state = RoundTrip(PassUntil(Apply(state, static action => action.Kind == ActionKind.UseTrigger).State,
+            static value => value.RunState is null));
+        Assert.Equal(credits + 1, Player(state, PlayerSide.Runner).Credits);
+    }
+
     // Flagship: runs against its server can't be declared successful, and don't become unsuccessful.
     [Theory]
     [InlineData(ElevationBoard.Hq, false)]
