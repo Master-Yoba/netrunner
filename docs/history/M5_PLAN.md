@@ -3,7 +3,7 @@
 Status: M5.0–5.8 implemented and [audited](M5_COMPLETION_AUDIT.md); the user
 accepted the result for publication on 25 September 2026. Results and the scope
 of that feedback are tracked in [progress](M5_PROGRESS.md) and
-[the gate report](../M5_GATE.md#human-acceptance).
+[the gate report](M5_GATE.md#human-acceptance).
 
 Baseline: 22 September 2026, repository commit `8f27bac`.
 
@@ -12,7 +12,7 @@ Scope: System Gateway, the repository's pinned rules/content versions, both seat
 Estimate: 32–41 engineering days, approximately 6–9 weeks for one engineer,
 plus player review and any newly discovered rules defects.
 
-This expands [M5 in the roadmap](../IMPLEMENTATION_PLAN.md#m5--complete-offline-solo-experience).
+This expands [M5 in the roadmap](IMPLEMENTATION_PLAN.md#m5--complete-offline-solo-experience).
 Requirements come from [PRD v0.2](../netrunner_solo_prd_v0.2.md). The implementation
 must preserve the completed board interactions, condition/cost feedback, local
 artwork support, and paced opponent playback.
@@ -655,7 +655,7 @@ and feedback. Specifically review Corp economy/replacement behavior, Runner
 pressure/breaker use, waiting/animation clarity, save discoverability, and resume
 of a run or nested choice. Test 1080p/1440p and normal/reduced motion.
 
-Publish a concise `docs/M5_GATE.md` and progress record containing benchmark
+Publish a concise `docs/history/M5_GATE.md` and progress record containing benchmark
 manifest/report hashes, actual denominators/category scores, failures and their
 disposition, save-matrix results, latency measurements, offline steps and manual
 acceptance. Keep full private snapshots/logs and official art outside source

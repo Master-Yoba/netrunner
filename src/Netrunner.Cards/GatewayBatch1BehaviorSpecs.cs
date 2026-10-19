@@ -14,7 +14,7 @@ namespace Netrunner.Cards;
 /// CR primitive audit; this module does not parse or embed card text. The
 /// content provenance is the local authenticated snapshot named by
 /// <c>data/vendor/system-gateway/manifest.json</c>; rules citations are the
-/// CR-26.03 rows in <c>docs/M4_PRIMITIVES.md</c>.
+/// CR-26.03 rows in <c>docs/history/M4_PRIMITIVES.md</c>.
 /// </summary>
 public static class GatewayBatch1BehaviorSpecs
 {

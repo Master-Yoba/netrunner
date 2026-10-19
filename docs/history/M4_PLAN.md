@@ -1,10 +1,10 @@
 # M4 implementation plan — System Gateway complete
 
-Status: architect-reviewed execution plan for the M4 slice of `docs/IMPLEMENTATION_PLAN.md`
+Status: architect-reviewed execution plan for the M4 slice of `docs/history/IMPLEMENTATION_PLAN.md`
 Baseline date: 31 August 2026
 Rules baseline: Null Signal Comprehensive Rules v26.03
 Card baseline: System Gateway – Remastered Edition, vendored commit `236140cf…`, 77 designs
-Companion docs: `docs/IMPLEMENTATION_PLAN.md` (M4 section),
+Companion docs: `docs/history/IMPLEMENTATION_PLAN.md` (M4 section),
 `docs/M2_ARCHITECTURE.md`, `docs/M2_PROGRESS.md`, `docs/M3_PROGRESS.md`,
 `data/vendor/README.md`
 
@@ -120,7 +120,7 @@ renders, and reports without one-off work.
 |---|---|
 | ARCH-401 | Implement D-401/D-412/D-415/D-416/D-417 contracts: distinct data/behavior versions; immutable composable behavior catalogs injected into engine sessions; state/frame schema policy; dependency tests that reject Core→Cards, Core→Match, and AI→Cards references. Preserve the M2 APIs through adapters. |
 | ENG-400 | Engine organization per D-408: per-domain partial files and documented `StateInvariantValidator`, JSON-polymorphism, observation, and event extension checklists. Move code mechanically only where the diff is reviewable; behavior-neutral, full suite green. |
-| PRIME-AUDIT | Walk all 70 incomplete card texts and the Gateway-reachable base rules; list every required primitive with CR 26.03 citation, owning slice, current gap, hidden-information impact, serialization impact, and representative tests. Output: `docs/M4_PRIMITIVES.md`. It must explicitly cover the full turn timing, all basic actions, install/play/rez/score legality, hosting, uniqueness/console rules, 7-point victory, setup, and the card-specific corrections captured in this plan. |
+| PRIME-AUDIT | Walk all 70 incomplete card texts and the Gateway-reachable base rules; list every required primitive with CR 26.03 citation, owning slice, current gap, hidden-information impact, serialization impact, and representative tests. Output: `docs/history/M4_PRIMITIVES.md`. It must explicitly cover the full turn timing, all basic actions, install/play/rez/score legality, hosting, uniqueness/console rules, 7-point victory, setup, and the card-specific corrections captured in this plan. |
 | CARD-401 | Build-tool implementation per D-403, `data/m4/batch-registry.json` (the 7 M2 codes in a legacy pseudo-batch), report generator, `verify.sh` wiring, and `data/m4/rulings.json` seed. The expected 77-code set is checked in; when local vendor data exists, the tool also asserts exact equality with it. |
 | COV-401 | Generate and check in the first coverage report with distinct states: 7/77 registered/tested, of which 5/77 are full-text complete; Nico and Offworld are explicitly partial; 70 are unregistered. A partial registration never satisfies the final gate. |
 | VER-401 | Perform the one-time version/schema migration from D-401. Record old/new state and event hashes and a semantic trace diff; hashes are expected to change because version fields are part of canonical state. Prove later additive registrations do not invalidate the M2 fixture. |

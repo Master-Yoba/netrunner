@@ -5,6 +5,30 @@ roadmap and architecture, its Runner AI, its principles, and how it judges an AI
 Netrunner client with rule-based Corp and Runner AIs. Our Corp policy already borrowed one idea from it (the Spin
 Doctor timing in `CorpHeuristicPolicy.ArchivesShuffleValue`).
 
+## Update, 19 October 2026
+
+Chiriboga's `main` took 66 commits from 12 to 19 October:
+- **Cards:** it finished Vantage Point (all 13 of its batches) and the last Elevation cards. Its next set is Downfall, an
+  older FFG set outside Startup.
+- **Corp AI:** about 29 roadmap items are now closed, up from 16, but several closed as failures. L8.2 (remote deception
+  profiles) and L9.0.1 (adopting honest lockout everywhere) failed their full gates, and their policies were removed.
+  Next are I2 (choosing the ICE and server that most improve security, weighted by what a breach would cost), then L8.9
+  (why ICE placement still reveals which remote holds an agenda), then I3 and the rest of the install track. All three
+  are only proposed.
+- **Runner AI:** no new items. Only randomness (D2) and information leaks (D3) are done.
+- **Measurement:**
+  - F11, paired metric guards: a change names its target metric and guards, each judged on paired resamples of the
+    same games;
+  - F12, realized-defense measurement: how much ICE ends up on each kind of root;
+  - a fresh main-against-checkout benchmark;
+  - F13, stall diagnostics, still proposed.
+
+What this changes for us:
+- **I2** is the same lever as our largest Corp leak, agendas stolen from remotes. Its spec (marginal security per ICE
+  and server, breach-cost weighted) is the design to borrow for our Corp's ICE installs.
+- **F11** is the measurement idea we listed as "worth taking next" (one target metric and guards), now built and in use.
+- **Two more failed deception ideas** (L8.2, L9.0.1) join L7.1. They support keeping bluffing out of our track.
+
 ## Where chiriboga stands
 
 - **Corp AI:** about 16 of 50 roadmap items done, mostly the server-security groundwork (ICE and breaker

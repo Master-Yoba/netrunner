@@ -344,7 +344,7 @@ public static GameState ObservationSampler.Sample(
   values and new frame types. Before starting a second card set, set a budget
   such as "at least 80% of the next pool needs no Core change". Treat misses
   as design reviews of the primitive vocabulary.
-- Keep a short primitives reference (`docs/M4_PRIMITIVES.md` exists) generated
+- Keep a short primitives reference (`docs/history/M4_PRIMITIVES.md` exists) generated
   or checked against `BehaviorCatalog`, so card authors can see what's
   available without reading Core.
 

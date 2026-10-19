@@ -7,6 +7,10 @@ and a self-contained accepted-action replay from setup. Engine, policy, and
 whole-document integrity hashes are separate. UTC timestamps and build provenance
 are metadata; changing them does not change the engine or policy hashes.
 
+A save records its format (`SoloSaveMetadata.FormatId`: Gateway + Elevation, NSG Core Sets or Startup 2026; omitted
+for a System Gateway game, so older saves read as Gateway). It loads with that format's card data and behavior catalog
+(`PlayFormats.SaveContent`). A build that can't play the format lists the save as incompatible rather than loading it.
+
 Saves contain private game state. They are local artifacts, not repository
 fixtures or player-facing diagnostics. `SoloSavePreview` allowlists the name,
 human seat, seed, preset IDs, difficulty, turn, phase, timestamp, and terminal

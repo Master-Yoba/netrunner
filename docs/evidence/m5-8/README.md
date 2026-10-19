@@ -64,5 +64,5 @@ application profiles. The 77-card archive is created, unpacked and validated
 under network denial. Official-art screenshots and the archive are not copied
 into this folder.
 
-Reproduction commands and interpretation are in [M5_GATE.md](../../M5_GATE.md).
+Reproduction commands and interpretation are in [M5_GATE.md](../../history/M5_GATE.md).
 Automated opponents completing these flows do not constitute human playtesting.

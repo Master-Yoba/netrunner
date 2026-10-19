@@ -4,7 +4,7 @@ Automated evidence date: 23 September 2026. User acceptance: 25 September 2026.
 Branch: `feat/m5-8-final-gate`. The user authorized GitHub publication.
 Implementation and automated verification are complete: headless, repository,
 offline-package and performance gates pass. General human acceptance is recorded below.
-The [completion audit](history/M5_COMPLETION_AUDIT.md) maps each planned deliverable to
+The [completion audit](M5_COMPLETION_AUDIT.md) maps each planned deliverable to
 its implementation and evidence, and records the remaining human criteria.
 
 ## Frozen inputs and reproducibility
@@ -15,7 +15,7 @@ suites, each with four workers and one worker. `make m5-gate` additionally runs
 Easy tactical suites. Official metadata must already be provisioned. The gate
 does not fetch metadata or artwork.
 
-The [freeze](../data/m5/benchmarks/frozen-profiles-v1.json) binds the existing
+The [freeze](../../data/m5/benchmarks/frozen-profiles-v1.json) binds the existing
 Corp v2 and Runner v1 Standard/Easy profiles and the earlier held-out seed
 corpus. Each full self-play suite balances all four Basic/Expanded deck pairings.
 Comparisons use 20 paired seed/deck cases with the candidate in each seat.
@@ -76,8 +76,8 @@ Easy scores 38/40 in each seat, with Corp 11/11 and Runner 17/17 critical.
 Corp scores 23/24 tuning and 15/16 held-out; Runner scores 24/24 and 14/16.
 Every Easy tactical position and declared hidden twin completes and replays.
 The complete category and position denominators are retained in the
-[Corp](evidence/m5-8/corp-easy-tactics-summary.json) and
-[Runner](evidence/m5-8/runner-easy-tactics-summary.json) summaries.
+[Corp](../evidence/m5-8/corp-easy-tactics-summary.json) and
+[Runner](../evidence/m5-8/runner-easy-tactics-summary.json) summaries.
 
 Both paired comparison suites complete 40/40 terminal games with verified
 replays and no caps or failures. Each cell below is five paired seed/deck cases;
@@ -93,14 +93,14 @@ candidate wins use that seat's perspective.
 
 The previous-profile comparison's 40 replay hashes match the corresponding
 unchanged-profile smoke games exactly. This is expected with no policy tuning.
-The [contract](evidence/m5-8/compare-contract-summary.json) and
-[previous](evidence/m5-8/compare-previous-summary.json) summaries retain per-seat
+The [contract](../evidence/m5-8/compare-contract-summary.json) and
+[previous](../evidence/m5-8/compare-previous-summary.json) summaries retain per-seat
 and per-preset game lengths, scores, economy, installs/replacements, runs,
-successful runs, pumps and fallback counts. [Comparison timings](evidence/m5-8/comparison-timing.json)
+successful runs, pumps and fallback counts. [Comparison timings](../evidence/m5-8/comparison-timing.json)
 retain explicit per-game percentile summaries; they include benchmark scheduling
 and diagnostic overhead and are separate from the direct-policy budget below.
 
-All 12 headless cases pass. The [gate summary](evidence/m5-8/gate-summary.json)
+All 12 headless cases pass. The [gate summary](../evidence/m5-8/gate-summary.json)
 binds every result to exact manifest, compiled-assembly and report hashes, plus
 worker counts and deterministic digests. The full Standard manifest hash is
 `108a14a94f2bc0ed80c6f377012f75cf65a98641726e25a429cd97ee48f25cd8`, its report
@@ -110,7 +110,7 @@ and its deterministic digest is
 
 ## Preserved failures and repairs
 
-The [exploratory Standard preflight](evidence/m5-8/failed-preflight-summary.json)
+The [exploratory Standard preflight](../evidence/m5-8/failed-preflight-summary.json)
 completed 999/1,000 games, with zero caps and one resolution failure. This is a
 failed attempt, not a passing milestone result. Its report SHA-256 is
 `3c1b842b0b3a98e1e9be8cc5221665d87142d51e1f19a411686f2dfd5980562d`.
@@ -142,7 +142,7 @@ runs into a new evidence directory rather than overwriting the attempt.
 
 M5.5 verifies repeated restart with exact engine/policy/replay agreement, nested
 and opponent-owned choices, terminal saves, legacy trace recovery, and actual
-writer-process termination. M5.6's [five-case client matrix](evidence/m5-6/client-matrix.json)
+writer-process termination. M5.6's [five-case client matrix](../evidence/m5-6/client-matrix.json)
 covers both seats/preset families plus Easy, ten process phases, paused resume,
 write failures, corrupt entries, verified backups, stale callbacks, Escape,
 ordered playback, terminal reload and New game. M5.7 verifies all 80 developer
@@ -171,9 +171,9 @@ python3 scripts/m5-offline-proof.py --render-proof /path/to/completed-proof
 The renderer supplement captures actual 1080p missing-art and 1440p restored-art
 windows from the same verified bundle. All eight restart phases and eight actual
 renderer captures pass; logs contain no errors or warnings. The
-[offline summary](evidence/m5-8/offline-summary.json) records bundle/archive/log
+[offline summary](../evidence/m5-8/offline-summary.json) records bundle/archive/log
 hashes and exact moved-save engine/policy/integrity hashes. The
-[1080p no-art capture](evidence/m5-8/offline-no-art-1920.png) shows the packaged
+[1080p no-art capture](../evidence/m5-8/offline-no-art-1920.png) shows the packaged
 backs and paused continuation. Screenshots with official faces remain outside
 the repository. This is an offline runtime proof, not offline toolchain bootstrap
 or human playtesting.
@@ -224,7 +224,7 @@ all twenty terminal replay hashes match the normal benchmark exactly.
 | Runner ordinary | 5,278 | 1 / 18 / 27 | 0.1428 | 0.4764 | 3.6114 | 50 |
 | Runner tactical | 2,214 | 1 / 6 / 16 | 0.1604 | 0.5067 | 2.9629 | 200 |
 
-The [performance summary](evidence/m5-8/performance-summary.json) retains exact
+The [performance summary](../evidence/m5-8/performance-summary.json) retains exact
 build/manifest/report hashes. These figures cover this frozen workload on the
 recorded desktop. The full local report retains every raw sample.
 
@@ -234,14 +234,14 @@ All four seat/resolution combinations pass. Across 120 idle frames, median
 frame time is 2.91 ms and p95 is 3.05 ms, within the 16.67 ms budget for 60 FPS.
 Idle allocation remains 410 bytes/frame. Existing cancellation, stale-result
 and background-save tests pass; policy and save-file work remain off the Godot
-render thread. Log bindings are in the [validation record](evidence/m5-8/validation.json).
+render thread. Log bindings are in the [validation record](../evidence/m5-8/validation.json).
 
 ## Completion audit: private policy diagnostics
 
 The final requirement audit added explicit opt-in per-decision JSONL to
 `ai-benchmark --policy-diagnostics` (`66098d7`), followed by a cancellation
 recheck after log writes (`c808438`). See the
-[command guide](M5_BENCHMARKS.md#private-policy-decision-logs). This closes §4.5's
+[command guide](../M5_BENCHMARKS.md#private-policy-decision-logs). This closes §4.5's
 diagnostic export requirement without changing strategic weights, gameplay,
 save formats or UI behavior.
 
@@ -251,7 +251,7 @@ logging enabled at four workers and again without logging at one worker.
 All **13,828 records** match the issued action, replay sequence, configuration
 and manifest/build pins; every replay and the deterministic report digest are
 identical. Normal execution emits no decision logs, and public reports contain
-no candidate scores. [Diagnostic evidence](evidence/m5-8/audit/diagnostics-summary.json)
+no candidate scores. [Diagnostic evidence](../evidence/m5-8/audit/diagnostics-summary.json)
 retains report/build/log hashes without any private candidate records.
 `workUsed` measures deterministic budget units, not processor instructions;
 69 records legitimately use zero budget units on direct encounter estimates.
@@ -261,8 +261,8 @@ Standard and 100/100 Easy terminal games. Every case's manifest and deterministi
 digest matches the preserved passing baseline. The complete provisioned M4 gate
 also passes again, including all four native save/reload games, 77/77 coverage,
 existing interactions, formatting and secret scanning. The new
-[gate summary](evidence/m5-8/audit/gate-summary.json) and
-[validation bindings](evidence/m5-8/audit/validation.json) preserve this attempt
+[gate summary](../evidence/m5-8/audit/gate-summary.json) and
+[validation bindings](../evidence/m5-8/audit/validation.json) preserve this attempt
 separately. The long gate uses the immutable `66098d7` build with logging off;
 the final `c808438` logging/cancellation path is covered by the separate official
 logged/unlogged comparison and solution tests. No policy or rules changes
@@ -277,13 +277,13 @@ that provenance or claim a newly exported package.
 On 25 September 2026, in direct response to the request for M5 playtest results,
 the user reported: “it seems to work fine, can push to GH”. This is recorded as
 general acceptance of M5 and authorization to publish the completed work.
-The [acceptance record](evidence/m5-8/acceptance.json) binds the feedback to the
+The [acceptance record](../evidence/m5-8/acceptance.json) binds the feedback to the
 reviewed implementation at `bc2d596`.
 
 The user did not supply individual seeds, seat/preset results, save boundaries,
 or resolution/motion observations. Those details are not inferred from the
 general acceptance. The planned manual matrix remains a useful regression
-checklist in [the audit](history/M5_COMPLETION_AUDIT.md#human-acceptance), while the
+checklist in [the audit](M5_COMPLETION_AUDIT.md#human-acceptance), while the
 automated matrices above remain explicitly scripted evidence. The publication
 blocker is resolved by the user's acceptance; no additional confirmation is
 required. Historical evidence files retain their original acceptance status
