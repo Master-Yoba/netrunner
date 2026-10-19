@@ -11,10 +11,21 @@ namespace Netrunner.Cards;
 public static class VantagePointBehaviorCatalog
 {
     /// <summary>Version of the current Startup composition.</summary>
-    public const string Version = "startup-vp.7";
+    public const string Version = "startup-vp.8";
 
-    /// <summary>Builds the immutable Startup behavior catalog.</summary>
-    public static BehaviorCatalog Create() =>
+    /// <summary>
+    /// Builds the immutable Startup behavior catalog. Mycoweb's options are rebuilt over the whole Startup pool (VP.8), so it
+    /// resolves Vantage Point's sentries and code gates too.
+    /// </summary>
+    public static BehaviorCatalog Create()
+    {
+        BehaviorCatalog withoutPool = ComposeWithElevationMycoweb();
+        return new BehaviorCatalogBuilder(Version, withoutPool)
+            .Replace(ElevationBatch3Specs.MycowebFor(withoutPool, withoutSelfReferences: true))
+            .Build();
+    }
+
+    private static BehaviorCatalog ComposeWithElevationMycoweb() =>
         new BehaviorCatalogBuilder(Version, ElevationBehaviorCatalog.Create())
             // VP-SCORING-FACTS, VP-RUN-FACTS and VP-CLICK-COST-MODIFIER read opt-in turn events.
             .RecordTurnEvents(TurnEventKind.AgendaScored, TurnEventKind.AgendaScoredNotInstalledThisTurn,
