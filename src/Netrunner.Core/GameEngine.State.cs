@@ -68,6 +68,13 @@ public static partial class GameEngine
         {
             TrashHostedDescendants(working, card.Id);
         }
+        // VP-RETURN-AT-RUN-END: a remembered card that leaves play is forgotten, so a reinstalled copy isn't returned.
+        if (leavesInstalledZone
+            && working.RunState is { PersistentContext.RememberedCards: { } remembered } rememberingRun
+            && remembered.Any(value => value.CardId == card.Id))
+        {
+            working.RunState = rememberingRun.WithPersistentContext(rememberingRun.PersistentContext!.WithoutRemembered(card.Id));
+        }
         // VP-UNINSTALL-INTERRUPT: a card that returns its hosted bad publicity hands it to the Corp as it leaves (Luana
         // Campos); the counters are read before they are cleared.
         if (leavesInstalledZone

@@ -23,7 +23,8 @@ public static partial class GameEngine
             if (!retained.Any(value => value.SourceCardId == card.Id && value.TriggerKey == key))
                 retained.Add(new PersistentRunAbility(card.Id, card.DefinitionId, zone.Id, key));
         }
-        return run.WithPersistentContext(new RunPersistentContext(run.Id, run.AttackedServer, context.StolenAgendas, retained, context.AccessOccurrenceCount));
+        return run.WithPersistentContext(new RunPersistentContext(run.Id, run.AttackedServer, context.StolenAgendas, retained, context.AccessOccurrenceCount,
+            context.RememberedCards));
     }
 
     private static bool CatalogRunAgendaConditionMatches(BehaviorTrigger trigger, OccurrenceSnapshot occurrence) =>

@@ -362,3 +362,47 @@ refills the grip before the next hit. Without draws this is the old total check,
 
 The eighth review's one: the bots' whole-run forecast reads changes to every ICE's strength, from active cards and, through
 the observation (`allIceStrength`, absent while none), from the run itself.
+
+### VP.5a: VP.5's binding gaps (15 October 2026)
+
+On probe cards 90049 to 90059 (`VantagePointRunGapTests`):
+- **VP-ENDED-RUN-SERVER:** with no live run, the attacked-server selector reads the server of the run-ended occurrence
+  resolving (Kompromat's derez choice). The engine and the validator share the lookup.
+- **VP-INSTALL-AND-REZ-LESS:** a rez paying less takes `DiscountLeftAfterIceInstallTax`, the shared discount left after
+  the install tax the ICE paid. It may record whether it rezzed a card matching its filter, and bad publicity may take that
+  recorded amount (Reanimation Protocol). A card filter may name a subtype the card must lack (`ExcludedSubtype`:
+  "non-liability", Beta Build's "non-virus").
+- **VP-RETURN-AT-RUN-END:** `RememberForRun` keeps a card in the run's persistent context, which travels into the
+  run-ended occurrence. A `RememberedCard` target names it while it is still installed. A run event's own abilities are
+  active as its run begins (Beta Build: search, install, and the program back on top of the stack when the run ends).
+- **VP-RUN-AFTER-RUN:** `RunAfterRun` marks the turn frame. Once the ended run's reactions finish, the Runner runs the
+  chosen card's remote server as part of the same action. A remote exists only while it holds a card, so the
+  remote-server selector picks a server by one of its cards (Aircheck).
+- **VP-PAID-REDIRECT:** the occurrence `ServerWouldBeApproached`, raised once at the approach step (6.9.4g). It fires
+  before the approach, and `ChangeAttackedServer` makes the Runner approach a central server instead. The trigger condition
+  `RunStartedBySource` limits it to the source's own run (Baker).
+- **VP-RESOLVE-SUBROUTINE:** `ResolveIceSubroutine` resolves a subroutine of a piece of ICE outside an encounter. A
+  behavior subroutine runs as the resolving card's child frame. Credit, tag and plain damage subroutines resolve
+  directly, and end-the-run subroutines do nothing with no run. A mode offering one is available only while it can
+  resolve; subroutines that need an encounter's choice frame aren't offered (Unleash, a ruling for VP.5's binding to
+  revisit against the decks' ICE). Elevation's Mycoweb resolves another ICE's subroutine differently: each pool ICE's
+  subroutines become inline instructions in the source's own frame. That covers pay-or-tag, trash and install
+  subroutines, but the source, not the ICE, is then "this ICE". VP.5 picks per card.
+- **VP-ADVANCEMENT-COST:** existing vocabulary plus the trigger condition `RunOnAnotherServer`: an optional trigger
+  requiring its source's advancement counters removes one (Sacrifice Zone Expansion).
+
+**Review (PR #155).** The first round's two:
+- moving the run (Proprionegation) or redirecting it now moves its persistent context with it, so a program Beta Build
+  remembered survives the move;
+- a remembered card that leaves play is forgotten: a copy installed again is a new object, and the
+  validator rejects a live run that remembers an uninstalled card. Once the run has ended, its snapshot is fixed. Only
+  a run-end reaction could uninstall and then reinstall the card before the return resolves, and no card in the pool does.
+
+The second round's one: a behavior subroutine resolved outside a run can still end the run (Grubber's and Semak-Samun's
+options, or N-Pot's threat), and that now does nothing, as a printed end-the-run subroutine already did. A behavior
+subroutine that changes the run or its encounter (ezaM's strength) isn't offered with no run.
+
+The third round's one: the turn frame's clone kept no follow-up run, so Aircheck's run was lost whenever another run-end
+reaction asked for a decision after it (Zahya's optional gain). The clone and the one rebuild that keeps the frame's
+stage now carry it. The other VP.5a fields survive every copy: the run's state and persistent context pass them on, and
+a card filter's excluded subtype is part of its equality.

@@ -10,6 +10,12 @@ public sealed record PersistentRunAbility(
     ZoneId SourceZoneId,
     string TriggerKey);
 
+/// <summary>
+/// VP-RETURN-AT-RUN-END: a card a source's ability remembered for its run's end, by a stable key (the program Beta Build
+/// installed).
+/// </summary>
+public sealed record RunRememberedCard(CardInstanceId SourceCardId, string Key, CardInstanceId CardId);
+
 /// <summary>Run-local facts carried into the run-end reaction checkpoint (CR 9.12.5).</summary>
 public sealed record RunPersistentContext
 {
@@ -19,8 +25,17 @@ public sealed record RunPersistentContext
         ServerId serverId,
         IReadOnlyList<CardInstanceId> stolenAgendas,
         IReadOnlyList<PersistentRunAbility> abilities,
-        int accessOccurrenceCount = 0)
+        int accessOccurrenceCount = 0,
+        IReadOnlyList<RunRememberedCard>? rememberedCards = null)
     {
+        if (rememberedCards is not null && (rememberedCards.Count == 0
+            || rememberedCards.Any(value => value is null
+                || !StableIdentifier.TryValidate(value.SourceCardId.Value)
+                || !StableIdentifier.TryValidate(value.Key)
+                || !StableIdentifier.TryValidate(value.CardId.Value))
+            || rememberedCards.DistinctBy(value => (value.SourceCardId, value.Key)).Count() != rememberedCards.Count))
+            throw new ArgumentException("Remembered cards are omitted while none, and each source remembers a key once.");
+        RememberedCards = rememberedCards is null ? null : new ReadOnlyCollection<RunRememberedCard>(rememberedCards.ToArray());
         ArgumentNullException.ThrowIfNull(stolenAgendas);
         ArgumentNullException.ThrowIfNull(abilities);
         if (!StableIdentifier.TryValidate(runId.Value) || !StableIdentifier.TryValidate(serverId.Value)
@@ -50,12 +65,35 @@ public sealed record RunPersistentContext
     public IReadOnlyList<CardInstanceId> StolenAgendas { get; }
     public IReadOnlyList<PersistentRunAbility> Abilities { get; }
 
-    internal RunPersistentContext Copy() => new(RunId, ServerId, StolenAgendas, Abilities, AccessOccurrenceCount);
+    /// <summary>VP-RETURN-AT-RUN-END: cards abilities remembered for the run's end; omitted while none.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<RunRememberedCard>? RememberedCards { get; }
+
+    internal RunPersistentContext Copy() => new(RunId, ServerId, StolenAgendas, Abilities, AccessOccurrenceCount, RememberedCards);
+
+    internal RunPersistentContext WithRemembered(RunRememberedCard remembered) => new(RunId, ServerId, StolenAgendas, Abilities,
+        AccessOccurrenceCount,
+        (RememberedCards ?? []).Where(value => value.SourceCardId != remembered.SourceCardId || value.Key != remembered.Key)
+            .Append(remembered).ToArray());
+
+    /// <summary>The run's attacked server changed (a move or a redirect); the remembered facts stay with the run.</summary>
+    internal RunPersistentContext WithServer(ServerId serverId) => new(RunId, serverId, StolenAgendas, Abilities,
+        AccessOccurrenceCount, RememberedCards);
+
+    /// <summary>
+    /// VP-RETURN-AT-RUN-END: a remembered card left play, so it is forgotten; a copy installed again is a new object.
+    /// </summary>
+    internal RunPersistentContext WithoutRemembered(CardInstanceId cardId)
+    {
+        RunRememberedCard[] kept = (RememberedCards ?? []).Where(value => value.CardId != cardId).ToArray();
+        return new(RunId, ServerId, StolenAgendas, Abilities, AccessOccurrenceCount, kept.Length == 0 ? null : kept);
+    }
 
     internal static bool Matches(RunPersistentContext? left, RunPersistentContext? right) =>
         left is null ? right is null : right is not null
             && left.RunId == right.RunId && left.ServerId == right.ServerId
             && left.AccessOccurrenceCount == right.AccessOccurrenceCount
             && left.StolenAgendas.SequenceEqual(right.StolenAgendas)
-            && left.Abilities.SequenceEqual(right.Abilities);
+            && left.Abilities.SequenceEqual(right.Abilities)
+            && (left.RememberedCards ?? []).SequenceEqual(right.RememberedCards ?? []);
 }

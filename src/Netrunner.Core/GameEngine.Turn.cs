@@ -297,6 +297,16 @@ public static partial class GameEngine
             case TurnFrameStage.GainAllottedClicks:
                 AllotTurnClicks(working, frame);
                 return;
+            case TurnFrameStage.ActionPriority when frame.FollowUpRunServerId is { } followUp:
+                // VP-RUN-AFTER-RUN: the run-end ability's run, part of the same action (Aircheck).
+                working.ResolutionStack[^1] = new TurnFrame(frame.Version, frame.BehaviorId, frame.ActiveSide, frame.TurnNumber,
+                    TurnFrameStage.AwaitingAction);
+                if (working.Servers.Any(server => server.Id == followUp && server.Exists))
+                {
+                    StartRunInWorkingState(working, followUp, GetPlayer(working, PlayerSide.Runner).Id, initiatingSource: null);
+                }
+
+                return;
             case TurnFrameStage.BeforeTurnPriority:
             case TurnFrameStage.ActionPriority:
             case TurnFrameStage.DiscardPriority:

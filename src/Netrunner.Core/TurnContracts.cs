@@ -1115,6 +1115,16 @@ public sealed record TurnFrame : ResolutionFrame
     [JsonRequired]
     public bool ForcedActionEnd { get; private set; }
 
+    /// <summary>
+    /// VP-RUN-AFTER-RUN: a run a run-end ability made, on this server, started as part of the same action once the
+    /// run's end reactions finish (Aircheck). Null for none.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ServerId? FollowUpRunServerId { get; private set; }
+
+    internal TurnFrame WithFollowUpRun(ServerId? serverId) => this with { FollowUpRunServerId = serverId };
+
     [JsonIgnore]
     public bool AllowsPaidAbilities => PriorityWindow is TurnPriorityWindowKind.Paid
         or TurnPriorityWindowKind.PaidAndRez

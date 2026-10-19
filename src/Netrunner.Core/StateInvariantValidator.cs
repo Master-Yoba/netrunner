@@ -1485,6 +1485,11 @@ public static partial class StateInvariantValidator
             }
         }
 
+        if (run.ServerApproachRaised && run.Step != RunTimingStep.ApproachServer)
+        {
+            Add(violations, "run.server-approach-raised", $"{path}.serverApproachRaised", "The would-approach occurrence is raised only at the approach step.");
+        }
+
         if (!installedRunSource && run.InitiatingSource != run.ActiveRunEventId)
         {
             Add(
@@ -1508,7 +1513,8 @@ public static partial class StateInvariantValidator
                 && behaviorCatalog.TryGet(source.DefinitionId, out CardBehaviorDefinition? sourceDefinition)
                 && (state.Servers.FirstOrDefault(server => server?.Id == run.AttackedServer)?.Kind ?? (ServerKind)(-1)) is var attackedKind
                 // As for a run event: the run may have been moved to Archives (Proprionegation).
-                && (BehaviorRunRules.DefinitionHasStartRunForServer(sourceDefinition!, attackedKind) || attackedKind == ServerKind.Archives);
+                && (BehaviorRunRules.DefinitionHasStartRunForServer(sourceDefinition!, attackedKind) || attackedKind == ServerKind.Archives
+                    || BehaviorRunRules.DefinitionRedirectsTo(sourceDefinition!, attackedKind));
             if (!validInstalledSource)
             {
                 Add(
@@ -2948,7 +2954,8 @@ public static partial class StateInvariantValidator
                 && behaviorCatalog.TryGet(source.DefinitionId, out CardBehaviorDefinition? sourceDefinition)
                 && (state.Servers.FirstOrDefault(server => server?.Id == run.AttackedServer)?.Kind ?? (ServerKind)(-1)) is var attackedKind
                 // As for a run event: the run may have been moved to Archives (Proprionegation).
-                && (BehaviorRunRules.DefinitionHasStartRunForServer(sourceDefinition!, attackedKind) || attackedKind == ServerKind.Archives);
+                && (BehaviorRunRules.DefinitionHasStartRunForServer(sourceDefinition!, attackedKind) || attackedKind == ServerKind.Archives
+                    || BehaviorRunRules.DefinitionRedirectsTo(sourceDefinition!, attackedKind));
             if (!validInstalledSource)
             {
                 Add(
@@ -3076,6 +3083,13 @@ public static partial class StateInvariantValidator
                 && frame.Controller == run.InitiatingPlayer
                 && occurrence.Controller == run.InitiatingPlayer
                 && occurrence.ServerId == run.AttackedServer,
+            // VP-PAID-REDIRECT: raised at the approach step, once; a reaction may already have changed the attacked server.
+            OccurrenceKind.ServerWouldBeApproached => run.Step == RunTimingStep.ApproachServer
+                && run.ServerApproachRaised
+                && frame.Controller == run.InitiatingPlayer
+                && occurrence.Controller == run.InitiatingPlayer
+                && occurrence.SubjectCardId is null
+                && occurrence.ServerId is not null,
             // VP-SUBROUTINE-BROKEN, VP-ICE-PASSED (fully broken): raised in the encounter's paid window by a break.
             OccurrenceKind.SubroutineBroken or OccurrenceKind.IceFullyBroken => run.Step == RunTimingStep.EncounterPaidWindow
                 && frame.Controller == run.InitiatingPlayer
@@ -3917,6 +3931,17 @@ public static partial class StateInvariantValidator
                         Add(violations, "resolution.turn-action-end-with-clicks", $"{path}.stage", "An action phase cannot end with clicks remaining unless a direct effect forced it.");
                     }
 
+                    // VP-RUN-AFTER-RUN: a follow-up run waits only on the Runner's action priority, with no live run, for an
+                    // existing remote server.
+                    if (turnFrame.FollowUpRunServerId is { } followUp
+                        && (turnFrame.ActiveSide != PlayerSide.Runner
+                            || turnFrame.Stage != TurnFrameStage.ActionPriority
+                            || state.RunState is not null
+                            || !state.Servers.Any(server => server?.Id == followUp && server.Kind == ServerKind.Remote)))
+                    {
+                        Add(violations, "resolution.turn-follow-up-run", $"{path}.followUpRunServerId", "A follow-up run waits on the Runner's action priority for a remote server.");
+                    }
+
                     break;
                 case TurnDiscardFrame turnDiscard:
                     RequirePlayer(playerIds, turnDiscard.Owner, $"{path}.owner", violations);
@@ -4694,9 +4719,16 @@ public static partial class StateInvariantValidator
                     {
                         // A generic ICE subroutine runs directly above the run
                         // timing frame of its own ICE's encounter.
+                        // VP-RESOLVE-SUBROUTINE: or above the behavior that resolved it outside an encounter (Unleash).
+                        bool effectResolved = index > 0
+                            && state.ResolutionStack[index - 1] is BehaviorResolutionFrame resolver
+                            && ParentIdentityMatches(resolver, behaviorFrame.ParentFrameIdentity)
+                            && behaviorCatalog.TryGet(resolver.DefinitionId, out CardBehaviorDefinition? resolverDefinition)
+                            && BehaviorRunRules.DeclaresInstruction(resolverDefinition, BehaviorInstructionKind.ResolveIceSubroutine);
                         if (index == 0
-                            || state.ResolutionStack[index - 1] is not RunTimingFrame
-                            || state.RunState?.Encounter?.IceId != behaviorFrame.SourceCardId
+                            || !effectResolved
+                                && (state.ResolutionStack[index - 1] is not RunTimingFrame
+                                    || state.RunState?.Encounter?.IceId != behaviorFrame.SourceCardId)
                             || triggerSubjectBindings.Length > 0)
                         {
                             Add(
@@ -8182,7 +8214,12 @@ public static partial class StateInvariantValidator
                 && state.ResolutionStack[index + 2] is EffectResolutionFrame nestedEffect
                 && nestedEffect.Controller == frame.Owner
                 && nestedEffect.Stage != EffectResolutionStage.AwaitingMemoryCleanup)
-            && !GameEngine.IsSuspendedForMemoryLoss(state.ResolutionStack, index + 1))
+            && !GameEngine.IsSuspendedForMemoryLoss(state.ResolutionStack, index + 1)
+            // VP-RESOLVE-SUBROUTINE: a behavior suspends beneath the ICE subroutine its own instruction resolves.
+            && !(child.Stage == BehaviorResolutionStage.Execute
+                && state.ResolutionStack[index + 2] is BehaviorResolutionFrame { TriggerKey: not null } resolved
+                && ParentIdentityMatches(child, resolved.ParentFrameIdentity)
+                && IsIceSubroutineTrigger(behaviorCatalog, resolved)))
         {
             Add(
                 violations,
@@ -12967,8 +13004,9 @@ public static partial class StateInvariantValidator
                     && (!target.IsOther || card.Id != excludedCardId)
                     && (!target.IsCopyOfArchives || GameEngine.IsCopyOfFaceUpArchivesCard(state.Cards, state.Zones, card))
                     && (!target.IsNotAi || !GameEngine.CardSubtypes(runtimeCardCatalog, card.DefinitionId).Contains("ai", StringComparer.Ordinal))
-                    && (!target.IsInAttackedServer || state.RunState is { } attacked
-                        && state.Zones.FirstOrDefault(zone => zone.Id == card.ZoneId)?.ServerId == attacked.AttackedServer)
+                    && (!target.IsInRemoteServer || GameEngine.IsInRemoteServer(state.Servers, state.Zones, card))
+                    && (!target.IsInAttackedServer || GameEngine.AttackedOrEndedRunServer(state.RunState, state.ResolutionStack) is { } attacked
+                        && state.Zones.FirstOrDefault(zone => zone.Id == card.ZoneId)?.ServerId == attacked)
                     && (target.Kind != BehaviorTargetKind.InstalledCardNotThisTurn
                         || !IsInstalledThisTurn(state, card.Id, owner))
                     && BehaviorCardMatches(state, behaviorCatalog, runtimeCardCatalog, card.Id, target.Filter))
@@ -13064,8 +13102,7 @@ public static partial class StateInvariantValidator
                 return false;
             }
 
-            if (filter.Subtype is not null
-                && !runtimeSpec.Subtypes.Contains(filter.Subtype, StringComparer.Ordinal))
+            if (!filter.SubtypesMatch(runtimeSpec.Subtypes))
             {
                 return false;
             }
@@ -13100,9 +13137,9 @@ public static partial class StateInvariantValidator
             };
         }
 
-        if (filter.Subtype is not null || filter.CardType == BehaviorCardType.Any)
+        if (filter.NamesSubtype || filter.CardType == BehaviorCardType.Any)
         {
-            return filter.Subtype is null;
+            return !filter.NamesSubtype;
         }
 
         return filter.CardType switch

@@ -16,6 +16,10 @@ public static partial class StateInvariantValidator
                 || live.StolenAgendas.Any(id => !state.RunState.AccessedCards.Contains(id))
                 || live.Abilities.Any(value => !state.RunState.AccessedCards.Contains(value.SourceCardId)))
                 Add(violations, "run.persistent-context", "runState.persistentContext", "Persistent facts must belong to this run.");
+            // VP-RETURN-AT-RUN-END: the live run forgets a remembered card as it leaves play.
+            if ((live.RememberedCards ?? []).Any(value => !IsInstalledCard(state, value.CardId)))
+                Add(violations, "run.remembered-card-uninstalled", "runState.persistentContext.rememberedCards",
+                    "A live run remembers only installed cards.");
         }
         foreach (ResolutionFrame frame in state.ResolutionStack)
         {
@@ -57,6 +61,12 @@ public static partial class StateInvariantValidator
                         || string.Equals(retained.TriggerKey, GameEngine.RootAssetTrashCostKey, StringComparison.Ordinal)
                             && definition.RootAssetTrashCostIncrease > 0)))
                 Add(violations, "run.persistent-source", "runPersistentContext.abilities", "Persistent source provenance must match its installed object and catalog declaration.");
+        }
+        // VP-RETURN-AT-RUN-END: a remembered card and the source that remembered it are cards of the game.
+        foreach (RunRememberedCard remembered in context.RememberedCards ?? [])
+        {
+            if (!state.Cards.Any(value => value.Id == remembered.SourceCardId) || !state.Cards.Any(value => value.Id == remembered.CardId))
+                Add(violations, "run.remembered-card", "runPersistentContext.rememberedCards", "A remembered card and its source must exist.");
         }
     }
 }

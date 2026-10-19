@@ -399,6 +399,7 @@ public sealed record GameplayOccurrenceEffect : EffectInstruction
                 or OccurrenceKind.IceFullyBroken
                 or OccurrenceKind.SubroutineBroken
                 or OccurrenceKind.EncounterEnded
+                or OccurrenceKind.ServerWouldBeApproached
                 or OccurrenceKind.DamageDone
                 or OccurrenceKind.CardsTrashedFromHq
                 or OccurrenceKind.HandSizeDiscarded))
@@ -730,6 +731,7 @@ public static class EffectInstructionValidator
                 or OccurrenceKind.IceFullyBroken
                 or OccurrenceKind.SubroutineBroken
                 or OccurrenceKind.EncounterEnded
+                or OccurrenceKind.ServerWouldBeApproached
                 or OccurrenceKind.DamageDone
                 or OccurrenceKind.CardsTrashedFromHq
                 or OccurrenceKind.HandSizeDiscarded))

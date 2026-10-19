@@ -3278,7 +3278,7 @@ internal static class ResolutionFrameCloner
             turn.PriorityWindow,
             turn.PriorityHolder,
             turn.ConsecutivePasses,
-            turn.ForcedActionEnd),
+            turn.ForcedActionEnd).WithFollowUpRun(turn.FollowUpRunServerId),
         TurnDiscardFrame turnDiscard => new TurnDiscardFrame(
             turnDiscard.Version,
             turnDiscard.BehaviorId,

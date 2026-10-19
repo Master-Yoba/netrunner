@@ -1897,7 +1897,7 @@ public static partial class GameEngine
                     turn.PriorityWindow,
                     turn.PriorityHolder,
                     0,
-                    turn.ForcedActionEnd);
+                    turn.ForcedActionEnd).WithFollowUpRun(turn.FollowUpRunServerId);
                 return;
             case RunTimingFrame runFrame when frame.Activation == BehaviorAbilityActivation.PaidAbility:
                 RunState run = working.RunState

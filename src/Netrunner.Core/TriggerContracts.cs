@@ -115,6 +115,12 @@ public enum OccurrenceKind
 
     /// <summary>VP-ENCOUNTER-ENDED: an encounter with a piece of ICE ended; the subject is the ICE (Knowledge Seeker).</summary>
     EncounterEnded,
+
+    /// <summary>
+    /// VP-PAID-REDIRECT: the Runner would approach the attacked server, having passed all ICE (CR 26.03 6.9.4g); a
+    /// reaction may change the attacked server first (Baker).
+    /// </summary>
+    ServerWouldBeApproached,
 }
 
 public enum OccurrencePhase
