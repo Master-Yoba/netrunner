@@ -53,7 +53,7 @@ public sealed class VantagePointBotTests
     public async Task TheRunnerLowersABarrierWithCorsairsStealthCredits()
     {
         if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
-        (LegalAction chosen, GameState state) = await ChooseAsync("vp5-corsair", 783, PlayerSide.Runner);
+        (LegalAction chosen, GameState state) = await ChooseAsync("vp5-corsair", 469, PlayerSide.Runner);
         Assert.True(chosen.Kind == ActionKind.UseAbility && Card(state, chosen) == "36004", $"chose {chosen.Kind} {chosen.Description}.");
     }
 
@@ -63,7 +63,7 @@ public sealed class VantagePointBotTests
     [InlineData("vp5-kompromat", 100, ActionKind.PlayCard, "36010")]
     [InlineData("vp5-beta-build", 29, ActionKind.PlayCard, "36019")]
     [InlineData("vp5-aircheck", 23, ActionKind.PlayCard, "36018")]
-    [InlineData("vp5-beta-build", 474, ActionKind.InstallCard, "36015")]
+    [InlineData("vp5-baker-install", 193, ActionKind.InstallCard, "36015")]
     [InlineData("vp5-baker", 460, ActionKind.UseAbility, "36015")]
     public async Task TheRunnerPlaysVantagePointRunCards(string fixture, long sequence, ActionKind kind, string code)
     {
