@@ -599,3 +599,13 @@ The last 10 cards, on `feat/vp7-batch3`:
 - **Fixtures:** `VantagePointBotTests` checks VP.3's, VP.5's and VP.7's fixes at saved decisions of this ladder
   (`Fixtures/saved-games/vp7-*`). VP.5's Corsair case is dropped. This ladder offered Corsair's ability twice, both times
   against Palisade with no fracter installed, where declining is right.
+
+### E6
+
+`scripts/core-growth.sh ... --range slice-VP.7=b2474c0..4063bab` counts VP.6's primitives and the cards together:
+- 20 Core files and 10 new terms of vocabulary;
+- 5 of 10 cards with no Core change.
+
+By hand, beyond VP.6's planned primitives, three cards needed a Core change: Hiram, Hype Machine and Lotus Haze. That
+makes **7 of 10 (70%)**. As the Startup pool's last batch, it carries most of the set's one-of-a-kind effects: an
+identity, a host and a hidden zone.
