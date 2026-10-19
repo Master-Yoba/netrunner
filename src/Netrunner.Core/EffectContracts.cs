@@ -391,6 +391,7 @@ public sealed record GameplayOccurrenceEffect : EffectInstruction
                 or OccurrenceKind.FirstBadPublicityThisTurn
                 or OccurrenceKind.CreditsSpentFromOutsidePool
                 or OccurrenceKind.ArchivesCardsTurnedFaceUp
+                or OccurrenceKind.CardTrashed
                 or OccurrenceKind.CardAdvanced
                 or OccurrenceKind.FirstCardCreditGainThisTurn
                 or OccurrenceKind.FirstOperationPlayedThisTurn
@@ -724,6 +725,7 @@ public static class EffectInstructionValidator
                 or OccurrenceKind.FirstBadPublicityThisTurn
                 or OccurrenceKind.CreditsSpentFromOutsidePool
                 or OccurrenceKind.ArchivesCardsTurnedFaceUp
+                or OccurrenceKind.CardTrashed
                 or OccurrenceKind.CardAdvanced
                 or OccurrenceKind.FirstCardCreditGainThisTurn
                 or OccurrenceKind.FirstOperationPlayedThisTurn

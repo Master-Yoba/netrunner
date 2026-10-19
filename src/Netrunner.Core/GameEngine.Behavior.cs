@@ -761,7 +761,11 @@ public static partial class GameEngine
             case BehaviorInstructionKind.MoveSourceToServerOf:
                 {
                     IReadOnlyList<CardInstanceId> anchors = ResolveBehaviorCards(working, frame, instruction.Target);
-                    CardInstanceState upgrade = GetCard(working, frame.SourceCardId);
+                    // VP-MOVE-UPGRADE: the argument names a bound card to move instead of the source (Lotus Haze).
+                    CardInstanceState upgrade = GetCard(working, instruction.Argument is { } movedKey
+                        ? frame.Bindings.SingleOrDefault(binding => string.Equals(binding.Key, movedKey, StringComparison.Ordinal))?.CardIds.SingleOrDefault()
+                            ?? frame.SourceCardId
+                        : frame.SourceCardId);
                     ZoneState from = ZoneForCard(working, upgrade.Id);
                     if (anchors.Count == 1
                         && from.Kind == ZoneKind.ServerRoot
@@ -770,6 +774,11 @@ public static partial class GameEngine
                         && server.RootZoneId != from.Id)
                     {
                         MoveCard(working, upgrade, from, working.Zones.Single(zone => zone.Id == server.RootZoneId));
+                        if (upgrade.Id != frame.SourceCardId)
+                        {
+                            AdvanceBehaviorCursor(working, frame);
+                            return;
+                        }
 
                         // The move is the behavior's last act: its source has left
                         // the location the behavior was invoked from, so it completes.
@@ -785,6 +794,20 @@ public static partial class GameEngine
                 foreach (CardInstanceId derezzedId in ResolveBehaviorCards(working, frame, instruction.Target).ToArray())
                 {
                     Derez(working, derezzedId);
+                }
+
+                AdvanceBehaviorCursor(working, frame);
+                return;
+            case BehaviorInstructionKind.SetSecretIdentity:
+                // VP-SECRET-IDENTITY: no event names the side; the Runner learns it only when the identity flips.
+                working.RulesState = RequireRulesState(working)
+                    .WithSecretIdentity(new SecretIdentityState(Enum.Parse<ServerKind>(instruction.Argument!), Flipped: false));
+                AdvanceBehaviorCursor(working, frame);
+                return;
+            case BehaviorInstructionKind.FlipIdentity:
+                if (working.RulesState?.SecretIdentity is { } flipping)
+                {
+                    working.RulesState = working.RulesState.WithSecretIdentity(flipping with { Flipped = !flipping.Flipped });
                 }
 
                 AdvanceBehaviorCursor(working, frame);
@@ -1059,6 +1082,15 @@ public static partial class GameEngine
         && ice.Triggers.Any(trigger => trigger.Occurrence == OccurrenceKind.IceSubroutine && string.Equals(trigger.Key, key, StringComparison.Ordinal))
         && working.BehaviorCatalog.TryGet(parent.DefinitionId, out CardBehaviorDefinition? resolver)
         && BehaviorRunRules.DeclaresInstruction(resolver, BehaviorInstructionKind.ResolveIceSubroutine);
+
+    /// <summary>VP-SOURCE-SERVER-ROOT: the card is in the root of the source's server (Hype Machine). Shared with the validator.</summary>
+    internal static bool IsInSourceServerRoot(IReadOnlyList<CardInstanceState?> cards, IReadOnlyList<ZoneState?> zones, CardInstanceState card,
+        CardInstanceId? sourceId) =>
+        sourceId is { } source
+        && cards.FirstOrDefault(candidate => candidate?.Id == source) is { } sourceCard
+        && zones.FirstOrDefault(zone => zone?.Id == sourceCard.ZoneId) is { ServerId: { } server }
+        && zones.FirstOrDefault(zone => zone?.Id == card.ZoneId) is { Kind: ZoneKind.ServerRoot } root
+        && root.ServerId == server;
 
     /// <summary>VP-RUN-AFTER-RUN: the card is installed in a remote server, root or ICE. Shared with the validator.</summary>
     internal static bool IsInRemoteServer(IReadOnlyList<ServerState?> servers, IReadOnlyList<ZoneState?> zones, CardInstanceState card) =>
@@ -3811,6 +3843,7 @@ public static partial class GameEngine
                     && (!target.IsCopyOfArchives || IsCopyOfFaceUpArchivesCard(working.Cards, working.Zones, card))
                     && (!target.IsNotAi || !GameEngine.CardSubtypes(working.RuntimeCardCatalog, card.DefinitionId).Contains("ai", StringComparer.Ordinal))
                     && (!target.IsInRemoteServer || IsInRemoteServer(working.Servers, working.Zones, card))
+                    && (!target.IsInSourceServerRoot || IsInSourceServerRoot(working.Cards, working.Zones, card, excludedCardId))
                     && (!target.IsInAttackedServer || AttackedOrEndedRunServer(working.RunState, working.ResolutionStack) is { } attacked
                         && working.Zones.FirstOrDefault(zone => zone.Id == card.ZoneId)?.ServerId == attacked)
                     && (target.Kind != BehaviorTargetKind.InstalledCardNotThisTurn

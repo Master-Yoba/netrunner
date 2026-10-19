@@ -849,13 +849,20 @@ public static partial class ObservationBuilder
                 }
             }
 
-            return new Dictionary<string, object?>
+            var corp = new Dictionary<string, object?>
             {
                 ["hand"] = PrivateZoneCards(state, ZoneKind.CorpHand).Select(card => PrivateCardView(state, card)).ToArray(),
                 ["deck"] = Array.Empty<object>(),
                 ["faceDownIce"] = faceDownIce,
                 ["faceDownArchives"] = faceDownArchives,
             };
+            // VP-SECRET-IDENTITY: the Corp knows the copy it set (Méliès U); written only while there is one.
+            if (state.RulesState?.SecretIdentity is { } secret)
+            {
+                corp["secretIdentitySide"] = secret.Side.ToString();
+            }
+
+            return corp;
         }
 
         var runner = new Dictionary<string, object?>
@@ -944,6 +951,9 @@ public static partial class ObservationBuilder
             if (rules.CoreDamage != 0) view["coreDamage"] = rules.CoreDamage;
             // VP-BAD-PUBLICITY: public (CR 1.9.5d), shown only once the Corp has some, so other observations keep their shape.
             if (player.Side == PlayerSide.Corp && state.RulesState.BadPublicity != 0) view["badPublicity"] = state.RulesState.BadPublicity;
+            // VP-SECRET-IDENTITY: public only while the identity is flipped to its back (Méliès U).
+            if (player.Side == PlayerSide.Corp && state.RulesState.SecretIdentity is { Flipped: true } shown)
+                view["identitySide"] = shown.Side.ToString();
 
             // Runner memory is a public rules projection. Keep it tied to the
             // optional RulesState so legacy M1 observations retain their

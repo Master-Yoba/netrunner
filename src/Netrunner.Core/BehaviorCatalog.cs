@@ -437,7 +437,10 @@ public sealed record BehaviorCondition
                 or BehaviorConditionKind.SourceScoredThisTurn
                 or BehaviorConditionKind.SuccessfulRunOnEveryCentralThisTurn
                 or BehaviorConditionKind.RunAgainstSourceServer
-                or BehaviorConditionKind.RunAgainstAnotherServer)
+                or BehaviorConditionKind.RunAgainstAnotherServer
+                or BehaviorConditionKind.IdentityFlipped
+                or BehaviorConditionKind.IdentityNotFlipped
+                or BehaviorConditionKind.SecretIdentityMatchesAttackedServer)
             && (fact is not null || value is not null))
         {
             throw new ArgumentException(
@@ -707,6 +710,15 @@ public enum BehaviorConditionKind
 
     /// <summary>VP-ICE-PASSED: the subject side (by default the controller) has at most the value in clicks (Vertigo).</summary>
     ClicksRemainingAtMost,
+
+    /// <summary>VP-SECRET-IDENTITY: the secret identity is flipped to its back (Méliès U).</summary>
+    IdentityFlipped,
+
+    /// <summary>VP-SECRET-IDENTITY: the secret identity shows its front.</summary>
+    IdentityNotFlipped,
+
+    /// <summary>VP-SECRET-IDENTITY: the secret identity's back names the attacked server's kind.</summary>
+    SecretIdentityMatchesAttackedServer,
 }
 
 /// <summary>A typed target selector; IDs are resolved by Core at runtime.</summary>
@@ -871,6 +883,12 @@ public sealed record BehaviorTarget
 
     [JsonIgnore]
     public bool IsInRemoteServer => string.Equals(Selector, RemoteServerSelector, StringComparison.Ordinal);
+
+    /// <summary>VP-SOURCE-SERVER-ROOT: an installed-card target over only cards in the root of the source's server (Hype Machine).</summary>
+    public const string SourceServerRootSelector = "source-server-root";
+
+    [JsonIgnore]
+    public bool IsInSourceServerRoot => string.Equals(Selector, SourceServerRootSelector, StringComparison.Ordinal);
 
     [JsonIgnore]
     public bool IsCopyOfArchives => string.Equals(Selector, CopyOfArchivesSelector, StringComparison.Ordinal);
@@ -1568,6 +1586,12 @@ public sealed record BehaviorInstruction
             throw new ArgumentException("A swap names its first piece of ICE by a stable key.", nameof(Argument));
         }
 
+        if (Kind == BehaviorInstructionKind.SetSecretIdentity
+            && (!Enum.TryParse(Argument, ignoreCase: false, out ServerKind secretSide) || secretSide == ServerKind.Remote))
+        {
+            throw new ArgumentException("A secret identity's side names a central server kind.", nameof(Argument));
+        }
+
         if (Kind == BehaviorInstructionKind.ChangeAttackedServer
             && (!Enum.TryParse(Argument, ignoreCase: false, out ServerKind redirect) || redirect == ServerKind.Remote))
         {
@@ -2054,6 +2078,12 @@ public enum BehaviorInstructionKind
 
     /// <summary>VP-HOST-FACEDOWN: host the target facedown on the source, up to the source's limit (Read-Write Share).</summary>
     HostFaceDown,
+
+    /// <summary>VP-SECRET-IDENTITY: secretly set the active copy, by its back's central server, front up (Méliès U).</summary>
+    SetSecretIdentity,
+
+    /// <summary>VP-SECRET-IDENTITY: flip the secret identity, to its back or to its front.</summary>
+    FlipIdentity,
 
     // Short aliases keep the contract pleasant for callers while the longer
     // names remain unambiguous in serialized/fingerprint output.

@@ -51,6 +51,11 @@ public static partial class GameEngine
                 && sourceCardId is { } otherSource
                 && SourceServerId(working, GetCard(working, otherSource)) is { } sourceServer
                 && sourceServer != otherRun.AttackedServer,
+            BehaviorConditionKind.IdentityFlipped => working.RulesState?.SecretIdentity is { Flipped: true },
+            BehaviorConditionKind.IdentityNotFlipped => working.RulesState?.SecretIdentity is not { Flipped: true },
+            BehaviorConditionKind.SecretIdentityMatchesAttackedServer => working.RulesState?.SecretIdentity is { } secret
+                && working.RunState is { } secretRun
+                && working.Servers.FirstOrDefault(server => server.Id == secretRun.AttackedServer)?.Kind == secret.Side,
             BehaviorConditionKind.ThreatLevelAtLeast => ThreatLevel(working.Players) >= threshold,
             BehaviorConditionKind.RunnerTagsAtLeast => RunnerTags(working) >= threshold,
             BehaviorConditionKind.ZoneCountAtMost =>

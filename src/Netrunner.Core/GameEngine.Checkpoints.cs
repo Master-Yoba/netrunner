@@ -1012,6 +1012,7 @@ public static partial class GameEngine
                 or OccurrenceKind.FirstBadPublicityThisTurn
                 or OccurrenceKind.CreditsSpentFromOutsidePool
                 or OccurrenceKind.ArchivesCardsTurnedFaceUp
+                or OccurrenceKind.CardTrashed
                 or OccurrenceKind.CardAdvanced
                 or OccurrenceKind.FirstCardCreditGainThisTurn
                 or OccurrenceKind.FirstOperationPlayedThisTurn

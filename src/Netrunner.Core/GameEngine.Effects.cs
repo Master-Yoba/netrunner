@@ -1197,7 +1197,8 @@ public static partial class GameEngine
             triggers ?? rules.Triggers,
             interrupts ?? rules.Interrupts,
             badPublicity ?? rules.BadPublicity,
-            scoredAsAgendas ?? rules.ScoredAsAgendas);
+            scoredAsAgendas ?? rules.ScoredAsAgendas,
+            rules.SecretIdentity);
     }
 
     private static void ReplaceTopFrame(WorkingState working, ResolutionFrame frame)
