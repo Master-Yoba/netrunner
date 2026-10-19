@@ -229,8 +229,15 @@ public sealed class ElevationPrimitiveContractTests
     public void IceAbilitiesTheRunnerUsesCostAClickOrCredits()
     {
         _ = new EncounteredBioroidAbilitySpec("probe-credit-break", new BehaviorCost(BehaviorCostKind.Credits, 3));
+        // VP-BIOROID-MULTI-BREAK allows two lost clicks (Ansel 2.0), and no more.
+        _ = new EncounteredBioroidAbilitySpec("probe-two-clicks", new BehaviorCost(BehaviorCostKind.LoseClick, 2), breakCount: 2);
         Assert.Throws<ArgumentException>(() =>
-            new EncounteredBioroidAbilitySpec("probe-two-clicks", new BehaviorCost(BehaviorCostKind.LoseClick, 2)));
+            new EncounteredBioroidAbilitySpec("probe-three-clicks", new BehaviorCost(BehaviorCostKind.LoseClick, 3)));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new EncounteredBioroidAbilitySpec("probe-three-breaks", new BehaviorCost(BehaviorCostKind.LoseClick, 2), breakCount: 3));
+        var single = new RunBioroidAbilityParameters(new CardInstanceId("card:1"), new SubroutineId("subroutine:1"),
+            "probe-click-break", new BehaviorCost(BehaviorCostKind.LoseClick, 1), 0);
+        Assert.DoesNotContain("secondSubroutine", EngineJson.Serialize(single), StringComparison.Ordinal);
         var parameters = new RunBioroidAbilityParameters(new CardInstanceId("card:1"), new SubroutineId("subroutine:1"),
             "probe-credit-break", new BehaviorCost(BehaviorCostKind.Credits, 3), 0);
         Assert.Equal(3, EngineJson.Deserialize<RunBioroidAbilityParameters>(EngineJson.Serialize(parameters)).Cost.Amount);

@@ -1683,7 +1683,10 @@ public static partial class StateInvariantValidator
                 && run.CurrentIceId is { } departedIce
                 && state.Cards.Any(card => card.Id == departedIce
                     && card.OwnerSide == PlayerSide.Corp && card.ZoneId != iceZone.Id);
-            if (!destroyedCursor && (run.CurrentIceIndex < -1 || run.CurrentIceIndex >= iceZone.CardIds.Count))
+            // A removed encounter cursor may sit just outside the remaining ICE: the ICE it encountered trashed itself
+            // (VP-ICE-TRASHES-ITSELF, Vicsek), and moving inward steps to the next protector.
+            if (!destroyedCursor && (run.CurrentIceIndex < -1 || run.CurrentIceIndex > iceZone.CardIds.Count
+                || run.CurrentIceIndex == iceZone.CardIds.Count && !removedEncounterCursor))
             {
                 Add(violations, "run.invalid-ice-index", $"{path}.currentIceIndex", "Current ICE index must be -1 or an index in the attacked server's ordered ICE zone.");
             }
@@ -2399,10 +2402,10 @@ public static partial class StateInvariantValidator
                 or RunTimingStep.JackOutDecision
                 or RunTimingStep.MoveInward
             && run.Encounter is { Status: RunEncounterStatus.Complete } encounter
-            && !iceZone.CardIds.Contains(encounter.IceId)
+            // The passed ICE left the Runner's position: trashed, or swapped elsewhere (VP-SWAP-WITH, Sipa).
+            && (run.CurrentIceIndex >= iceZone.CardIds.Count || iceZone.CardIds[run.CurrentIceIndex] != encounter.IceId)
             && state.Cards.Any(card => card.Id == encounter.IceId
-                && card.OwnerSide == PlayerSide.Corp
-                && card.ZoneId != iceZone.Id);
+                && card.OwnerSide == PlayerSide.Corp);
     }
 
     /// <summary>
@@ -4671,7 +4674,11 @@ public static partial class StateInvariantValidator
                                 && state.RulesState?.ScoredAsAgendas?.Any(entry => entry.CardId == sourceCard.Id) != true
                                 && !catalogTriggerDetachedSource
                                 && !(behaviorFrame.TriggerKey is not null && behaviorFrame.CatalogTriggerSourceMovedAfterStart)
-                                && !movedAfterPayment)
+                                && !movedAfterPayment
+                                && !(behaviorFrame.TriggerKey is null
+                                    && behaviorCatalog.TryGet(sourceCard.DefinitionId, out CardBehaviorDefinition? swapping)
+                                    && state.Zones.FirstOrDefault(zone => zone?.Id == sourceCard.ZoneId) is { } swappedZone
+                                    && GameEngine.MaySwapItsSource(swapping, behaviorFrame.AbilityKey, swappedZone.Kind)))
                             {
                                 Add(violations, "resolution.behavior-source-location-mismatch", $"{path}.sourceZoneId", "Behavior source card no longer occupies its captured invocation location.");
                             }
@@ -5620,13 +5627,13 @@ public static partial class StateInvariantValidator
                     "Ability source card definition must match the frame definition.");
             }
 
-            if (controller is not null && controller.Side != source.OwnerSide)
+            if (controller is not null && controller.Side != GameEngine.AbilityUserSide(behaviorCatalog, source, frame.AbilityKey))
             {
                 Add(
                     violations,
                     "resolution.ability-controller-mismatch",
                     $"{path}.controller",
-                    "Ability controller must be the source card owner.");
+                    "Ability controller must be the source card owner, or its opponent for an opponent's ability.");
             }
         }
 
@@ -5803,7 +5810,10 @@ public static partial class StateInvariantValidator
             behaviorCatalog.TryGet(frame.DefinitionId, out CardBehaviorDefinition? lifecycleDefinition);
             validLifecycleZone |= AbilityLifecycleRules.IsEmptyPoolSelfTrash(lifecycleDefinition, declaration, frame,
                 source, currentZone, state.RulesState, state.Turn)
-                || AbilityLifecycleRules.IsSelfPlay(declaration, frame, source, currentZone);
+                || AbilityLifecycleRules.IsSelfPlay(declaration, frame, source, currentZone)
+                || AbilityLifecycleRules.IsSelfTrashEffect(declaration, frame, source, currentZone)
+                || lifecycleDefinition is not null && currentZone is not null
+                    && GameEngine.MaySwapItsSource(lifecycleDefinition, frame.AbilityKey, currentZone.Kind);
             if (!validLifecycleZone || (selfTrash && selfRemove))
             {
                 Add(
@@ -7613,13 +7623,13 @@ public static partial class StateInvariantValidator
             }
 
             PlayerState? owner = state.Players.FirstOrDefault(player => player?.Id == pending.Owner);
-            if (owner is not null && owner.Side != sourceCard.OwnerSide)
+            if (owner is not null && owner.Side != GameEngine.AbilityUserSide(behaviorCatalog, sourceCard, ability.AbilityKey))
             {
                 Add(
                     violations,
                     "decision.ability-source-owner-mismatch",
                     $"{path}.parameters.sourceCardId",
-                    "Ability source card owner must match the pending decision owner.");
+                    "Ability source card owner, or its opponent for an opponent's ability, must match the pending decision owner.");
             }
 
             if (sourceCard.ZoneId != ability.SourceZoneId)
@@ -8515,8 +8525,8 @@ public static partial class StateInvariantValidator
             foreach (BehaviorCost behaviorCost in definition.Costs)
             {
                 // A "Double" card's additional click is paid with the action
-                // and is not part of the frozen credit cost.
-                if (behaviorCost.Kind == BehaviorCostKind.Clicks)
+                // and is not part of the frozen credit cost; nor is a tag cost (VP-TAG-COST, Unleash).
+                if (behaviorCost.Kind is BehaviorCostKind.Clicks or BehaviorCostKind.Tags)
                 {
                     continue;
                 }
@@ -9179,20 +9189,7 @@ public static partial class StateInvariantValidator
                                     continue;
                                 }
 
-                                foreach (RunSubroutineState subroutine in run.Encounter.Subroutines)
-                                {
-                                    if (subroutine.Broken || subroutine.Resolved)
-                                    {
-                                        continue;
-                                    }
-
-                                    expectedBioroidAbilities.Add(new RunBioroidAbilityParameters(
-                                        run.Encounter.IceId,
-                                        subroutine.Id,
-                                        ability.Key,
-                                        ability.Cost,
-                                        subroutine.Ordinal));
-                                }
+                                expectedBioroidAbilities.AddRange(GameEngine.BioroidAbilityOffers(run.Encounter.IceId, ability, run.Encounter.Subroutines));
                             }
                         }
 

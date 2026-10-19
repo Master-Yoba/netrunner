@@ -1562,7 +1562,8 @@ public sealed class FullGameContractAgent : IGameAgent
         RunBioroidAbilityParameters bioroid =>
             $"bioroid:ice:{bioroid.IceId.Value}:ordinal:{bioroid.SubroutineOrdinal.ToString(CultureInfo.InvariantCulture)}"
             + $":subroutine:{bioroid.SubroutineId.Value}"
-            + $":ability:{bioroid.AbilityKey}",
+            + $":ability:{bioroid.AbilityKey}"
+            + (bioroid.SecondSubroutineId is { } second ? $":second:{second.Value}" : string.Empty),
         IceSubroutineChoiceParameters iceSubroutine =>
             IceSubroutineChoiceKey(iceSubroutine),
         RunCardPaymentParameters payment =>

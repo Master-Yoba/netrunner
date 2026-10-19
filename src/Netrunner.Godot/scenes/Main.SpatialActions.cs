@@ -163,7 +163,7 @@ public partial class Main
 					foreach (BoardSpatialAction action in choices) AddSpatialConfirm(snapshot, action);
 					continue;
 				}
-				string label = first.Action.Parameters is RunBioroidAbilityParameters ? "Break a subroutine · lose 1 click…"
+				string label = first.Action.Parameters is RunBioroidAbilityParameters firstBioroid ? BioroidSpatialLabel(firstBioroid) + "…"
 					: ActionLabelPresenter.AbilityChoiceLabel(first.Action, ActionCardName);
 				AddSpatialButton(label + " · choose targets…", () =>
 				{
@@ -178,7 +178,7 @@ public partial class Main
 		string selected = string.Join("; ", selection.Selected.Select(target =>
 			$"{(target.PaymentKind == BehaviorAdditionalCostKind.TrashCards ? "Trash as payment" : target.Role)}: {SpatialTargetLabel(target)}"));
 		string effect = _spatialSource is not null && selection.Remaining is { Count: > 0 } remainingActions
-			? (remainingActions[0].Action.Parameters is RunBioroidAbilityParameters ? "Break a subroutine · lose 1 click"
+			? (remainingActions[0].Action.Parameters is RunBioroidAbilityParameters remainingBioroid ? BioroidSpatialLabel(remainingBioroid)
 				: ActionLabelPresenter.AbilityChoiceLabel(remainingActions[0].Action, ActionCardName)) + "\n" : "";
 		IReadOnlyList<BoardTarget> candidates = selection.Candidates;
 		IReadOnlyList<BoardSpatialAction> completeActions = selection.CompleteActions;
@@ -393,4 +393,10 @@ public partial class Main
 		_spatialCues.Clear();
 		if (_boardDrag?.IsDragging != true) _gameTable?.SetNewRemoteDropVisible(false);
 	}
+
+	// VP-BIOROID-MULTI-BREAK: Ansel 2.0 loses two clicks to break up to two subroutines.
+	private static string BioroidSpatialLabel(RunBioroidAbilityParameters bioroid) =>
+		bioroid.Cost.Kind == BehaviorCostKind.LoseClick && bioroid.Cost.Amount > 1
+			? $"Break up to 2 subroutines · lose {bioroid.Cost.Amount} clicks"
+			: "Break a subroutine · lose 1 click";
 }

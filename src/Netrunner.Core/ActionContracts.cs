@@ -655,12 +655,25 @@ public sealed record RunBioroidAbilityParameters : ActionParameters
         SubroutineId subroutineId,
         string abilityKey,
         BehaviorCost cost,
-        int subroutineOrdinal = 0)
+        int subroutineOrdinal = 0,
+        SubroutineId? secondSubroutineId = null,
+        int? secondSubroutineOrdinal = null)
     {
         if (!StableIdentifier.TryValidate(iceId.Value))
         {
             throw new ArgumentException("A bioroid ability must identify a stable ICE card.", nameof(iceId));
         }
+
+        // VP-BIOROID-MULTI-BREAK: a second subroutine, later in the printed order, for "break up to 2" (Ansel 2.0).
+        if (secondSubroutineId is null != secondSubroutineOrdinal is null
+            || secondSubroutineId is { } second && (!StableIdentifier.TryValidate(second.Value) || second == subroutineId)
+            || secondSubroutineOrdinal is { } secondOrdinal && secondOrdinal <= subroutineOrdinal)
+        {
+            throw new ArgumentException("A second broken subroutine follows the first in printed order.", nameof(secondSubroutineId));
+        }
+
+        SecondSubroutineId = secondSubroutineId;
+        SecondSubroutineOrdinal = secondSubroutineOrdinal;
 
         if (!StableIdentifier.TryValidate(subroutineId.Value))
         {
@@ -726,6 +739,15 @@ public sealed record RunBioroidAbilityParameters : ActionParameters
     [JsonInclude]
     [JsonRequired]
     public int SubroutineOrdinal { get; private set; }
+
+    /// <summary>VP-BIOROID-MULTI-BREAK: the second subroutine one use breaks; omitted while none.</summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public SubroutineId? SecondSubroutineId { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? SecondSubroutineOrdinal { get; private set; }
 
     [JsonIgnore]
     public int ClickCost => Cost.Amount;
@@ -1624,7 +1646,9 @@ public sealed class PendingDecision
             bioroid.SubroutineId,
             bioroid.AbilityKey,
             bioroid.Cost,
-            bioroid.SubroutineOrdinal),
+            bioroid.SubroutineOrdinal,
+            bioroid.SecondSubroutineId,
+            bioroid.SecondSubroutineOrdinal),
         NoActionParameters => new NoActionParameters(),
         TriggerChoiceParameters trigger => new TriggerChoiceParameters(trigger.TriggerId),
         TriggerOrderParameters order => new TriggerOrderParameters(order.TriggerId),

@@ -2011,6 +2011,13 @@ public sealed record BioroidAbilityUsedEventPayload : EngineEventPayload
     {
     }
 
+    /// <summary>VP-BIOROID-MULTI-BREAK: the second subroutine the use broke (Ansel 2.0); omitted while none.</summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public SubroutineId? SecondSubroutineId { get; private set; }
+
+    internal BioroidAbilityUsedEventPayload WithSecondSubroutine(SubroutineId? second) => this with { SecondSubroutineId = second };
+
     /// <summary>EL-RUNNER-ICE-ABILITY: the credits a credit-cost break ability paid (N-Pot); 0 for a lost click.</summary>
     [JsonInclude]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
@@ -2464,7 +2471,7 @@ public sealed record EngineEvent
         IceRezzedEventPayload value => new EngineEvent(Version, Sequence, Kind, new IceRezzedEventPayload(value.Version, value.RunId, value.IceId)),
         SubroutinesBrokenEventPayload value => new EngineEvent(Version, Sequence, Kind, new SubroutinesBrokenEventPayload(value.Version, value.RunId, value.EncounterId, value.BreakerId, value.BrokenCount)),
         IceSubroutineJackOutEventPayload value => new EngineEvent(Version, Sequence, Kind, new IceSubroutineJackOutEventPayload(value.Version, value.RunId, value.EncounterId, value.IceId, value.SubroutineId)),
-        BioroidAbilityUsedEventPayload value => new EngineEvent(Version, Sequence, Kind, new BioroidAbilityUsedEventPayload(value.Version, value.RunId, value.EncounterId, value.IceId, value.SubroutineId, value.AbilityKey, value.ClickCost, value.CreditCost)),
+        BioroidAbilityUsedEventPayload value => new EngineEvent(Version, Sequence, Kind, new BioroidAbilityUsedEventPayload(value.Version, value.RunId, value.EncounterId, value.IceId, value.SubroutineId, value.AbilityKey, value.ClickCost, value.CreditCost).WithSecondSubroutine(value.SecondSubroutineId)),
         BreakerPumpedEventPayload value => new EngineEvent(Version, Sequence, Kind, new BreakerPumpedEventPayload(value.Version, value.RunId, value.BreakerId)),
         EncounterInitializedEventPayload value => new EngineEvent(Version, Sequence, Kind, new EncounterInitializedEventPayload(value.Version, value.RunId, value.EncounterId, value.IceId, value.SubroutineCount)),
         EncounterCompletedEventPayload value => new EngineEvent(Version, Sequence, Kind, new EncounterCompletedEventPayload(value.Version, value.RunId, value.EncounterId)),
@@ -3024,9 +3031,10 @@ public static class EngineEventValidator
                 RequireId(value.IceId.Value, $"{path}.payload.iceId", "card", violations);
                 RequireId(value.SubroutineId.Value, $"{path}.payload.subroutineId", "subroutine", violations);
                 RequireId(value.AbilityKey, $"{path}.payload.abilityKey", "ability", violations);
-                if (value.CreditCost > 0 ? value.ClickCost != 0 : value.ClickCost != 1)
+                // VP-BIOROID-MULTI-BREAK: two lost clicks for Ansel 2.0.
+                if (value.CreditCost > 0 ? value.ClickCost != 0 : value.ClickCost is < 1 or > EncounteredBioroidAbilitySpec.MaxBreakCount)
                 {
-                    Add(violations, "event.invalid-bioroid-click-cost", $"{path}.payload.clickCost", "A bioroid ability event must carry exactly one lost click.");
+                    Add(violations, "event.invalid-bioroid-click-cost", $"{path}.payload.clickCost", "A bioroid ability event must carry its lost clicks.");
                 }
 
                 break;

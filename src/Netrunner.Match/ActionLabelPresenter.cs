@@ -113,7 +113,9 @@ public static class ActionLabelPresenter
             case RunBreakerParameters pump:
                 return action.Description.Replace($"Pump {pump.BreakerId.Value}", $"Boost {Card(pump.BreakerId)} strength", StringComparison.Ordinal);
             case RunBioroidAbilityParameters bioroid:
-                return $"Break subroutine {bioroid.SubroutineOrdinal + 1} on {Card(bioroid.IceId)} · "
+                return (bioroid.SecondSubroutineOrdinal is { } second
+                        ? $"Break subroutines {bioroid.SubroutineOrdinal + 1} and {second + 1} on {Card(bioroid.IceId)} · "
+                        : $"Break subroutine {bioroid.SubroutineOrdinal + 1} on {Card(bioroid.IceId)} · ")
                     + Cost(bioroid.Cost, Card(bioroid.IceId), null, cardName);
             case IceSubroutineChoiceParameters ice:
                 return ice.Choice switch

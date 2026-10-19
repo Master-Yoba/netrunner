@@ -406,3 +406,111 @@ The third round's one: the turn frame's clone kept no follow-up run, so Aircheck
 reaction asked for a decision after it (Zahya's optional gain). The clone and the one rebuild that keeps the frame's
 stage now carry it. The other VP.5a fields survive every copy: the run's state and persistent context pass them on, and
 a card filter's excluded subtype is part of its equality.
+
+### VP.5b: the gaps writing VP.5's specs found (19 October 2026)
+
+Writing the specs found six primitives that VP.5a's pass had judged expressible. They are proven on probe cards 90061
+to 90067 (`VantagePointBindingGapTests`):
+- **VP-TRAP-ICE:** `IceType.Trap`, for ICE with none of the three breaker types (Vicsek: "Trap - AP - Observer"). Only a
+  breaker that interfaces with every piece of ICE (Mayfly) breaks it, or a typed one while the ICE gains every type
+  (Chromatophores). No icebreaker interfaces with traps alone.
+- **VP-BIOROID-MULTI-BREAK:** an encountered-ICE break ability may cost two lost clicks and break up to two subroutines
+  (Ansel 2.0). Each use names its subroutine, or two in printed order (`SecondSubroutineId`, omitted while unused). The
+  engine and the validator share the offers, which are each unbroken subroutine and each pair. The bots' encounter planner
+  counts a pair as one use.
+- **VP-OPPONENT-ABILITY:** `BehaviorPaidAbility.UsedByOpponent`: only the card's opponent uses the ability, and they pay
+  for and resolve it (Rotary's "Only the Corp can use this ability"). The engine and the validator share one rule for
+  the side that uses an ability.
+- **VP-SWAP-WITH:** `SwapInstalledIce` may name its first piece of ICE in its argument: `self`, the source (ezaM), or a
+  binding (`trigger-subject`, the ICE Sipa's Runner just passed). Its target is the chosen ICE. With none chosen,
+  nothing is swapped.
+- **VP-TAG-COST:** a card's play cost of tags (`BehaviorCostKind.Tags`) removes the Runner's tags, whoever plays the card,
+  and the card can't be played while the Runner has too few (Unleash). Before, plays took only credit, click and trash
+  costs.
+- **VP-DECK-BOTTOM:** a card a move takes from a deck into that same deck goes to its bottom (ezaM's look at R&D's top).
+  Before, a move within one zone did nothing.
+
+## VP.5 — Batch 2 (19 October 2026)
+
+28 cards on `feat/vp5-batch2`, in one PR with VP.5b's primitives:
+- **Runner:** Chain Reaction, The Tungsten Tailor, Lampades, Stick and Poke, Kompromat, Rotary, Baker, Aircheck, Beta
+  Build and Sipa.
+- **Corp:** Ansel 2.0, Reverb, Sleipnir, Vertigo, Perfect Recall, ezaM, Lionsmane, Vicsek, Unleash, The Red Room,
+  Lethe, Paywall, Sacrifice Zone Expansion, Event Horizon, Flywheel, Reanimation Protocol, Flagship and Shackleton Grid.
+
+- **Specs:** `VantagePointBatch2CorpSpecs` and `VantagePointBatch2RunnerSpecs`, composed by `VantagePointBehaviorCatalog`
+  (version `startup-vp.5`). Elevation's catalog is unchanged.
+- **Tests:** 49 card tests (`VantagePointBatch2CorpTests`, `VantagePointBatch2RunnerTests`), at least one per card.
+- **Registry and coverage:** VP.5 complete. The report shows Vantage Point 56 of 66 registered, tested and complete.
+
+### What binding found
+
+Beyond VP.5b's six primitives, the batch needed three Core changes:
+- **VP-ICE-TRASHES-ITSELF (Vicsek):** found by the fuzz. A subroutine that trashes the encountered ICE ends its
+  encounter, and the Runner moves on from its position, as when an install trashes it. The run's cursor may then sit
+  just outside the remaining ICE.
+- **Sipa:** swapping the ICE just passed leaves the cursor empty while its completed encounter stays on record.
+- **Unleash:** the validator's card-play frame accepts VP.5b's tag cost.
+
+Reanimation Protocol with no ICE in Archives rezzes nothing (also a fuzz find). Lethe's bounce and Event Horizon's
+program trash choose as many as able: a zone-count condition can't read the rig.
+
+### Simulation decks
+
+- `data/decks/vantage-point-simulation-decks.json` now has eight decks, all legal under Startup 2026 with Vantage Point
+  counted legal (`CardFormatTests`). Between them they hold every VP.5 card.
+- **Four of VP.3's decks** take VP.5's cards in like-for-like swaps within the deck's faction:
+  - Editorial Division: Lethe and Paywall;
+  - Weyland: Sacrifice Zone Expansion, Event Horizon, Flywheel, Reanimation Protocol, Flagship and Shackleton Grid;
+  - Vic: Kompromat and Rotary;
+  - Tāo: Aircheck, Beta Build, Sipa and Baker (with the deck's stealth credits).
+- **Three new decks** come from the Core Battle Box's lists in the same way:
+  - LEO Construction: Ansel 2.0, Reverb, Sleipnir, Vertigo and Perfect Recall;
+  - PT Untaian: ezaM, Lionsmane, Vicsek, Unleash and The Red Room;
+  - Topan: Chain Reaction, The Tungsten Tailor, Lampades and Stick and Poke.
+- **The first vantage-point fuzz** rejected 46 of 360 games, on Vicsek's self-trash and Reanimation Protocol (both
+  above). After the fixes, all 360 games ended in a terminal state and 45 sampled replays verified (mean 456.4 actions).
+
+### Ladder and the misplay sweep
+
+- **Ladder:** `scripts/ai-ladder.sh --content vantage-point --entrants random,contract,easy,standard --seeds-per-pairing 3`
+  over the eight decks played 720 games, with 0 errors and 3 capped. Both sides order random < contract < easy <
+  standard.
+- **The sweep:** `ai-offers` over the saved games found the standard bots never took these plays:
+  - **Kompromat and Beta Build** were never played, and **Aircheck** was played 3 times in 789 offers. A run event's
+    value now counts its run-end bad publicity, its run after the run, and its program installed from the stack.
+  - **Baker** was never installed, nor its run used. A redirect to HQ or R&D is now worth what that server holds over the
+    one attacked, while stealth credits are to hand or a rig card places them as the run begins. Baker moved to the Tāo
+    deck, whose stealth cards can pay for the redirect.
+  - **Flagship** was never rezzed: it read as a scoring upgrade. A no-success upgrade, or one reacting to credits from
+    outside the pool, is now run-relevant.
+  - The Corp values Rotary's trash ability as trashing a Runner card. It is still rarely worth a click in these games.
+- **After the fixes:** every card above is played, installed or rezzed (Baker's run 33 times). The ladder's order holds,
+  with 0 errors.
+- **Scope:** these paths read vocabulary only Vantage Point cards use, so the policy versions are unchanged.
+- **Fixtures:** `VantagePointBotTests` checks each fix at a saved decision of this ladder
+  (`tests/Netrunner.Match.Tests/Fixtures/saved-games/vp5-*`). VP.3's fixtures were recorded on the VP.3 catalog, which the
+  Startup pool no longer plays, so its cases move to decisions of this ladder too.
+
+### E6
+
+`scripts/core-growth.sh ... --range slice-VP.5=561bb46..<head>` counts VP.5b's primitives and the cards together: 13 Core
+files, two new terms of vocabulary, 27 of 28 cards with no Core change. By hand, beyond VP.5b, three cards needed a Core
+change (Vicsek, Sipa and Unleash): **25 of 28 (89%)**.
+
+**Review (PR #156).** The first round's two findings:
+- **Valid:** Ansel 2.0's pairs now follow printed order, so a subroutine Stick and Poke adds (listed first, numbered last)
+  pairs with each printed one.
+- **Not a change:** Unleash's resolve stays optional. The card says "You may resolve 1 subroutine on that ice".
+
+The second round's two, both Beta Build's: it now shuffles the stack after its search, and with no program to install
+it remembers nothing and the run goes on.
+
+### Rulings and deviations
+
+| Card | Note |
+|---|---|
+| Unleash | One mode per subroutine position, offered while that subroutine can resolve outside an encounter. A subroutine that needs an encounter's choice frame, or changes the run, isn't offered. |
+| Sipa | "Another installed piece of ICE": choosing the passed ICE itself swaps nothing, the same as declining. |
+| Mycoweb (Elevation) | The Startup catalog keeps Elevation's catalog unchanged, so Mycoweb offers only the Elevation pool's subroutines, none of VP.5's sentries or code gates. VP.8 rebuilds it over the Startup pool. |
+

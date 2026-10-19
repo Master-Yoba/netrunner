@@ -22,6 +22,17 @@ internal static class AbilityLifecycleRules
     /// Archives) lets the source move to its play area, discard or
     /// removed-from-game zone once its costs are paid.
     /// </summary>
+    /// <summary>
+    /// VP-OPPONENT-ABILITY: an ability whose effect trashes its own source (Rotary: "Trash this hardware") finishes with
+    /// the source in its owner's trash.
+    /// </summary>
+    internal static bool IsSelfTrashEffect(BehaviorPaidAbility? ability, AbilityFrame frame, CardInstanceState source, ZoneState? currentZone) =>
+        frame.Stage is AbilityLifecycleStage.AwaitingChild or AbilityLifecycleStage.Complete
+        && source.Id == frame.SourceCardId
+        && ability?.Key == frame.AbilityKey
+        && ability.Instructions.Any(static instruction => instruction.Kind == BehaviorInstructionKind.TrashSelf)
+        && currentZone?.Kind == (source.OwnerSide == PlayerSide.Corp ? ZoneKind.CorpDiscard : ZoneKind.RunnerHeap);
+
     internal static bool IsSelfPlay(BehaviorPaidAbility? ability, AbilityFrame frame, CardInstanceState source, ZoneState? currentZone) =>
         frame.Stage is AbilityLifecycleStage.AwaitingChild or AbilityLifecycleStage.Complete
         && source.Id == frame.SourceCardId

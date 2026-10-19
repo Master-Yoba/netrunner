@@ -30,6 +30,10 @@ public sealed partial class CorpHeuristicPolicy
                 - HeuristicContext.CreditCost(ability))
             return Value(-100, "ability/play-it-cannot-pay-for", approximate: true);
         int benefit = Effects(context, declaration.Instructions, card, context.Features.Side);
+        // VP.5 (misplay sweep): an ability only the Corp uses on a Runner card trashes that card (Rotary, a console, while the
+        // Runner is tagged); its own-card trash read as a loss, and it was never used.
+        if (declaration.UsedByOpponent && HeuristicContext.Flatten(declaration.Instructions).Any(instruction => instruction.Kind == BehaviorInstructionKind.TrashSelf))
+            benefit = 300;
         // v30: Petty Cash from Archives refunds its click: a free gain, and only before the turn's first action finishes.
         if (NowOrNever(declaration.Conditions) && context.Definition(card)?.Behavior?.Instructions is { } played
             && HeuristicContext.Flatten(played).Any(instruction => instruction.Kind == BehaviorInstructionKind.GainClicks))

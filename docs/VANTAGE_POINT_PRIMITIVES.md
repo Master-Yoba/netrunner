@@ -230,3 +230,15 @@ Binding VP.5's cards found seven more, which land in VP.5a before those cards:
 
 All seven landed in VP.5a (the progress record has each contract). `VP-ADVANCEMENT-COST` needed only a trigger condition
 for "a run on another server", and `VP-RETURN-AT-RUN-END` also made a run event's abilities active as its run begins.
+
+Writing VP.5's specs found six more that the audit had judged expressible. They land in VP.5b, on probe cards
+90061 to 90067 (`VantagePointBindingGapTests`):
+
+| Id | What | Cards |
+|---|---|---|
+| `VP-TRAP-ICE` | ICE with none of the three breaker types: only a breaker for every piece of ICE breaks it. | Vicsek |
+| `VP-BIOROID-MULTI-BREAK` | A bioroid ability costing two lost clicks that breaks up to two subroutines. | Ansel 2.0 |
+| `VP-OPPONENT-ABILITY` | An ability on a card that only its opponent can use, paid and resolved by them. | Rotary |
+| `VP-SWAP-WITH` | A swap of a named piece of ICE (the source, or the ICE just passed) with a chosen one. | ezaM, Sipa |
+| `VP-TAG-COST` | A Corp card's play cost that removes the Runner's tags. | Unleash |
+| `VP-DECK-BOTTOM` | A deck's card moved into that deck goes to its bottom. | ezaM |

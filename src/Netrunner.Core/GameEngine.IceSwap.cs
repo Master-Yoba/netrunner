@@ -87,10 +87,44 @@ public static partial class GameEngine
         AdvanceBehaviorCursor(working, frame.With(setAside: remainingSetAside, clearSetAsideZone: remainingSetAside.Count == 0));
     }
 
+    /// <summary>VP-SWAP-WITH: the swap's named first piece of ICE is its source (ezaM: "Swap this ice").</summary>
+    internal const string SwapWithSelf = "self";
+
+    /// <summary>
+    /// VP-SWAP-WITH: a behavior whose instructions swap its own source may finish with that source in another ICE
+    /// position. Shared with the validator.
+    /// </summary>
+    internal static bool MaySwapItsSource(CardBehaviorDefinition definition, string? abilityKey, ZoneKind currentZone) =>
+        currentZone == ZoneKind.ServerIce
+        && BehaviorRunRules.FlattenInstructions(abilityKey is null
+                ? definition.Instructions
+                : definition.PaidAbilities.FirstOrDefault(ability => string.Equals(ability.Key, abilityKey, StringComparison.Ordinal))?.Instructions ?? [])
+            .Any(static instruction => instruction.Kind == BehaviorInstructionKind.SwapInstalledIce
+                && string.Equals(instruction.Argument, SwapWithSelf, StringComparison.Ordinal));
+
     private static void ResolveSwapInstalledIce(
         WorkingState working, BehaviorResolutionFrame frame, BehaviorInstruction instruction)
     {
-        CardInstanceId[] selected = ResolveBehaviorCards(working, frame, instruction.Target).ToArray();
+        CardInstanceId[] selected = instruction.Argument is not null
+            && instruction.Target is { Kind: BehaviorTargetKind.ChosenCard } chosenTarget
+            && IsProvenEmptyChosenCard(frame, chosenTarget)
+                ? []
+                : ResolveBehaviorCards(working, frame, instruction.Target).ToArray();
+        // VP-SWAP-WITH: the first piece of ICE named by the instruction: the source, or a binding (the trigger subject).
+        if (instruction.Argument is { } namedKey)
+        {
+            CardInstanceId[] named = string.Equals(namedKey, SwapWithSelf, StringComparison.Ordinal)
+                ? [frame.SourceCardId]
+                : frame.Bindings.SingleOrDefault(binding => string.Equals(binding.Key, namedKey, StringComparison.Ordinal))?.CardIds.ToArray() ?? [];
+            if (selected.Length == 0 || named.SequenceEqual(selected))
+            {
+                // "Another installed piece of ICE" may be none, or the named one itself: nothing is swapped.
+                return;
+            }
+
+            selected = [.. named, .. selected];
+        }
+
         if (selected.Length != 2 || selected[0] == selected[1])
             throw new ResolutionFailureException("An ICE swap requires two distinct installed pieces of ICE.");
         CardInstanceState first = GetCard(working, selected[0]);
@@ -128,9 +162,15 @@ public static partial class GameEngine
             ZoneState attackedIce = working.Zones.Single(zone => zone.Kind == ZoneKind.ServerIce
                 && zone.ServerId == run.AttackedServer);
             CardInstanceId current = attackedIce.CardIds[run.CurrentIceIndex];
-            if (run.Encounter is not null && current != run.CurrentIceId)
+            // VP-SWAP-WITH: a completed encounter's ICE may move once passed (Sipa swaps the ICE it just passed).
+            if (run.Encounter is { Status: RunEncounterStatus.Initialized } && current != run.CurrentIceId)
                 throw new ResolutionFailureException("An active encounter cannot be replaced by a score/steal ICE swap.");
-            working.RunState = run.WithTiming(run.Step, run.CurrentIceIndex, current,
+            // A passed ICE swapped away leaves the cursor empty, as a passed ICE trashed does; the Runner moves on by position.
+            CardInstanceId? cursor = run.Encounter is { Status: RunEncounterStatus.Complete } passed && current != passed.IceId
+                && run.CurrentIceId == passed.IceId
+                    ? null
+                    : current;
+            working.RunState = run.WithTiming(run.Step, run.CurrentIceIndex, cursor,
                 run.Successful, run.Unsuccessful, run.EndReason, run.Priority, run.Encounter, run.AccessState);
         }
 

@@ -20,8 +20,23 @@ public sealed partial class RunnerHeuristicPolicy
             int success = definition.Behavior?.Triggers
                 .Where(trigger => trigger.Occurrence == OccurrenceKind.RunSuccessful && trigger.Scope == BehaviorTriggerScope.Self)
                 .Sum(trigger => Effects(context, trigger.Instructions, card, PlayerSide.Runner)) ?? 0;
+            // VP.5 (misplay sweep): what a Vantage Point run event adds past the run: bad publicity when its successful run ends
+            // (Kompromat), a run after it (Aircheck), and a program from the stack as it begins (Beta Build). Kompromat and Beta
+            // Build were never played.
+            success += definition.Behavior?.Triggers
+                .Where(trigger => trigger.Occurrence == OccurrenceKind.RunEnded && trigger.Scope == BehaviorTriggerScope.Self
+                    && trigger.RunOutcomeRequirement == RunOutcomeRequirement.Successful
+                    && HeuristicContext.Flatten(trigger.Instructions).Any(instruction => instruction.Kind
+                        is BehaviorInstructionKind.TakeBadPublicity or BehaviorInstructionKind.RunAfterRun))
+                .Sum(trigger => Effects(context, trigger.Instructions, card, PlayerSide.Runner)
+                    + (HeuristicContext.Flatten(trigger.Instructions).Any(instruction => instruction.Kind == BehaviorInstructionKind.RunAfterRun) ? 200 : 0)) ?? 0;
+            int begins = definition.Behavior?.Triggers
+                .Where(trigger => trigger.Occurrence == OccurrenceKind.RunBegan
+                    && HeuristicContext.Flatten(trigger.Instructions).Any(instruction => instruction is
+                    { Kind: BehaviorInstructionKind.InstallCard, SourceZone: BehaviorZone.Stack }))
+                .Sum(trigger => Effects(context, trigger.Instructions, card, PlayerSide.Runner)) ?? 0;
             AgentUtility utility = Run(context, context.Server(play.TargetServerId), runEvent.HostedCredits,
-                (runEvent.BreachAccessModifier?.Delta ?? 0) * 140 + (runEvent.SuccessDraw?.DrawCount ?? 0) * context.DrawValue + kept,
+                (runEvent.BreachAccessModifier?.Delta ?? 0) * 140 + (runEvent.SuccessDraw?.DrawCount ?? 0) * context.DrawValue + kept + begins,
                 upfrontCost: play.CreditCost, knownSuccessValue: success, gripSpent: 1);
             return utility with { Reason = "run/event-benefit-and-issued-cost" };
         }
@@ -41,6 +56,18 @@ public sealed partial class RunnerHeuristicPolicy
         if (declaration.Instructions.FirstOrDefault(instruction => instruction.Kind == BehaviorInstructionKind.StartRun)?.RunOperand is { } run)
         {
             AgentServer? server = context.Features.Board.Servers.FirstOrDefault(server => server.Kind == run.ServerKind);
+            // VP.5 (misplay sweep): a run whose approach a stealth credit may redirect to HQ or R&D (Baker) passes the
+            // attacked server's ICE and breaches the better of the two, while a stealth credit is to hand. It was never used.
+            // Stealth credits may also arrive as the run begins (Methuselah); without any, the run keeps the option over a basic one.
+            bool redirects = context.Definition(card)?.Behavior?.Triggers.Any(trigger => trigger.Occurrence == OccurrenceKind.ServerWouldBeApproached) == true;
+            bool stealthToHand = RunnerEncounterPlanner.RestrictedCredits(context, "stealth") > 0
+                || context.Features.Board.RunnerRig.Any(installed => context.Definition(installed)?.Behavior?.Triggers.Any(trigger =>
+                    trigger.Occurrence == OccurrenceKind.RunBegan && HeuristicContext.Flatten(trigger.Instructions)
+                        .Any(instruction => instruction.Kind == BehaviorInstructionKind.PlaceHostedCredits)) == true);
+            int redirect = !redirects ? 0 : stealthToHand
+                ? Math.Max(20, context.Features.Board.Servers.Where(candidate => candidate.Kind is ServerKind.Headquarters or ServerKind.RAndD)
+                    .Select(candidate => RunnerValues.Server(context, candidate)).DefaultIfEmpty(0).Max() - RunnerValues.Server(context, server))
+                : 20;
             int access = (run.BreachAccessDeltaPerCounter ?? 0) * (card?.Counters.Where(counter => counter.CounterName == run.SourceCounterName).Sum(counter => counter.Count) ?? 0);
             int payout = context.Definition(card)?.Behavior?.Triggers.Where(trigger => trigger.Occurrence == OccurrenceKind.RunEnded)
                 .SelectMany(trigger => trigger.Instructions).Where(instruction => instruction.Kind == BehaviorInstructionKind.TakeHostedCredits)
@@ -50,8 +77,8 @@ public sealed partial class RunnerHeuristicPolicy
                     .Sum(id => RunnerValues.Card(context, context.Card(id)))
                 + ability.Costs.Where(cost => cost.Kind is BehaviorCostKind.TrashSelf or BehaviorCostKind.RemoveSelfFromGame)
                     .Sum(_ => RunnerValues.Card(context, card));
-            return Run(context, server, extraValue: access * 140 + payout * context.CreditValue
-                - (access == 0 && payout == 0 ? 30 : 0) - consumables,
+            return Run(context, server, extraValue: access * 140 + payout * context.CreditValue + redirect
+                - (access == 0 && payout == 0 && redirect == 0 ? 30 : 0) - consumables,
                 upfrontCost: HeuristicContext.CreditCost(ability));
         }
         int benefit = Effects(context, declaration.Instructions, card, PlayerSide.Runner);
@@ -158,6 +185,12 @@ public sealed partial class RunnerHeuristicPolicy
                     total += context.Features.Board.Run?.Breach.Chosen.Where(card => card is not null).Select(card => RunnerValues.Trash(context, card)).DefaultIfEmpty(0).Max() ?? 0;
                     break;
                 case BehaviorInstructionKind.SwapInstalledIce: total += BestSwap(context, []); break;
+                // VP.5 (misplay sweep): a redirect to a central server is worth what that server holds over the one attacked
+                // (Baker's Archives run turned on HQ or R&D).
+                case BehaviorInstructionKind.ChangeAttackedServer when Enum.TryParse(instruction.Argument, out ServerKind redirect):
+                    total += Math.Max(0, RunnerValues.Server(context, context.Features.Board.Servers.FirstOrDefault(server => server.Kind == redirect))
+                        - RunnerValues.Server(context, RunnerValues.Attacked(context)));
+                    break;
                 case BehaviorInstructionKind.EndRun or BehaviorInstructionKind.JackOut: total -= Math.Max(300, RunnerValues.Server(context, RunnerValues.Attacked(context))); break;
                 case BehaviorInstructionKind.AddTags: total -= RunnerValues.TagRisk(context, amount); break;
                 // v23: a card choice from a grip that holds nothing it takes chooses nothing (Madani's empty hosting).

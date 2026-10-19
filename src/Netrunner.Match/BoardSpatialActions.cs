@@ -54,6 +54,9 @@ public static class BoardSpatialActions
                     source = p.IceId.Value;
                     family += ":" + p.AbilityKey;
                     targets.Add(new(BoardTargetKind.Subroutine, p.SubroutineOrdinal.ToString(System.Globalization.CultureInfo.InvariantCulture), "Subroutine"));
+                    // VP-BIOROID-MULTI-BREAK: "break up to 2" names a second subroutine (Ansel 2.0).
+                    if (p.SecondSubroutineOrdinal is { } second)
+                        targets.Add(new(BoardTargetKind.Subroutine, second.ToString(System.Globalization.CultureInfo.InvariantCulture), "Second subroutine"));
                     break;
                 case (ActionKind.ChooseCard or ActionKind.TrashProgram, CardChoiceParameters p) when decision.Kind != DecisionKind.TurnDiscard:
                     automatic = true; Card(p.CardId.Value); break;
