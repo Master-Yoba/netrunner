@@ -61,11 +61,11 @@ public sealed class VantagePointCardDataTests
         BehaviorCatalog elevation = ElevationBehaviorCatalog.Create();
         BehaviorCatalog catalog = startup.CreateBehavior();
         Assert.Equal(VantagePointBehaviorCatalog.Version, catalog.Version);
-        // The pool plays Elevation's cards and the registered Vantage Point batches (VP.3's 28), and Elevation's catalog is
+        // The pool plays Elevation's cards and the registered Vantage Point batches (VP.3's and VP.5's 56), and Elevation's catalog is
         // unchanged: each of its cards keeps its behavior fingerprint.
         string[] registered = catalog.AllDefinitionIds.Select(static id => id.Value)
             .Where(static code => code.StartsWith("36", StringComparison.Ordinal)).Order(StringComparer.Ordinal).ToArray();
-        Assert.Equal(28, registered.Length);
+        Assert.Equal(56, registered.Length);
         Assert.Equal(elevation.AllDefinitionIds.ToHashSet(),
             catalog.AllDefinitionIds.Where(static id => !id.Value.StartsWith("36", StringComparison.Ordinal)).ToHashSet());
         Assert.All(elevation.AllDefinitionIds, id => Assert.Equal(elevation.GetCardBehaviorFingerprint(id), catalog.GetCardBehaviorFingerprint(id)));

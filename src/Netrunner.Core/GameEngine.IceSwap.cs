@@ -162,9 +162,15 @@ public static partial class GameEngine
             ZoneState attackedIce = working.Zones.Single(zone => zone.Kind == ZoneKind.ServerIce
                 && zone.ServerId == run.AttackedServer);
             CardInstanceId current = attackedIce.CardIds[run.CurrentIceIndex];
-            if (run.Encounter is not null && current != run.CurrentIceId)
+            // VP-SWAP-WITH: a completed encounter's ICE may move once passed (Sipa swaps the ICE it just passed).
+            if (run.Encounter is { Status: RunEncounterStatus.Initialized } && current != run.CurrentIceId)
                 throw new ResolutionFailureException("An active encounter cannot be replaced by a score/steal ICE swap.");
-            working.RunState = run.WithTiming(run.Step, run.CurrentIceIndex, current,
+            // A passed ICE swapped away leaves the cursor empty, as a passed ICE trashed does; the Runner moves on by position.
+            CardInstanceId? cursor = run.Encounter is { Status: RunEncounterStatus.Complete } passed && current != passed.IceId
+                && run.CurrentIceId == passed.IceId
+                    ? null
+                    : current;
+            working.RunState = run.WithTiming(run.Step, run.CurrentIceIndex, cursor,
                 run.Successful, run.Unsuccessful, run.EndReason, run.Priority, run.Encounter, run.AccessState);
         }
 

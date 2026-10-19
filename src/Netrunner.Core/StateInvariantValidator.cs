@@ -1683,7 +1683,10 @@ public static partial class StateInvariantValidator
                 && run.CurrentIceId is { } departedIce
                 && state.Cards.Any(card => card.Id == departedIce
                     && card.OwnerSide == PlayerSide.Corp && card.ZoneId != iceZone.Id);
-            if (!destroyedCursor && (run.CurrentIceIndex < -1 || run.CurrentIceIndex >= iceZone.CardIds.Count))
+            // A removed encounter cursor may sit just outside the remaining ICE: the ICE it encountered trashed itself
+            // (VP-ICE-TRASHES-ITSELF, Vicsek), and moving inward steps to the next protector.
+            if (!destroyedCursor && (run.CurrentIceIndex < -1 || run.CurrentIceIndex > iceZone.CardIds.Count
+                || run.CurrentIceIndex == iceZone.CardIds.Count && !removedEncounterCursor))
             {
                 Add(violations, "run.invalid-ice-index", $"{path}.currentIceIndex", "Current ICE index must be -1 or an index in the attacked server's ordered ICE zone.");
             }
@@ -2399,10 +2402,10 @@ public static partial class StateInvariantValidator
                 or RunTimingStep.JackOutDecision
                 or RunTimingStep.MoveInward
             && run.Encounter is { Status: RunEncounterStatus.Complete } encounter
-            && !iceZone.CardIds.Contains(encounter.IceId)
+            // The passed ICE left the Runner's position: trashed, or swapped elsewhere (VP-SWAP-WITH, Sipa).
+            && (run.CurrentIceIndex >= iceZone.CardIds.Count || iceZone.CardIds[run.CurrentIceIndex] != encounter.IceId)
             && state.Cards.Any(card => card.Id == encounter.IceId
-                && card.OwnerSide == PlayerSide.Corp
-                && card.ZoneId != iceZone.Id);
+                && card.OwnerSide == PlayerSide.Corp);
     }
 
     /// <summary>
@@ -8522,8 +8525,8 @@ public static partial class StateInvariantValidator
             foreach (BehaviorCost behaviorCost in definition.Costs)
             {
                 // A "Double" card's additional click is paid with the action
-                // and is not part of the frozen credit cost.
-                if (behaviorCost.Kind == BehaviorCostKind.Clicks)
+                // and is not part of the frozen credit cost; nor is a tag cost (VP-TAG-COST, Unleash).
+                if (behaviorCost.Kind is BehaviorCostKind.Clicks or BehaviorCostKind.Tags)
                 {
                     continue;
                 }

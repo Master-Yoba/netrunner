@@ -446,7 +446,11 @@ public sealed partial class CorpHeuristicPolicy
     private static bool RunRelevant(CardEvaluationDescriptor definition) => definition.Behavior?.Triggers.Any(trigger =>
         trigger.Occurrence is OccurrenceKind.ServerApproached or OccurrenceKind.RunEnded or OccurrenceKind.IceEncountered
             or OccurrenceKind.RunSuccessful || trigger.RequireAgendaStolenDuringRun) == true
-        || definition.Behavior?.PaidAbilities.Count > 0;
+        || definition.Behavior?.PaidAbilities.Count > 0
+        // VP.5 (misplay sweep): Flagship works during a run on its server, and Shackleton Grid when the Runner spends credits
+        // from outside the pool; Flagship, read as a scoring upgrade, was never rezzed.
+        || definition.Behavior?.RunsCannotSucceed == true
+        || definition.Behavior?.Triggers.Any(trigger => trigger.Occurrence == OccurrenceKind.CreditsSpentFromOutsidePool) == true;
 
     /// <summary>What rezzing the unrezzed ICE protecting the Corp's installed agendas costs.</summary>
     private static int AgendaIceReserve(HeuristicContext context) => context.Features.Board.Servers

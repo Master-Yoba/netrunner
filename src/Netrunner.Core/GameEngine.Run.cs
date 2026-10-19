@@ -1076,6 +1076,30 @@ public static partial class GameEngine
                 + "its subroutines cannot be resolved.");
         }
 
+        // VP-ICE-TRASHES-ITSELF: a subroutine trashed the encountered ICE (Vicsek: "Trash this ice"). Its encounter ends
+        // with the remaining subroutines unresolved, and the Runner moves on from its position, as when an install
+        // trashes it (CR 26.03 8.5.10). The cursor counts the ICE inward of it; moving inward steps to the next.
+        ServerState attacked = working.Servers.Single(server => server.Id == run.AttackedServer);
+        if (!working.Zones.Single(zone => zone.Id == attacked.IceZoneId).CardIds.Contains(ice.Id))
+        {
+            RunState removed = run.WithLingeringEffects(run.LingeringEffects
+                    .Where(effect => effect.Expiry != RunLingeringEffectExpiry.Encounter).ToArray())
+                .WithTiming(
+                    RunTimingStep.MovementPaidWindow,
+                    run.CurrentIceIndex,
+                    null,
+                    run.Successful,
+                    run.Unsuccessful,
+                    run.EndReason,
+                    CreatePriority(RunPriorityWindowKind.MovementPaid),
+                    new RunEncounterState(encounter.Version, encounter.Id, encounter.IceId, RunEncounterStatus.Complete, encounter.Subroutines),
+                    run.AccessState);
+            Emit(working, EngineEventKinds.EncounterCompleted, new EncounterCompletedEventPayload(run.Id, encounter.Id));
+            SetRunTiming(working, removed);
+            QueueRunIceOccurrence(working, working.RunState!, OccurrenceKind.EncounterEnded, encounter.IceId);
+            return;
+        }
+
         // CR 6.5/9.8: every unbroken subroutine resolves in printed order;
         // broken subroutines are skipped, and an end-the-run subroutine stops
         // the remaining sequence.

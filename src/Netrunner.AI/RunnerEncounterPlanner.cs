@@ -7,7 +7,7 @@ namespace Netrunner.AI;
 internal static class RunnerEncounterPlanner
 {
     /// <summary>VP.3: the hosted credits on installed Runner cards with the subtype, which a cost restricted to it may spend.</summary>
-    private static int RestrictedCredits(HeuristicContext context, string subtype) =>
+    internal static int RestrictedCredits(HeuristicContext context, string subtype) =>
         context.Features.Board.RunnerRig.Where(card => context.Definition(card)?.Printed.Subtypes.Contains(subtype, StringComparer.Ordinal) == true)
             .Sum(card => card.Counters.Where(counter => counter.Purpose == CardCounterPurpose.HostedCredit).Sum(counter => counter.Count));
 

@@ -86,6 +86,9 @@ public sealed partial class RunnerHeuristicPolicy
             // v6: a better basic draw pays off over the coming turns (Verbal Plasticity).
             value += (definition.Behavior?.FirstBasicDrawReplacements ?? []).Sum(replacement => (replacement.DrawCount - 1) * context.DrawValue * 3);
             if (definition.Printed.Console) value += 180;
+            // VP.5 (misplay sweep): a program whose click-run may become an HQ or R&D run (Baker) is worth a run a turn; it was
+            // never installed.
+            if (definition.Behavior?.Triggers.Any(trigger => trigger.Occurrence == OccurrenceKind.ServerWouldBeApproached) == true) value += 250;
             if (context.Self.UsedMemory >= context.Self.MemoryLimit && definition.Printed.CardClass == RuntimeCardClass.Hardware) value += 170;
         }
         // v11: a setup deck builds its rig first; a virus deck values every virus.
