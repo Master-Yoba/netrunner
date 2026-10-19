@@ -84,6 +84,21 @@ public sealed class VantagePointBatch2CorpTests
         Assert.Null(state.RunState);
     }
 
+    // PR #156's review: a subroutine Stick and Poke gives Ansel 2.0 pairs with each printed one, though it is listed first.
+    [Fact]
+    [Trait("VantagePointCard", Ansel20)]
+    public void Ansel20PairsAGainedSubroutineWithAPrintedOne()
+    {
+        GameState state = Encounter(new ElevationBoard(PlayerSide.Runner) { StackFiller = 2 }
+            .Add("36008", Place.Rig)
+            .Add(Ansel20, Place.Ice, rezzed: true));
+        Assert.Equal(5, state.RunState!.Encounter!.Subroutines.Count);
+        int gained = state.RunState.Encounter.Subroutines[0].Ordinal;
+        Assert.Equal(4, gained);
+        Assert.Contains(Actions(state), action => action.Parameters is RunBioroidAbilityParameters pair
+            && pair.SubroutineOrdinal == 0 && pair.SecondSubroutineOrdinal == gained);
+    }
+
     [Fact]
     [Trait("VantagePointCard", Reverb)]
     public void ReverbCostsLessForEachOtherUnrezzedIce()

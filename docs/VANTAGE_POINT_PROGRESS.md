@@ -498,6 +498,11 @@ program trash choose as many as able: a zone-count condition can't read the rig.
 files, two new terms of vocabulary, 27 of 28 cards with no Core change. By hand, beyond VP.5b, three cards needed a Core
 change (Vicsek, Sipa and Unleash): **25 of 28 (89%)**.
 
+**Review (PR #156).** The first round's two findings:
+- **Valid:** Ansel 2.0's pairs now follow printed order, so a subroutine Stick and Poke adds (listed first, numbered last)
+  pairs with each printed one.
+- **Not a change:** Unleash's resolve stays optional. The card says "You may resolve 1 subroutine on that ice".
+
 ### Rulings and deviations
 
 | Card | Note |

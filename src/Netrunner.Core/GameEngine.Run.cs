@@ -3708,7 +3708,9 @@ public static partial class GameEngine
         EncounteredBioroidAbilitySpec ability,
         IReadOnlyList<RunSubroutineState> subroutines)
     {
-        RunSubroutineState[] unbroken = subroutines.Where(static value => !value.Broken && !value.Resolved).ToArray();
+        // By ordinal: a gained subroutine is listed first but numbered after the printed ones (Stick and Poke on Ansel 2.0).
+        RunSubroutineState[] unbroken = subroutines.Where(static value => !value.Broken && !value.Resolved)
+            .OrderBy(static value => value.Ordinal).ToArray();
         for (int first = 0; first < unbroken.Length; first++)
         {
             yield return new RunBioroidAbilityParameters(iceId, unbroken[first].Id, ability.Key, ability.Cost, unbroken[first].Ordinal);
