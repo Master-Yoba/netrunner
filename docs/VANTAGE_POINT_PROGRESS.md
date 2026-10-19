@@ -618,3 +618,6 @@ identity, a host and a hidden zone.
 - **Lotus Haze** couldn't move an upgrade to a central server with nothing installed, since it chose the server by a card
   in it. `MoveSourceToServerOf` may now name a central server by its zone. Lotus Haze chooses HQ, R&D, Archives, or a
   remote by one of its cards.
+
+The second round's one finding, valid: Lotus Haze could put a region in a root that already held one, which CR 3.6.5e
+forbids (Shackleton Grid to Mahkota Langit Grid's server). That move now leaves the region where it is.

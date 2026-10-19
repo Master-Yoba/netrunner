@@ -780,9 +780,12 @@ public static partial class GameEngine
                             ?? frame.SourceCardId
                         : frame.SourceCardId);
                     ZoneState from = ZoneForCard(working, upgrade.Id);
+                    // CR 3.6.5e: a move can't put a second region in a root (Shackleton Grid to Mahkota Langit Grid's server).
                     if (destination is { } server
                         && from.Kind == ZoneKind.ServerRoot
-                        && server.RootZoneId != from.Id)
+                        && server.RootZoneId != from.Id
+                        && !(IsRegion(working, upgrade.Id) && working.Zones.Single(zone => zone.Id == server.RootZoneId).CardIds
+                            .Any(rootCard => IsRegion(working, rootCard))))
                     {
                         MoveCard(working, upgrade, from, working.Zones.Single(zone => zone.Id == server.RootZoneId));
                         if (upgrade.Id != frame.SourceCardId)

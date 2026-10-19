@@ -235,6 +235,24 @@ public sealed class VantagePointBatch3Tests
             state.Zones.Single(zone => zone.CardIds.Contains(Card(state, PerfectRecall))).ServerId);
     }
 
+    // The second review of #157: a region can't join another region in a root (CR 3.6.5e), so it stays where it is.
+    [Fact]
+    [Trait("VantagePointCard", LotusHaze)]
+    public void LotusHazeDoesNotPutTwoRegionsInOneRoot()
+    {
+        GameState state = ToAbility(BeginWithoutPassing(new ElevationBoard()
+            .Add(LotusHaze, Place.CorpScore, counters: new Dictionary<string, int> { ["agenda"] = 3 })
+            .Add("36065", Place.Root, rezzed: true)
+            .Add("35082", Place.Root, server: ElevationBoard.Hq)), "lotus-haze-move");
+        state = Apply(state, static action => action.Parameters is AbilityActionParameters { AbilityKey: "lotus-haze-move" }).State;
+        state = ChooseCards(PassUntil(state, IsChoice), Card(state, "36065"));
+        state = ChooseOption(PassUntil(state, IsChoice), "hq");
+
+        state = RoundTrip(ToAction(state));
+        Assert.Equal(ElevationBoard.ServerId(state, ElevationBoard.Remote),
+            state.Zones.Single(zone => zone.CardIds.Contains(Card(state, "36065"))).ServerId);
+    }
+
     [Fact]
     [Trait("VantagePointCard", LotusHaze)]
     public void LotusHazeMovesARezzedUpgradeToARemoteServerByOneOfItsCards()
