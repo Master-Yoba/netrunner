@@ -128,7 +128,7 @@ public partial class Main : Control
 		try
 		{
 			// D-EL-8: with Elevation installed the setup form also lists the
-			// Gateway + Elevation and NSG Core Sets decks.
+			// Gateway + Elevation and NSG Core Sets decks (and Startup 2026's, VP.8).
 			return PlayFormats.IsAvailable(CardFormatIds.GatewayElevation)
 				? OfficialPresetCatalog.FormatDecks()
 				: OfficialPresetCatalog.Embedded();
@@ -408,6 +408,7 @@ public partial class Main : Control
 	private static string FormatLabel(string presetId) => PlayFormats.FormatOfPreset(presetId) switch
 	{
 		CardFormatIds.NsgCoreSets => "NSG CORE",
+		CardFormatIds.Startup2026 => "STARTUP",
 		CardFormatIds.GatewayElevation => "ELEVATION",
 		_ => "GATEWAY",
 	};

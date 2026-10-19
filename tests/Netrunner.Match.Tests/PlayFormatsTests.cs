@@ -25,6 +25,14 @@ public sealed class PlayFormatsTests
         Assert.True(PlayFormats.TryGetPreset("nsg-core-gimbatul", out OfficialPreset gimbatul));
         Assert.Equal("35058", gimbatul.IdentityCode);
         Assert.False(PlayFormats.TryGetPreset("nsg-core-unknown", out _));
+        // VP.8: Startup 2026's tournament lists, on the Startup pool's behaviors.
+        Assert.Equal(CardFormatIds.Startup2026, PlayFormats.FormatOfPresets("startup-leo-glacier", "startup-magdalene"));
+        Assert.Equal(CardFormatIds.Startup2026, PlayFormats.FormatOfBehavior(VantagePointBehaviorCatalog.Create()));
+        Assert.True(PlayFormats.TryGetPreset("startup-melies-u", out OfficialPreset melies));
+        Assert.Equal("36036", melies.IdentityCode);
+        Assert.False(PlayFormats.TryGetPreset("vp-sim-melies-corp", out _));
+        Assert.Contains("different formats", Assert.Throws<ArgumentException>(
+            () => PlayFormats.FormatOfPresets("startup-leo-glacier", "nsg-core-sabbatical")).Message, StringComparison.Ordinal);
         // A Gateway + Elevation deck and an NSG Core Sets deck share no format's deck list (PR #92's review).
         Assert.Contains("different formats", Assert.Throws<ArgumentException>(
             () => PlayFormats.FormatOfPresets("elevation-box-topan", "nsg-core-sabbatical")).Message, StringComparison.Ordinal);
@@ -60,6 +68,13 @@ public sealed class PlayFormatsTests
         Assert.All(nsg.Decks, deck => Assert.True(OfficialPresetCatalog.IsNsgCoreSetsDeck(deck.PresetId)));
         Assert.Equal(elevation.Behavior.Fingerprint, nsg.Behavior.Fingerprint);
         Assert.Null(nsg.Format.Restriction);
+
+        if (!PlayFormats.IsAvailable(CardFormatIds.Startup2026)) return;
+        PlayFormatContent startup = PlayFormats.Get(CardFormatIds.Startup2026);
+        Assert.Equal(14, startup.Decks.Count);
+        Assert.All(startup.Decks, deck => Assert.True(OfficialPresetCatalog.IsStartup2026Deck(deck.PresetId)));
+        Assert.Equal(VantagePointBehaviorCatalog.Version, startup.Behavior.Version);
+        Assert.Equal("startup-balance-update-26-09", startup.Format.Restriction!.Id);
     }
 
     [Fact]
@@ -69,6 +84,8 @@ public sealed class PlayFormatsTests
         Assert.Equal("gateway-elevation-v2", RulesFuzzRunner.PoolVersion("gateway-elevation"));
         Assert.Equal(108, RulesFuzzRunner.ContentIds("nsg-core-sets").Count);
         Assert.Equal("nsg-core-sets-v1", RulesFuzzRunner.PoolVersion("nsg-core-sets"));
+        Assert.Equal(48, RulesFuzzRunner.ContentIds("startup-2026").Count);
+        Assert.Equal("startup-2026-v1", RulesFuzzRunner.PoolVersion("startup-2026"));
         if (!ElevationAvailable) return;
         string content = RulesFuzzRunner.ContentIds("gateway-elevation")[0];
 
@@ -138,6 +155,33 @@ public sealed class PlayFormatsTests
             SoloSaveReceipt receipt = await service.SaveAsync(original, "An NSG Core Sets game");
 
             Assert.Equal(CardFormatIds.NsgCoreSets, receipt.Preview.FormatId);
+            LoadedSoloSession loaded = await service.LoadAsync(receipt.Preview.SaveId);
+            await using MatchCoordinator restored = loaded.Coordinator;
+            Assert.Equal(receipt.ActionCount, restored.CurrentSnapshot!.ActionCount);
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    [Fact]
+    public async Task AStartup2026SaveRecordsItsFormatAndLoadsWithItsContent()
+    {
+        if (!PlayFormats.IsAvailable(CardFormatIds.Startup2026)) return;
+        string directory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        try
+        {
+            PlayFormatContent content = PlayFormats.Get(CardFormatIds.Startup2026);
+            FullMatchDefinition definition = content.Compose(content.ComposeOfficial("startup-melies-u", "startup-tao-overlap", 23));
+            Assert.Equal(CardFormatIds.Startup2026, PlayFormats.FormatOf(definition.Request, content.Behavior));
+            await using var service = new SoloSessionService(PlayFormats.SaveContent, directory);
+            await using var original = new MatchCoordinator(definition, OfflineMatchFactory.CreateOpponent(definition, PlayerSide.Runner),
+                new MatchCoordinatorOptions { HumanSide = PlayerSide.Runner, AutoPassPriority = true });
+            service.SetActiveSession(original);
+            await original.StartAsync();
+            await original.WaitForHumanDecisionAsync();
+
+            SoloSaveReceipt receipt = await service.SaveAsync(original, "A Startup 2026 game");
+
+            Assert.Equal(CardFormatIds.Startup2026, receipt.Preview.FormatId);
             LoadedSoloSession loaded = await service.LoadAsync(receipt.Preview.SaveId);
             await using MatchCoordinator restored = loaded.Coordinator;
             Assert.Equal(receipt.ActionCount, restored.CurrentSnapshot!.ActionCount);

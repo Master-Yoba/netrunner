@@ -116,6 +116,13 @@ public static class RulesFuzzRunner
                 .Select(runner => $"{corp.PresetId}{PairSeparator}{runner.PresetId}"))
             .ToArray();
 
+    /// <summary>VP.8: every pairing of Startup 2026's decks (D-VP-6), the deck pool of that format.</summary>
+    public static IReadOnlyList<string> Startup2026ContentIds =>
+        OfficialPresetCatalog.Startup2026().Startup2026Decks.Where(preset => preset.Side == PlayerSide.Corp)
+            .SelectMany(corp => OfficialPresetCatalog.Startup2026().Startup2026Decks.Where(preset => preset.Side == PlayerSide.Runner)
+                .Select(runner => $"{corp.PresetId}{PairSeparator}{runner.PresetId}"))
+            .ToArray();
+
     /// <summary>Every pairing of NSG's Core Sets decks, the deck pool of the NSG Core Sets format.</summary>
     public static IReadOnlyList<string> NsgCoreSetsContentIds =>
         OfficialPresetCatalog.NsgCoreSets().NsgCoreSetsDecks.Where(preset => preset.Side == PlayerSide.Corp)
@@ -125,10 +132,10 @@ public static class RulesFuzzRunner
 
     /// <summary>
     /// The <c>--content</c> options: developer, official (expanded), gateway, elevation (simulation),
-    /// gateway-elevation, nsg-core-sets or vantage-point (simulation).
+    /// gateway-elevation, nsg-core-sets, vantage-point (simulation) or startup-2026.
     /// </summary>
     public static IReadOnlyList<string> ContentNames { get; } =
-        ["developer", "official", "gateway", "elevation", "gateway-elevation", "nsg-core-sets", "vantage-point"];
+        ["developer", "official", "gateway", "elevation", "gateway-elevation", "nsg-core-sets", "vantage-point", "startup-2026"];
 
     /// <summary>Whether a content ID is a pairing of one of the official pools (Gateway, the Elevation pools, the expanded decks).</summary>
     public static bool IsKnownContentId(string contentId)
@@ -147,6 +154,7 @@ public static class RulesFuzzRunner
         "gateway-elevation" => GatewayElevationContentIds,
         "nsg-core-sets" => NsgCoreSetsContentIds,
         "vantage-point" => VantagePointContentIds,
+        "startup-2026" => Startup2026ContentIds,
         _ => throw new ArgumentException($"Unknown content '{content}'; expected {string.Join(", ", ContentNames)}.", nameof(content)),
     };
 
@@ -164,6 +172,7 @@ public static class RulesFuzzRunner
         "gateway-elevation" => "gateway-elevation-v2",
         "nsg-core-sets" => "nsg-core-sets-v1",
         "vantage-point" => "vantage-point-simulation-v1",
+        "startup-2026" => "startup-2026-v1",
         _ => throw new ArgumentException($"Unknown content '{content}'; expected {string.Join(", ", ContentNames)}.", nameof(content)),
     };
 
@@ -220,7 +229,8 @@ public static class RulesFuzzRunner
         if (!string.Equals(CardDataResource.EmbeddedMode, CardDataResource.OfficialMode, StringComparison.Ordinal))
             throw new InvalidOperationException("Official fuzz content requires the embedded official card snapshot.");
         OfficialPresetCatalog presets = CatalogOf(corpPreset);
-        bool startup = ReferenceEquals(presets, OfficialPresetCatalog.VantagePointSimulation());
+        bool startup = ReferenceEquals(presets, OfficialPresetCatalog.VantagePointSimulation())
+            || ReferenceEquals(presets, OfficialPresetCatalog.Startup2026());
         bool elevation = !startup && !ReferenceEquals(presets, OfficialPresetCatalog.Embedded());
         // The Gateway + Elevation pool's packs, not every embedded pack: Vantage Point's cards stay out of these games (VP.1);
         // the Vantage Point simulation decks play on the Startup pool (VP.3).
@@ -255,13 +265,14 @@ public static class RulesFuzzRunner
 
     /// <summary>
     /// The preset catalog a Corp preset ID belongs to: the simulation decks, the Elevation format's decks,
-    /// NSG's Core Sets decks or the embedded catalog.
+    /// NSG's Core Sets decks, Startup 2026's decks or the embedded catalog.
     /// </summary>
     private static OfficialPresetCatalog CatalogOf(string corpPresetId) =>
         corpPresetId.StartsWith(OfficialPresetCatalog.ElevationSimulationPrefix, StringComparison.Ordinal) ? OfficialPresetCatalog.ElevationSimulation()
         : corpPresetId.StartsWith(OfficialPresetCatalog.VantagePointSimulationPrefix, StringComparison.Ordinal) ? OfficialPresetCatalog.VantagePointSimulation()
         : OfficialPresetCatalog.IsElevationDeck(corpPresetId) ? OfficialPresetCatalog.GatewayElevation()
         : OfficialPresetCatalog.IsNsgCoreSetsDeck(corpPresetId) ? OfficialPresetCatalog.NsgCoreSets()
+        : OfficialPresetCatalog.IsStartup2026Deck(corpPresetId) ? OfficialPresetCatalog.Startup2026()
         : OfficialPresetCatalog.Embedded();
 
     public static Task<FuzzGameResult> RunAsync(FuzzGameCase fuzzCase, int actionCap = DefaultActionCap,

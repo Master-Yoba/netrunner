@@ -23,11 +23,13 @@ public sealed class CardFormatTests
                 CardFormatIds.Startup2026],
             catalog.Formats.Select(static format => format.Id));
         Assert.Equal(
-            [CardFormatIds.Gateway, CardFormatIds.GatewayElevation, CardFormatIds.NsgCoreSets],
+            [CardFormatIds.Gateway, CardFormatIds.GatewayElevation, CardFormatIds.NsgCoreSets, CardFormatIds.Startup2026],
             catalog.PlayableFormats.Select(static format => format.Id));
+        // VP.8: Startup 2026 is complete on the Startup pool.
         CardFormat startup = catalog.Get(CardFormatIds.Startup2026);
-        Assert.False(startup.Complete);
-        Assert.Equal(["vp"], startup.MissingPacks);
+        Assert.True(startup.Complete);
+        Assert.Empty(startup.MissingPacks);
+        Assert.Equal(CardPoolIds.Startup, startup.CardPool);
         Assert.True(startup.IsBanned("35045"));
         // Balance Update 26.09 (Vantage Point plan, D-VP-5): NBN: Reality Plus is unbanned and a Corp deck may hold 4 agendas
         // worth 3 or more points.
@@ -162,11 +164,9 @@ public sealed class CardFormatTests
             return;
         }
 
-        // Startup 2026's deck rules and ban list, with Vantage Point counted legal: the format itself stays incomplete
-        // until VP.8.
+        // Startup 2026's deck rules and ban list.
         CardDataSet pool = CardDataResource.LoadEmbeddedPool(CardPools.Startup.PackCodes);
-        CardFormat startup = CardFormatCatalog.Embedded().Get(CardFormatIds.Startup2026);
-        CardFormat format = startup with { LegalPacks = [.. startup.LegalPacks, .. startup.MissingPacks], MissingPacks = [] };
+        CardFormat format = CardFormatCatalog.Embedded().Get(CardFormatIds.Startup2026);
         foreach (OfficialPreset deck in decks)
         {
             var request = new DeckRequest(DeckRequest.CurrentSchemaVersion, deck.Side, deck.IdentityCode, deck.Cards);
@@ -215,6 +215,48 @@ public sealed class CardFormatTests
         CardFormat format = CardFormatCatalog.Embedded().Get(CardFormatIds.GatewayElevation);
         // The retired decks stay valid, so a saved game that uses one still loads.
         foreach (OfficialPreset deck in decks.Concat(OfficialPresetCatalog.GatewayElevation().RetiredElevationDecks))
+        {
+            var request = new DeckRequest(DeckRequest.CurrentSchemaVersion, deck.Side, deck.IdentityCode, deck.Cards);
+            DeckValidationResult result = FormatDeckValidator.Validate(request, format, pool);
+            Assert.True(result.IsValid, $"{deck.PresetId}: {string.Join("; ", result.Diagnostics)}");
+        }
+    }
+
+    [Fact]
+    public void Startup2026DecksAreTournamentListsLegalAndFullyBound()
+    {
+        // D-VP-6: real players' lists, two per faction, eight Corp and six Runner, fourteen identities.
+        IReadOnlyList<OfficialPreset> decks = OfficialPresetCatalog.Startup2026().Startup2026Decks;
+        Assert.Equal(8, decks.Count(static deck => deck.Side == PlayerSide.Corp));
+        Assert.Equal(6, decks.Count(static deck => deck.Side == PlayerSide.Runner));
+        Assert.Equal(14, decks.Select(static deck => deck.IdentityCode).Distinct(StringComparer.Ordinal).Count());
+        Assert.All(decks, static deck => Assert.StartsWith("https://netrunnerdb.com/en/decklist/", deck.SourceUrl, StringComparison.Ordinal));
+        Assert.All(decks, static deck => Assert.NotEmpty(deck.Archetypes));
+        Assert.DoesNotContain(OfficialPresetCatalog.Embedded().Presets,
+            static preset => OfficialPresetCatalog.IsStartup2026Deck(preset.PresetId));
+        BehaviorCatalog behavior = VantagePointBehaviorCatalog.Create();
+        foreach (OfficialPreset deck in decks)
+        {
+            Assert.All(deck.Cards.Select(static card => card.Code).Append(deck.IdentityCode),
+                code => Assert.True(
+                    behavior.TryGet(new CardDefinitionId(code), out _)
+                    || behavior.TryGetIce(new CardDefinitionId(code), out _)
+                    || behavior.TryGetIcebreaker(new CardDefinitionId(code), out _)
+                    || behavior.TryGetAgenda(new CardDefinitionId(code), out _)
+                    || behavior.TryGetAsset(new CardDefinitionId(code), out _)
+                    || behavior.TryGetRunEvent(new CardDefinitionId(code), out _),
+                    $"{deck.PresetId}: {code} is unbound."));
+        }
+
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode)
+        {
+            return;
+        }
+
+        CardDataSet pool = CardDataResource.LoadEmbeddedPool(CardPools.Startup.PackCodes);
+        OfficialPresetCatalog.Startup2026().Validate(pool);
+        CardFormat format = CardFormatCatalog.Embedded().Get(CardFormatIds.Startup2026);
+        foreach (OfficialPreset deck in decks)
         {
             var request = new DeckRequest(DeckRequest.CurrentSchemaVersion, deck.Side, deck.IdentityCode, deck.Cards);
             DeckValidationResult result = FormatDeckValidator.Validate(request, format, pool);
@@ -306,12 +348,15 @@ public sealed class CardFormatTests
         Assert.DoesNotContain(FormatDeckValidator.Validate(withCleaver, elevation, pool).Diagnostics,
             static diagnostic => diagnostic.Code == "format-banned");
 
-        // Balance Update 26.09 unbanned NBN: Reality Plus; a Vantage Point card isn't legal in Startup 2026 until VP.8.
+        // Balance Update 26.09 unbanned NBN: Reality Plus; a Vantage Point card is legal in Startup 2026 (VP.8), not in
+        // Gateway + Elevation.
         DeckRequest realityPlus = new(DeckRequest.CurrentSchemaVersion, PlayerSide.Corp, "30051", []);
         Assert.DoesNotContain(FormatDeckValidator.Validate(realityPlus, startup, pool).Diagnostics,
             static diagnostic => diagnostic.Code == "format-banned");
         DeckRequest withVantagePoint = Runner("30010", [("36013", 1)]);
-        Assert.Contains(FormatDeckValidator.Validate(withVantagePoint, startup, pool).Diagnostics,
+        Assert.DoesNotContain(FormatDeckValidator.Validate(withVantagePoint, startup, pool).Diagnostics,
+            static diagnostic => diagnostic.Code == "format-pack");
+        Assert.Contains(FormatDeckValidator.Validate(withVantagePoint, elevation, pool).Diagnostics,
             static diagnostic => diagnostic.Code == "format-pack");
 
         // High-value agendas: five agendas worth 3 points break the Startup limit of four (26.09).

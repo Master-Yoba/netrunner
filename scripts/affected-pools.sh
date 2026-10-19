@@ -14,7 +14,7 @@ scope_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$scope_root/scripts/env.sh"
 base="${1:-origin/dev}"
 merge_base="$(git -C "$scope_root" merge-base "$base" HEAD)"
-all_pools=(official gateway elevation gateway-elevation nsg-core-sets vantage-point)
+all_pools=(official gateway elevation gateway-elevation nsg-core-sets vantage-point startup-2026)
 
 declare -A pools=()
 specs_changed=0
@@ -28,6 +28,7 @@ while IFS= read -r path; do
     data/decks/nsg-core-sets-decks.json) pools[nsg-core-sets]=1 ;;
     data/decks/elevation-simulation-decks.json) pools[elevation]=1 ;;
     data/decks/vantage-point-simulation-decks.json) pools[vantage-point]=1 ;;
+    data/decks/startup-2026-decks.json) pools[startup-2026]=1 ;;
     data/m4/presets.json) pools[official]=1 ;;
     src/Netrunner.Cards/Gateway*BehaviorSpecs.cs|src/Netrunner.Cards/Gateway*CardCodes.cs|\
     src/Netrunner.Cards/GatewayBehaviorCatalog.cs|src/Netrunner.Cards/ElevationBehaviorCatalog.cs|\

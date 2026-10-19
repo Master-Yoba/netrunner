@@ -92,6 +92,20 @@ public partial class Main
 						&& _menuPersonalities!.Visible, "The NSG Core Sets area lacks Hard or the personalities.");
 					if (screenshots) await SaveInteractionEvidence($"menu-nsg-core-corp-{size.X}");
 				}
+				if (StartupMenuOffered)
+				{
+					// D-VP-7: Startup 2026 offers its fourteen tournament lists, Random drawing from them.
+					await ClickTableButton(FindDescendants<Button>(_menuNewGameView).Single(button => button.Text == "Startup 2026"));
+					RequireInteraction(_menuMode == StartupMode
+						&& FindDescendants<Button>(_menuYourDecks!).Length == 8
+						&& FindDescendants<Button>(_menuOpponentDecks!).Length == 7
+						&& _menuOpponentDeck == RandomOpponent
+						&& FindDescendants<Button>(_menuYourDecks!).All(button => button.Name.ToString().StartsWith("Deck-startup-", StringComparison.Ordinal)),
+						"The Startup 2026 area doesn't list eight Corp decks and six Runner decks plus Random.");
+					RequireInteraction(FindDescendants<Button>(_menuDifficulties!).Single(button => button.Text == "Hard opponent").Visible
+						&& _menuPersonalities!.Visible, "The Startup 2026 area lacks Hard or the personalities.");
+					if (screenshots) await SaveInteractionEvidence($"menu-startup-corp-{size.X}");
+				}
 				await ClickTableButton(FindDescendants<Button>(_menuNewGameView).Single(button => button.Text == "Tutorial"));
 				RequireInteraction(_menuMode == TutorialMode && _menuYourDeck == "system-gateway-expanded-corp"
 					&& _menuOpponentDeck == "system-gateway-expanded-runner", "The Tutorial area doesn't default to the expanded decks.");

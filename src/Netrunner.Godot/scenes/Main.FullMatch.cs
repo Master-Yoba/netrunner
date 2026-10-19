@@ -128,12 +128,12 @@ public partial class Main
 	};
 
 	/// <summary>
-	/// A <c>corp~runner</c> pairing of two decks of one Elevation-pool format: Gateway + Elevation
-	/// or NSG Core Sets (scripts/elevation-deck-smoke.sh).
+	/// A <c>corp~runner</c> pairing of two decks of one format beyond Gateway: Gateway + Elevation,
+	/// NSG Core Sets or Startup 2026 (scripts/elevation-deck-smoke.sh).
 	/// </summary>
 	private static bool IsElevationPairing(string preset) =>
 		preset.Split('~') is [string corp, string runner]
-		&& PlayFormats.FormatOfPreset(corp) is CardFormatIds.GatewayElevation or CardFormatIds.NsgCoreSets
+		&& PlayFormats.FormatOfPreset(corp) is CardFormatIds.GatewayElevation or CardFormatIds.NsgCoreSets or CardFormatIds.Startup2026
 		&& PlayFormats.FormatOfPreset(runner) == PlayFormats.FormatOfPreset(corp);
 
 	private bool HasAuthenticatedOfficialContent() =>

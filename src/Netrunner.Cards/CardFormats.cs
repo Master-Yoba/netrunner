@@ -83,7 +83,7 @@ public sealed class CardFormatCatalog
         StringComparer.Ordinal);
 
     private static readonly HashSet<string> KnownPools = new(
-        [CardPoolIds.Gateway, CardPoolIds.GatewayElevation],
+        [CardPoolIds.Gateway, CardPoolIds.GatewayElevation, CardPoolIds.Startup],
         StringComparer.Ordinal);
 
     private readonly Dictionary<string, CardFormat> _formats;

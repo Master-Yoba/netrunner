@@ -35,7 +35,7 @@ public static partial class CliCommands
         foreach (string content in RulesFuzzRunner.ContentNames.Where(name => name != "developer"))
         {
             if (content != "official" && content != "gateway" && !CardPools.GatewayElevation.IsEmbedded) continue;
-            if (content == "vantage-point" && !CardPools.Startup.IsEmbedded) continue;
+            if (content is "vantage-point" or "startup-2026" && !CardPools.Startup.IsEmbedded) continue;
             var codes = new SortedSet<string>(StringComparer.Ordinal);
             foreach (string contentId in RulesFuzzRunner.ContentIds(content))
             {

@@ -25,6 +25,8 @@
                       LogicalName="Netrunner.Cards.Data.decks.elevation-core-battle-box-decks.json" />
     <EmbeddedResource Include="../../data/decks/nsg-core-sets-decks.json"
                       LogicalName="Netrunner.Cards.Data.decks.nsg-core-sets-decks.json" />
+    <EmbeddedResource Include="../../data/decks/startup-2026-decks.json"
+                      LogicalName="Netrunner.Cards.Data.decks.startup-2026-decks.json" />
     <!-- EL.1 C2: versioned format snapshots, validated by CardFormatCatalog. -->
     <EmbeddedResource Include="../../data/formats/gateway.json"
                       LogicalName="Netrunner.Cards.Data.formats.gateway.json" />
