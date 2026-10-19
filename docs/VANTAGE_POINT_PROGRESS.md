@@ -667,3 +667,63 @@ Vantage Point's sentries and code gates too. Two kinds of subroutine are never o
 
 The Elevation pool's Mycoweb is unchanged, and so is every other Elevation card's fingerprint. `BehaviorCatalogBuilder.Replace`
 swaps the one definition.
+
+### Bots
+
+These paths read vocabulary only Vantage Point cards use, so the policy versions are unchanged:
+- **The run model:**
+  - a run's bad publicity fund counts as run credits when the Runner plans a run;
+  - a known agenda the run can't pay to steal isn't worth its points: its steal clicks beyond the clicks left, or the
+    active cards' steal credits (Magistrate Revontulet) beyond the credits left.
+- **The tracker (A9):**
+  - Hiram's look at R&D's top card is now kept as that card at the top, as an access that leaves it is (PR #157's fourth
+    finding);
+  - face-down hosted cards and the secret identity give the tracker nothing to infer: the Runner never sees the copy
+    before it flips, and the Runner's samples draw it again (PR #157's first finding).
+  - `ai-belief` over the Startup 2026 ladder stays above its prior on every tier (standard: log-loss 3.409 against
+    3.755, top-1 14% against 2%).
+- **The Startup 2026 ladder:** 1,536 games (random, contract, easy and standard; 2 seeds a pairing), 0 errors, 8 capped.
+  Both sides order random < contract < easy < standard; the Corp's order separates.
+- **The sweep:** two Vantage Point cards were never used:
+  - Nihilo Agent, never rezzed in Reality Plus's tag deck, which lacks Editorial Division's search. An asset that tags
+    the Runner for the bad publicity it takes now works rezzed. After the fix: 62 rezzes in 100 offers.
+  - The Tungsten Tailor, installed 3 times in 1,540 offers. Its lower strength on every piece of ICE is now worth a
+    pump on each rezzed piece. After the fix: 39 installs in 914 offers.
+  - Esca and Byte! are never rezzed because they work when accessed, unrezzed.
+  - Four System Gateway and Elevation cards are never used: Idiosyncresis and Plutus never rezzed, Syailendra never
+    advanced, Tread Lightly never played. They go to the heuristic track, since fixing them changes those pools' games
+    and the policy versions.
+- **Fixtures:** `VantagePointBotTests` checks each sweep's fixes at saved decisions of VP.8's two ladders, on the
+  `startup-vp.8` catalog: `vp8-*` on the simulation decks and `s26-*` on Startup 2026's.
+
+### Client
+
+The client presents every new state:
+- **Bad publicity:** the Corp's count beside its clicks, and the run's bad publicity credits on the run line.
+- **Méliès U:** the side it shows once flipped, for both players; before that, "Secret copy" for the Corp alone.
+- **Face-down hosted cards:** they sit on Read-Write Share, as backs to the Corp and as named cards to the Runner.
+- `VantagePointBotTests.TheClientShowsTheSecretCopyAndFaceDownHostedCardsToTheirOwnersAlone` walks a saved game of Méliès
+  U against Hiram and checks both views at every position.
+- Some new states needed no new view:
+  - hosted resources (Hackerspace) sit on their host, as any hosted card does;
+  - a trap ICE shows its printed subtypes, as all cards do;
+  - stealth credits are hosted credits on their stealth cards.
+
+### Hardening
+
+- **The first 10,000-game Startup 2026 fuzz** (every replay verified) rejected 1 game. Ryō's trigger had trashed HQ's last
+  card before Detente's random pick of an HQ card resolved. The pick bound nothing, and the host found no binding. Both
+  are Elevation cards, so the Elevation pool could meet it too. A random pick that finds nothing now hosts nothing
+  (`Startup2026FuzzRegressionTests`).
+- **The second run:** FUZZ10K_RESULT.
+
+### E6
+
+By hand, the whole set needed **59 of 66 cards (89%)** with no Core change past their primitive slice:
+- VP.3: 27 of 28;
+- VP.5: 25 of 28;
+- VP.7: 7 of 10.
+
+VP.7 misses the gate's 80%. As the last batch, it carried most of the set's one-of-a-kind effects: a secret identity, a
+resource host and a hidden hosted zone. Three of its cards still needed Core after VP.6's slice: Hiram, Hype Machine and
+Lotus Haze.
