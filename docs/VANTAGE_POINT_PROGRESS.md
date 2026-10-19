@@ -693,6 +693,8 @@ These paths read vocabulary only Vantage Point cards use, so the policy versions
   - Four System Gateway and Elevation cards are never used: Idiosyncresis and Plutus never rezzed, Syailendra never
     advanced, Tread Lightly never played. They go to the heuristic track, since fixing them changes those pools' games
     and the policy versions.
+- **The Core Battle Box is unchanged.** The same ladder (easy and standard, 2 seeds a pairing, 96 games) at `dev` and at
+  this branch plays every game identically, action for action.
 - **Fixtures:** `VantagePointBotTests` checks each sweep's fixes at saved decisions of VP.8's two ladders, on the
   `startup-vp.8` catalog: `vp8-*` on the simulation decks and `s26-*` on Startup 2026's.
 
@@ -704,6 +706,13 @@ The client presents every new state:
 - **Face-down hosted cards:** they sit on Read-Write Share, as backs to the Corp and as named cards to the Runner.
 - `VantagePointBotTests.TheClientShowsTheSecretCopyAndFaceDownHostedCardsToTheirOwnersAlone` walks a saved game of Méliès
   U against Hiram and checks both views at every position.
+- **The deck smoke** (`scripts/elevation-deck-smoke.sh --format startup-2026`) plays every Startup 2026 deck through the
+  client as the human seat of its side, against the latest bot: 14 of 14 pass.
+- **The M5 client smoke's matrix** gains a Startup 2026 game, Méliès U against Tāo, which saves and resumes on each side.
+  Both pass.
+- **A pre-existing failure:** that smoke's Gateway case of Hard against a human Corp fails with "Chosen opponent was not
+  persisted". It fails the same way at `dev` (96cea91), and the gates don't run this smoke. It is recorded for the client
+  track, not fixed here.
 - Some new states needed no new view:
   - hosted resources (Hackerspace) sit on their host, as any hosted card does;
   - a trap ICE shows its printed subtypes, as all cards do;
@@ -715,7 +724,7 @@ The client presents every new state:
   card before Detente's random pick of an HQ card resolved. The pick bound nothing, and the host found no binding. Both
   are Elevation cards, so the Elevation pool could meet it too. A random pick that finds nothing now hosts nothing
   (`Startup2026FuzzRegressionTests`).
-- **The second run:** FUZZ10K_RESULT.
+- **The second run:** 10,000 games, all terminal, every replay verified (mean 471.2 actions).
 
 ### E6
 
@@ -727,3 +736,22 @@ By hand, the whole set needed **59 of 66 cards (89%)** with no Core change past 
 VP.7 misses the gate's 80%. As the last batch, it carried most of the set's one-of-a-kind effects: a secret identity, a
 resource host and a hidden hosted zone. Three of its cards still needed Core after VP.6's slice: Hiram, Hype Machine and
 Lotus Haze.
+
+### Milestone gate (section 7)
+
+- [x] **Coverage:** 225 of 225 bound, tested and checklist-complete.
+- [ ] **E6:** VP.3 (96%) and VP.5 (89%) meet the 80% bar; VP.7 (70%) doesn't, for the reasons above. The whole-set report
+  is recorded: 89%.
+- [x] **Formats:** Startup 2026 is complete, loads and validates, and plays with its decks.
+- [x] **Decks:** each of the fourteen validates, loads and plays human against bot through the client, on its side.
+- [x] **Hardening:** 10,000 clean official fuzz games over the Startup 2026 pool, every replay verified; the full gates.
+- [x] **Bots:**
+  - every Vantage Point card the decks hold is played without errors, with a non-default valuation;
+  - none is installed but never used in the sweep;
+  - the deck-pool ladder has no deck warning;
+  - the Core Battle Box ladder is unchanged;
+  - `ai-belief` is above its prior.
+- [x] **Client:** every new state is presented, and the smoke matrices include Startup 2026's decks. `make verify`'s
+  main-menu smoke checks the Startup 2026 area at 1920×1080 and 2560×1440.
+- [x] This record, with evidence and deviations.
+
