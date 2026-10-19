@@ -171,7 +171,7 @@ public static partial class GameEngine
     /// (Bling, Madani, Detente). Hosted cards stay in their owner's hosted
     /// zone, name their host, and are trashed when the host leaves play.
     /// </summary>
-    private static void HostFaceUp(WorkingState working, CardInstanceId cardId, CardInstanceId hostId)
+    private static void HostFaceUp(WorkingState working, CardInstanceId cardId, CardInstanceId hostId, bool faceUp = true)
     {
         CardInstanceState card = GetCard(working, cardId);
         ZoneState source = ZoneForCard(working, cardId);
@@ -183,7 +183,7 @@ public static partial class GameEngine
 
         CardInstanceState moved = GetCard(working, cardId);
         ReplaceCard(working, new CardInstanceState(moved.Id, moved.DefinitionId, moved.ZoneId, moved.OwnerSide,
-            faceUp: true, rezzed: false, moved.AdvancementCounters, hostId));
+            faceUp: faceUp, rezzed: false, moved.AdvancementCounters, hostId));
     }
 
     /// <summary>EL-ICE-GAINS-SUBTYPE: a card installed on this ICE gives it every ICE subtype (Chromatophores).</summary>

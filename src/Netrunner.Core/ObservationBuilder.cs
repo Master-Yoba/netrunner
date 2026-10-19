@@ -264,8 +264,9 @@ public static partial class ObservationBuilder
         // EL-HOSTED-FACEUP: cards hosted faceup on a console are public; each names its host.
         if (state.Zones.Any(zone => zone.Kind == ZoneKind.RunnerHostedFaceUp && zone.ServerId is null))
         {
+            // VP-HOST-FACEDOWN: a card hosted facedown (Read-Write Share) shows only that it is there, and on what.
             publicState["runnerHostedFaceUp"] = ZoneCards(state, ZoneKind.RunnerHostedFaceUp)
-                .Select(card => CardView(state, card))
+                .Select(card => card.FaceUp ? CardView(state, card) : FaceDownHostedView(card))
                 .ToArray();
         }
 
@@ -857,12 +858,27 @@ public static partial class ObservationBuilder
             };
         }
 
-        return new Dictionary<string, object?>
+        var runner = new Dictionary<string, object?>
         {
             ["grip"] = PrivateZoneCards(state, ZoneKind.RunnerGrip).Select(card => PrivateCardView(state, card)).ToArray(),
             ["stack"] = Array.Empty<object>(),
         };
+        // VP-HOST-FACEDOWN: the Runner knows the cards it hosted facedown; written only while there are some.
+        CardInstanceState[] hostedFaceDown = ZoneCards(state, ZoneKind.RunnerHostedFaceUp).Where(static card => !card.FaceUp).ToArray();
+        if (hostedFaceDown.Length > 0)
+        {
+            runner["hostedFaceDown"] = hostedFaceDown.Select(card => PrivateCardView(state, card)).ToArray();
+        }
+
+        return runner;
     }
+
+    private static Dictionary<string, object?> FaceDownHostedView(CardInstanceState card) => new()
+    {
+        ["id"] = card.Id.Value,
+        ["hostCardId"] = card.HostCardId?.Value,
+        ["faceDown"] = true,
+    };
 
     /// <summary>
     /// A card is known to the viewer when it is the viewer's own card, a

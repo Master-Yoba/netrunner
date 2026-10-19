@@ -1552,7 +1552,8 @@ public sealed record BehaviorInstruction
             or BehaviorInstructionKind.InstallCard
             or BehaviorInstructionKind.AdvanceCard
             or BehaviorInstructionKind.RemoveAdvancementCounters
-            or BehaviorInstructionKind.SwapInstalledIce)
+            or BehaviorInstructionKind.SwapInstalledIce
+            or BehaviorInstructionKind.HostFaceDown)
         {
             if (Target is null)
             {
@@ -1783,6 +1784,7 @@ public sealed record BehaviorInstruction
             or BehaviorInstructionKind.PlayCard
             or BehaviorInstructionKind.TurnFaceUp
             or BehaviorInstructionKind.HostFaceUp
+            or BehaviorInstructionKind.HostFaceDown
             or BehaviorInstructionKind.Derez
             or BehaviorInstructionKind.RezPayingLess
             or BehaviorInstructionKind.MoveSourceToServerOf
@@ -2049,6 +2051,9 @@ public enum BehaviorInstructionKind
     /// encounter (Unleash). A mode option holding only this is offered while that subroutine can resolve so.
     /// </summary>
     ResolveIceSubroutine,
+
+    /// <summary>VP-HOST-FACEDOWN: host the target facedown on the source, up to the source's limit (Read-Write Share).</summary>
+    HostFaceDown,
 
     // Short aliases keep the contract pleasant for callers while the longer
     // names remain unambiguous in serialized/fingerprint output.
@@ -2564,8 +2569,15 @@ public sealed class CardBehaviorDefinition
         bool runsCannotSucceed = false,
         int runAccessLimitBesidesSelf = 0,
         IceSubroutineSpec? gainedIceSubroutine = null,
-        ResourceHostingSpec? hostsResources = null)
+        ResourceHostingSpec? hostsResources = null,
+        int hostsFaceDownLimit = 0)
     {
+        if (hostsFaceDownLimit < 0 || hostsFaceDownLimit > 0 && controller != PlayerSide.Runner)
+        {
+            throw new ArgumentException("Only a Runner card hosts cards facedown, up to a positive limit.", nameof(hostsFaceDownLimit));
+        }
+
+        HostsFaceDownLimit = hostsFaceDownLimit;
         if (hostsResources is not null && controller != PlayerSide.Runner)
         {
             throw new ArgumentException("Only a Runner card hosts resources.", nameof(hostsResources));
@@ -2801,6 +2813,10 @@ public sealed class CardBehaviorDefinition
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<ServerKind>? InstallServerKinds { get; }
+
+    /// <summary>VP-HOST-FACEDOWN: the most cards its owner may host facedown on the card (Read-Write Share). Zero for none.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int HostsFaceDownLimit { get; }
 
     /// <summary>VP-HOST-RESOURCES: the resources the card may host (Hackerspace). Null for none.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -3742,6 +3758,7 @@ internal static class BehaviorCatalogStructure
                 && a.ReturnsHostedBadPublicity == b.ReturnsHostedBadPublicity
                 && SequenceEquals(a.InstallServerKinds ?? [], b.InstallServerKinds ?? [])
                 && Equals(a.HostsResources, b.HostsResources)
+                && a.HostsFaceDownLimit == b.HostsFaceDownLimit
                 && a.AllIceStrength == b.AllIceStrength
                 && a.RunsCannotSucceed == b.RunsCannotSucceed
                 && a.RunAccessLimitBesidesSelf == b.RunAccessLimitBesidesSelf
@@ -4084,6 +4101,10 @@ internal static class BehaviorCatalogFingerprint
         if (value.InstallServerKinds is { } installKinds)
         {
             builder.Append(",installServerKinds=").Append(string.Join("+", installKinds.Select(static kind => (int)kind)));
+        }
+        if (value.HostsFaceDownLimit != 0)
+        {
+            builder.Append(",hostsFaceDownLimit=").Append(value.HostsFaceDownLimit);
         }
         if (value.HostsResources is { } hostsResources)
         {

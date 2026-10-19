@@ -789,6 +789,24 @@ public static partial class GameEngine
 
                 AdvanceBehaviorCursor(working, frame);
                 return;
+            case BehaviorInstructionKind.HostFaceDown:
+                // VP-HOST-FACEDOWN: a chosen card from the grip, facedown on the source while it has room (Read-Write Share).
+                if (!(instruction.Target is { Kind: BehaviorTargetKind.ChosenCard } hostTarget && IsProvenEmptyChosenCard(frame, hostTarget)))
+                {
+                    int limit = working.BehaviorCatalog.TryGet(GetCard(working, frame.SourceCardId).DefinitionId, out CardBehaviorDefinition? host)
+                        ? host.HostsFaceDownLimit
+                        : 0;
+                    foreach (CardInstanceId hostedId in ResolveBehaviorCards(working, frame, instruction.Target).ToArray())
+                    {
+                        if (working.Cards.Count(card => card.HostCardId == frame.SourceCardId) < limit && IsInstalledCard(working, frame.SourceCardId))
+                        {
+                            HostFaceUp(working, hostedId, frame.SourceCardId, faceUp: false);
+                        }
+                    }
+                }
+
+                AdvanceBehaviorCursor(working, frame);
+                return;
             case BehaviorInstructionKind.HostFaceUp:
                 {
                     var remainingSetAside = frame.SetAside.ToList();

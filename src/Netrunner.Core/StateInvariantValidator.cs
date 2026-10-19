@@ -544,8 +544,15 @@ public static partial class StateInvariantValidator
                         $"Removed-from-game card '{card.Id}' must be faceup.");
                 }
 
+                // VP-HOST-FACEDOWN: a Runner card facedown on a host that hosts facedown, within its limit (Read-Write Share).
+                bool facedownHosted = !card.FaceUp && zone.Kind == ZoneKind.RunnerHostedFaceUp
+                    && card.HostCardId is { } facedownHost
+                    && cardsById.TryGetValue(facedownHost.Value, out CardInstanceState? facedownHostCard)
+                    && behaviorCatalog is not null
+                    && behaviorCatalog.TryGet(facedownHostCard.DefinitionId, out CardBehaviorDefinition? facedownDefinition)
+                    && facedownDefinition.HostsFaceDownLimit >= state.Cards.Count(other => other?.HostCardId == facedownHost);
                 if (zone.Kind is ZoneKind.CorpHostedFaceUp or ZoneKind.RunnerHostedFaceUp
-                    && (!card.FaceUp
+                    && (!card.FaceUp && !facedownHosted
                         || card.HostCardId is not { } faceUpHost
                         || !cardsById.TryGetValue(faceUpHost.Value, out CardInstanceState? host)
                         || state.Zones.FirstOrDefault(candidate => candidate?.Id == host.ZoneId)?.Kind != ZoneKind.RunnerRig))
