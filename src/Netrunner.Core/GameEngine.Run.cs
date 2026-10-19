@@ -2254,6 +2254,12 @@ public static partial class GameEngine
         if (server.Kind == ServerKind.Archives)
         {
             ZoneState discard = GetZone(working, ZoneKind.CorpDiscard);
+            // VP-ARCHIVES-TURNED-FACEUP: two or more turned faceup at once is an occurrence (Nurse Hạnh).
+            if (discard.CardIds.Count(id => !GetCard(working, id).FaceUp) >= 2)
+            {
+                DeferOccurrence(working, OccurrenceKind.ArchivesCardsTurnedFaceUp, PlayerSide.Corp);
+            }
+
             foreach (CardInstanceId discardId in discard.CardIds)
             {
                 CardInstanceState discardCard = GetCard(working, discardId);

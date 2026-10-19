@@ -154,6 +154,13 @@ public static partial class StateInvariantValidator
         ValidateTurnAndOutcome(state, runtimeCardCatalog, violations);
         ValidateRunState(state, behaviorCatalog, violations);
         ValidatePersistentRuns(state, behaviorCatalog, violations);
+        // VP-SECRET-IDENTITY: only an identity that sets a secret copy has one (Méliès U).
+        if (state.RulesState?.SecretIdentity is not null
+            && !state.Cards.Any(card => card is not null && card.OwnerSide == PlayerSide.Corp
+                && state.Zones.FirstOrDefault(zone => zone?.Id == card.ZoneId)?.Kind == ZoneKind.CorpIdentity
+                && behaviorCatalog.TryGet(card.DefinitionId, out CardBehaviorDefinition? identity)
+                && BehaviorRunRules.DeclaresInstruction(identity, BehaviorInstructionKind.SetSecretIdentity)))
+            Add(violations, "rules.secret-identity-unsupported", "rulesState.secretIdentity", "Only an identity that sets a secret copy has one.");
         ValidateRulesState(state, behaviorCatalog, runtimeCardCatalog, violations);
         ValidateResolutionAndDecision(
             state,
@@ -544,8 +551,14 @@ public static partial class StateInvariantValidator
                         $"Removed-from-game card '{card.Id}' must be faceup.");
                 }
 
+                // VP-HOST-FACEDOWN: a Runner card facedown on a host that hosts facedown, within its limit (Read-Write Share).
+                bool facedownHosted = !card.FaceUp && zone.Kind == ZoneKind.RunnerHostedFaceUp
+                    && card.HostCardId is { } facedownHost
+                    && cardsById.TryGetValue(facedownHost.Value, out CardInstanceState? facedownHostCard)
+                    && behaviorCatalog.TryGet(facedownHostCard.DefinitionId, out CardBehaviorDefinition? facedownDefinition)
+                    && facedownDefinition.HostsFaceDownLimit >= state.Cards.Count(other => other?.HostCardId == facedownHost);
                 if (zone.Kind is ZoneKind.CorpHostedFaceUp or ZoneKind.RunnerHostedFaceUp
-                    && (!card.FaceUp
+                    && (!card.FaceUp && !facedownHosted
                         || card.HostCardId is not { } faceUpHost
                         || !cardsById.TryGetValue(faceUpHost.Value, out CardInstanceState? host)
                         || state.Zones.FirstOrDefault(candidate => candidate?.Id == host.ZoneId)?.Kind != ZoneKind.RunnerRig))
@@ -3058,6 +3071,8 @@ public static partial class StateInvariantValidator
             OccurrenceKind.AgendaForfeited or OccurrenceKind.HostedCreditPoolEmptied
                 or OccurrenceKind.FirstTagRemovalThisTurn or OccurrenceKind.FirstBadPublicityThisTurn
                 or OccurrenceKind.CreditsSpentFromOutsidePool
+                or OccurrenceKind.ArchivesCardsTurnedFaceUp
+                or OccurrenceKind.CardTrashed
                 or OccurrenceKind.FirstOperationPlayedThisTurn
                 or OccurrenceKind.FirstEventPlayedThisTurn
                 or OccurrenceKind.FirstCardCreditGainThisTurn => occurrence.ServerId is null,
@@ -12631,6 +12646,7 @@ public static partial class StateInvariantValidator
         bool consumed = lastSelectionCursor >= 0
             && replay.Skip(lastSelectionCursor).Take(Math.Max(0, frame.InstructionCursor - lastSelectionCursor))
                 .Any(instruction => instruction.Kind is BehaviorInstructionKind.TrashCard or BehaviorInstructionKind.AddToHand or BehaviorInstructionKind.MoveCard or BehaviorInstructionKind.InstallCard
+                        or BehaviorInstructionKind.PlaceOnTopOfDeck
                     && instruction.Target is { Kind: BehaviorTargetKind.ChosenCard } target
                     && (target.Selector is null || target.Selector == lastSelectionKey));
         if (lastNonEmptySelection is not null
@@ -12774,7 +12790,7 @@ public static partial class StateInvariantValidator
                 runtimeCardCatalog,
                 target,
                 instruction.Kind == BehaviorInstructionKind.Search || target.Kind is BehaviorTargetKind.ZoneCard or BehaviorTargetKind.ZoneCards
-                    || target.IsOther
+                    || target.IsOther || target.IsInSourceServerRoot
                     ? frame.SourceCardId
                     : null);
             if (instruction.Kind == BehaviorInstructionKind.Choose
@@ -13002,6 +13018,7 @@ public static partial class StateInvariantValidator
                     && (!target.IsCopyOfArchives || GameEngine.IsCopyOfFaceUpArchivesCard(state.Cards, state.Zones, card))
                     && (!target.IsNotAi || !GameEngine.CardSubtypes(runtimeCardCatalog, card.DefinitionId).Contains("ai", StringComparer.Ordinal))
                     && (!target.IsInRemoteServer || GameEngine.IsInRemoteServer(state.Servers, state.Zones, card))
+                    && (!target.IsInSourceServerRoot || GameEngine.IsInSourceServerRoot(state.Cards, state.Zones, card, excludedCardId))
                     && (!target.IsInAttackedServer || GameEngine.AttackedOrEndedRunServer(state.RunState, state.ResolutionStack) is { } attacked
                         && state.Zones.FirstOrDefault(zone => zone.Id == card.ZoneId)?.ServerId == attacked)
                     && (target.Kind != BehaviorTargetKind.InstalledCardNotThisTurn

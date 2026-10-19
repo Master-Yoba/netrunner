@@ -139,8 +139,8 @@ public sealed class CardFormatTests
     public void VantagePointSimulationDecksAreLegalAndFullyBound()
     {
         IReadOnlyList<OfficialPreset> decks = OfficialPresetCatalog.VantagePointSimulation().VantagePointSimulationDecks;
-        Assert.Equal(5, decks.Count(static deck => deck.Side == PlayerSide.Corp));
-        Assert.Equal(3, decks.Count(static deck => deck.Side == PlayerSide.Runner));
+        Assert.Equal(6, decks.Count(static deck => deck.Side == PlayerSide.Corp));
+        Assert.Equal(4, decks.Count(static deck => deck.Side == PlayerSide.Runner));
         Assert.DoesNotContain(OfficialPresetCatalog.Embedded().Presets,
             static preset => preset.PresetId.StartsWith(OfficialPresetCatalog.VantagePointSimulationPrefix, StringComparison.Ordinal));
         BehaviorCatalog behavior = VantagePointBehaviorCatalog.Create();

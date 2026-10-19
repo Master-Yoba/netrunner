@@ -760,16 +760,39 @@ public static partial class GameEngine
                 return;
             case BehaviorInstructionKind.MoveSourceToServerOf:
                 {
-                    IReadOnlyList<CardInstanceId> anchors = ResolveBehaviorCards(working, frame, instruction.Target);
-                    CardInstanceState upgrade = GetCard(working, frame.SourceCardId);
+                    // VP-MOVE-UPGRADE: the argument names a bound card to move instead of the source (Lotus Haze), and a
+                    // destination zone names a central server, which may hold no card to choose.
+                    ServerState? destination = instruction.DestinationZone is { } central
+                        ? working.Servers.Single(server => server.Kind == central switch
+                        {
+                            BehaviorZone.Headquarters => ServerKind.Headquarters,
+                            BehaviorZone.Deck => ServerKind.RAndD,
+                            _ => ServerKind.Archives,
+                        })
+                        : instruction.Target is { Kind: BehaviorTargetKind.ChosenCard } chosenServer && IsProvenEmptyChosenCard(frame, chosenServer)
+                            ? null
+                            : ResolveBehaviorCards(working, frame, instruction.Target) is [var anchor]
+                                && ZoneForCard(working, anchor).ServerId is { } serverId
+                                ? working.Servers.Single(server => server.Id == serverId)
+                                : null;
+                    CardInstanceState upgrade = GetCard(working, instruction.Argument is { } movedKey
+                        ? frame.Bindings.SingleOrDefault(binding => string.Equals(binding.Key, movedKey, StringComparison.Ordinal))?.CardIds.SingleOrDefault()
+                            ?? frame.SourceCardId
+                        : frame.SourceCardId);
                     ZoneState from = ZoneForCard(working, upgrade.Id);
-                    if (anchors.Count == 1
+                    // CR 3.6.5e: a move can't put a second region in a root (Shackleton Grid to Mahkota Langit Grid's server).
+                    if (destination is { } server
                         && from.Kind == ZoneKind.ServerRoot
-                        && ZoneForCard(working, anchors[0]).ServerId is { } serverId
-                        && working.Servers.Single(server => server.Id == serverId) is { } server
-                        && server.RootZoneId != from.Id)
+                        && server.RootZoneId != from.Id
+                        && !(IsRegion(working, upgrade.Id) && working.Zones.Single(zone => zone.Id == server.RootZoneId).CardIds
+                            .Any(rootCard => IsRegion(working, rootCard))))
                     {
                         MoveCard(working, upgrade, from, working.Zones.Single(zone => zone.Id == server.RootZoneId));
+                        if (upgrade.Id != frame.SourceCardId)
+                        {
+                            AdvanceBehaviorCursor(working, frame);
+                            return;
+                        }
 
                         // The move is the behavior's last act: its source has left
                         // the location the behavior was invoked from, so it completes.
@@ -789,12 +812,41 @@ public static partial class GameEngine
 
                 AdvanceBehaviorCursor(working, frame);
                 return;
-            case BehaviorInstructionKind.HostFaceUp:
+            case BehaviorInstructionKind.SetSecretIdentity:
+                // VP-SECRET-IDENTITY: no event names the side; the Runner learns it only when the identity flips.
+                working.RulesState = RequireRulesState(working)
+                    .WithSecretIdentity(new SecretIdentityState(Enum.Parse<ServerKind>(instruction.Argument!), Flipped: false));
+                AdvanceBehaviorCursor(working, frame);
+                return;
+            case BehaviorInstructionKind.FlipIdentity:
+                if (working.RulesState?.SecretIdentity is { } flipping)
                 {
+                    working.RulesState = working.RulesState.WithSecretIdentity(flipping with { Flipped = !flipping.Flipped });
+                }
+
+                AdvanceBehaviorCursor(working, frame);
+                return;
+            case BehaviorInstructionKind.HostFaceUp:
+            case BehaviorInstructionKind.HostFaceDown:
+                {
+                    // VP-HOST-FACEDOWN: facedown on the source while it has room (Read-Write Share); a chosen card may be none.
+                    bool faceDown = instruction.Kind == BehaviorInstructionKind.HostFaceDown;
+                    int limit = faceDown && working.BehaviorCatalog.TryGet(GetCard(working, frame.SourceCardId).DefinitionId,
+                        out CardBehaviorDefinition? facedownHost) ? facedownHost.HostsFaceDownLimit : int.MaxValue;
                     var remainingSetAside = frame.SetAside.ToList();
-                    foreach (CardInstanceId hostedId in ResolveBehaviorCards(working, frame, instruction.Target).ToArray())
+                    IReadOnlyList<CardInstanceId> toHost = faceDown && instruction.Target is { Kind: BehaviorTargetKind.ChosenCard } facedownTarget
+                        && IsProvenEmptyChosenCard(frame, facedownTarget)
+                            ? []
+                            : ResolveBehaviorCards(working, frame, instruction.Target);
+                    foreach (CardInstanceId hostedId in toHost.ToArray())
                     {
-                        HostFaceUp(working, hostedId, frame.SourceCardId);
+                        if (faceDown && (working.Cards.Count(card => card.HostCardId == frame.SourceCardId) >= limit
+                            || !IsInstalledCard(working, frame.SourceCardId)))
+                        {
+                            continue;
+                        }
+
+                        HostFaceUp(working, hostedId, frame.SourceCardId, faceUp: !faceDown);
                         remainingSetAside.RemoveAll(selected => selected.CardId == hostedId);
                     }
 
@@ -1041,6 +1093,15 @@ public static partial class GameEngine
         && ice.Triggers.Any(trigger => trigger.Occurrence == OccurrenceKind.IceSubroutine && string.Equals(trigger.Key, key, StringComparison.Ordinal))
         && working.BehaviorCatalog.TryGet(parent.DefinitionId, out CardBehaviorDefinition? resolver)
         && BehaviorRunRules.DeclaresInstruction(resolver, BehaviorInstructionKind.ResolveIceSubroutine);
+
+    /// <summary>VP-SOURCE-SERVER-ROOT: the card is in the root of the source's server (Hype Machine). Shared with the validator.</summary>
+    internal static bool IsInSourceServerRoot(IReadOnlyList<CardInstanceState?> cards, IReadOnlyList<ZoneState?> zones, CardInstanceState card,
+        CardInstanceId? sourceId) =>
+        sourceId is { } source
+        && cards.FirstOrDefault(candidate => candidate?.Id == source) is { } sourceCard
+        && zones.FirstOrDefault(zone => zone?.Id == sourceCard.ZoneId) is { ServerId: { } server }
+        && zones.FirstOrDefault(zone => zone?.Id == card.ZoneId) is { Kind: ZoneKind.ServerRoot } root
+        && root.ServerId == server;
 
     /// <summary>VP-RUN-AFTER-RUN: the card is installed in a remote server, root or ICE. Shared with the validator.</summary>
     internal static bool IsInRemoteServer(IReadOnlyList<ServerState?> servers, IReadOnlyList<ZoneState?> zones, CardInstanceState card) =>
@@ -2069,7 +2130,8 @@ public static partial class GameEngine
             working.Cards,
             working.Zones,
             side,
-            BehaviorStaticModifierKind.MaximumHandSize);
+            BehaviorStaticModifierKind.MaximumHandSize,
+            working.RuntimeCardCatalog);
         return checked(rules.BaseHandSize + modifier - rules.CoreDamage);
     }
 
@@ -3792,6 +3854,7 @@ public static partial class GameEngine
                     && (!target.IsCopyOfArchives || IsCopyOfFaceUpArchivesCard(working.Cards, working.Zones, card))
                     && (!target.IsNotAi || !GameEngine.CardSubtypes(working.RuntimeCardCatalog, card.DefinitionId).Contains("ai", StringComparer.Ordinal))
                     && (!target.IsInRemoteServer || IsInRemoteServer(working.Servers, working.Zones, card))
+                    && (!target.IsInSourceServerRoot || IsInSourceServerRoot(working.Cards, working.Zones, card, excludedCardId))
                     && (!target.IsInAttackedServer || AttackedOrEndedRunServer(working.RunState, working.ResolutionStack) is { } attacked
                         && working.Zones.FirstOrDefault(zone => zone.Id == card.ZoneId)?.ServerId == attacked)
                     && (target.Kind != BehaviorTargetKind.InstalledCardNotThisTurn
@@ -4574,7 +4637,10 @@ public static partial class GameEngine
             // legal same-zone shuffle.
             if (source.Id != destination.Id)
             {
-                leftRunnerRig |= source.Kind == ZoneKind.RunnerRig;
+                // A chosen card may sit set aside while its choice resolves; it still leaves the rig it came from.
+                leftRunnerRig |= source.Kind == ZoneKind.RunnerRig
+                    || (frozenSelection is not null
+                        && working.Zones.SingleOrDefault(zone => zone.Id == frozenSelection.OriginalZoneId)?.Kind == ZoneKind.RunnerRig);
                 bool emit = source.Kind != ZoneKind.BehaviorSetAside
                     || destination.Kind is ZoneKind.CorpDiscard
                         or ZoneKind.RunnerHeap
@@ -5021,7 +5087,8 @@ public static partial class GameEngine
                 "A chosen-card advance requires a reachable installed-card selection as its origin.");
         }
 
-        CardInstanceId[] currentCandidates = MaterializeBehaviorCandidates(working, originatingTarget);
+        CardInstanceId[] currentCandidates = MaterializeBehaviorCandidates(working, originatingTarget,
+            originatingTarget.IsInSourceServerRoot || originatingTarget.IsOther ? frame.SourceCardId : null);
         if (cardIds.Any(cardId => !currentCandidates.Contains(cardId)))
         {
             throw new ResolutionFailureException(

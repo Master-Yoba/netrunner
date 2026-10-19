@@ -153,6 +153,8 @@ public static partial class GameEngine
 
         MoveCard(working, card, source, destination, emit, cleanupCounters, emitMemoryAdjustment);
         RecordTurnTrash(working, card.Id);
+        // VP-CARD-TRASHED: raised only while a trigger waits on it (Hiram), so other games keep their bytes.
+        DeferOccurrence(working, OccurrenceKind.CardTrashed, card.OwnerSide, card.Id);
     }
 
     /// <summary>

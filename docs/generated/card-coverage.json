@@ -3,11 +3,11 @@
   "rulesVersion": "CR-26.03",
   "counts": {
     "total": 225,
-    "registered": 215,
-    "tested": 215,
-    "fullTextComplete": 215,
+    "registered": 225,
+    "tested": 225,
+    "fullTextComplete": 225,
     "partial": 0,
-    "unregistered": 10
+    "unregistered": 0
   },
   "sets": [
     {
@@ -117,17 +117,17 @@
         {
           "id": "slice-VP.7",
           "slice": "VP.7",
-          "status": "planned",
+          "status": "complete",
           "cards": 10
         }
       ],
       "counts": {
         "total": 66,
-        "registered": 56,
-        "tested": 56,
-        "fullTextComplete": 56,
+        "registered": 66,
+        "tested": 66,
+        "fullTextComplete": 66,
         "partial": 0,
-        "unregistered": 10
+        "unregistered": 0
       }
     }
   ],
@@ -4257,13 +4257,16 @@
       "title": "Hackerspace",
       "batch": "slice-VP.7",
       "slice": "VP.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch3Tests.AnEffectsInstallOntoHackerspaceTakesItsDiscount",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch3Tests.HackerspaceHostsACompanionAndAConnectionForLessAndMoreHandSize"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "VP-CR-1.13-hosting"
@@ -4278,13 +4281,15 @@
       "title": "Nurse Hạnh",
       "batch": "slice-VP.7",
       "slice": "VP.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch3Tests.NurseHanhDrawsWhenTwoArchivesCardsTurnFaceup"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "VP-CR-7.3.2-archives-faceup"
@@ -4512,13 +4517,15 @@
       "title": "Hiram “0mission” Svensson: Shadow of the Past",
       "batch": "slice-VP.7",
       "slice": "VP.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch3Tests.HiramLooksAtRAndDsTopWhenHardwareIsInstalled"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "VP-CR-9.6-conditional"
@@ -4631,13 +4638,15 @@
       "title": "Read-Write Share",
       "batch": "slice-VP.7",
       "slice": "VP.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch3Tests.ReadWriteShareHostsGripCardsFacedownToDrawAndShufflesThemBack"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "VP-CR-1.13.7-facedown-hosting"
@@ -4967,13 +4976,16 @@
       "title": "Méliès U: Only the Brightest",
       "batch": "slice-VP.7",
       "slice": "VP.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch3Tests.MeliesUSetsACopySecretlyAndFlipsOnTheMatchingCentralRun",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch3Tests.TheRunnersSamplesDrawMeliesUsSecretCopyAgain"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "VP-CR-1.5.2-melies-u",
@@ -4990,13 +5002,17 @@
       "title": "Lotus Haze",
       "batch": "slice-VP.7",
       "slice": "VP.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch3Tests.LotusHazeDoesNotPutTwoRegionsInOneRoot",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch3Tests.LotusHazeMovesARezzedUpgradeToAnEmptyCentralServer",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch3Tests.LotusHazeMovesARezzedUpgradeToARemoteServerByOneOfItsCards"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "VP-CR-1.9-counters",
@@ -5063,13 +5079,15 @@
       "title": "Knowledge Seeker",
       "batch": "slice-VP.7",
       "slice": "VP.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch3Tests.KnowledgeSeekerArrangesRAndDAndDerezzesWithThreeVirusCounters"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "VP-CR-1.9-counters",
@@ -5136,13 +5154,15 @@
       "title": "Cultivate",
       "batch": "slice-VP.7",
       "slice": "VP.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch3Tests.CultivateTrashesOneTakesOneAndArrangesTheRest"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "VP-CR-8.3-arrange"
@@ -5408,7 +5428,8 @@
       "tests": [
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1CorpTests.ScapegoatWithNothingInstalledShufflesNothing",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1CorpTests.TheRunnerCanRemoveTheCorpsBadPublicityWithScapegoat",
-        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1CorpTests.WithoutBadPublicityScapegoatShufflesAnInstalledRunnerCardIntoTheStack"
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch1CorpTests.WithoutBadPublicityScapegoatShufflesAnInstalledRunnerCardIntoTheStack",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch3Tests.ShufflingAwayAMemoryCardMakesTheRunnerTrashAProgram"
       ],
       "fullTextComplete": true,
       "partial": false,
@@ -5425,13 +5446,15 @@
       "title": "Hype Machine",
       "batch": "slice-VP.7",
       "slice": "VP.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch3Tests.HypeMachineTrashesToAdvanceACardInItsRoot"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "VP-CR-2.3-cost-modifiers",
@@ -5544,13 +5567,16 @@
       "title": "Tocsin",
       "batch": "slice-VP.7",
       "slice": "VP.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch3Tests.AnInstalledTocsinDoesNotOfferItsExpendableSearch",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch3Tests.TocsinIsTrashedFromHqToFindABarrierAndASentry"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "VP-CR-9.5-paid-abilities",

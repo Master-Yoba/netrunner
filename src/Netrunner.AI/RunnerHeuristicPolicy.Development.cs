@@ -89,6 +89,14 @@ public sealed partial class RunnerHeuristicPolicy
             // VP.5 (misplay sweep): a program whose click-run may become an HQ or R&D run (Baker) is worth a run a turn; it was
             // never installed.
             if (definition.Behavior?.Triggers.Any(trigger => trigger.Occurrence == OccurrenceKind.ServerWouldBeApproached) == true) value += 250;
+            // VP.7 (misplay sweep): Nurse Hạnh's draws when Archives' face-down cards turn face up, and Hackerspace's discount
+            // on the resources in the grip it can host, with its hand size; neither was ever installed with a click.
+            value += (definition.Behavior?.Triggers ?? []).Where(trigger => trigger.Occurrence == OccurrenceKind.ArchivesCardsTurnedFaceUp)
+                .SelectMany(trigger => HeuristicContext.Flatten(trigger.Instructions))
+                .Where(instruction => instruction.Kind == BehaviorInstructionKind.Draw).Sum(instruction => instruction.Amount * context.DrawValue);
+            if (definition.Behavior?.HostsResources is { } hosts)
+                value += context.Features.Hand.Count(held => context.Definition(held)?.Printed is { } printed && hosts.Accepts(printed))
+                    * hosts.InstallDiscount * context.CreditValue + hosts.HandSizeWhileHostingEach * 40;
             if (context.Self.UsedMemory >= context.Self.MemoryLimit && definition.Printed.CardClass == RuntimeCardClass.Hardware) value += 170;
         }
         // v11: a setup deck builds its rig first; a virus deck values every virus.

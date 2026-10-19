@@ -57,6 +57,7 @@ public static partial class GameEngine
         {
             bool inRunnerScoreArea = sourceZone.Kind == ZoneKind.RunnerScore;
             bool inArchives = sourceZone.Kind == ZoneKind.CorpDiscard;
+            bool inHeadquarters = sourceZone.Kind == ZoneKind.CorpHand;
             if (sourceZone.OwnerSide != source.OwnerSide && !inRunnerScoreArea)
             {
                 continue;
@@ -84,6 +85,7 @@ public static partial class GameEngine
             {
                 if (inRunnerScoreArea && !ability.UsableFromRunnerScoreArea
                     || inArchives && !ability.UsableFromArchives
+                    || inHeadquarters != ability.UsableFromHeadquarters
                     || AbilityUserSide(source.OwnerSide, ability) != window.ControllerSide)
                 {
                     continue;
@@ -860,7 +862,7 @@ public static partial class GameEngine
     internal static bool IsIdentityOrScoreAbilityZone(ZoneState zone) =>
         zone.ServerId is null
         && zone.Kind is ZoneKind.CorpIdentity or ZoneKind.RunnerIdentity or ZoneKind.CorpScore or ZoneKind.RunnerScore
-            or ZoneKind.CorpDiscard;
+            or ZoneKind.CorpDiscard or ZoneKind.CorpHand;
 
     /// <summary>
     /// A faceup identity in its owner's identity zone, or a Corp agenda in
@@ -869,7 +871,7 @@ public static partial class GameEngine
     /// </summary>
     internal static bool IsIdentityOrScoreAbilitySource(CardInstanceState card, ZoneState zone) =>
         zone.ServerId is null
-        && zone.Kind == ZoneKind.CorpDiscard
+        && zone.Kind is ZoneKind.CorpDiscard or ZoneKind.CorpHand
         && card.OwnerSide == PlayerSide.Corp
         && zone.OwnerSide == PlayerSide.Corp
         || card.FaceUp

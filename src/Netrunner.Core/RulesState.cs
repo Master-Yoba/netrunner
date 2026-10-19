@@ -542,8 +542,15 @@ public sealed record RulesState
         IReadOnlyList<TriggerRegistration>? triggers = null,
         IReadOnlyList<InterruptRegistration>? interrupts = null,
         int badPublicity = 0,
-        IReadOnlyList<ScoreAreaAgenda>? scoredAsAgendas = null)
+        IReadOnlyList<ScoreAreaAgenda>? scoredAsAgendas = null,
+        SecretIdentityState? secretIdentity = null)
     {
+        if (secretIdentity is not null && secretIdentity.Side is not (ServerKind.Headquarters or ServerKind.RAndD or ServerKind.Archives))
+        {
+            throw new ArgumentException("A secret identity names a central server's side.", nameof(secretIdentity));
+        }
+
+        SecretIdentity = secretIdentity;
         // PR #152's review: a null entry is an invalid state, rejected here as the other collections' are.
         ScoredAsAgendas = scoredAsAgendas is { Count: > 0 }
             ? new ReadOnlyCollection<ScoreAreaAgenda>(scoredAsAgendas.Select(static entry =>
@@ -644,6 +651,16 @@ public sealed record RulesState
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<ScoreAreaAgenda>? ScoredAsAgendas { get; private set; }
 
+    /// <summary>
+    /// VP-SECRET-IDENTITY: the copy of Méliès U the Corp secretly set as active, by the central server its back names, and
+    /// whether it is flipped to that back. Hidden from the Runner until flipped; omitted while unused.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public SecretIdentityState? SecretIdentity { get; private set; }
+
+    internal RulesState WithSecretIdentity(SecretIdentityState? secretIdentity) => this with { SecretIdentity = secretIdentity };
+
     public static RulesState CreateDefault(IEnumerable<PlayerState> players)
     {
         ArgumentNullException.ThrowIfNull(players);
@@ -656,5 +673,10 @@ public sealed record RulesState
             usedMemory: 0)).ToArray());
     }
 
-    internal RulesState Copy() => new(Version, Players, Programs, Counters, LingeringEffects, Triggers, Interrupts, BadPublicity, ScoredAsAgendas);
+    internal RulesState Copy() => new(Version, Players, Programs, Counters, LingeringEffects, Triggers, Interrupts, BadPublicity, ScoredAsAgendas,
+        SecretIdentity);
 }
+
+/// <summary>VP-SECRET-IDENTITY: the active copy of a secret identity (Méliès U), by its back's central server.</summary>
+public sealed record SecretIdentityState(ServerKind Side, bool Flipped);
+

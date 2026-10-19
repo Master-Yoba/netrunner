@@ -121,6 +121,12 @@ public enum OccurrenceKind
     /// reaction may change the attacked server first (Baker).
     /// </summary>
     ServerWouldBeApproached,
+
+    /// <summary>VP-ARCHIVES-TURNED-FACEUP: two or more facedown cards in Archives were turned faceup at once (Nurse Hạnh).</summary>
+    ArchivesCardsTurnedFaceUp,
+
+    /// <summary>VP-CARD-TRASHED: a card was trashed, from any location; the subject is the card (Hiram, its hardware).</summary>
+    CardTrashed,
 }
 
 public enum OccurrencePhase

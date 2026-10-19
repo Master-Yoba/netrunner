@@ -82,7 +82,7 @@
       "id": "slice-VP.7",
       "slice": "VP.7",
       "title": "Batch 3: zones and hidden information",
-      "status": "planned",
+      "status": "complete",
       "completionRequired": true,
       "codes": [
         "36006",
@@ -223,9 +223,9 @@
       "faction": "anarch",
       "batch": "slice-VP.7",
       "slice": "VP.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "VP-HOST-RESOURCES"
@@ -245,9 +245,9 @@
       "faction": "anarch",
       "batch": "slice-VP.7",
       "slice": "VP.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "VP-ARCHIVES-TURNED-FACEUP"
@@ -463,9 +463,9 @@
       "faction": "shaper",
       "batch": "slice-VP.7",
       "slice": "VP.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [],
       "citations": [
@@ -576,9 +576,9 @@
       "faction": "shaper",
       "batch": "slice-VP.7",
       "slice": "VP.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "VP-HOST-FACEDOWN"
@@ -888,9 +888,9 @@
       "faction": "jinteki",
       "batch": "slice-VP.7",
       "slice": "VP.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "VP-SECRET-IDENTITY"
@@ -912,9 +912,9 @@
       "faction": "jinteki",
       "batch": "slice-VP.7",
       "slice": "VP.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [],
       "citations": [
@@ -978,9 +978,9 @@
       "faction": "jinteki",
       "batch": "slice-VP.7",
       "slice": "VP.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "VP-ICE-VIRUS-COUNTERS",
@@ -1048,9 +1048,9 @@
       "faction": "jinteki",
       "batch": "slice-VP.7",
       "slice": "VP.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "VP-ARRANGE"
@@ -1316,9 +1316,9 @@
       "faction": "nbn",
       "batch": "slice-VP.7",
       "slice": "VP.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "VP-DYNAMIC-REZ-COST",
@@ -1430,9 +1430,9 @@
       "faction": "weyland-consortium",
       "batch": "slice-VP.7",
       "slice": "VP.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "VP-ABILITY-FROM-HQ"

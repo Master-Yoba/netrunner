@@ -437,7 +437,10 @@ public sealed record BehaviorCondition
                 or BehaviorConditionKind.SourceScoredThisTurn
                 or BehaviorConditionKind.SuccessfulRunOnEveryCentralThisTurn
                 or BehaviorConditionKind.RunAgainstSourceServer
-                or BehaviorConditionKind.RunAgainstAnotherServer)
+                or BehaviorConditionKind.RunAgainstAnotherServer
+                or BehaviorConditionKind.IdentityFlipped
+                or BehaviorConditionKind.IdentityNotFlipped
+                or BehaviorConditionKind.SecretIdentityMatchesAttackedServer)
             && (fact is not null || value is not null))
         {
             throw new ArgumentException(
@@ -707,6 +710,15 @@ public enum BehaviorConditionKind
 
     /// <summary>VP-ICE-PASSED: the subject side (by default the controller) has at most the value in clicks (Vertigo).</summary>
     ClicksRemainingAtMost,
+
+    /// <summary>VP-SECRET-IDENTITY: the secret identity is flipped to its back (Méliès U).</summary>
+    IdentityFlipped,
+
+    /// <summary>VP-SECRET-IDENTITY: the secret identity shows its front.</summary>
+    IdentityNotFlipped,
+
+    /// <summary>VP-SECRET-IDENTITY: the secret identity's back names the attacked server's kind.</summary>
+    SecretIdentityMatchesAttackedServer,
 }
 
 /// <summary>A typed target selector; IDs are resolved by Core at runtime.</summary>
@@ -871,6 +883,12 @@ public sealed record BehaviorTarget
 
     [JsonIgnore]
     public bool IsInRemoteServer => string.Equals(Selector, RemoteServerSelector, StringComparison.Ordinal);
+
+    /// <summary>VP-SOURCE-SERVER-ROOT: an installed-card target over only cards in the root of the source's server (Hype Machine).</summary>
+    public const string SourceServerRootSelector = "source-server-root";
+
+    [JsonIgnore]
+    public bool IsInSourceServerRoot => string.Equals(Selector, SourceServerRootSelector, StringComparison.Ordinal);
 
     [JsonIgnore]
     public bool IsCopyOfArchives => string.Equals(Selector, CopyOfArchivesSelector, StringComparison.Ordinal);
@@ -1552,7 +1570,8 @@ public sealed record BehaviorInstruction
             or BehaviorInstructionKind.InstallCard
             or BehaviorInstructionKind.AdvanceCard
             or BehaviorInstructionKind.RemoveAdvancementCounters
-            or BehaviorInstructionKind.SwapInstalledIce)
+            or BehaviorInstructionKind.SwapInstalledIce
+            or BehaviorInstructionKind.HostFaceDown)
         {
             if (Target is null)
             {
@@ -1565,6 +1584,12 @@ public sealed record BehaviorInstruction
         if (Kind == BehaviorInstructionKind.SwapInstalledIce && Argument is not null && !StableIdentifier.TryValidate(Argument))
         {
             throw new ArgumentException("A swap names its first piece of ICE by a stable key.", nameof(Argument));
+        }
+
+        if (Kind == BehaviorInstructionKind.SetSecretIdentity
+            && (!Enum.TryParse(Argument, ignoreCase: false, out ServerKind secretSide) || secretSide == ServerKind.Remote))
+        {
+            throw new ArgumentException("A secret identity's side names a central server kind.", nameof(Argument));
         }
 
         if (Kind == BehaviorInstructionKind.ChangeAttackedServer
@@ -1591,7 +1616,8 @@ public sealed record BehaviorInstruction
             case BehaviorInstructionKind.ShuffleIntoDeck:
                 if (SourceZone is { } shuffleSource)
                 {
-                    // VP.3: the rig too, for an installed Runner card shuffled into the stack (Scapegoat).
+                    // VP.3: the rig too, for an installed Runner card shuffled into the stack (Scapegoat); VP.7, hosted cards
+                    // (Read-Write Share's facedown cards).
                     RequireZone(
                         shuffleSource,
                         nameof(SourceZone),
@@ -1600,7 +1626,8 @@ public sealed record BehaviorInstruction
                         BehaviorZone.Archives,
                         BehaviorZone.Stack,
                         BehaviorZone.Grip,
-                        BehaviorZone.Rig);
+                        BehaviorZone.Rig,
+                        BehaviorZone.HostedFaceUp);
                 }
 
                 RequireDestination(nameof(DestinationZone), BehaviorZone.Deck, BehaviorZone.Stack);
@@ -1678,6 +1705,14 @@ public sealed record BehaviorInstruction
                 break;
         }
 
+        if (Kind == BehaviorInstructionKind.MoveSourceToServerOf && DestinationZone is not null
+            && (Target is not null || DestinationZone is not (BehaviorZone.Headquarters or BehaviorZone.Deck or BehaviorZone.Archives)))
+        {
+            throw new ArgumentException(
+                "A move to a server names either a card in it or a central server's zone (VP-MOVE-UPGRADE).",
+                nameof(DestinationZone));
+        }
+
         if (Kind == BehaviorInstructionKind.MoveCard
             && (Target is not null || DestinationZone is not null || SourceZone is not null)
             && (Target is null || DestinationZone is null))
@@ -1746,6 +1781,7 @@ public sealed record BehaviorInstruction
             && Kind != BehaviorInstructionKind.ShuffleDeck
             && !(Kind == BehaviorInstructionKind.PlayCard && SourceZone is null
                 && DestinationZone is null or BehaviorZone.RemovedFromGame)
+            && !(Kind == BehaviorInstructionKind.MoveSourceToServerOf && SourceZone is null)
             && (SourceZone is not null || DestinationZone is not null))
         {
             throw new ArgumentException(
@@ -1783,6 +1819,7 @@ public sealed record BehaviorInstruction
             or BehaviorInstructionKind.PlayCard
             or BehaviorInstructionKind.TurnFaceUp
             or BehaviorInstructionKind.HostFaceUp
+            or BehaviorInstructionKind.HostFaceDown
             or BehaviorInstructionKind.Derez
             or BehaviorInstructionKind.RezPayingLess
             or BehaviorInstructionKind.MoveSourceToServerOf
@@ -2049,6 +2086,15 @@ public enum BehaviorInstructionKind
     /// encounter (Unleash). A mode option holding only this is offered while that subroutine can resolve so.
     /// </summary>
     ResolveIceSubroutine,
+
+    /// <summary>VP-HOST-FACEDOWN: host the target facedown on the source, up to the source's limit (Read-Write Share).</summary>
+    HostFaceDown,
+
+    /// <summary>VP-SECRET-IDENTITY: secretly set the active copy, by its back's central server, front up (Méliès U).</summary>
+    SetSecretIdentity,
+
+    /// <summary>VP-SECRET-IDENTITY: flip the secret identity, to its back or to its front.</summary>
+    FlipIdentity,
 
     // Short aliases keep the contract pleasant for callers while the longer
     // names remain unambiguous in serialized/fingerprint output.
@@ -2494,7 +2540,8 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
         or OccurrenceKind.IceBypassed
         or OccurrenceKind.IceFullyBroken
         or OccurrenceKind.SubroutineBroken
-        or OccurrenceKind.EncounterEnded;
+        or OccurrenceKind.EncounterEnded
+        or OccurrenceKind.CardTrashed;
 
     private static ReadOnlyCollection<BehaviorInstruction> Freeze(
         IEnumerable<BehaviorInstruction> values)
@@ -2563,8 +2610,22 @@ public sealed class CardBehaviorDefinition
         int allIceStrength = 0,
         bool runsCannotSucceed = false,
         int runAccessLimitBesidesSelf = 0,
-        IceSubroutineSpec? gainedIceSubroutine = null)
+        IceSubroutineSpec? gainedIceSubroutine = null,
+        ResourceHostingSpec? hostsResources = null,
+        int hostsFaceDownLimit = 0)
     {
+        if (hostsFaceDownLimit < 0 || hostsFaceDownLimit > 0 && controller != PlayerSide.Runner)
+        {
+            throw new ArgumentException("Only a Runner card hosts cards facedown, up to a positive limit.", nameof(hostsFaceDownLimit));
+        }
+
+        HostsFaceDownLimit = hostsFaceDownLimit;
+        if (hostsResources is not null && controller != PlayerSide.Runner)
+        {
+            throw new ArgumentException("Only a Runner card hosts resources.", nameof(hostsResources));
+        }
+
+        HostsResources = hostsResources;
         // VP-ICE-GAINS-SUBROUTINE: a typed subroutine; a behavior subroutine names a trigger on the ICE's own definition.
         if (gainedIceSubroutine is BehaviorSubroutineSpec)
         {
@@ -2794,6 +2855,14 @@ public sealed class CardBehaviorDefinition
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<ServerKind>? InstallServerKinds { get; }
+
+    /// <summary>VP-HOST-FACEDOWN: the most cards its owner may host facedown on the card (Read-Write Share). Zero for none.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int HostsFaceDownLimit { get; }
+
+    /// <summary>VP-HOST-RESOURCES: the resources the card may host (Hackerspace). Null for none.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ResourceHostingSpec? HostsResources { get; }
 
     /// <summary>
     /// VP-ALL-ICE-STRENGTH: while the card is active and installed, every piece of ICE gets this strength ("Each piece of
@@ -3730,6 +3799,8 @@ internal static class BehaviorCatalogStructure
                 && a.FirstDoubleOperationClickDiscount == b.FirstDoubleOperationClickDiscount
                 && a.ReturnsHostedBadPublicity == b.ReturnsHostedBadPublicity
                 && SequenceEquals(a.InstallServerKinds ?? [], b.InstallServerKinds ?? [])
+                && Equals(a.HostsResources, b.HostsResources)
+                && a.HostsFaceDownLimit == b.HostsFaceDownLimit
                 && a.AllIceStrength == b.AllIceStrength
                 && a.RunsCannotSucceed == b.RunsCannotSucceed
                 && a.RunAccessLimitBesidesSelf == b.RunAccessLimitBesidesSelf
@@ -4073,6 +4144,16 @@ internal static class BehaviorCatalogFingerprint
         {
             builder.Append(",installServerKinds=").Append(string.Join("+", installKinds.Select(static kind => (int)kind)));
         }
+        if (value.HostsFaceDownLimit != 0)
+        {
+            builder.Append(",hostsFaceDownLimit=").Append(value.HostsFaceDownLimit);
+        }
+        if (value.HostsResources is { } hostsResources)
+        {
+            builder.Append(",hostsResources=").Append(string.Join("+", hostsResources.Subtypes))
+                .Append('|').Append(hostsResources.UniqueOnly ? 1 : 0).Append('|').Append(hostsResources.InstallDiscount)
+                .Append('|').Append(hostsResources.HandSizeWhileHostingEach);
+        }
         if (value.AllIceStrength != 0)
         {
             builder.Append(",allIceStrength=").Append(value.AllIceStrength);
@@ -4262,6 +4343,10 @@ internal static class BehaviorCatalogFingerprint
         if (value.UsedByOpponent)
         {
             builder.Append(",byOpponent=1");
+        }
+        if (value.UsableFromHeadquarters)
+        {
+            builder.Append(",fromHeadquarters=1");
         }
     }
 

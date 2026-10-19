@@ -10,7 +10,7 @@ public sealed partial class CorpHeuristicPolicy
         AgentCard? card = context.Card(play.CardId);
         CardBehaviorDefinition? behavior = context.Definition(card)?.Behavior;
         if (behavior is null) return Value(-50, "play/unmodelled", approximate: true, fallback: true);
-        int effect = Effects(context, behavior.Instructions, card, behavior.Controller);
+        int effect = Effects(context, behavior.Instructions, card, behavior.Controller, play: true);
         // v30: a play only possible before the turn's first action finishes (Petty Cash) is now or never this turn.
         if (effect - play.CreditCost * context.CreditValue > 0 && NowOrNever(behavior.Conditions)) effect += NowOrNeverBonus;
         return new(effect >= 10000 ? 100 : 0, effect - play.CreditCost * context.CreditValue,
@@ -136,7 +136,12 @@ public sealed partial class CorpHeuristicPolicy
             .Any(instruction => instruction.Kind is BehaviorInstructionKind.GainCredits or BehaviorInstructionKind.LoadHostedCredits
                 or BehaviorInstructionKind.PlaceHostedCredits);
 
-    private static int Effects(HeuristicContext context, IEnumerable<BehaviorInstruction> instructions, AgentCard? source, PlayerSide controller)
+    /// <param name="play">
+    /// VP.7 (misplay sweep): an operation's own effects, where a choice among R&amp;D's top cards is valued as the Corp's pick of
+    /// them (Cultivate was never played: its trash read as trashing an installed card). Triggers (Au Co) keep their v30 values.
+    /// </param>
+    private static int Effects(HeuristicContext context, IEnumerable<BehaviorInstruction> instructions, AgentCard? source, PlayerSide controller,
+        bool play = false)
     {
         int total = 0;
         BehaviorTarget? chosenTarget = null;
@@ -232,6 +237,12 @@ public sealed partial class CorpHeuristicPolicy
                         .Select(card => context.CardValue(card, installed: true)).DefaultIfEmpty(0).Max() / 2)
                         * context.CorpProfile.TagWeight);
                     break;
+                // VP.7: the Corp trashes the least useful of R&D's top cards, and takes the most useful into HQ.
+                case BehaviorInstructionKind.TrashCard when play && IsDeckTopChoice(chosenTarget): break;
+                case BehaviorInstructionKind.AddToHand when play && IsDeckTopChoice(chosenTarget)
+                    && instruction.Target is { Kind: BehaviorTargetKind.ChosenCard }:
+                    total += context.DrawValue + 50;
+                    break;
                 // v29 (bot loop 2): trashing its own card costs the Corp the cheapest it can choose (LEO's bioroid), where the
                 // target filter's missing card type had matched the Runner's cards and made it a gain.
                 case BehaviorInstructionKind.TrashCard when self
@@ -259,7 +270,7 @@ public sealed partial class CorpHeuristicPolicy
                     && ChooserSide(runnerChoice.Chooser, controller) != context.Features.Side:
                     // v7: the opponent picks the option least good for us, and the
                     // credits it pays are ours to value (Public Trail: a tag or 8 credits).
-                    total += runnerChoice.Options.Min(option => Effects(context, option.Instructions, source, controller)
+                    total += runnerChoice.Options.Min(option => Effects(context, option.Instructions, source, controller, play)
                         + (option.Costs ?? []).Where(cost => cost.Kind == BehaviorCostKind.Credits).Sum(cost => cost.Amount) * 100);
                     break;
                 case BehaviorInstructionKind.Choose:
@@ -267,7 +278,7 @@ public sealed partial class CorpHeuristicPolicy
                     if (instruction.Choice is { Options.Count: > 0 } choice
                         && choice.Options.Where(option => option.Condition is not { Kind: BehaviorConditionKind.RunnerTagsAtLeast } tagged
                             || context.Opponent.Tags >= (tagged.Value ?? 1)).ToArray() is { Length: > 0 } offered)
-                        total += offered.Max(option => Effects(context, option.Instructions, source, controller)
+                        total += offered.Max(option => Effects(context, option.Instructions, source, controller, play)
                             - (option.Costs ?? []).Where(cost => cost.Kind == BehaviorCostKind.Credits).Sum(cost => cost.Amount) * context.CreditValue);
                     else total += 100;
                     break;
@@ -281,7 +292,7 @@ public sealed partial class CorpHeuristicPolicy
                             BehaviorConditionKind.SuccessfulRunThisTurn => context.Features.Board.TurnFacts?.Runner.ThisTurn?.SuccessfulRun == true,
                             _ => true,
                         };
-                        total += Effects(context, condition ? branch.WhenTrue : branch.WhenFalse, source, controller);
+                        total += Effects(context, condition ? branch.WhenTrue : branch.WhenFalse, source, controller, play);
                     }
                     break;
                 // v29 (bot loop 2): ending a run the ICE ahead stops anyway gains little; LEO trashed the Brân it had just
@@ -345,6 +356,9 @@ public sealed partial class CorpHeuristicPolicy
     };
 
     /// <summary>Whether an installed Runner card fits a behavior target's card filter.</summary>
+    private static bool IsDeckTopChoice(BehaviorTarget? target) =>
+        target is { Kind: BehaviorTargetKind.ZoneCards, Zone: BehaviorZone.Deck };
+
     private static bool MatchesTarget(HeuristicContext context, AgentCard card, BehaviorTarget? target)
     {
         if (target?.Filter is not { } filter) return true;

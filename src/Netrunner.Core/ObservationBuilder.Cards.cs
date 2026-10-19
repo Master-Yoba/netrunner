@@ -25,8 +25,8 @@ public static partial class ObservationBuilder
         // the deck, ineligible cards, or another player's private search.
         // A choice among the opponent's hand cards follows their reveal (Touch-ups' grip): the chooser sees them.
         var cards = choice.CandidateCardIds.Distinct().OrderBy(id => id.Value, StringComparer.Ordinal)
-            .Where(id => state.GetCard(id).OwnerSide == viewer
-                    && state.GetZone(state.GetCard(id).ZoneId).Kind is ZoneKind.CorpDeck or ZoneKind.RunnerStack
+            .Where(id => state.GetZone(state.GetCard(id).ZoneId).Kind is ZoneKind.CorpDeck or ZoneKind.RunnerStack
+                // VP-LOOK-OPPONENT-DECK: a choice over the opponent's deck is a look at its top (Hiram, R&D).
                 || state.GetCard(id).OwnerSide != viewer && IsHandZone(state.GetZone(state.GetCard(id).ZoneId).Kind))
             .Select(id => ObserveCard(state, viewer, id)).Where(card => card is not null).ToArray();
         if (cards.Length > 0) privateState["choiceCards"] = cards;
@@ -43,7 +43,8 @@ public static partial class ObservationBuilder
         if (!Enum.IsDefined(viewer)) throw new ArgumentOutOfRangeException(nameof(viewer));
         CardInstanceState? card = state.Cards.FirstOrDefault(candidate => candidate.Id == cardId);
         if (card is null) return null;
-        bool choicePermission = (card.OwnerSide == viewer || IsHandZone(state.GetZone(card.ZoneId).Kind))
+        bool choicePermission = (card.OwnerSide == viewer || IsHandZone(state.GetZone(card.ZoneId).Kind)
+                || state.GetZone(card.ZoneId).Kind is ZoneKind.CorpDeck or ZoneKind.RunnerStack)
             && state.PendingDecision is { } pending && state.GetPlayer(pending.Owner).Side == viewer
             && (state.ResolutionStack.Count > 0 ? state.ResolutionStack[^1] : null) is BehaviorResolutionFrame { Choice: { } choice }
             && state.GetPlayer(choice.Owner).Side == viewer && choice.CandidateCardIds.Contains(cardId)
