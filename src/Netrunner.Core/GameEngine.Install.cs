@@ -1049,7 +1049,7 @@ public static partial class GameEngine
             return zoneRule is null || !IsLegalInstallHost(working, cardId, hostCardId)
                 ? null
                 : BuildInstallPlanCore(working, side, cardId, destinationKind, serverId, createNewRemote,
-                    initiationKind, inwardAnchorIceId, zoneRule);
+                    initiationKind, inwardAnchorIceId, zoneRule, hostCardId);
         }
 
         bool deferredHost = initiationKind == InstallInitiationKind.BehaviorEffect && hostCardId is null

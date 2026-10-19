@@ -50,6 +50,30 @@ public sealed class VantagePointBatch3Tests
 
     private static CardInstanceId[] Deck(GameState state) => state.Zones.Single(static zone => zone.Kind == ZoneKind.CorpDeck).CardIds.ToArray();
 
+    // The third review of #157: an effect's install onto Hackerspace (Baz's, as the Corp rezzes ICE) takes its discount.
+    [Fact]
+    [Trait("VantagePointCard", Hackerspace)]
+    public void AnEffectsInstallOntoHackerspaceTakesItsDiscount()
+    {
+        GameState state = new ElevationBoard(PlayerSide.Runner) { CorpCredits = 5, RunnerCredits = 5 }
+            .Add("35012", Place.RunnerIdentity)
+            .Add(Hackerspace, Place.Rig)
+            .Add(CorpFillerIce, Place.Ice)
+            .Add(NurseHanh, Place.Grip)
+            .Begin(catalog: Startup);
+        static bool RezOffer(GameState value, LegalAction action) => action.Kind == ActionKind.RezCard
+            && action.Parameters is RezCardParameters rez && rez.CardId == Card(value, CorpFillerIce);
+        state = RunTo(state, ElevationBoard.Remote, value => value.PendingDecision?.LegalActions.Any(action => RezOffer(value, action)) == true);
+        state = Apply(state, action => RezOffer(state, action)).State;
+        state = UseTrigger(PassToTrigger(state));
+        int credits = Player(state, PlayerSide.Runner).Credits;
+        state = RoundTrip(Apply(state, action => action.Parameters is BehaviorInstallChoiceParameters { Choice: { } choice }
+            && choice.CardId == Card(state, NurseHanh) && choice.HostCardId == Card(state, Hackerspace)).State);
+
+        Assert.Equal(Card(state, Hackerspace), state.GetCard(Card(state, NurseHanh)).HostCardId);
+        Assert.Equal(credits, Player(state, PlayerSide.Runner).Credits);
+    }
+
     [Fact]
     [Trait("VantagePointCard", Hackerspace)]
     public void HackerspaceHostsACompanionAndAConnectionForLessAndMoreHandSize()

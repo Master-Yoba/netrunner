@@ -621,3 +621,6 @@ identity, a host and a hidden zone.
 
 The second round's one finding, valid: Lotus Haze could put a region in a root that already held one, which CR 3.6.5e
 forbids (Shackleton Grid to Mahkota Langit Grid's server). That move now leaves the region where it is.
+
+The third round's one finding, valid: an effect's install onto Hackerspace (Baz Wong's, as the Corp rezzes ICE) was offered
+at full price but checked with the discount, so it was rejected. The effect's install plan now passes on its host.

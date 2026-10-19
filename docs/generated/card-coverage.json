@@ -4263,6 +4263,7 @@
       "reviewer": "architect",
       "registered": true,
       "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch3Tests.AnEffectsInstallOntoHackerspaceTakesItsDiscount",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch3Tests.HackerspaceHostsACompanionAndAConnectionForLessAndMoreHandSize"
       ],
       "fullTextComplete": true,
