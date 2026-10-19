@@ -503,6 +503,9 @@ change (Vicsek, Sipa and Unleash): **25 of 28 (89%)**.
   pairs with each printed one.
 - **Not a change:** Unleash's resolve stays optional. The card says "You may resolve 1 subroutine on that ice".
 
+The second round's two, both Beta Build's: it now shuffles the stack after its search, and with no program to install
+it remembers nothing and the run goes on.
+
 ### Rulings and deviations
 
 | Card | Note |

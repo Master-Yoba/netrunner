@@ -4563,7 +4563,8 @@
       "reviewer": "architect",
       "registered": true,
       "tests": [
-        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch2RunnerTests.BetaBuildInstallsAProgramForTheRunAndReturnsIt"
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch2RunnerTests.BetaBuildInstallsAProgramForTheRunAndReturnsIt",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch2RunnerTests.BetaBuildShufflesTheStackAndRunsWithNoProgramToInstall"
       ],
       "fullTextComplete": true,
       "partial": false,

@@ -189,7 +189,10 @@ public static class VantagePointBatch2RunnerSpecs
                     target: BehaviorTarget.CardInZone(BehaviorZone.Stack,
                         new BehaviorCardFilter(BehaviorCardType.Program, ownerSide: PlayerSide.Runner, excludedSubtype: "virus")),
                     sourceZone: BehaviorZone.Stack, costRule: BehaviorInstallCostRule.IgnoreAllCosts),
-                new BehaviorInstruction(BehaviorInstructionKind.RememberForRun, argument: "beta-build-program", target: ChosenBy("beta-build-program")),
+                // A search: the stack is shuffled after it. With no program to install there is nothing to remember.
+                new BehaviorInstruction(BehaviorInstructionKind.ShuffleDeck, sourceZone: BehaviorZone.Stack),
+                Branch(BehaviorCondition.Chose("beta-build-program"),
+                    [new BehaviorInstruction(BehaviorInstructionKind.RememberForRun, argument: "beta-build-program", target: ChosenBy("beta-build-program"))]),
             ]),
             Trigger("beta-build-return", OccurrenceKind.RunEnded, BehaviorTriggerScope.Self,
                 [new BehaviorInstruction(BehaviorInstructionKind.PlaceOnTopOfDeck,

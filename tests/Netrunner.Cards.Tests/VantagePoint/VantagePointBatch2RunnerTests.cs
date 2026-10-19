@@ -245,6 +245,31 @@ public sealed class VantagePointBatch2RunnerTests
         Assert.Equal(Card(state, Cleaver), state.Zones.Single(static zone => zone.Kind == ZoneKind.RunnerStack).CardIds[0]);
     }
 
+    // PR #156's review: Beta Build searches, so the stack is shuffled after it; with no program to install, the run goes on.
+    [Theory]
+    [Trait("VantagePointCard", BetaBuild)]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void BetaBuildShufflesTheStackAndRunsWithNoProgramToInstall(bool program)
+    {
+        ElevationBoard board = new ElevationBoard(PlayerSide.Runner) { RunnerCredits = 3, StackFiller = 6 }
+            .Add(BetaBuild, Place.Grip);
+        GameState state = (program ? board.Add(Cleaver, Place.Stack) : board).Begin(catalog: Startup);
+        state = Play(state, BetaBuild, ElevationBoard.Remote);
+        if (program)
+        {
+            state = PassUntil(state, static value => value.PendingDecision?.Kind == DecisionKind.BehaviorInstallChoice);
+            ApplyResult installed = Apply(state, Actions(state).First(action => action.Parameters is BehaviorInstallChoiceParameters
+            { Choice: not null } choice && choice.Choice!.CardId == Card(state, Cleaver)));
+            Assert.Contains(installed.Events, static value => value.Kind == EngineEventKinds.BehaviorCardsShuffled);
+            state = installed.State;
+        }
+
+        state = RoundTrip(ToAction(state));
+        Assert.Null(state.RunState);
+        Assert.Equal([ElevationBoard.ServerId(state, ElevationBoard.Remote)], state.Turn.History!.RunnerThisTurn!.SuccessfulRunServerIds);
+    }
+
     [Fact]
     [Trait("VantagePointCard", Sipa)]
     public void SipaSwapsTheFullyBrokenOutermostIce()
