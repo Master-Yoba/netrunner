@@ -32,6 +32,13 @@ public static partial class StateInvariantValidator
 
                 continue;
             }
+            // VP-HOST-RESOURCES: a resource installed onto a host that accepts it (Hackerspace).
+            if (!requiresHost && zone?.Kind == ZoneKind.RunnerRig
+                && GameEngine.ResourceHost(state.Cards, state.Zones, catalog, runtimeCatalog, hostId, card) is not null)
+            {
+                continue;
+            }
+
             CardInstanceState? host = state.Cards.FirstOrDefault(value => value.Id == hostId);
             ZoneState? hostZone = state.Zones.FirstOrDefault(value => value.Id == host?.ZoneId);
             if (!requiresHost || hostId == card.Id || host is null || host.OwnerSide != PlayerSide.Corp

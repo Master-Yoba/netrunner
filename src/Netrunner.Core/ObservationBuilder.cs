@@ -921,7 +921,8 @@ public static partial class ObservationBuilder
                 state.Cards,
                 state.Zones,
                 player.Side,
-                BehaviorStaticModifierKind.MaximumHandSize);
+                BehaviorStaticModifierKind.MaximumHandSize,
+                runtimeCardCatalog);
             view["maximumHandSize"] = checked(rules.MaximumHandSize + modifier);
             view["tags"] = Math.Max(0, rules.Tags);
             if (rules.CoreDamage != 0) view["coreDamage"] = rules.CoreDamage;

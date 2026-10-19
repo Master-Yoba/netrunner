@@ -2563,8 +2563,15 @@ public sealed class CardBehaviorDefinition
         int allIceStrength = 0,
         bool runsCannotSucceed = false,
         int runAccessLimitBesidesSelf = 0,
-        IceSubroutineSpec? gainedIceSubroutine = null)
+        IceSubroutineSpec? gainedIceSubroutine = null,
+        ResourceHostingSpec? hostsResources = null)
     {
+        if (hostsResources is not null && controller != PlayerSide.Runner)
+        {
+            throw new ArgumentException("Only a Runner card hosts resources.", nameof(hostsResources));
+        }
+
+        HostsResources = hostsResources;
         // VP-ICE-GAINS-SUBROUTINE: a typed subroutine; a behavior subroutine names a trigger on the ICE's own definition.
         if (gainedIceSubroutine is BehaviorSubroutineSpec)
         {
@@ -2794,6 +2801,10 @@ public sealed class CardBehaviorDefinition
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<ServerKind>? InstallServerKinds { get; }
+
+    /// <summary>VP-HOST-RESOURCES: the resources the card may host (Hackerspace). Null for none.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ResourceHostingSpec? HostsResources { get; }
 
     /// <summary>
     /// VP-ALL-ICE-STRENGTH: while the card is active and installed, every piece of ICE gets this strength ("Each piece of
@@ -3730,6 +3741,7 @@ internal static class BehaviorCatalogStructure
                 && a.FirstDoubleOperationClickDiscount == b.FirstDoubleOperationClickDiscount
                 && a.ReturnsHostedBadPublicity == b.ReturnsHostedBadPublicity
                 && SequenceEquals(a.InstallServerKinds ?? [], b.InstallServerKinds ?? [])
+                && Equals(a.HostsResources, b.HostsResources)
                 && a.AllIceStrength == b.AllIceStrength
                 && a.RunsCannotSucceed == b.RunsCannotSucceed
                 && a.RunAccessLimitBesidesSelf == b.RunAccessLimitBesidesSelf
@@ -4073,6 +4085,12 @@ internal static class BehaviorCatalogFingerprint
         {
             builder.Append(",installServerKinds=").Append(string.Join("+", installKinds.Select(static kind => (int)kind)));
         }
+        if (value.HostsResources is { } hostsResources)
+        {
+            builder.Append(",hostsResources=").Append(string.Join("+", hostsResources.Subtypes))
+                .Append('|').Append(hostsResources.UniqueOnly ? 1 : 0).Append('|').Append(hostsResources.InstallDiscount)
+                .Append('|').Append(hostsResources.HandSizeWhileHostingEach);
+        }
         if (value.AllIceStrength != 0)
         {
             builder.Append(",allIceStrength=").Append(value.AllIceStrength);
@@ -4262,6 +4280,10 @@ internal static class BehaviorCatalogFingerprint
         if (value.UsedByOpponent)
         {
             builder.Append(",byOpponent=1");
+        }
+        if (value.UsableFromHeadquarters)
+        {
+            builder.Append(",fromHeadquarters=1");
         }
     }
 

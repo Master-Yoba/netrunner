@@ -2069,7 +2069,8 @@ public static partial class GameEngine
             working.Cards,
             working.Zones,
             side,
-            BehaviorStaticModifierKind.MaximumHandSize);
+            BehaviorStaticModifierKind.MaximumHandSize,
+            working.RuntimeCardCatalog);
         return checked(rules.BaseHandSize + modifier - rules.CoreDamage);
     }
 

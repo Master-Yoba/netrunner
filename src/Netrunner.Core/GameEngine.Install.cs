@@ -964,6 +964,12 @@ public static partial class GameEngine
             forcedActionEnd: activeParent.ForcedActionEnd);
     }
 
+    /// <summary>VP-HOST-RESOURCES: a resource installed onto a host that accepts it costs the host's discount less.</summary>
+    private static int HostedInstallDiscount(WorkingState working, CardInstanceState card, CardInstanceId? hostCardId, int cost) =>
+        hostCardId is { } host && ResourceHost(working, host, card) is { } hosting
+            ? Math.Max(0, cost - hosting.InstallDiscount)
+            : cost;
+
     private static bool IsClickFreeInstall(InstallInitiationKind initiationKind) =>
         initiationKind is InstallInitiationKind.BehaviorEffect
             or InstallInitiationKind.IceSubroutineNormal
@@ -1016,6 +1022,8 @@ public static partial class GameEngine
             // As in BuildInstallPlan: the zone discount comes before the quoted modifiers.
             baseCost = rule.Apply(baseCost);
         }
+
+        baseCost = HostedInstallDiscount(working, plan.Card, frame.HostCardId, baseCost);
 
         CostQuote? quote = rule?.CostRule == BehaviorInstallCostRule.IgnoreAllCosts
             ? null
@@ -1073,7 +1081,8 @@ public static partial class GameEngine
             serverId,
             createNewRemote,
             initiationKind,
-            inwardAnchorIceId);
+            inwardAnchorIceId,
+            hostCardId: hostCardId);
     }
 
     private static InstallPlan? BuildInstallPlanCore(
@@ -1085,7 +1094,8 @@ public static partial class GameEngine
         bool createNewRemote,
         InstallInitiationKind initiationKind,
         CardInstanceId? inwardAnchorIceId,
-        BehaviorZoneInstallRule? zoneRule = null)
+        BehaviorZoneInstallRule? zoneRule = null,
+        CardInstanceId? hostCardId = null)
     {
         if (side is not (PlayerSide.Runner or PlayerSide.Corp))
         {
@@ -1271,6 +1281,8 @@ public static partial class GameEngine
         {
             baseInstallCost = zoneRule.Apply(baseInstallCost);
         }
+
+        baseInstallCost = HostedInstallDiscount(working, card, hostCardId, baseInstallCost);
 
         CostQuote? installCostQuote = zoneRule?.CostRule == BehaviorInstallCostRule.IgnoreAllCosts
             ? null

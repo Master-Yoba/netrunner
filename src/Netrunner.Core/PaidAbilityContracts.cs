@@ -119,7 +119,8 @@ public sealed class BehaviorPaidAbility : IEquatable<BehaviorPaidAbility>
         BehaviorAbilityUsageLimit usageLimit,
         bool usableFromRunnerScoreArea = false,
         bool usableFromArchives = false,
-        bool usedByOpponent = false)
+        bool usedByOpponent = false,
+        bool usableFromHeadquarters = false)
     {
         if (!StableIdentifier.TryValidate(key))
         {
@@ -150,6 +151,7 @@ public sealed class BehaviorPaidAbility : IEquatable<BehaviorPaidAbility>
         UsableFromRunnerScoreArea = usableFromRunnerScoreArea;
         UsableFromArchives = usableFromArchives;
         UsedByOpponent = usedByOpponent;
+        UsableFromHeadquarters = usableFromHeadquarters;
         Costs = Freeze(costs, nameof(costs));
         Conditions = Freeze(conditions, nameof(conditions));
         Targets = Freeze(targets, nameof(targets));
@@ -219,6 +221,11 @@ public sealed class BehaviorPaidAbility : IEquatable<BehaviorPaidAbility>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool UsedByOpponent { get; private set; }
 
+    /// <summary>VP-ABILITY-FROM-HQ: the Corp can use this ability while the card is in HQ (Tocsin, an Expendable card).</summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool UsableFromHeadquarters { get; private set; }
+
     public bool Equals(BehaviorPaidAbility? other) =>
         other is not null
         && string.Equals(Key, other.Key, StringComparison.Ordinal)
@@ -228,6 +235,7 @@ public sealed class BehaviorPaidAbility : IEquatable<BehaviorPaidAbility>
         && UsableFromRunnerScoreArea == other.UsableFromRunnerScoreArea
         && UsableFromArchives == other.UsableFromArchives
         && UsedByOpponent == other.UsedByOpponent
+        && UsableFromHeadquarters == other.UsableFromHeadquarters
         && SequenceEquals(Costs, other.Costs)
         && SequenceEquals(Conditions, other.Conditions)
         && SequenceEquals(Targets, other.Targets)

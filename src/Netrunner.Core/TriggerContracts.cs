@@ -121,6 +121,9 @@ public enum OccurrenceKind
     /// reaction may change the attacked server first (Baker).
     /// </summary>
     ServerWouldBeApproached,
+
+    /// <summary>VP-ARCHIVES-TURNED-FACEUP: two or more facedown cards in Archives were turned faceup at once (Nurse Hạnh).</summary>
+    ArchivesCardsTurnedFaceUp,
 }
 
 public enum OccurrencePhase

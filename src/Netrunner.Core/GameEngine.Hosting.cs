@@ -15,6 +15,15 @@ public static partial class GameEngine
         if (HostingSpec(working, card) is null)
         {
             yield return null;
+            // VP-HOST-RESOURCES: a resource may also be installed onto an installed host that accepts it (Hackerspace).
+            foreach (CardInstanceState host in working.Cards)
+            {
+                if (ResourceHost(working, host.Id, card) is not null)
+                {
+                    yield return host.Id;
+                }
+            }
+
             yield break;
         }
         foreach (CardInstanceState host in working.Cards)
@@ -36,9 +45,30 @@ public static partial class GameEngine
             && spec.CardClass == RuntimeCardClass.Ice;
     }
 
+    /// <summary>
+    /// VP-HOST-RESOURCES: the host's resource-hosting spec, when the host is the owner's installed, active card that
+    /// accepts the resource. Shared with the validator.
+    /// </summary>
+    internal static ResourceHostingSpec? ResourceHost(
+        IReadOnlyList<CardInstanceState> cards, IReadOnlyList<ZoneState> zones, IBehaviorCatalog catalog, IRuntimeCardCatalog? runtime,
+        CardInstanceId hostId, CardInstanceState resource) =>
+        hostId != resource.Id
+        && cards.FirstOrDefault(card => card.Id == hostId) is { OwnerSide: PlayerSide.Runner, FaceUp: true, HostCardId: null } host
+        && resource.OwnerSide == PlayerSide.Runner
+        && zones.Any(zone => zone.Id == host.ZoneId && zone.Kind == ZoneKind.RunnerRig)
+        && catalog.TryGet(host.DefinitionId, out CardBehaviorDefinition? definition)
+        && definition.HostsResources is { } hosting
+        && runtime is not null && runtime.TryGet(resource.DefinitionId, out CardRuntimeSpec? spec)
+        && hosting.Accepts(spec)
+            ? hosting
+            : null;
+
+    private static ResourceHostingSpec? ResourceHost(WorkingState working, CardInstanceId hostId, CardInstanceState resource) =>
+        ResourceHost(working.Cards, working.Zones, working.BehaviorCatalog, working.RuntimeCardCatalog, hostId, resource);
+
     private static bool IsLegalInstallHost(WorkingState working, CardInstanceId cardId, CardInstanceId? hostId) =>
         HostingSpec(working, GetCard(working, cardId)) is null
-            ? hostId is null
+            ? hostId is null || ResourceHost(working, hostId.Value, GetCard(working, cardId)) is not null
             : hostId is { } id && id != cardId && IsInstalledIceHost(working, id);
 
     private static void TrashHostedDescendants(WorkingState working, CardInstanceId hostId)

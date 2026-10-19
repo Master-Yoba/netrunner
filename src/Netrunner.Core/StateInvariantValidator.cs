@@ -3058,6 +3058,7 @@ public static partial class StateInvariantValidator
             OccurrenceKind.AgendaForfeited or OccurrenceKind.HostedCreditPoolEmptied
                 or OccurrenceKind.FirstTagRemovalThisTurn or OccurrenceKind.FirstBadPublicityThisTurn
                 or OccurrenceKind.CreditsSpentFromOutsidePool
+                or OccurrenceKind.ArchivesCardsTurnedFaceUp
                 or OccurrenceKind.FirstOperationPlayedThisTurn
                 or OccurrenceKind.FirstEventPlayedThisTurn
                 or OccurrenceKind.FirstCardCreditGainThisTurn => occurrence.ServerId is null,

@@ -14,7 +14,8 @@ internal static class BehaviorStaticModifierProjection
         IReadOnlyList<CardInstanceState> cards,
         IReadOnlyList<ZoneState> zones,
         PlayerSide side,
-        BehaviorStaticModifierKind kind)
+        BehaviorStaticModifierKind kind,
+        IRuntimeCardCatalog? runtime = null)
     {
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(cards);
@@ -27,7 +28,7 @@ internal static class BehaviorStaticModifierProjection
         {
             if (card.OwnerSide != side
                 || !catalog.TryGet(card.DefinitionId, out CardBehaviorDefinition? definition)
-                || !HasModifier(definition, kind)
+                || !HasModifier(definition, kind) && !(kind == BehaviorStaticModifierKind.MaximumHandSize && definition.HostsResources is not null)
                 || FirstZone(zones, card.ZoneId) is not { } zone
                 || !(IsActiveInstalled(card, zone, side) || RuntimeCardActivity.IsActive(card, zones)))
             {
@@ -40,6 +41,16 @@ internal static class BehaviorStaticModifierProjection
                 {
                     total = checked(total + modifier.Delta);
                 }
+            }
+
+            // VP-HOST-RESOURCES: while the host holds a resource of every subtype it hosts (Hackerspace).
+            if (kind == BehaviorStaticModifierKind.MaximumHandSize && definition.HostsResources is { HandSizeWhileHostingEach: > 0 } hosting
+                && runtime is not null
+                && hosting.Subtypes.All(subtype => cards.Any(hosted => hosted.HostCardId == card.Id
+                    && runtime.TryGet(hosted.DefinitionId, out CardRuntimeSpec? spec)
+                    && spec.Subtypes.Contains(subtype, StringComparer.OrdinalIgnoreCase))))
+            {
+                total = checked(total + hosting.HandSizeWhileHostingEach);
             }
         }
 
