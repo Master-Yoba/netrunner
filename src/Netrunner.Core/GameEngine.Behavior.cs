@@ -812,30 +812,27 @@ public static partial class GameEngine
 
                 AdvanceBehaviorCursor(working, frame);
                 return;
-            case BehaviorInstructionKind.HostFaceDown:
-                // VP-HOST-FACEDOWN: a chosen card from the grip, facedown on the source while it has room (Read-Write Share).
-                if (!(instruction.Target is { Kind: BehaviorTargetKind.ChosenCard } hostTarget && IsProvenEmptyChosenCard(frame, hostTarget)))
-                {
-                    int limit = working.BehaviorCatalog.TryGet(GetCard(working, frame.SourceCardId).DefinitionId, out CardBehaviorDefinition? host)
-                        ? host.HostsFaceDownLimit
-                        : 0;
-                    foreach (CardInstanceId hostedId in ResolveBehaviorCards(working, frame, instruction.Target).ToArray())
-                    {
-                        if (working.Cards.Count(card => card.HostCardId == frame.SourceCardId) < limit && IsInstalledCard(working, frame.SourceCardId))
-                        {
-                            HostFaceUp(working, hostedId, frame.SourceCardId, faceUp: false);
-                        }
-                    }
-                }
-
-                AdvanceBehaviorCursor(working, frame);
-                return;
             case BehaviorInstructionKind.HostFaceUp:
+            case BehaviorInstructionKind.HostFaceDown:
                 {
+                    // VP-HOST-FACEDOWN: facedown on the source while it has room (Read-Write Share); a chosen card may be none.
+                    bool faceDown = instruction.Kind == BehaviorInstructionKind.HostFaceDown;
+                    int limit = faceDown && working.BehaviorCatalog.TryGet(GetCard(working, frame.SourceCardId).DefinitionId,
+                        out CardBehaviorDefinition? facedownHost) ? facedownHost.HostsFaceDownLimit : int.MaxValue;
                     var remainingSetAside = frame.SetAside.ToList();
-                    foreach (CardInstanceId hostedId in ResolveBehaviorCards(working, frame, instruction.Target).ToArray())
+                    IReadOnlyList<CardInstanceId> toHost = faceDown && instruction.Target is { Kind: BehaviorTargetKind.ChosenCard } facedownTarget
+                        && IsProvenEmptyChosenCard(frame, facedownTarget)
+                            ? []
+                            : ResolveBehaviorCards(working, frame, instruction.Target);
+                    foreach (CardInstanceId hostedId in toHost.ToArray())
                     {
-                        HostFaceUp(working, hostedId, frame.SourceCardId);
+                        if (faceDown && (working.Cards.Count(card => card.HostCardId == frame.SourceCardId) >= limit
+                            || !IsInstalledCard(working, frame.SourceCardId)))
+                        {
+                            continue;
+                        }
+
+                        HostFaceUp(working, hostedId, frame.SourceCardId, faceUp: !faceDown);
                         remainingSetAside.RemoveAll(selected => selected.CardId == hostedId);
                     }
 
@@ -4626,7 +4623,10 @@ public static partial class GameEngine
             // legal same-zone shuffle.
             if (source.Id != destination.Id)
             {
-                leftRunnerRig |= source.Kind == ZoneKind.RunnerRig;
+                // A chosen card may sit set aside while its choice resolves; it still leaves the rig it came from.
+                leftRunnerRig |= source.Kind == ZoneKind.RunnerRig
+                    || (frozenSelection is not null
+                        && working.Zones.SingleOrDefault(zone => zone.Id == frozenSelection.OriginalZoneId)?.Kind == ZoneKind.RunnerRig);
                 bool emit = source.Kind != ZoneKind.BehaviorSetAside
                     || destination.Kind is ZoneKind.CorpDiscard
                         or ZoneKind.RunnerHeap
@@ -5073,7 +5073,8 @@ public static partial class GameEngine
                 "A chosen-card advance requires a reachable installed-card selection as its origin.");
         }
 
-        CardInstanceId[] currentCandidates = MaterializeBehaviorCandidates(working, originatingTarget);
+        CardInstanceId[] currentCandidates = MaterializeBehaviorCandidates(working, originatingTarget,
+            originatingTarget.IsInSourceServerRoot || originatingTarget.IsOther ? frame.SourceCardId : null);
         if (cardIds.Any(cardId => !currentCandidates.Contains(cardId)))
         {
             throw new ResolutionFailureException(

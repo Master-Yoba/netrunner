@@ -62,7 +62,7 @@ public static class VantagePointBatch3Specs
     // what it hosts into the stack (the shuffle is listed first, so the hosted cards are still there).
     private static IReadOnlyList<BehaviorInstruction> ReadWriteShareHost(string key) =>
     [
-        Branch(BehaviorCondition.SourceHostsAtLeast(4), [],
+        Branch(BehaviorCondition.SourceHostsAtLeast(4), [new BehaviorInstruction(BehaviorInstructionKind.NoOp)],
         [
             ChooseCards(key, BehaviorTarget.CardsInZone(BehaviorZone.Grip, new BehaviorCardFilter(ownerSide: PlayerSide.Runner)),
                 BehaviorChoiceCardinality.UpTo(1)),

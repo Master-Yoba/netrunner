@@ -158,7 +158,7 @@ public static partial class StateInvariantValidator
         if (state.RulesState?.SecretIdentity is not null
             && !state.Cards.Any(card => card is not null && card.OwnerSide == PlayerSide.Corp
                 && state.Zones.FirstOrDefault(zone => zone?.Id == card.ZoneId)?.Kind == ZoneKind.CorpIdentity
-                && behaviorCatalog is not null && behaviorCatalog.TryGet(card.DefinitionId, out CardBehaviorDefinition? identity)
+                && behaviorCatalog.TryGet(card.DefinitionId, out CardBehaviorDefinition? identity)
                 && BehaviorRunRules.DeclaresInstruction(identity, BehaviorInstructionKind.SetSecretIdentity)))
             Add(violations, "rules.secret-identity-unsupported", "rulesState.secretIdentity", "Only an identity that sets a secret copy has one.");
         ValidateRulesState(state, behaviorCatalog, runtimeCardCatalog, violations);
@@ -555,7 +555,6 @@ public static partial class StateInvariantValidator
                 bool facedownHosted = !card.FaceUp && zone.Kind == ZoneKind.RunnerHostedFaceUp
                     && card.HostCardId is { } facedownHost
                     && cardsById.TryGetValue(facedownHost.Value, out CardInstanceState? facedownHostCard)
-                    && behaviorCatalog is not null
                     && behaviorCatalog.TryGet(facedownHostCard.DefinitionId, out CardBehaviorDefinition? facedownDefinition)
                     && facedownDefinition.HostsFaceDownLimit >= state.Cards.Count(other => other?.HostCardId == facedownHost);
                 if (zone.Kind is ZoneKind.CorpHostedFaceUp or ZoneKind.RunnerHostedFaceUp
@@ -12647,6 +12646,7 @@ public static partial class StateInvariantValidator
         bool consumed = lastSelectionCursor >= 0
             && replay.Skip(lastSelectionCursor).Take(Math.Max(0, frame.InstructionCursor - lastSelectionCursor))
                 .Any(instruction => instruction.Kind is BehaviorInstructionKind.TrashCard or BehaviorInstructionKind.AddToHand or BehaviorInstructionKind.MoveCard or BehaviorInstructionKind.InstallCard
+                        or BehaviorInstructionKind.PlaceOnTopOfDeck
                     && instruction.Target is { Kind: BehaviorTargetKind.ChosenCard } target
                     && (target.Selector is null || target.Selector == lastSelectionKey));
         if (lastNonEmptySelection is not null
@@ -12790,7 +12790,7 @@ public static partial class StateInvariantValidator
                 runtimeCardCatalog,
                 target,
                 instruction.Kind == BehaviorInstructionKind.Search || target.Kind is BehaviorTargetKind.ZoneCard or BehaviorTargetKind.ZoneCards
-                    || target.IsOther
+                    || target.IsOther || target.IsInSourceServerRoot
                     ? frame.SourceCardId
                     : null);
             if (instruction.Kind == BehaviorInstructionKind.Choose

@@ -408,6 +408,7 @@ public static partial class GameEngine
                 frame.ServerId,
                 frame.CreateNewRemote,
                 frame.SelectedReplacementCardIds);
+        baseCost = HostedInstallDiscount(working, plan.Card, frame.HostCardId, baseCost);
         // ValidateInstallFrame above has already checked that the frozen
         // quote is the current quote for this card and selection.  Use its
         // effective amount for the actual payment so the transaction cannot

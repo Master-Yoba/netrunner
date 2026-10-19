@@ -855,6 +855,7 @@ public sealed class BehaviorContractsTests
                 OccurrenceKind.IceFullyBroken,
                 OccurrenceKind.SubroutineBroken,
                 OccurrenceKind.EncounterEnded,
+                OccurrenceKind.CardTrashed,
             }))
         {
             Assert.Throws<ArgumentException>(() => new BehaviorTrigger(

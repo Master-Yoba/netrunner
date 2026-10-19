@@ -514,3 +514,88 @@ it remembers nothing and the run goes on.
 | Sipa | "Another installed piece of ICE": choosing the passed ICE itself swaps nothing, the same as declining. |
 | Mycoweb (Elevation) | The Startup catalog keeps Elevation's catalog unchanged, so Mycoweb offers only the Elevation pool's subroutines, none of VP.5's sentries or code gates. VP.8 rebuilds it over the Startup pool. |
 
+
+## VP.6 — Primitives C: zones, information and identities (19 October 2026)
+
+VP.6's primitives land with VP.7's cards in one PR, since each has only one or two cards. Each has engine tests through
+its card, and an observation test where it hides something:
+- **VP-ABILITY-FROM-HQ:** a paid ability may be usable from HQ (`usableFromHeadquarters`): Tocsin's Expendable, whose
+  costs reveal and trash the card.
+- **VP-ARCHIVES-TURNED-FACEUP:** an occurrence, deferred only when an Archives breach turns two or more face-down cards
+  face up at once (Nurse Hạnh).
+- **VP-CARD-TRASHED:** an occurrence for any card trashed, with the card as its subject (Hiram's hardware). It is queued
+  only while a catalog trigger listens for it, so other games' replays are unchanged.
+- **VP-HOST-RESOURCES:** a resource may host resources of named subtypes (`hostsResources`), installed onto it at a
+  discount, with a hand-size bonus while it hosts one of each (Hackerspace). The engine and the validator share the
+  host rule. The discount is in the install's plan, its frame and its payment.
+- **VP-HOST-FACEDOWN:** a program may host cards from the grip face down, up to a limit (`hostsFaceDownLimit`, Read-Write
+  Share). Its public view shows only how many, under a separate key (`runnerHostedFaceDown`). The Runner's own view names
+  them.
+- **VP-SECRET-IDENTITY:** the rules state carries the Corp's secret choice and whether the identity is flipped
+  (`secretIdentity`, omitted when unused). The choice is in the Corp's private view only. The public view shows the side
+  only while flipped. New vocabulary:
+  - instructions: `SetSecretIdentity`, `FlipIdentity`;
+  - conditions: `IdentityFlipped`, `IdentityNotFlipped`, `SecretIdentityMatchesAttackedServer`.
+- **VP-ARRANGE** needed no new vocabulary: arranging the top N cards is N rounds of choosing one of them and putting it on
+  top (the last chosen ends on top), so every order can be made.
+
+Binding VP.7 found three more, beside VP-CARD-TRASHED above:
+- **VP-SOURCE-SERVER-ROOT:** a selector for cards in the root of the source's server (Hype Machine). The engine, the
+  validator's candidates and the advance re-check share it.
+- **VP-MOVE-UPGRADE:** `MoveSourceToServerOf` may name a bound card to move instead of its source (Lotus Haze's rezzed
+  upgrade).
+- **VP-LOOK-OPPONENT-DECK:** a choice among the opponent's deck cards shows them to the chooser only (Hiram).
+
+## VP.7 — Batch 3 (19 October 2026)
+
+The last 10 cards, on `feat/vp7-batch3`:
+- **Runner:** Hackerspace, Nurse Hạnh, Hiram "0mission" Svensson and Read-Write Share.
+- **Corp:** Méliès U: Only the Brightest (front and back), Lotus Haze, Knowledge Seeker, Cultivate, Hype Machine and Tocsin.
+
+- **Specs:** `VantagePointBatch3Specs`, composed by `VantagePointBehaviorCatalog` (version `startup-vp.7`).
+- **Tests:** `VantagePointBatch3Tests`, at least one per card.
+- **Registry and coverage:** VP.7 complete. The report shows every Vantage Point card registered, tested and complete
+  (225 of 225 across the three sets).
+- **Méliès U** is implemented in full (D-VP-8):
+  - the Corp sets the copy secretly as its discard phase ends;
+  - a successful run on a central server flips it, and the copy naming that server resolves;
+  - the front gains a credit as the Runner's action phase ends;
+  - the identity flips back as the Runner's discard phase ends.
+
+### Simulation decks
+
+`data/decks/vantage-point-simulation-decks.json` now has ten decks, all legal (`CardFormatTests`):
+- like-for-like swaps:
+  - Editorial Division: Hype Machine;
+  - Weyland: Tocsin;
+  - Topan: Hackerspace and Nurse Hạnh;
+  - Tāo: Read-Write Share;
+- two new decks:
+  - Méliès U, from the PT Untaian list, with Knowledge Seeker, Cultivate and Lotus Haze;
+  - Hiram, the Tāo list under Hiram's identity.
+
+### The fuzz, the ladder and the sweep
+
+- **Fuzz:** 576 games, all terminal, and 72 sampled replays verified.
+- **Ladder:** the first ladder found one rejected game. Scapegoat (VP.3) shuffled Methuselah, +1 memory, out of a full
+  rig, and the Runner's memory cleanup never started. The chosen card was set aside while the Corp's choice resolved, so
+  the transfer didn't see it leave the rig. It now checks the card's original zone
+  (`ShufflingAwayAMemoryCardMakesTheRunnerTrashAProgram`).
+- **The sweep:** the standard Corp never played Cultivate (0 in 863 offers). Its trash among R&D's top cards read as
+  trashing an installed Corp card, and its card to HQ had no value. An operation's choice among R&D's top cards is now
+  the Corp's pick of them. Triggers (Au Co) keep their values. After the fix, the Corp played Cultivate 36 times in 79
+  offers, in 31 of 32 games.
+- **The second sweep:** the standard Runner never installed Nurse Hạnh (0 in 83 offers) or Hackerspace (0 in 72) with a
+  click, only when its identity's install offered them free. Both were valued as a card with no income. Nurse Hạnh is now
+  worth its draws, and Hackerspace its discount on the hostable resources in the grip, with its hand size. After the fix,
+  the Runner installed Nurse Hạnh 25 times in 36 offers. Hackerspace stays uninstalled with a click (0 in 38): the Topan
+  deck holds one card it can host of each kind, Nurse Hạnh and Stick and Poke, so it rarely has anything to discount. The
+  identity's free install takes it every time (12 of 12).
+- **The ladder after both fixes:** 1,152 games, 0 errors, 12 capped. Both sides order random < contract < easy <
+  standard; random and contract don't separate, as before.
+- Hype Machine's rez and ability, Tocsin's Expendable and Read-Write Share's trash are rarely used, which suits their
+  costs.
+- **Scope:** these paths read vocabulary only Vantage Point cards use, so the policy versions are unchanged.
+- **Fixtures:** `VantagePointBotTests` checks VP.3's, VP.5's and VP.7's fixes at saved decisions of this ladder
+  (`Fixtures/saved-games/vp7-*`). VP.5's Corsair case is dropped. This ladder offered Corsair's ability twice, both times
+  against Palisade with no fracter installed, where declining is right.

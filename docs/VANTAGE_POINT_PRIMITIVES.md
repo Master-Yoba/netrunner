@@ -242,3 +242,16 @@ Writing VP.5's specs found six more that the audit had judged expressible. They 
 | `VP-SWAP-WITH` | A swap of a named piece of ICE (the source, or the ICE just passed) with a chosen one. | ezaM, Sipa |
 | `VP-TAG-COST` | A Corp card's play cost that removes the Runner's tags. | Unleash |
 | `VP-DECK-BOTTOM` | A deck's card moved into that deck goes to its bottom. | ezaM |
+
+## VP.6 status (19 October 2026)
+
+The family "zones, information and identities" landed in VP.6, with VP.7's cards (the progress record has each
+primitive's contract). `VP-ARRANGE` turned out to be existing vocabulary. Binding VP.7 found four more, landed in the same
+PR:
+
+| Id | What | Cards |
+|---|---|---|
+| `VP-CARD-TRASHED` | An occurrence: a card is trashed, with the card as its subject. | Hiram "0mission" Svensson |
+| `VP-SOURCE-SERVER-ROOT` | A selector for the cards in the root of the source's server. | Hype Machine |
+| `VP-MOVE-UPGRADE` | A move of a bound card, not the source, to the server of a chosen card. | Lotus Haze |
+| `VP-LOOK-OPPONENT-DECK` | A private look at the opponent's deck cards, offered as a choice. | Hiram "0mission" Svensson |

@@ -1616,7 +1616,8 @@ public sealed record BehaviorInstruction
             case BehaviorInstructionKind.ShuffleIntoDeck:
                 if (SourceZone is { } shuffleSource)
                 {
-                    // VP.3: the rig too, for an installed Runner card shuffled into the stack (Scapegoat).
+                    // VP.3: the rig too, for an installed Runner card shuffled into the stack (Scapegoat); VP.7, hosted cards
+                    // (Read-Write Share's facedown cards).
                     RequireZone(
                         shuffleSource,
                         nameof(SourceZone),
@@ -1625,7 +1626,8 @@ public sealed record BehaviorInstruction
                         BehaviorZone.Archives,
                         BehaviorZone.Stack,
                         BehaviorZone.Grip,
-                        BehaviorZone.Rig);
+                        BehaviorZone.Rig,
+                        BehaviorZone.HostedFaceUp);
                 }
 
                 RequireDestination(nameof(DestinationZone), BehaviorZone.Deck, BehaviorZone.Stack);
@@ -2529,7 +2531,8 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
         or OccurrenceKind.IceBypassed
         or OccurrenceKind.IceFullyBroken
         or OccurrenceKind.SubroutineBroken
-        or OccurrenceKind.EncounterEnded;
+        or OccurrenceKind.EncounterEnded
+        or OccurrenceKind.CardTrashed;
 
     private static ReadOnlyCollection<BehaviorInstruction> Freeze(
         IEnumerable<BehaviorInstruction> values)

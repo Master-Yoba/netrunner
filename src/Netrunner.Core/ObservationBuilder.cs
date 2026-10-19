@@ -43,7 +43,7 @@ public static partial class ObservationBuilder
         IRuntimeCardCatalog runtimeCardCatalog)
     {
         ArgumentNullException.ThrowIfNull(runtimeCardCatalog);
-        Observation observation = Build(state, viewer, behaviorCatalog);
+        Observation observation = BuildObservation(state, viewer, behaviorCatalog, runtimeCardCatalog);
         // A simulated state is already a sample; it is never sampled again.
         return state.IsSimulated ? observation
             : observation with { Determinizer = new ObservationDeterminizer(state, viewer, behaviorCatalog, runtimeCardCatalog) };
@@ -57,7 +57,13 @@ public static partial class ObservationBuilder
     public static Observation Build(
         GameState state,
         PlayerSide viewer,
-        IBehaviorCatalog behaviorCatalog)
+        IBehaviorCatalog behaviorCatalog) => BuildObservation(state, viewer, behaviorCatalog, runtime: null);
+
+    private static Observation BuildObservation(
+        GameState state,
+        PlayerSide viewer,
+        IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog? runtime)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(behaviorCatalog);
@@ -73,7 +79,7 @@ public static partial class ObservationBuilder
         // reducer, so they do not need temporary visibility here.
         HashSet<CardInstanceId> accessVisible = BuildAccessVisibleSet(state);
 
-        Dictionary<string, object?> publicState = BuildPublicState(state, viewer, accessVisible, behaviorCatalog);
+        Dictionary<string, object?> publicState = BuildPublicState(state, viewer, accessVisible, behaviorCatalog, runtime);
         Dictionary<string, object?> privateState = BuildPrivateState(state, viewer);
         AddPrivateChoiceCards(state, viewer, privateState);
         AddOwnedTriggerContext(state, viewer, privateState);
@@ -136,7 +142,8 @@ public static partial class ObservationBuilder
         GameState state,
         PlayerSide viewer,
         IReadOnlySet<CardInstanceId> accessVisible,
-        IBehaviorCatalog behaviorCatalog)
+        IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog? runtime = null)
     {
         PlayerState corp = state.Players.Single(player => player.Side == PlayerSide.Corp);
         PlayerState runner = state.Players.Single(player => player.Side == PlayerSide.Runner);
@@ -151,8 +158,8 @@ public static partial class ObservationBuilder
             },
             ["players"] = new Dictionary<string, object?>
             {
-                ["corp"] = PlayerView(state, corp, behaviorCatalog),
-                ["runner"] = PlayerView(state, runner, behaviorCatalog),
+                ["corp"] = PlayerView(state, corp, behaviorCatalog, runtime),
+                ["runner"] = PlayerView(state, runner, behaviorCatalog, runtime),
             },
             ["outcome"] = new Dictionary<string, object?>
             {
@@ -264,10 +271,16 @@ public static partial class ObservationBuilder
         // EL-HOSTED-FACEUP: cards hosted faceup on a console are public; each names its host.
         if (state.Zones.Any(zone => zone.Kind == ZoneKind.RunnerHostedFaceUp && zone.ServerId is null))
         {
-            // VP-HOST-FACEDOWN: a card hosted facedown (Read-Write Share) shows only that it is there, and on what.
             publicState["runnerHostedFaceUp"] = ZoneCards(state, ZoneKind.RunnerHostedFaceUp)
-                .Select(card => card.FaceUp ? CardView(state, card) : FaceDownHostedView(card))
+                .Select(card => CardView(state, card))
                 .ToArray();
+            // VP-HOST-FACEDOWN: a card hosted facedown (Read-Write Share) shows only that it is there, and on what; listed
+            // apart, and only while there are some.
+            CardInstanceState[] facedownHosted = ZoneCardsAnyFace(state, ZoneKind.RunnerHostedFaceUp).Where(static card => !card.FaceUp).ToArray();
+            if (facedownHosted.Length > 0)
+            {
+                publicState["runnerHostedFaceDown"] = facedownHosted.Select(FaceDownHostedView).ToArray();
+            }
         }
 
         if (state.Zones.Any(zone => zone.Kind == ZoneKind.CorpHostedFaceUp && zone.ServerId is null))
@@ -871,7 +884,7 @@ public static partial class ObservationBuilder
             ["stack"] = Array.Empty<object>(),
         };
         // VP-HOST-FACEDOWN: the Runner knows the cards it hosted facedown; written only while there are some.
-        CardInstanceState[] hostedFaceDown = ZoneCards(state, ZoneKind.RunnerHostedFaceUp).Where(static card => !card.FaceUp).ToArray();
+        CardInstanceState[] hostedFaceDown = ZoneCardsAnyFace(state, ZoneKind.RunnerHostedFaceUp).Where(static card => !card.FaceUp).ToArray();
         if (hostedFaceDown.Length > 0)
         {
             runner["hostedFaceDown"] = hostedFaceDown.Select(card => PrivateCardView(state, card)).ToArray();
@@ -923,7 +936,8 @@ public static partial class ObservationBuilder
     private static Dictionary<string, object?> PlayerView(
         GameState state,
         PlayerState player,
-        IBehaviorCatalog behaviorCatalog)
+        IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog? runtimeCardCatalog = null)
     {
         var view = new Dictionary<string, object?>
         {
@@ -1068,6 +1082,12 @@ public static partial class ObservationBuilder
     }
 
     /// <summary>Only the revealed (faceup) cards of a public zone.</summary>
+    /// <summary>A zone's cards, facedown ones included (VP-HOST-FACEDOWN: each caller hides what it must).</summary>
+    private static CardInstanceState[] ZoneCardsAnyFace(GameState state, ZoneKind kind) =>
+        state.Zones.FirstOrDefault(value => value.Kind == kind && value.ServerId is null) is { } zone
+            ? zone.CardIds.Select(state.GetCard).ToArray()
+            : [];
+
     private static CardInstanceState[] ZoneCards(GameState state, ZoneKind kind)
     {
         ZoneState? zone = state.Zones.FirstOrDefault(value => value.Kind == kind && value.ServerId is null);

@@ -63,7 +63,7 @@ public sealed record ResourceHostingSpec
     public override int GetHashCode() => HashCode.Combine(Subtypes.Count, UniqueOnly, InstallDiscount, HandSizeWhileHostingEach);
 
     /// <summary>Whether a resource of the subtypes (and uniqueness) may be installed onto the host.</summary>
-    internal bool Accepts(CardRuntimeSpec resource) => resource.CardClass == RuntimeCardClass.Resource
+    public bool Accepts(CardRuntimeSpec resource) => resource.CardClass == RuntimeCardClass.Resource
         && (!UniqueOnly || resource.Unique)
         && Subtypes.Any(subtype => resource.Subtypes.Contains(subtype, StringComparer.OrdinalIgnoreCase));
 }
