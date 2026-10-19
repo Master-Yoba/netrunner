@@ -624,3 +624,7 @@ forbids (Shackleton Grid to Mahkota Langit Grid's server). That move now leaves 
 
 The third round's one finding, valid: an effect's install onto Hackerspace (Baz Wong's, as the Corp rezzes ICE) was offered
 at full price but checked with the discount, so it was rejected. The effect's install plan now passes on its host.
+
+The fourth round's finding is deferred to VP.8's tracker work (A9 over the new hidden zones). The Runner's samples and card
+tracker don't keep the R&D card Hiram's look shows, so the bot forgets it once the look ends. The engine and the
+observation are right; only the bot's knowledge is lost.
