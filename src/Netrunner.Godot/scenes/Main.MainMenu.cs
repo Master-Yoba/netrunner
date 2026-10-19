@@ -20,6 +20,7 @@ public partial class Main
 	// D-EL-8: the mode's value is the format's ID.
 	private const string ElevationMode = CardFormatIds.GatewayElevation;
 	private const string NsgCoreMode = CardFormatIds.NsgCoreSets;
+	private const string StartupMode = CardFormatIds.Startup2026;
 	private const string RandomOpponent = "random";
 
 	private readonly List<Control> _legacySetupControls = [];
@@ -157,6 +158,7 @@ public partial class Main
 			("Gateway decks", GatewayMode),
 			.. ElevationMenuOffered ? [("Core Battle Box", ElevationMode)] : Array.Empty<(string, string)>(),
 			.. NsgCoreMenuOffered ? [("NSG Core Sets", NsgCoreMode)] : Array.Empty<(string, string)>(),
+			.. StartupMenuOffered ? [("Startup 2026", StartupMode)] : Array.Empty<(string, string)>(),
 			("Tutorial", TutorialMode),
 		];
 		HBoxContainer modes = MenuToggleRow(view, modeOptions, _menuMode, mode =>
@@ -222,18 +224,24 @@ public partial class Main
 	private bool NsgCoreMenuOffered =>
 		HasAuthenticatedOfficialContent() && PlayFormats.IsAvailable(CardFormatIds.NsgCoreSets);
 
+	/// <summary>D-VP-7: Startup 2026, with real players' tournament lists, wherever the Startup pool is installed.</summary>
+	private bool StartupMenuOffered =>
+		HasAuthenticatedOfficialContent() && PlayFormats.IsAvailable(CardFormatIds.Startup2026);
+
 	/// <summary>A mode's decks: a format's own decks, or the teaching decks for the tutorial.</summary>
 	private IEnumerable<OfficialPreset> MenuModeDecks(string mode) => mode switch
 	{
 		TutorialMode => _officialPresetCatalog!.Teaching,
 		ElevationMode => PlayFormats.Get(CardFormatIds.GatewayElevation).Decks,
 		NsgCoreMode => PlayFormats.Get(CardFormatIds.NsgCoreSets).Decks,
+		StartupMode => PlayFormats.Get(CardFormatIds.Startup2026).Decks,
 		_ => _officialPresetCatalog!.Gateway.Where(preset => PlayFormats.FormatOfPreset(preset.PresetId) == CardFormatIds.Gateway),
 	};
 
-	/// <summary>Card metadata for the menu's identity tiles: the whole pool when Elevation is installed.</summary>
+	/// <summary>Card metadata for the menu's identity tiles: the whole installed pool, Vantage Point's included.</summary>
 	private ICardMetadataResolver MenuMetadata =>
-		PlayFormats.IsAvailable(CardFormatIds.GatewayElevation) ? PlayFormats.Get(CardFormatIds.GatewayElevation).Metadata : _metadataResolver;
+		PlayFormats.IsAvailable(CardFormatIds.Startup2026) ? PlayFormats.Get(CardFormatIds.Startup2026).Metadata
+		: PlayFormats.IsAvailable(CardFormatIds.GatewayElevation) ? PlayFormats.Get(CardFormatIds.GatewayElevation).Metadata : _metadataResolver;
 
 	/// <summary>The decks for the current mode and seat, as cards; the opponent side adds "Random" outside the tutorial.</summary>
 	private void RefreshMenuDecks()
@@ -256,6 +264,8 @@ public partial class Main
 					+ "built to be played against each other. Random opponents come from these decks.",
 				NsgCoreMode => "NSG Core Sets: Null Signal Games' twenty-one System Gateway + Elevation sample decks, one per identity, "
 					+ "with no ban list. Random opponents come from these decks.",
+				StartupMode => "Startup 2026: System Gateway, Elevation and Vantage Point on Balance Update 26.09, with fourteen tournament "
+					+ "lists by real players, two per faction. Random opponents come from these decks.",
 				_ => "The Catalyst and the Syndicate, the learn-to-play decks. The basic decks start small; the expanded decks add the booster cards.",
 			};
 		FillMenuDecks(_menuYourDecks, yours, _menuYourDeck, allowRandom: false, id => { _menuYourDeck = id; RefreshMenuDecks(); });

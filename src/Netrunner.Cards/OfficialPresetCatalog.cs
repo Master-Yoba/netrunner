@@ -555,11 +555,12 @@ public sealed class OfficialPresetCatalog
             if (preset.Kind != GatewayKind) problems.Add($"{path}.kind: expected '{GatewayKind}'.");
             if (string.IsNullOrWhiteSpace(preset.Name) || string.IsNullOrWhiteSpace(preset.Summary) || string.IsNullOrWhiteSpace(preset.SourceUrl))
                 problems.Add($"{path}: a sample deck needs a name, a summary and a source URL.");
-            // Our Elevation and Vantage Point decks and NSG's Core Sets decks follow their identity's
-            // minimum (checked against the metadata below), not the Gateway sample sizes.
+            // Our Elevation and Vantage Point decks, NSG's Core Sets decks and Startup 2026's lists follow their
+            // identity's minimum (checked against the metadata below), not the Gateway sample sizes.
             if (!preset.PresetId.StartsWith(ElevationDeckPrefix, StringComparison.Ordinal)
                 && !preset.PresetId.StartsWith(VantagePointSimulationPrefix, StringComparison.Ordinal)
                 && !IsNsgCoreSetsDeck(preset.PresetId)
+                && !IsStartup2026Deck(preset.PresetId)
                 && preset.CardCount != (preset.Side == PlayerSide.Corp ? 44 : 40))
                 problems.Add($"{path}.cards: contains {preset.CardCount} cards; a Gateway sample deck has {(preset.Side == PlayerSide.Corp ? 44 : 40)}.");
             var codes = new HashSet<string>(StringComparer.Ordinal);
@@ -636,6 +637,15 @@ public sealed class OfficialPresetCatalog
     /// <summary>The preset-ID prefix of Null Signal Games' Core Sets sample decks.</summary>
     public const string NsgCoreSetsDeckPrefix = "nsg-core-";
 
+    private const string Startup2026DecksResourceName = "Netrunner.Cards.Data.decks.startup-2026-decks.json";
+
+    /// <summary>The preset-ID prefix of Startup 2026's decks: real players' tournament lists (D-VP-6).</summary>
+    public const string Startup2026DeckPrefix = "startup-";
+
+    private static readonly Lazy<OfficialPresetCatalog> Startup2026Catalog = new(
+        () => WithEmbeddedDecks(Startup2026DecksResourceName),
+        LazyThreadSafetyMode.ExecutionAndPublication);
+
     private static readonly Lazy<OfficialPresetCatalog> ElevationSimulationCatalog = new(
         () => WithEmbeddedDecks(ElevationSimulationResourceName),
         LazyThreadSafetyMode.ExecutionAndPublication);
@@ -653,8 +663,23 @@ public sealed class OfficialPresetCatalog
         LazyThreadSafetyMode.ExecutionAndPublication);
 
     private static readonly Lazy<OfficialPresetCatalog> FormatDecksCatalog = new(
-        () => WithEmbeddedDecks(CoreBattleBoxResourceName, ElevationDecksResourceName, NsgCoreSetsDecksResourceName),
+        () => WithEmbeddedDecks(CoreBattleBoxResourceName, ElevationDecksResourceName, NsgCoreSetsDecksResourceName,
+            Startup2026DecksResourceName),
         LazyThreadSafetyMode.ExecutionAndPublication);
+
+    /// <summary>The embedded catalog plus Startup 2026's decks (D-VP-6), the decks of the Startup 2026 format.</summary>
+    public static OfficialPresetCatalog Startup2026() => Startup2026Catalog.Value;
+
+    /// <summary>Startup 2026's decks alone.</summary>
+    public IReadOnlyList<OfficialPreset> Startup2026Decks =>
+        Gateway.Where(static preset => IsStartup2026Deck(preset.PresetId)).ToArray();
+
+    /// <summary>Whether a preset is one of Startup 2026's decks.</summary>
+    public static bool IsStartup2026Deck(string presetId)
+    {
+        ArgumentNullException.ThrowIfNull(presetId);
+        return presetId.StartsWith(Startup2026DeckPrefix, StringComparison.Ordinal);
+    }
 
     /// <summary>
     /// The embedded catalog plus Null Signal Games' Core Sets (System Gateway +

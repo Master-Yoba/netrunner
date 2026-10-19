@@ -91,6 +91,7 @@ public sealed record CardTracker(ImmutableArray<TrackedCard> Cards, TrackerSnaps
         TrackerSnapshot now = work.Snapshot();
         if (Last is { } last) work.Apply(last, now);
         work.RecordAccesses(Last, now);
+        work.RecordLook();
         work.Decay(memory);
         return new([.. work.Cards.Where(card => card.Weight > Epsilon)
             .OrderBy(card => card.Place).ThenBy(card => card.ServerId, StringComparer.Ordinal).ThenBy(card => card.Zone, StringComparer.Ordinal)
@@ -388,6 +389,26 @@ public sealed record CardTracker(ImmutableArray<TrackedCard> Cards, TrackerSnaps
                         if (Cards[i].DefinitionId == definition && Cards[i].Place == TrackedPlace.Hand) Cards[i] = Cards[i] with { SeenTurn = Turn };
                 }
         }
+
+        /// <summary>
+        /// VP.8 (PR #157's review): a look the Runner is offered at R&amp;D's top card (Hiram) makes it known there, as an
+        /// access that leaves it does. Only a declared look at one top card counts, so the card's place is certain.
+        /// </summary>
+        public void RecordLook()
+        {
+            if (!_corp || features.PrivateCards.ChoiceCards is not [AgentCard shown] || Owner(shown) != PlayerSide.Corp) return;
+            if (features.Actions.Select(action => action.Parameters).OfType<BehaviorChoiceParameters>().FirstOrDefault() is not { } offered
+                || BehaviorChoiceLookup.Find(catalog, offered.ChoiceKey)?.Choice?.Target
+                    is not { Kind: BehaviorTargetKind.ZoneCards, Zone: BehaviorZone.Deck, TopCount: 1 })
+                return;
+            if (DeckTopKnown(shown.DefinitionId)) return;
+            Cards.RemoveAll(card => card.Place == TrackedPlace.DeckTop && card.Depth == 0);
+            TakeShare(shown.DefinitionId, TrackedPlace.Deck);
+            Cards.Add(new(shown.DefinitionId, TrackedPlace.DeckTop, 1, Turn, Depth: 0));
+        }
+
+        private bool DeckTopKnown(string definitionId) =>
+            Cards.Any(card => card.Place == TrackedPlace.DeckTop && card.Depth == 0 && card.DefinitionId == definitionId && card.Weight >= 1);
 
         public void Decay(TrackerMemory memory)
         {

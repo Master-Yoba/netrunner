@@ -62,14 +62,36 @@ public sealed class VantagePointCardDataTests
         BehaviorCatalog catalog = startup.CreateBehavior();
         Assert.Equal(VantagePointBehaviorCatalog.Version, catalog.Version);
         // The pool plays Elevation's cards and the registered Vantage Point batches (all 66), and Elevation's catalog is
-        // unchanged: each of its cards keeps its behavior fingerprint.
+        // unchanged: each of its cards keeps its behavior fingerprint, but Mycoweb, whose options are rebuilt over the Startup
+        // pool's ICE (VP.8).
         string[] registered = catalog.AllDefinitionIds.Select(static id => id.Value)
             .Where(static code => code.StartsWith("36", StringComparison.Ordinal)).Order(StringComparer.Ordinal).ToArray();
         Assert.Equal(66, registered.Length);
         Assert.Equal(elevation.AllDefinitionIds.ToHashSet(),
             catalog.AllDefinitionIds.Where(static id => !id.Value.StartsWith("36", StringComparison.Ordinal)).ToHashSet());
-        Assert.All(elevation.AllDefinitionIds, id => Assert.Equal(elevation.GetCardBehaviorFingerprint(id), catalog.GetCardBehaviorFingerprint(id)));
+        Assert.All(elevation.AllDefinitionIds.Where(static id => id != ElevationCardCodes.Mycoweb),
+            id => Assert.Equal(elevation.GetCardBehaviorFingerprint(id), catalog.GetCardBehaviorFingerprint(id)));
+        Assert.NotEqual(elevation.GetCardBehaviorFingerprint(ElevationCardCodes.Mycoweb), catalog.GetCardBehaviorFingerprint(ElevationCardCodes.Mycoweb));
         Assert.Equal(ElevationBehaviorCatalog.Create().Fingerprint, elevation.Fingerprint);
+    }
+
+    // VP.8: on the Startup pool Mycoweb resolves Vantage Point's code gates and sentries too, but no subroutine that acts on
+    // its own ICE (Knowledge Seeker's virus counter would land on Mycoweb). The Elevation pool's Mycoweb is unchanged.
+    [Fact]
+    public void MycowebOnTheStartupPoolResolvesVantagePointsIceButNotTheirSelfReferences()
+    {
+        static IReadOnlyList<string> CodeGateOptions(BehaviorCatalog catalog)
+        {
+            Assert.True(catalog.TryGet(ElevationCardCodes.Mycoweb, out CardBehaviorDefinition? mycoweb));
+            return mycoweb!.Triggers.Single(static trigger => trigger.Key == "mycoweb-code-gate").Instructions[0].Choice!.Options
+                .Select(static option => option.Key).ToArray();
+        }
+
+        IReadOnlyList<string> startup = CodeGateOptions(VantagePointBehaviorCatalog.Create());
+        Assert.Contains("resolve-36040-1", startup);
+        Assert.DoesNotContain("resolve-36040-0", startup);
+        Assert.DoesNotContain(startup, static key => key.StartsWith("resolve-35053-", StringComparison.Ordinal));
+        Assert.DoesNotContain(CodeGateOptions(ElevationBehaviorCatalog.Create()), static key => key.StartsWith("resolve-36", StringComparison.Ordinal));
     }
 
     [Fact]

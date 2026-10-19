@@ -111,6 +111,32 @@ public sealed class CardTrackerTests
     }
 
     /// <summary>A tracker that saw <paramref name="definition"/> in HQ on turn 1, and last saw HQ of <paramref name="hand"/> cards and no installs.</summary>
+    // VP.8 (PR #157's review): a look at R&D's top card (Hiram) makes it known there after the look, as an access does.
+    [Fact]
+    public void ALookAtTheDecksTopCardKeepsItKnownThere()
+    {
+        AgentFeatures looking = Board(hand: 5) with
+        {
+            Actions = [new AgentAction(new ActionId("action:look"), ActionKind.ChooseBehavior,
+                new BehaviorChoiceParameters(LookKey, [new CardInstanceId("card:top")]))],
+            PrivateCards = new AgentPrivateCards { ChoiceCards = [new AgentCard { Id = "card:top", DefinitionId = Offworld }] },
+        };
+        CardTracker tracker = CardTracker.Empty.Observe(looking, Catalog, _ => 1 / 3.0, TrackerMemory.Full);
+        Assert.Equal(Offworld, tracker.DeckTopAt(0));
+
+        tracker = tracker.Observe(Board(hand: 5), Catalog, _ => 1 / 3.0, TrackerMemory.Full);
+        Assert.Equal(Offworld, tracker.DeckTopAt(0));
+        // A choice that isn't a look at the top (a card in HQ) teaches nothing about the deck.
+        AgentFeatures other = looking with
+        {
+            Actions = [new AgentAction(new ActionId("action:other"), ActionKind.ChooseBehavior,
+                new BehaviorChoiceParameters("test-other", [new CardInstanceId("card:top")]))],
+        };
+        Assert.Null(CardTracker.Empty.Observe(other, Catalog, _ => 1 / 3.0, TrackerMemory.Full).DeckTopAt(0));
+    }
+
+    private const string LookCard = "test-runner-look", LookKey = "test-look";
+
     private static CardTracker Seen(string definition, int hand) =>
         new([new(definition, TrackedPlace.Hand, 1, 1)], Snapshot(hand, deck: 20));
 
@@ -143,11 +169,21 @@ public sealed class CardTrackerTests
 
         public string Version => "test";
         public string Fingerprint => "test";
-        public IReadOnlyCollection<CardDefinitionId> DefinitionIds => [.. Classes.Keys.Select(key => new CardDefinitionId(key))];
+        public IReadOnlyCollection<CardDefinitionId> DefinitionIds =>
+            [.. Classes.Keys.Append(LookCard).Select(key => new CardDefinitionId(key))];
 
         public bool TryGet(CardDefinitionId definitionId, out CardEvaluationDescriptor descriptor)
         {
             descriptor = null!;
+            if (definitionId.Value == LookCard)
+            {
+                var look = new BehaviorInstruction(BehaviorInstructionKind.Choose, choice: new BehaviorChoiceSpec(LookKey,
+                    BehaviorChooser.Controller, BehaviorChoiceMode.Mandatory, BehaviorChoiceCardinality.Exactly(1),
+                    target: BehaviorTarget.TopOfZone(BehaviorZone.Deck, 1)));
+                descriptor = new(new(definitionId, PlayerSide.Runner, RuntimeCardClass.Resource, installCost: 0),
+                    new CardBehaviorDefinition(definitionId, PlayerSide.Runner, instructions: [look]), null, null, null, null, null, [], false);
+                return true;
+            }
             if (!Classes.TryGetValue(definitionId.Value, out RuntimeCardClass cardClass)) return false;
             CardRuntimeSpec printed = cardClass switch
             {

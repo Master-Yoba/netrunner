@@ -10,6 +10,9 @@ public sealed partial class RunnerHeuristicPolicy
         int upfrontCost = 0, int knownSuccessValue = 0, int gripSpent = 0)
     {
         if (server is null) return Value(-1000, "run/unknown-server", true, true);
+        // VP.8: a run's bad publicity fund (one credit for each the Corp holds) pays for the run's costs alone. Only the
+        // Startup pool deals bad publicity, so other pools' games are unchanged.
+        if (context.Features.Board.Run is null) extraRunCredits += context.Features.Board.Players.Corp.BadPublicity ?? 0;
         // v26: the grip the run is made with, once a run event has left it (PR #97's review: every lethal check reads it).
         int grip = context.Features.Hand.Length - gripSpent;
         // v7: the whole-run model (A4a) costs the run as one path, tolls included.
@@ -81,6 +84,14 @@ public sealed partial class RunnerHeuristicPolicy
             trapRisk = Math.Min(trapRisk, 200);
             extraValue += context.Opponent.AgendaPoints >= 5 ? 700 : 400;
         }
+        // VP.8: a known agenda the run can't pay to steal is not stolen: its steal clicks (Méliès City Luxury Line) beyond the
+        // clicks left after the run, or the active cards' steal credits (Magistrate Revontulet) beyond the credits left.
+        int stealCredits = context.Features.Board.Servers.SelectMany(value => value.Root).OfType<AgentCard>()
+            .Where(card => card.Rezzed == true).Sum(card => context.Definition(card)?.Behavior?.StealCredits ?? 0);
+        extraValue -= server.Root.OfType<AgentCard>().Select(card => context.Definition(card)?.Agenda)
+            .Where(agenda => agenda is not null && (agenda.StealClicks > context.Self.Clicks - 1 - tollClicks
+                || stealCredits > funds - cost - loss))
+            .Sum(agenda => agenda!.AgendaPoints * 350);
         int score = RunnerValues.Server(context, server) + rewards + extraValue
             - (upfrontCost + Math.Max(0, cost - extraRunCredits) + loss) * context.CreditValue
             - damage * 160 - risk - repeated * 180 - (funds - cost - loss < reserve ? 220 : 0)

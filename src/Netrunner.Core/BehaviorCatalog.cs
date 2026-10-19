@@ -3595,6 +3595,23 @@ public sealed class BehaviorCatalogBuilder
     public BehaviorCatalogBuilder Add(IEnumerable<CardBehaviorDefinition> specs) => AddMany(specs, Add);
 
     /// <summary>
+    /// Replaces a registered generic behavior: a definition built from the pool it plays in (VP.8: Mycoweb's subroutine
+    /// options over the Startup pool's ICE), where the base catalog's was built over a smaller pool.
+    /// </summary>
+    public BehaviorCatalogBuilder Replace(CardBehaviorDefinition spec)
+    {
+        ArgumentNullException.ThrowIfNull(spec);
+        CardDefinitionId definitionId = DefinitionIdOf(spec, "generic behavior");
+        if (!_generic.ContainsKey(definitionId))
+        {
+            throw new InvalidOperationException($"Card definition '{definitionId}' has no generic behavior to replace.");
+        }
+
+        _generic[definitionId] = spec;
+        return this;
+    }
+
+    /// <summary>
     /// Registers a compiled card class for typed hidden-zone filters. This is
     /// deliberately separate from generic behavior, but every classification
     /// must accompany a typed or generic executable registration before the

@@ -24,9 +24,9 @@ public partial class Main
 
 		if (presetValue is not null)
 		{
-			if (presetValue is not ("basic" or "expanded" or "elevation" or "nsg-core") && !IsElevationPairing(presetValue))
+			if (presetValue is not ("basic" or "expanded" or "elevation" or "nsg-core" or "startup") && !IsElevationPairing(presetValue))
 			{
-				error = $"--preset requires 'basic', 'expanded', 'elevation', 'nsg-core' or an Elevation pairing 'corp~runner', found '{presetValue}'.";
+				error = $"--preset requires 'basic', 'expanded', 'elevation', 'nsg-core', 'startup' or a pairing 'corp~runner', found '{presetValue}'.";
 				return false;
 			}
 
@@ -116,24 +116,26 @@ public partial class Main
 
 	/// <summary>
 	/// A smoke's deck for a side: the teaching decks by kind, for
-	/// <c>elevation</c> a Gateway + Elevation pairing (EL.8), or for
-	/// <c>nsg-core</c> an NSG Core Sets pairing.
+	/// <c>elevation</c> a Gateway + Elevation pairing (EL.8), for
+	/// <c>nsg-core</c> an NSG Core Sets pairing, or for <c>startup</c> a
+	/// Startup 2026 pairing (VP.8: Méliès U's secret copy against Read-Write Share).
 	/// </summary>
 	private static string SmokePresetId(string preset, string side) => preset switch
 	{
 		"elevation" => side == "corp" ? "elevation-box-nebula-fast-advance" : "elevation-box-magdalene",
 		"nsg-core" => side == "corp" ? "nsg-core-gimbatul" : "nsg-core-sabbatical",
+		"startup" => side == "corp" ? "startup-melies-u" : "startup-tao-overlap",
 		_ when IsElevationPairing(preset) => preset.Split('~')[side == "corp" ? 0 : 1],
 		_ => $"system-gateway-{preset}-{side}",
 	};
 
 	/// <summary>
-	/// A <c>corp~runner</c> pairing of two decks of one Elevation-pool format: Gateway + Elevation
-	/// or NSG Core Sets (scripts/elevation-deck-smoke.sh).
+	/// A <c>corp~runner</c> pairing of two decks of one format beyond Gateway: Gateway + Elevation,
+	/// NSG Core Sets or Startup 2026 (scripts/elevation-deck-smoke.sh).
 	/// </summary>
 	private static bool IsElevationPairing(string preset) =>
 		preset.Split('~') is [string corp, string runner]
-		&& PlayFormats.FormatOfPreset(corp) is CardFormatIds.GatewayElevation or CardFormatIds.NsgCoreSets
+		&& PlayFormats.FormatOfPreset(corp) is CardFormatIds.GatewayElevation or CardFormatIds.NsgCoreSets or CardFormatIds.Startup2026
 		&& PlayFormats.FormatOfPreset(runner) == PlayFormats.FormatOfPreset(corp);
 
 	private bool HasAuthenticatedOfficialContent() =>

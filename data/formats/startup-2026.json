@@ -3,10 +3,10 @@
   "id": "startup-2026",
   "name": "Startup 2026",
   "effectiveDate": "2026-09-21",
-  "complete": false,
-  "cardPool": "gateway-elevation",
-  "legalPacks": ["sg", "elev"],
-  "missingPacks": ["vp"],
+  "complete": true,
+  "cardPool": "startup",
+  "legalPacks": ["sg", "elev", "vp"],
+  "missingPacks": [],
   "restriction": {
     "id": "startup-balance-update-26-09",
     "banned": ["30006", "30040", "30067", "35045", "36066"],
@@ -22,6 +22,6 @@
   "source": {
     "snapshotId": "startup_10",
     "cardPoolId": "startup_vantage_point",
-    "note": "System Gateway, Elevation and Vantage Point, on Startup Balance Update 26.09 (effective 21 September 2026: NBN: Reality Plus unbanned, at most 4 agendas worth 3 or more points), taken from Null Signal's announcement because the pinned card data predates it. Incomplete until Vantage Point's cards are implemented (VP.8): it validates decks of the cards this build has but is not offered for play."
+    "note": "System Gateway, Elevation and Vantage Point, on Startup Balance Update 26.09 (effective 21 September 2026: NBN: Reality Plus unbanned, at most 4 agendas worth 3 or more points), taken from Null Signal's announcement because the pinned card data predates it. Complete and playable since VP.8, with real players' tournament lists as its decks (D-VP-6)."
   }
 }

@@ -1,0 +1,1353 @@
+{
+  "schemaVersion": 1,
+  "retrievedDate": "2026-10-19",
+  "publishedSourceUrl": "https://alwaysberunning.net/results",
+  "metadataCommitSha": "236140cf84491c23995b028bc791281837520b97",
+  "provenanceNote": "Startup 2026's decks (D-VP-6, approved by the user on 19 October 2026): real players' tournament lists, two per faction with fourteen identities. Every Startup event on Always Be Running since Vantage Point joined Startup (17 April 2026) was read; of the 132 linked NetrunnerDB lists legal under Balance Update 26.09, each faction's two best by event size over placement were taken, one per identity. The lists are their authors', retrieved from NetrunnerDB on 2026-10-19; the names, summaries and archetypes are ours.",
+  "decks": [
+    {
+      "presetId": "startup-leo-glacier",
+      "name": "LEO Glacier",
+      "summary": "LEO Construction: layers of bioroid ICE and Sleipnir guard the remote where Méliès City and Project Ingatan score. Totes Undefeated Leo (2026 Worlds Startup 1st Place) by SkoolKnight4, #1 of 29 at 2026 Worlds Championship Startup Side Event (2026-10-04).",
+      "archetypes": [
+        "glacier"
+      ],
+      "side": "corp",
+      "identityCode": "35035",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/99152",
+      "cards": [
+        {
+          "code": "30036",
+          "quantity": 1
+        },
+        {
+          "code": "30038",
+          "quantity": 2
+        },
+        {
+          "code": "30039",
+          "quantity": 3
+        },
+        {
+          "code": "30042",
+          "quantity": 2
+        },
+        {
+          "code": "30050",
+          "quantity": 1
+        },
+        {
+          "code": "30053",
+          "quantity": 3
+        },
+        {
+          "code": "30069",
+          "quantity": 1
+        },
+        {
+          "code": "30071",
+          "quantity": 3
+        },
+        {
+          "code": "30075",
+          "quantity": 3
+        },
+        {
+          "code": "35038",
+          "quantity": 3
+        },
+        {
+          "code": "35039",
+          "quantity": 3
+        },
+        {
+          "code": "35041",
+          "quantity": 3
+        },
+        {
+          "code": "35042",
+          "quantity": 1
+        },
+        {
+          "code": "35043",
+          "quantity": 2
+        },
+        {
+          "code": "35072",
+          "quantity": 1
+        },
+        {
+          "code": "35079",
+          "quantity": 2
+        },
+        {
+          "code": "35081",
+          "quantity": 3
+        },
+        {
+          "code": "35082",
+          "quantity": 1
+        },
+        {
+          "code": "36026",
+          "quantity": 3
+        },
+        {
+          "code": "36028",
+          "quantity": 1
+        },
+        {
+          "code": "36030",
+          "quantity": 3
+        },
+        {
+          "code": "36032",
+          "quantity": 2
+        },
+        {
+          "code": "36045",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "presetId": "startup-precision-design-campaigns",
+      "name": "Precision Design Campaigns",
+      "summary": "Haas-Bioroid: Precision Design: Nico and Otto campaigns fund bioroid ICE while Reverb and Magistrate Revontulet tax the remote. the purple king in yellow by Scarius, #1 of 12 at STATION ONE | STARTUP LEAGUE | SEASON SEASON 22 (2026-06-28).",
+      "archetypes": [
+        "glacier",
+        "horizontal"
+      ],
+      "side": "corp",
+      "identityCode": "30035",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/97378",
+      "cards": [
+        {
+          "code": "30036",
+          "quantity": 1
+        },
+        {
+          "code": "30037",
+          "quantity": 3
+        },
+        {
+          "code": "30039",
+          "quantity": 2
+        },
+        {
+          "code": "30042",
+          "quantity": 2
+        },
+        {
+          "code": "30053",
+          "quantity": 3
+        },
+        {
+          "code": "30071",
+          "quantity": 3
+        },
+        {
+          "code": "30075",
+          "quantity": 3
+        },
+        {
+          "code": "35037",
+          "quantity": 2
+        },
+        {
+          "code": "35038",
+          "quantity": 3
+        },
+        {
+          "code": "35039",
+          "quantity": 3
+        },
+        {
+          "code": "35040",
+          "quantity": 2
+        },
+        {
+          "code": "35041",
+          "quantity": 2
+        },
+        {
+          "code": "35043",
+          "quantity": 1
+        },
+        {
+          "code": "35079",
+          "quantity": 1
+        },
+        {
+          "code": "36026",
+          "quantity": 3
+        },
+        {
+          "code": "36028",
+          "quantity": 2
+        },
+        {
+          "code": "36029",
+          "quantity": 3
+        },
+        {
+          "code": "36030",
+          "quantity": 2
+        },
+        {
+          "code": "36048",
+          "quantity": 3
+        }
+      ]
+    },
+    {
+      "presetId": "startup-melies-u",
+      "name": "Méliès U",
+      "summary": "Méliès U: the secret copy punishes a central run, and Lotus Haze moves the upgrades to the server the Runner is going for. Reflections on the Past (1st at Berkeley Startup CTK) by bdorf, #2 of 29 at 2026 Worlds Championship Startup Side Event (2026-10-04).",
+      "archetypes": [
+        "glacier"
+      ],
+      "side": "corp",
+      "identityCode": "36036",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/60b85356-d855-49cf-b315-ec8b830836ba",
+      "cards": [
+        {
+          "code": "30039",
+          "quantity": 3
+        },
+        {
+          "code": "30042",
+          "quantity": 2
+        },
+        {
+          "code": "30044",
+          "quantity": 1
+        },
+        {
+          "code": "30048",
+          "quantity": 3
+        },
+        {
+          "code": "30050",
+          "quantity": 3
+        },
+        {
+          "code": "30053",
+          "quantity": 3
+        },
+        {
+          "code": "30069",
+          "quantity": 2
+        },
+        {
+          "code": "30071",
+          "quantity": 2
+        },
+        {
+          "code": "30073",
+          "quantity": 2
+        },
+        {
+          "code": "30075",
+          "quantity": 3
+        },
+        {
+          "code": "35048",
+          "quantity": 3
+        },
+        {
+          "code": "35052",
+          "quantity": 1
+        },
+        {
+          "code": "35053",
+          "quantity": 1
+        },
+        {
+          "code": "35054",
+          "quantity": 3
+        },
+        {
+          "code": "35056",
+          "quantity": 2
+        },
+        {
+          "code": "35079",
+          "quantity": 2
+        },
+        {
+          "code": "35081",
+          "quantity": 3
+        },
+        {
+          "code": "36037",
+          "quantity": 3
+        },
+        {
+          "code": "36040",
+          "quantity": 2
+        },
+        {
+          "code": "36041",
+          "quantity": 3
+        },
+        {
+          "code": "36043",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "presetId": "startup-au-co-upgrades",
+      "name": "AU Co. Upgrades",
+      "summary": "AU Co.: advanced Semak-samun and Sericulture Expansion beside agendas, with upgrades Lotus Haze moves. Startup Do the AUpgrade Shuffle by AliApp, #1 of 7 at Connecticut GNK [Startup] (Beginner Friendly!) (2026-09-20).",
+      "archetypes": [
+        "shell-game",
+        "horizontal"
+      ],
+      "side": "corp",
+      "identityCode": "35046",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/98659",
+      "cards": [
+        {
+          "code": "30042",
+          "quantity": 2
+        },
+        {
+          "code": "30044",
+          "quantity": 1
+        },
+        {
+          "code": "30046",
+          "quantity": 3
+        },
+        {
+          "code": "30048",
+          "quantity": 3
+        },
+        {
+          "code": "30050",
+          "quantity": 2
+        },
+        {
+          "code": "30053",
+          "quantity": 3
+        },
+        {
+          "code": "30070",
+          "quantity": 2
+        },
+        {
+          "code": "30071",
+          "quantity": 2
+        },
+        {
+          "code": "30075",
+          "quantity": 2
+        },
+        {
+          "code": "35048",
+          "quantity": 2
+        },
+        {
+          "code": "35049",
+          "quantity": 3
+        },
+        {
+          "code": "35051",
+          "quantity": 2
+        },
+        {
+          "code": "35052",
+          "quantity": 2
+        },
+        {
+          "code": "35053",
+          "quantity": 2
+        },
+        {
+          "code": "35054",
+          "quantity": 3
+        },
+        {
+          "code": "35055",
+          "quantity": 2
+        },
+        {
+          "code": "35073",
+          "quantity": 2
+        },
+        {
+          "code": "35081",
+          "quantity": 3
+        },
+        {
+          "code": "36037",
+          "quantity": 3
+        },
+        {
+          "code": "36041",
+          "quantity": 3
+        },
+        {
+          "code": "36045",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "presetId": "startup-reality-plus-tags",
+      "name": "Reality Plus Tags",
+      "summary": "NBN: Reality Plus: Doomscroll, Witch Hunt and Esca land tags; Orbital Superiority and Flood the Market cash them in. Il y aura du sang (3rd in Worlds '26 Startup) by Ghost Meat, #3 of 29 at 2026 Worlds Championship Startup Side Event (2026-10-04).",
+      "archetypes": [
+        "tag-punish"
+      ],
+      "side": "corp",
+      "identityCode": "30051",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/99077",
+      "cards": [
+        {
+          "code": "30052",
+          "quantity": 1
+        },
+        {
+          "code": "30053",
+          "quantity": 3
+        },
+        {
+          "code": "30054",
+          "quantity": 2
+        },
+        {
+          "code": "30055",
+          "quantity": 3
+        },
+        {
+          "code": "30056",
+          "quantity": 3
+        },
+        {
+          "code": "30068",
+          "quantity": 3
+        },
+        {
+          "code": "30071",
+          "quantity": 3
+        },
+        {
+          "code": "30074",
+          "quantity": 1
+        },
+        {
+          "code": "35050",
+          "quantity": 1
+        },
+        {
+          "code": "35059",
+          "quantity": 2
+        },
+        {
+          "code": "35063",
+          "quantity": 3
+        },
+        {
+          "code": "35079",
+          "quantity": 1
+        },
+        {
+          "code": "36038",
+          "quantity": 3
+        },
+        {
+          "code": "36042",
+          "quantity": 2
+        },
+        {
+          "code": "36044",
+          "quantity": 2
+        },
+        {
+          "code": "36047",
+          "quantity": 3
+        },
+        {
+          "code": "36048",
+          "quantity": 2
+        },
+        {
+          "code": "36049",
+          "quantity": 3
+        },
+        {
+          "code": "36053",
+          "quantity": 3
+        }
+      ]
+    },
+    {
+      "presetId": "startup-editorial-tempo",
+      "name": "Tempo Editorial Division",
+      "summary": "Editorial Division: Public Trail and Witch Hunt tag the Runner, IP Enforcement and Retribution punish it, and Hype Machine scores fast. Tempo ED by LLBlumire, #10 of 37 at NRO//TEST 2: Startup League (2026-06-29).",
+      "archetypes": [
+        "tag-punish",
+        "rush"
+      ],
+      "side": "corp",
+      "identityCode": "36046",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/98274",
+      "cards": [
+        {
+          "code": "30052",
+          "quantity": 1
+        },
+        {
+          "code": "30053",
+          "quantity": 3
+        },
+        {
+          "code": "30054",
+          "quantity": 2
+        },
+        {
+          "code": "30055",
+          "quantity": 3
+        },
+        {
+          "code": "30056",
+          "quantity": 3
+        },
+        {
+          "code": "30057",
+          "quantity": 2
+        },
+        {
+          "code": "30058",
+          "quantity": 1
+        },
+        {
+          "code": "30065",
+          "quantity": 1
+        },
+        {
+          "code": "30069",
+          "quantity": 2
+        },
+        {
+          "code": "30071",
+          "quantity": 2
+        },
+        {
+          "code": "35059",
+          "quantity": 3
+        },
+        {
+          "code": "35062",
+          "quantity": 2
+        },
+        {
+          "code": "35063",
+          "quantity": 3
+        },
+        {
+          "code": "35066",
+          "quantity": 3
+        },
+        {
+          "code": "35067",
+          "quantity": 1
+        },
+        {
+          "code": "35082",
+          "quantity": 1
+        },
+        {
+          "code": "36030",
+          "quantity": 2
+        },
+        {
+          "code": "36047",
+          "quantity": 3
+        },
+        {
+          "code": "36050",
+          "quantity": 3
+        },
+        {
+          "code": "36055",
+          "quantity": 3
+        },
+        {
+          "code": "36057",
+          "quantity": 2
+        },
+        {
+          "code": "36063",
+          "quantity": 3
+        }
+      ]
+    },
+    {
+      "presetId": "startup-zwicky-measured-response",
+      "name": "Zwicky Measured Response",
+      "summary": "The Zwicky Group: big credit operations fund Pharos and Tocsin, and Measured Response threatens a flatline. [Startup] Adelaide Megacity Side Event 1st Place (3-0) by SleepyPanda27, #1 of 10 at Adelaide Mega City Startup Side Event (2026-05-17).",
+      "archetypes": [
+        "rush",
+        "kill"
+      ],
+      "side": "corp",
+      "identityCode": "35069",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/96201",
+      "cards": [
+        {
+          "code": "30042",
+          "quantity": 2
+        },
+        {
+          "code": "30048",
+          "quantity": 2
+        },
+        {
+          "code": "30050",
+          "quantity": 1
+        },
+        {
+          "code": "30053",
+          "quantity": 3
+        },
+        {
+          "code": "30060",
+          "quantity": 1
+        },
+        {
+          "code": "30062",
+          "quantity": 2
+        },
+        {
+          "code": "30063",
+          "quantity": 3
+        },
+        {
+          "code": "30064",
+          "quantity": 3
+        },
+        {
+          "code": "30069",
+          "quantity": 3
+        },
+        {
+          "code": "30071",
+          "quantity": 2
+        },
+        {
+          "code": "30075",
+          "quantity": 3
+        },
+        {
+          "code": "35070",
+          "quantity": 3
+        },
+        {
+          "code": "35074",
+          "quantity": 3
+        },
+        {
+          "code": "35075",
+          "quantity": 1
+        },
+        {
+          "code": "35077",
+          "quantity": 3
+        },
+        {
+          "code": "35078",
+          "quantity": 3
+        },
+        {
+          "code": "35081",
+          "quantity": 3
+        },
+        {
+          "code": "36056",
+          "quantity": 3
+        },
+        {
+          "code": "36058",
+          "quantity": 2
+        },
+        {
+          "code": "36060",
+          "quantity": 3
+        }
+      ]
+    },
+    {
+      "presetId": "startup-built-to-last",
+      "name": "Built to Last",
+      "summary": "Weyland Consortium: Built to Last: advanced agendas pay out, while Myōshu and Reanimation Protocol rebuild the ICE. startup BTL by Tradon, #4 of 29 at 2026 Worlds Championship Startup Side Event (2026-10-04).",
+      "archetypes": [
+        "glacier",
+        "rush"
+      ],
+      "side": "corp",
+      "identityCode": "30059",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/99007",
+      "cards": [
+        {
+          "code": "30039",
+          "quantity": 1
+        },
+        {
+          "code": "30053",
+          "quantity": 3
+        },
+        {
+          "code": "30056",
+          "quantity": 2
+        },
+        {
+          "code": "30060",
+          "quantity": 1
+        },
+        {
+          "code": "30061",
+          "quantity": 2
+        },
+        {
+          "code": "30063",
+          "quantity": 2
+        },
+        {
+          "code": "30064",
+          "quantity": 2
+        },
+        {
+          "code": "30069",
+          "quantity": 3
+        },
+        {
+          "code": "30075",
+          "quantity": 3
+        },
+        {
+          "code": "35056",
+          "quantity": 2
+        },
+        {
+          "code": "35061",
+          "quantity": 2
+        },
+        {
+          "code": "35070",
+          "quantity": 3
+        },
+        {
+          "code": "35071",
+          "quantity": 3
+        },
+        {
+          "code": "35074",
+          "quantity": 2
+        },
+        {
+          "code": "35075",
+          "quantity": 2
+        },
+        {
+          "code": "35076",
+          "quantity": 2
+        },
+        {
+          "code": "35077",
+          "quantity": 3
+        },
+        {
+          "code": "35078",
+          "quantity": 2
+        },
+        {
+          "code": "36058",
+          "quantity": 3
+        },
+        {
+          "code": "36060",
+          "quantity": 2
+        },
+        {
+          "code": "36061",
+          "quantity": 2
+        },
+        {
+          "code": "36062",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "presetId": "startup-loup-cookbook",
+      "name": "Loup Cookbook",
+      "summary": "René \"Loup\" Arcemont: Cookbook's virus counters feed Fermenter, Gourmand and Botulus, and Conduit digs R&D. Startup Cooking Conduit [1st, 5-1 at Continentals 2026] by Saimin, #1 of 10 at Startup @ EMEA 2026 (2026-08-23).",
+      "archetypes": [
+        "virus",
+        "big-rig"
+      ],
+      "side": "runner",
+      "identityCode": "30001",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/98095",
+      "cards": [
+        {
+          "code": "30002",
+          "quantity": 3
+        },
+        {
+          "code": "30004",
+          "quantity": 3
+        },
+        {
+          "code": "30005",
+          "quantity": 2
+        },
+        {
+          "code": "30007",
+          "quantity": 3
+        },
+        {
+          "code": "30008",
+          "quantity": 2
+        },
+        {
+          "code": "30009",
+          "quantity": 3
+        },
+        {
+          "code": "30012",
+          "quantity": 2
+        },
+        {
+          "code": "30013",
+          "quantity": 1
+        },
+        {
+          "code": "30014",
+          "quantity": 1
+        },
+        {
+          "code": "30022",
+          "quantity": 1
+        },
+        {
+          "code": "30024",
+          "quantity": 1
+        },
+        {
+          "code": "30025",
+          "quantity": 2
+        },
+        {
+          "code": "30028",
+          "quantity": 3
+        },
+        {
+          "code": "30029",
+          "quantity": 3
+        },
+        {
+          "code": "30030",
+          "quantity": 3
+        },
+        {
+          "code": "30033",
+          "quantity": 1
+        },
+        {
+          "code": "30034",
+          "quantity": 2
+        },
+        {
+          "code": "35006",
+          "quantity": 1
+        },
+        {
+          "code": "35007",
+          "quantity": 3
+        },
+        {
+          "code": "35009",
+          "quantity": 2
+        },
+        {
+          "code": "36003",
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "presetId": "startup-ryo-chain-reaction",
+      "name": "Ryō Chain Reaction",
+      "summary": "Ryō \"Phoenix\" Ōno: Chain Reaction and Rent Rioters keep the Corp's board small, with virus breakers and Stick and Poke. Startup Ryō w/ Chains and a repeated Detente by AliApp, #1 of 7 at Connecticut GNK [Startup] (Beginner Friendly!) (2026-09-20).",
+      "archetypes": [
+        "virus",
+        "econ-denial"
+      ],
+      "side": "runner",
+      "identityCode": "35001",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/98658",
+      "cards": [
+        {
+          "code": "30004",
+          "quantity": 3
+        },
+        {
+          "code": "30005",
+          "quantity": 2
+        },
+        {
+          "code": "30007",
+          "quantity": 3
+        },
+        {
+          "code": "30008",
+          "quantity": 1
+        },
+        {
+          "code": "30015",
+          "quantity": 1
+        },
+        {
+          "code": "30020",
+          "quantity": 1
+        },
+        {
+          "code": "30025",
+          "quantity": 1
+        },
+        {
+          "code": "30030",
+          "quantity": 3
+        },
+        {
+          "code": "35003",
+          "quantity": 2
+        },
+        {
+          "code": "35004",
+          "quantity": 2
+        },
+        {
+          "code": "35007",
+          "quantity": 3
+        },
+        {
+          "code": "35009",
+          "quantity": 3
+        },
+        {
+          "code": "35011",
+          "quantity": 3
+        },
+        {
+          "code": "35018",
+          "quantity": 2
+        },
+        {
+          "code": "35026",
+          "quantity": 3
+        },
+        {
+          "code": "36001",
+          "quantity": 3
+        },
+        {
+          "code": "36002",
+          "quantity": 3
+        },
+        {
+          "code": "36003",
+          "quantity": 2
+        },
+        {
+          "code": "36007",
+          "quantity": 2
+        },
+        {
+          "code": "36008",
+          "quantity": 3
+        }
+      ]
+    },
+    {
+      "presetId": "startup-muslihat-clean-getaway",
+      "name": "MuslihaT Clean Getaway",
+      "summary": "MuslihaT: Clean Getaway and Tailgate runs every turn, paid for by Open Market and Side Hustle. Big T in a Small Pond by Scarius, #1 of 12 at STATION ONE | STARTUP LEAGUE | SEASON SEASON 22 (2026-06-28).",
+      "archetypes": [
+        "aggro",
+        "central-pressure"
+      ],
+      "side": "runner",
+      "identityCode": "35013",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/97379",
+      "cards": [
+        {
+          "code": "30008",
+          "quantity": 2
+        },
+        {
+          "code": "30011",
+          "quantity": 2
+        },
+        {
+          "code": "30012",
+          "quantity": 2
+        },
+        {
+          "code": "30014",
+          "quantity": 2
+        },
+        {
+          "code": "30015",
+          "quantity": 2
+        },
+        {
+          "code": "30016",
+          "quantity": 3
+        },
+        {
+          "code": "30028",
+          "quantity": 3
+        },
+        {
+          "code": "30029",
+          "quantity": 3
+        },
+        {
+          "code": "30030",
+          "quantity": 3
+        },
+        {
+          "code": "30034",
+          "quantity": 2
+        },
+        {
+          "code": "35009",
+          "quantity": 1
+        },
+        {
+          "code": "35014",
+          "quantity": 3
+        },
+        {
+          "code": "35017",
+          "quantity": 3
+        },
+        {
+          "code": "35020",
+          "quantity": 2
+        },
+        {
+          "code": "35022",
+          "quantity": 3
+        },
+        {
+          "code": "35034",
+          "quantity": 3
+        },
+        {
+          "code": "36003",
+          "quantity": 2
+        },
+        {
+          "code": "36012",
+          "quantity": 2
+        },
+        {
+          "code": "36021",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "presetId": "startup-zahya-runs",
+      "name": "Zahya Runs",
+      "summary": "Zahya Sadeghi: run events and Transfer of Wealth turn each central run into credits. Startup Zahya by Veronica, #1 of 8 at Casual Startup Tournament - Utrecht (2026-08-01).",
+      "archetypes": [
+        "aggro",
+        "central-pressure"
+      ],
+      "side": "runner",
+      "identityCode": "30010",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/97672",
+      "cards": [
+        {
+          "code": "30002",
+          "quantity": 3
+        },
+        {
+          "code": "30011",
+          "quantity": 2
+        },
+        {
+          "code": "30012",
+          "quantity": 2
+        },
+        {
+          "code": "30013",
+          "quantity": 1
+        },
+        {
+          "code": "30014",
+          "quantity": 2
+        },
+        {
+          "code": "30015",
+          "quantity": 2
+        },
+        {
+          "code": "30016",
+          "quantity": 1
+        },
+        {
+          "code": "30024",
+          "quantity": 1
+        },
+        {
+          "code": "30026",
+          "quantity": 1
+        },
+        {
+          "code": "30028",
+          "quantity": 3
+        },
+        {
+          "code": "30029",
+          "quantity": 2
+        },
+        {
+          "code": "30030",
+          "quantity": 3
+        },
+        {
+          "code": "35009",
+          "quantity": 1
+        },
+        {
+          "code": "35014",
+          "quantity": 3
+        },
+        {
+          "code": "35015",
+          "quantity": 2
+        },
+        {
+          "code": "35017",
+          "quantity": 3
+        },
+        {
+          "code": "35020",
+          "quantity": 1
+        },
+        {
+          "code": "35022",
+          "quantity": 3
+        },
+        {
+          "code": "36012",
+          "quantity": 1
+        },
+        {
+          "code": "36015",
+          "quantity": 1
+        },
+        {
+          "code": "36021",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "presetId": "startup-magdalene",
+      "name": "Magdalene",
+      "summary": "Magdalene Keino-Chemutai: overdraw with Creative Commission and Ritual, then install from the stack; VRcation buys the clicks. Bag Mags (2026 Worlds Startup 1st Place) by SkoolKnight4, #1 of 29 at 2026 Worlds Championship Startup Side Event (2026-10-04).",
+      "archetypes": [
+        "big-rig",
+        "central-pressure"
+      ],
+      "side": "runner",
+      "identityCode": "35024",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/99029",
+      "cards": [
+        {
+          "code": "30007",
+          "quantity": 3
+        },
+        {
+          "code": "30008",
+          "quantity": 2
+        },
+        {
+          "code": "30020",
+          "quantity": 3
+        },
+        {
+          "code": "30021",
+          "quantity": 3
+        },
+        {
+          "code": "30022",
+          "quantity": 3
+        },
+        {
+          "code": "30023",
+          "quantity": 1
+        },
+        {
+          "code": "30024",
+          "quantity": 1
+        },
+        {
+          "code": "30025",
+          "quantity": 2
+        },
+        {
+          "code": "30026",
+          "quantity": 2
+        },
+        {
+          "code": "30027",
+          "quantity": 3
+        },
+        {
+          "code": "30030",
+          "quantity": 3
+        },
+        {
+          "code": "35004",
+          "quantity": 1
+        },
+        {
+          "code": "35009",
+          "quantity": 2
+        },
+        {
+          "code": "35015",
+          "quantity": 2
+        },
+        {
+          "code": "35025",
+          "quantity": 2
+        },
+        {
+          "code": "35026",
+          "quantity": 3
+        },
+        {
+          "code": "35030",
+          "quantity": 2
+        },
+        {
+          "code": "35031",
+          "quantity": 1
+        },
+        {
+          "code": "35032",
+          "quantity": 3
+        },
+        {
+          "code": "35033",
+          "quantity": 2
+        },
+        {
+          "code": "36024",
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "presetId": "startup-tao-overlap",
+      "name": "Tāo Overlap",
+      "summary": "Tāo Salonga: Principia and Illumination behind DZMZ Optimizer, while the identity's ICE swaps strand the Corp's servers. Startup Overlap Tao by bdorf, #2 of 29 at 2026 Worlds Championship Startup Side Event (2026-10-04).",
+      "archetypes": [
+        "big-rig"
+      ],
+      "side": "runner",
+      "identityCode": "30019",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/066e4999-a427-4261-abe4-12fafa2eb932",
+      "cards": [
+        {
+          "code": "30004",
+          "quantity": 1
+        },
+        {
+          "code": "30020",
+          "quantity": 3
+        },
+        {
+          "code": "30021",
+          "quantity": 2
+        },
+        {
+          "code": "30022",
+          "quantity": 3
+        },
+        {
+          "code": "30023",
+          "quantity": 2
+        },
+        {
+          "code": "30024",
+          "quantity": 1
+        },
+        {
+          "code": "30025",
+          "quantity": 2
+        },
+        {
+          "code": "30026",
+          "quantity": 2
+        },
+        {
+          "code": "30027",
+          "quantity": 2
+        },
+        {
+          "code": "30029",
+          "quantity": 2
+        },
+        {
+          "code": "30030",
+          "quantity": 3
+        },
+        {
+          "code": "35017",
+          "quantity": 3
+        },
+        {
+          "code": "35025",
+          "quantity": 3
+        },
+        {
+          "code": "35026",
+          "quantity": 3
+        },
+        {
+          "code": "35029",
+          "quantity": 1
+        },
+        {
+          "code": "35030",
+          "quantity": 1
+        },
+        {
+          "code": "35032",
+          "quantity": 3
+        },
+        {
+          "code": "35033",
+          "quantity": 2
+        },
+        {
+          "code": "36024",
+          "quantity": 1
+        }
+      ]
+    }
+  ]
+}

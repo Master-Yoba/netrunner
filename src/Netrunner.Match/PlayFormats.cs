@@ -55,7 +55,8 @@ public sealed class PlayFormatContent
 public static class PlayFormats
 {
     /// <summary>The formats in menu order.</summary>
-    public static IReadOnlyList<string> Ids { get; } = [CardFormatIds.Gateway, CardFormatIds.GatewayElevation, CardFormatIds.NsgCoreSets];
+    public static IReadOnlyList<string> Ids { get; } =
+        [CardFormatIds.Gateway, CardFormatIds.GatewayElevation, CardFormatIds.NsgCoreSets, CardFormatIds.Startup2026];
 
     private static readonly ConcurrentDictionary<string, Lazy<PlayFormatContent>> Loaded = new(StringComparer.Ordinal);
 
@@ -78,11 +79,12 @@ public static class PlayFormats
     }
 
     /// <summary>
-    /// The format whose decks include a preset: NSG Core Sets for NSG's Core Sets decks,
-    /// Gateway + Elevation for our Elevation decks, Gateway otherwise.
+    /// The format whose decks include a preset: NSG Core Sets for NSG's Core Sets decks, Startup 2026 for its
+    /// tournament lists (VP.8), Gateway + Elevation for our Elevation decks, Gateway otherwise.
     /// </summary>
     public static string FormatOfPreset(string presetId) =>
         OfficialPresetCatalog.IsNsgCoreSetsDeck(presetId) ? CardFormatIds.NsgCoreSets
+        : OfficialPresetCatalog.IsStartup2026Deck(presetId) ? CardFormatIds.Startup2026
         : OfficialPresetCatalog.IsElevationDeck(presetId) ? CardFormatIds.GatewayElevation
         : CardFormatIds.Gateway;
 
@@ -123,7 +125,9 @@ public static class PlayFormats
     public static string FormatOfBehavior(IBehaviorCatalog behavior)
     {
         ArgumentNullException.ThrowIfNull(behavior);
-        return behavior.Version == ElevationBehaviorCatalog.Version ? CardFormatIds.GatewayElevation : CardFormatIds.Gateway;
+        return behavior.Version == ElevationBehaviorCatalog.Version ? CardFormatIds.GatewayElevation
+            : behavior.Version == VantagePointBehaviorCatalog.Version ? CardFormatIds.Startup2026
+            : CardFormatIds.Gateway;
     }
 
     /// <summary>
@@ -145,6 +149,7 @@ public static class PlayFormats
         if (presetId is null) return false;
         if (OfficialPresetCatalog.Embedded().TryGet(presetId, out preset)) return true;
         if (OfficialPresetCatalog.IsNsgCoreSetsDeck(presetId)) return OfficialPresetCatalog.NsgCoreSets().TryGet(presetId, out preset);
+        if (OfficialPresetCatalog.IsStartup2026Deck(presetId)) return OfficialPresetCatalog.Startup2026().TryGet(presetId, out preset);
         return OfficialPresetCatalog.IsElevationDeck(presetId) && OfficialPresetCatalog.GatewayElevation().TryGet(presetId, out preset);
     }
 
@@ -158,9 +163,13 @@ public static class PlayFormats
             return new(format, pool.LoadEmbeddedData(), GatewayBehaviorCatalog.Create(), gateway, gateway.Gateway);
         }
         bool nsg = formatId == CardFormatIds.NsgCoreSets;
-        OfficialPresetCatalog presets = nsg ? OfficialPresetCatalog.NsgCoreSets() : OfficialPresetCatalog.GatewayElevation();
+        bool startup = formatId == CardFormatIds.Startup2026;
+        OfficialPresetCatalog presets = nsg ? OfficialPresetCatalog.NsgCoreSets()
+            : startup ? OfficialPresetCatalog.Startup2026()
+            : OfficialPresetCatalog.GatewayElevation();
         CardDataSet data = pool.LoadEmbeddedData();
         presets.Validate(data);
-        return new(format, data, pool.CreateBehavior(), presets, nsg ? presets.NsgCoreSetsDecks : presets.ElevationDecks);
+        return new(format, data, pool.CreateBehavior(), presets,
+            nsg ? presets.NsgCoreSetsDecks : startup ? presets.Startup2026Decks : presets.ElevationDecks);
     }
 }

@@ -94,6 +94,10 @@ public sealed partial class RunnerHeuristicPolicy
             value += (definition.Behavior?.Triggers ?? []).Where(trigger => trigger.Occurrence == OccurrenceKind.ArchivesCardsTurnedFaceUp)
                 .SelectMany(trigger => HeuristicContext.Flatten(trigger.Instructions))
                 .Where(instruction => instruction.Kind == BehaviorInstructionKind.Draw).Sum(instruction => instruction.Amount * context.DrawValue);
+            // VP.8 (misplay sweep): The Tungsten Tailor's lower strength on every piece of ICE saves a pump at each the Runner
+            // breaks; it was installed 3 times in 1,540 offers.
+            if (definition.Behavior?.AllIceStrength is < 0 and var weaker)
+                value += -weaker * 60 * Math.Min(6, 2 + context.Features.Board.Servers.Sum(server => server.Ice.Count(ice => ice?.Rezzed == true)));
             if (definition.Behavior?.HostsResources is { } hosts)
                 value += context.Features.Hand.Count(held => context.Definition(held)?.Printed is { } printed && hosts.Accepts(printed))
                     * hosts.InstallDiscount * context.CreditValue + hosts.HandSizeWhileHostingEach * 40;

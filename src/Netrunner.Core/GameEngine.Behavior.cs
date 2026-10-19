@@ -834,7 +834,13 @@ public static partial class GameEngine
                     int limit = faceDown && working.BehaviorCatalog.TryGet(GetCard(working, frame.SourceCardId).DefinitionId,
                         out CardBehaviorDefinition? facedownHost) ? facedownHost.HostsFaceDownLimit : int.MaxValue;
                     var remainingSetAside = frame.SetAside.ToList();
-                    IReadOnlyList<CardInstanceId> toHost = faceDown && instruction.Target is { Kind: BehaviorTargetKind.ChosenCard } facedownTarget
+                    // A random pick that found nothing binds nothing (Detente's HQ card, when Ryō's trigger trashed HQ's last
+                    // card first): there is nothing to host.
+                    bool pickedNothing = instruction.Target is { Kind: BehaviorTargetKind.ChosenCard, Selector: { } pickedKey }
+                        && !frame.Bindings.Any(binding => string.Equals(binding.Key, pickedKey, StringComparison.Ordinal))
+                        && instructions.Take(frame.InstructionCursor).Any(earlier => earlier.Kind == BehaviorInstructionKind.ChooseAtRandom
+                            && string.Equals(earlier.Argument, pickedKey, StringComparison.Ordinal));
+                    IReadOnlyList<CardInstanceId> toHost = pickedNothing || faceDown && instruction.Target is { Kind: BehaviorTargetKind.ChosenCard } facedownTarget
                         && IsProvenEmptyChosenCard(frame, facedownTarget)
                             ? []
                             : ResolveBehaviorCards(working, frame, instruction.Target);

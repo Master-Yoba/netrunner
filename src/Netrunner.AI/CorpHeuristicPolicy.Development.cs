@@ -582,7 +582,12 @@ public sealed partial class CorpHeuristicPolicy
                         .Any(instruction => instruction.Kind == BehaviorInstructionKind.TakeBadPublicity)
                     && context.Features.Board.CorpIdentity.Any(identity => context.Definition(identity)?.Behavior?.Triggers
                         .Any(trigger => trigger.Occurrence == OccurrenceKind.FirstBadPublicityThisTurn) == true);
-                if (taxes || discounts || feedsIdentity) return Value(120 - cost * 30, "rez/asset-works-rezzed", approximate: true);
+                // VP.8 (misplay sweep): or a tag each turn for the bad publicity it takes (Nihilo Agent in Reality Plus's tag deck,
+                // never rezzed there without Editorial Division's search).
+                BehaviorInstruction[] rezzedEffects = [.. HeuristicContext.Flatten(asset.Triggers.SelectMany(trigger => trigger.Instructions))];
+                bool tagsEachTurn = rezzedEffects.Any(instruction => instruction.Kind == BehaviorInstructionKind.TakeBadPublicity)
+                    && rezzedEffects.Any(instruction => instruction.Kind == BehaviorInstructionKind.AddTags);
+                if (taxes || discounts || feedsIdentity || tagsEachTurn) return Value(120 - cost * 30, "rez/asset-works-rezzed", approximate: true);
             }
             // v29 (bot loop 2): an asset that pays each turn (Public Access Plaza's credit) pays more the sooner it is rezzed.
             int perTurn = definition.Behavior?.Triggers.Where(trigger => trigger.Occurrence == OccurrenceKind.TurnBegin)

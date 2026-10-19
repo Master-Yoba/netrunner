@@ -32,6 +32,8 @@ if mode != "--quick":
     matrix += [("runner", "expanded", "easy"), ("corp", "expanded", "hard")]
     # EL.8: a Gateway + Elevation game saves and resumes with its format.
     matrix += [("runner", "elevation", "standard"), ("corp", "elevation", "hard")]
+    # VP.8: a Startup 2026 game (Méliès U against Tāo's Read-Write Share) saves and resumes with its format.
+    matrix += [("runner", "startup", "standard"), ("corp", "startup", "standard")]
 def run_case(row):
     side, preset, difficulty = row
     case = f"{side}-{preset}-{difficulty}"

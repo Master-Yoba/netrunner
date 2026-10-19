@@ -628,3 +628,130 @@ at full price but checked with the discount, so it was rejected. The effect's in
 The fourth round's finding is deferred to VP.8's tracker work (A9 over the new hidden zones). The Runner's samples and card
 tracker don't keep the R&D card Hiram's look shows, so the bot forgets it once the look ends. The engine and the
 observation are right; only the bot's knowledge is lost.
+
+## VP.8 — Integration: decks, formats, bots, client and the milestone gate (19 October 2026)
+
+### Decks (D-VP-6)
+
+No Startup battle box has been published, so Startup 2026's decks are real players' tournament lists. The user approved
+the set on 19 October 2026.
+- **Source:** every Startup event on Always Be Running since Vantage Point joined Startup (17 April 2026): 31 events,
+  137 linked NetrunnerDB lists. 132 use only the Startup pool and are legal under Balance Update 26.09; one breaks the
+  limit on agendas worth 3 or more points.
+- **Selection:** each faction's two best lists, by event size over placement, one per identity. That makes eight Corp
+  and six Runner decks, with fourteen identities. Half come from the 2026 Worlds Startup side event (29 players): its
+  first, second, third and fourth places.
+- `data/decks/startup-2026-decks.json` records each list's NetrunnerDB link, author and placement. The names,
+  summaries and archetypes are ours. Between them the lists hold 37 of the 66 Vantage Point cards.
+- `CardFormatTests.Startup2026DecksAreTournamentListsLegalAndFullyBound` checks that each is legal and fully bound.
+
+### Formats and the menu (D-VP-5, D-VP-7)
+
+- **Startup 2026** is complete: the Startup pool, all three packs legal, and Balance Update 26.09's bans and agenda limit.
+  The format snapshot names the `startup` pool, which the schema now lists.
+- **`PlayFormats`:**
+  - offers it with its fourteen decks;
+  - maps its presets and the Startup behavior catalog to the format;
+  - records it in saves, which reload (`PlayFormatsTests`).
+- **The menu** offers "Startup 2026" beside the other formats, with random opponents drawn from its decks. The menu
+  smoke checks its eight Corp and six Runner decks.
+- **Ladders and fuzz:** `startup-2026` is a `--content` pool (48 pairings, pool version `startup-2026-v1`), and
+  `affected-pools.sh` and `card-fingerprints` list it.
+
+### Mycoweb over the Startup pool
+
+VP.5's deviation is closed. The Startup catalog (`startup-vp.8`) rebuilds Mycoweb over its own ICE, so Mycoweb resolves
+Vantage Point's sentries and code gates too. Two kinds of subroutine are never offered:
+- Mycoweb's own;
+- one that acts on its own ICE, such as Knowledge Seeker's virus counter, which would land on Mycoweb.
+
+The Elevation pool's Mycoweb is unchanged, and so is every other Elevation card's fingerprint. `BehaviorCatalogBuilder.Replace`
+swaps the one definition.
+
+### Bots
+
+These paths read vocabulary only Vantage Point cards use, so the policy versions are unchanged:
+- **The run model:**
+  - a run's bad publicity fund counts as run credits when the Runner plans a run;
+  - a known agenda the run can't pay to steal isn't worth its points: its steal clicks beyond the clicks left, or the
+    active cards' steal credits (Magistrate Revontulet) beyond the credits left.
+- **The tracker (A9):**
+  - Hiram's look at R&D's top card is now kept as that card at the top, as an access that leaves it is (PR #157's fourth
+    finding);
+  - face-down hosted cards and the secret identity give the tracker nothing to infer: the Runner never sees the copy
+    before it flips, and the Runner's samples draw it again (PR #157's first finding).
+  - `ai-belief` over the Startup 2026 ladder stays above its prior on every tier (standard: log-loss 3.409 against
+    3.755, top-1 14% against 2%).
+- **The Startup 2026 ladder:** 1,536 games (random, contract, easy and standard; 2 seeds a pairing), 0 errors, 8 capped.
+  Both sides order random < contract < easy < standard; the Corp's order separates.
+- **The sweep:** two Vantage Point cards were never used:
+  - Nihilo Agent, never rezzed in Reality Plus's tag deck, which lacks Editorial Division's search. An asset that tags
+    the Runner for the bad publicity it takes now works rezzed. After the fix: 62 rezzes in 100 offers.
+  - The Tungsten Tailor, installed 3 times in 1,540 offers. Its lower strength on every piece of ICE is now worth a
+    pump on each rezzed piece. After the fix: 39 installs in 914 offers.
+  - Esca and Byte! are never rezzed because they work when accessed, unrezzed.
+  - Four System Gateway and Elevation cards are never used: Idiosyncresis and Plutus never rezzed, Syailendra never
+    advanced, Tread Lightly never played. They go to the heuristic track, since fixing them changes those pools' games
+    and the policy versions.
+- **The Core Battle Box is unchanged.** The same ladder (easy and standard, 2 seeds a pairing, 96 games) at `dev` and at
+  this branch plays every game identically, action for action.
+- **Fixtures:** `VantagePointBotTests` checks each sweep's fixes at saved decisions of VP.8's two ladders, on the
+  `startup-vp.8` catalog: `vp8-*` on the simulation decks and `s26-*` on Startup 2026's.
+
+### Client
+
+The client presents every new state:
+- **Bad publicity:** the Corp's count beside its clicks, and the run's bad publicity credits on the run line.
+- **Méliès U:** the side it shows once flipped, for both players; before that, "Secret copy" for the Corp alone.
+- **Face-down hosted cards:** they sit on Read-Write Share, as backs to the Corp and as named cards to the Runner.
+- `VantagePointBotTests.TheClientShowsTheSecretCopyAndFaceDownHostedCardsToTheirOwnersAlone` walks a saved game of Méliès
+  U against Hiram and checks both views at every position.
+- **The deck smoke** (`scripts/elevation-deck-smoke.sh --format startup-2026`) plays every Startup 2026 deck through the
+  client as the human seat of its side, against the latest bot: 14 of 14 pass.
+- **The M5 client smoke's matrix** gains a Startup 2026 game, Méliès U against Tāo, which saves and resumes on each side.
+  Both pass.
+- **A pre-existing failure:** that smoke's Gateway case of Hard against a human Corp fails with "Chosen opponent was not
+  persisted". It fails the same way at `dev` (96cea91), and the gates don't run this smoke. It is recorded for the client
+  track, not fixed here.
+- Some new states needed no new view:
+  - hosted resources (Hackerspace) sit on their host, as any hosted card does;
+  - a trap ICE shows its printed subtypes, as all cards do;
+  - stealth credits are hosted credits on their stealth cards.
+
+### Hardening
+
+- **The first 10,000-game Startup 2026 fuzz** (every replay verified) rejected 1 game. Ryō's trigger had trashed HQ's last
+  card before Detente's random pick of an HQ card resolved. The pick bound nothing, and the host found no binding. Both
+  are Elevation cards, so the Elevation pool could meet it too. A random pick that finds nothing now hosts nothing
+  (`Startup2026FuzzRegressionTests`).
+- **The second run:** 10,000 games, all terminal, every replay verified (mean 471.2 actions).
+
+### E6
+
+By hand, the whole set needed **59 of 66 cards (89%)** with no Core change past their primitive slice:
+- VP.3: 27 of 28;
+- VP.5: 25 of 28;
+- VP.7: 7 of 10.
+
+VP.7 misses the gate's 80%. As the last batch, it carried most of the set's one-of-a-kind effects: a secret identity, a
+resource host and a hidden hosted zone. Three of its cards still needed Core after VP.6's slice: Hiram, Hype Machine and
+Lotus Haze.
+
+### Milestone gate (section 7)
+
+- [x] **Coverage:** 225 of 225 bound, tested and checklist-complete.
+- [ ] **E6:** VP.3 (96%) and VP.5 (89%) meet the 80% bar; VP.7 (70%) doesn't, for the reasons above. The whole-set report
+  is recorded: 89%.
+- [x] **Formats:** Startup 2026 is complete, loads and validates, and plays with its decks.
+- [x] **Decks:** each of the fourteen validates, loads and plays human against bot through the client, on its side.
+- [x] **Hardening:** 10,000 clean official fuzz games over the Startup 2026 pool, every replay verified; the full gates.
+- [x] **Bots:**
+  - every Vantage Point card the decks hold is played without errors, with a non-default valuation;
+  - none is installed but never used in the sweep;
+  - the deck-pool ladder has no deck warning;
+  - the Core Battle Box ladder is unchanged;
+  - `ai-belief` is above its prior.
+- [x] **Client:** every new state is presented, and the smoke matrices include Startup 2026's decks. `make verify`'s
+  main-menu smoke checks the Startup 2026 area at 1920×1080 and 2560×1440.
+- [x] This record, with evidence and deviations.
+

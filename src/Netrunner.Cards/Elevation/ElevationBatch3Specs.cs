@@ -527,7 +527,11 @@ public static class ElevationBatch3Specs
     /// with no instruction equivalent (run restrictions, damage with a printed
     /// follow-up, inward installs) are not offered.
     /// </summary>
-    public static CardBehaviorDefinition MycowebFor(IBehaviorCatalog pool) => new(
+    /// <param name="withoutSelfReferences">
+    /// VP.8: over the Startup pool, a subroutine that acts on its own ICE (Knowledge Seeker's virus counter) isn't offered: on
+    /// Mycoweb it would act on Mycoweb. The Elevation pool's options are unchanged.
+    /// </param>
+    public static CardBehaviorDefinition MycowebFor(IBehaviorCatalog pool, bool withoutSelfReferences = false) => new(
         ElevationCardCodes.Mycoweb,
         PlayerSide.Corp,
         triggers:
@@ -542,21 +546,22 @@ public static class ElevationBatch3Specs
                         BehaviorChoiceCardinality.UpTo(1)),
                     new BehaviorInstruction(BehaviorInstructionKind.RezPayingLess, amount: 2, target: ChosenBy("mycoweb-rez-target")),
                 ]),
-            Subroutine("mycoweb-sentry", [ResolveOtherSubroutine(pool, IceType.Sentry, "mycoweb-sentry-choice")]),
-            Subroutine("mycoweb-code-gate", [ResolveOtherSubroutine(pool, IceType.CodeGate, "mycoweb-code-gate-choice")]),
+            Subroutine("mycoweb-sentry", [ResolveOtherSubroutine(pool, IceType.Sentry, "mycoweb-sentry-choice", withoutSelfReferences)]),
+            Subroutine("mycoweb-code-gate", [ResolveOtherSubroutine(pool, IceType.CodeGate, "mycoweb-code-gate-choice", withoutSelfReferences)]),
         ]);
 
-    private static BehaviorInstruction ResolveOtherSubroutine(IBehaviorCatalog pool, IceType type, string key)
+    private static BehaviorInstruction ResolveOtherSubroutine(IBehaviorCatalog pool, IceType type, string key, bool withoutSelfReferences)
     {
         var options = new List<BehaviorChoiceOption>();
+        // "Another" piece of ICE: never Mycoweb itself, which a pool that already holds it (the Startup pool, VP.8) lists.
         foreach (IceBehaviorSpec ice in pool.IceSpecs
-            .Where(spec => spec.IceType == type)
+            .Where(spec => spec.IceType == type && spec.DefinitionId != ElevationCardCodes.Mycoweb)
             .OrderBy(static spec => spec.DefinitionId.Value, StringComparer.Ordinal))
         {
             for (int ordinal = 0; ordinal < ice.Subroutines.Count; ordinal++)
             {
                 if (SubroutineInstructions(pool, ice.DefinitionId, ice.Subroutines[ordinal], $"{key}-{ice.DefinitionId.Value}-{ordinal}")
-                    is { } instructions)
+                    is { } instructions && !(withoutSelfReferences && ActsOnItsSource(instructions)))
                 {
                     options.Add(Option($"resolve-{ice.DefinitionId.Value}-{ordinal}", instructions,
                         BehaviorCondition.RezzedInstalledCopy(ice.DefinitionId)));
@@ -568,6 +573,13 @@ public static class ElevationBatch3Specs
         options.Add(Option("none", [new BehaviorInstruction(BehaviorInstructionKind.NoOp)]));
         return ChooseOne(key, BehaviorChooser.Corp, [.. options]);
     }
+
+    private static bool ActsOnItsSource(IEnumerable<BehaviorInstruction> instructions) => instructions.Any(instruction =>
+        instruction.Target?.Kind == BehaviorTargetKind.Self
+        || instruction.Kind is BehaviorInstructionKind.TrashSelf or BehaviorInstructionKind.FlipSelf
+            or BehaviorInstructionKind.ModifySourceStrength
+        || instruction.Choice is { } choice && choice.Options.Any(option => ActsOnItsSource(option.Instructions))
+        || instruction.Branch is { } branch && (ActsOnItsSource(branch.WhenTrue) || ActsOnItsSource(branch.WhenFalse)));
 
     private static IReadOnlyList<BehaviorInstruction>? SubroutineInstructions(
         IBehaviorCatalog pool,

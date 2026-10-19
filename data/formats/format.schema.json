@@ -28,7 +28,7 @@
       "description": "False when the format needs packs this build does not have; an incomplete format validates decks but is not offered for play."
     },
     "cardPool": {
-      "enum": ["gateway", "gateway-elevation"],
+      "enum": ["gateway", "gateway-elevation", "startup"],
       "description": "The card pool whose behaviour catalog plays the format."
     },
     "legalPacks": {
