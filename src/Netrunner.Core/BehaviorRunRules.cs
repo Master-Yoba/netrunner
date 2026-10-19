@@ -107,6 +107,9 @@ internal static class BehaviorRunRules
                 ? definition.Instructions
                 : []));
 
+    /// <summary>Every instruction in the list, with those nested in branches and choice options.</summary>
+    internal static IEnumerable<BehaviorInstruction> FlattenInstructions(IEnumerable<BehaviorInstruction> instructions) => Flatten(instructions);
+
     private static IEnumerable<BehaviorInstruction> Flatten(IEnumerable<BehaviorInstruction> instructions)
     {
         foreach (BehaviorInstruction instruction in instructions)

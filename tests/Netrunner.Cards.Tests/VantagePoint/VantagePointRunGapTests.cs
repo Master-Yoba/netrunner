@@ -253,6 +253,40 @@ public sealed class VantagePointRunGapTests
         Assert.Equal(credits, Player(state, PlayerSide.Corp).Credits);
     }
 
+    // PR #155's review: resolved outside a run, a subroutine's "end the run" does nothing (Semak-Samun: the Runner takes
+    // the end-the-run option instead of the damage), and a subroutine that changes the run (ezaM's probe) isn't offered.
+    [Theory]
+    [InlineData("35054", "end-run", 5)]
+    [InlineData("35054", "suffer-damage", 2)]
+    [InlineData(ProbeEzamIce, null, 5)]
+    public void ASubroutineResolvedOutsideARunCannotEndIt(string ice, string? runnerOption, int grip)
+    {
+        GameState state = new ElevationBoard { CorpCredits = 0, GripFiller = 5 }
+            .Add(ProbeUnleashOperation, Place.Hq)
+            .Add(ice, Place.Ice)
+            .Begin(catalog: VantagePointProbe);
+        state = PlayFirst(state, ProbeUnleashOperation);
+        if (state.PendingDecision?.Kind == DecisionKind.BehaviorChoice
+            && Actions(state).Any(static action => action.Parameters is BehaviorChoiceParameters { CardIds.Count: > 0 }))
+        {
+            state = ChooseCards(state, Card(state, ice));
+        }
+
+        string[] offered = Actions(state).Select(static action => action.Parameters).OfType<BehaviorChoiceParameters>()
+            .SelectMany(static choice => choice.OptionKeys).Distinct().Order(StringComparer.Ordinal).ToArray();
+        if (runnerOption is null)
+        {
+            Assert.Equal(["decline"], offered);
+            return;
+        }
+
+        Assert.Equal(["decline", "sub-0"], offered);
+        state = RoundTrip(ChooseOption(state, "sub-0"));
+        state = RoundTrip(ToAction(ChooseOption(state, runnerOption)));
+        Assert.Null(state.RunState);
+        Assert.Equal(grip, ZoneCount(state, ZoneKind.RunnerGrip));
+    }
+
     // Sacrifice Zone Expansion: once a turn, on a successful run on another server, the Corp may spend an advancement
     // counter for 1 meat damage.
     [Theory]

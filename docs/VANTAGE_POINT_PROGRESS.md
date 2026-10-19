@@ -397,3 +397,7 @@ On probe cards 90049 to 90059 (`VantagePointRunGapTests`):
 - a remembered card that leaves play is forgotten: a copy installed again is a new object, and the
   validator rejects a live run that remembers an uninstalled card. Once the run has ended, its snapshot is fixed. Only
   a run-end reaction could uninstall and then reinstall the card before the return resolves, and no card in the pool does.
+
+The second round's one: a behavior subroutine resolved outside a run can still end the run (Grubber's and Semak-Samun's
+options, or N-Pot's threat), and that now does nothing, as a printed end-the-run subroutine already did. A behavior
+subroutine that changes the run or its encounter (ezaM's strength) isn't offered with no run.

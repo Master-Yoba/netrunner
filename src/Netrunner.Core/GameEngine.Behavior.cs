@@ -968,11 +968,29 @@ public static partial class GameEngine
         && working.BehaviorCatalog.TryGetIce(ice.DefinitionId, out IceBehaviorSpec? spec)
         && ordinal >= 0
         && ordinal < spec.Subroutines.Count
-        && spec.Subroutines[ordinal] is BehaviorSubroutineSpec or GainCreditsSubroutineSpec or LoseCreditsSubroutineSpec
-            or GiveTagsSubroutineSpec or DamageSubroutineSpec { FollowUp: DamageSubroutineFollowUp.None }
-            or EndRunSubroutineSpec or EndRunIfCreditsAtMostSubroutineSpec or RunRestrictionSubroutineSpec
+        && (spec.Subroutines[ordinal] is GainCreditsSubroutineSpec or LoseCreditsSubroutineSpec
+                or GiveTagsSubroutineSpec or DamageSubroutineSpec { FollowUp: DamageSubroutineFollowUp.None }
+                or EndRunSubroutineSpec or EndRunIfCreditsAtMostSubroutineSpec or RunRestrictionSubroutineSpec
+            || spec.Subroutines[ordinal] is BehaviorSubroutineSpec behavior && ResolvesWithoutRun(working, ice, behavior))
             ? spec.Subroutines[ordinal]
             : null;
+
+    /// <summary>
+    /// VP-RESOLVE-SUBROUTINE: with no run, a behavior subroutine can resolve unless it changes the run or its encounter;
+    /// ending the run or jacking out does nothing then (<see cref="ResolveBehaviorEndRun"/>).
+    /// </summary>
+    private static bool ResolvesWithoutRun(WorkingState working, CardInstanceState ice, BehaviorSubroutineSpec behavior) =>
+        working.RunState is not null
+        || working.BehaviorCatalog.TryGet(ice.DefinitionId, out CardBehaviorDefinition? definition)
+            && definition.Triggers.SingleOrDefault(trigger => trigger.Occurrence == OccurrenceKind.IceSubroutine
+                && string.Equals(trigger.Key, behavior.TriggerKey, StringComparison.Ordinal)) is { } subroutine
+            && !BehaviorRunRules.FlattenInstructions(subroutine.Instructions).Any(static instruction => instruction.Kind is
+                BehaviorInstructionKind.ModifyEncounteredIceStrength or BehaviorInstructionKind.ModifyAllIceStrengthForRun
+                or BehaviorInstructionKind.RestrictRun or BehaviorInstructionKind.EncounteredIceGainsSubroutine
+                or BehaviorInstructionKind.BypassEncounteredIce or BehaviorInstructionKind.SwapApproachedIce
+                or BehaviorInstructionKind.MoveRunnerToServer or BehaviorInstructionKind.ChangeAttackedServer
+                or BehaviorInstructionKind.AddBreachAccess or BehaviorInstructionKind.RememberForRun
+                or BehaviorInstructionKind.GainCreditsPerAccess);
 
     private static void ResolveIceSubroutineOutsideEncounter(
         WorkingState working,
@@ -1113,6 +1131,17 @@ public static partial class GameEngine
         BehaviorResolutionFrame frame,
         bool jackOut = false)
     {
+        // VP-RESOLVE-SUBROUTINE: a subroutine resolved outside a run (Unleash) has no run to end.
+        if (working.RunState is null
+            && working.ResolutionStack.Count >= 2
+            && working.ResolutionStack[^1] == frame
+            && working.ResolutionStack[^2] is BehaviorResolutionFrame resolver
+            && IsEffectResolvedIceSubroutineFrame(working, resolver, frame))
+        {
+            AdvanceBehaviorCursor(working, frame);
+            return;
+        }
+
         // EL-ABILITY-END-RUN: a paid ability used during the run (LEO
         // Construction) ends it as a reaction does.
         bool abilityChild = frame.AbilityKey is not null
