@@ -1141,11 +1141,12 @@ public sealed record RunState
 
     /// <summary>
     /// EL-MOVE-RUNNER: the attacked server changes. Breach access modifiers ("when you breach
-    /// the attacked server") follow the attacked server.
+    /// the attacked server") and the persistent context follow the attacked server.
     /// </summary>
     internal RunState WithAttackedServer(ServerId serverId) => this with
     {
         AttackedServer = serverId,
+        PersistentContext = PersistentContext?.WithServer(serverId),
         BreachAccessModifiers = BreachAccessModifiers?.Select(modifier => new RunBreachAccessModifier(
             modifier.SourceCardId, serverId, modifier.Delta, modifier.ReasonKey, modifier.SourceKind)).ToArray(),
     };

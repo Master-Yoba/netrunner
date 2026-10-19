@@ -16,6 +16,10 @@ public static partial class StateInvariantValidator
                 || live.StolenAgendas.Any(id => !state.RunState.AccessedCards.Contains(id))
                 || live.Abilities.Any(value => !state.RunState.AccessedCards.Contains(value.SourceCardId)))
                 Add(violations, "run.persistent-context", "runState.persistentContext", "Persistent facts must belong to this run.");
+            // VP-RETURN-AT-RUN-END: the live run forgets a remembered card as it leaves play.
+            if ((live.RememberedCards ?? []).Any(value => !IsInstalledCard(state, value.CardId)))
+                Add(violations, "run.remembered-card-uninstalled", "runState.persistentContext.rememberedCards",
+                    "A live run remembers only installed cards.");
         }
         foreach (ResolutionFrame frame in state.ResolutionStack)
         {

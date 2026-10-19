@@ -99,6 +99,72 @@ public sealed class VantagePointRunGapTests
         Assert.Equal(Card(state, RunnerFillerProgram), stack.CardIds[0]);
     }
 
+    // PR #155's review: the remembered program follows the run when the Corp moves it (Proprionegation), and still
+    // returns when the moved run ends.
+    [Fact]
+    public void ARememberedCardFollowsTheRunToAnotherServer()
+    {
+        GameState state = new ElevationBoard(PlayerSide.Runner) { RunnerCredits = 0, StackFiller = 2 }
+            .Add("35048", Place.CorpScore, counters: new Dictionary<string, int> { ["agenda"] = 1 })
+            .Add(CorpFillerIce, Place.Ice, rezzed: true)
+            .Add(CorpFillerIce, Place.Ice, server: ElevationBoard.ArchivesServer)
+            .Add(ProbeBetaBuildEvent, Place.Grip)
+            .Add(RunnerFillerProgram, Place.Stack)
+            .Begin(catalog: VantagePointProbe);
+        state = InstallBetaBuildProgram(state);
+        state = PassUntil(state, static value => value.RunState is null || value.PendingDecision?.LegalActions.Any(static action =>
+            action.Parameters is AbilityActionParameters { AbilityKey: "proprionegation-move" }) == true);
+        ApplyResult moved = Apply(state, static action => action.Parameters is AbilityActionParameters { AbilityKey: "proprionegation-move" });
+        Assert.True(moved.Accepted, moved.Rejection?.Message);
+        state = RoundTrip(moved.State);
+        ServerId archives = ElevationBoard.ServerId(state, ElevationBoard.ArchivesServer);
+        Assert.Equal(archives, state.RunState!.PersistentContext!.ServerId);
+
+        state = RoundTrip(ToAction(state));
+        Assert.Equal(Card(state, RunnerFillerProgram), state.Zones.Single(static zone => zone.Kind == ZoneKind.RunnerStack).CardIds[0]);
+    }
+
+    // PR #155's review: a remembered program that leaves play is forgotten (a copy installed again is a new object), so the
+    // run's end leaves it where it is; a live run remembering an uninstalled card is a forgery.
+    [Fact]
+    public void ARememberedCardIsForgottenWhenItLeavesPlay()
+    {
+        GameState state = new ElevationBoard(PlayerSide.Runner) { RunnerCredits = 0, StackFiller = 2 }
+            .Add(ProbeBounceIce, Place.Ice, rezzed: true)
+            .Add(ProbeBetaBuildEvent, Place.Grip)
+            .Add(RunnerFillerProgram, Place.Stack)
+            .Begin(catalog: VantagePointProbe);
+        state = InstallBetaBuildProgram(state);
+        CardInstanceId program = Card(state, RunnerFillerProgram);
+        string remembered = $"\"key\":\"probe-beta-program\",\"cardId\":\"{program.Value}\"";
+        string json = EngineJson.Serialize(state);
+        Assert.Contains(remembered, json, StringComparison.Ordinal);
+        CardInstanceId stacked = state.Zones.Single(static zone => zone.Kind == ZoneKind.RunnerStack).CardIds[0];
+        System.Text.Json.JsonException refused = Assert.Throws<System.Text.Json.JsonException>(() => EngineJson.DeserializeState(
+            json.Replace(remembered, $"\"key\":\"probe-beta-program\",\"cardId\":\"{stacked.Value}\"", StringComparison.Ordinal),
+            CatalogFor(state), Runtime));
+        Assert.Contains("run.remembered-card-uninstalled", refused.InnerException?.Message ?? string.Empty, StringComparison.Ordinal);
+
+        // The bounce subroutine returns the program to the grip mid-run.
+        state = PassUntil(state, static value => value.RunState is null || value.PendingDecision?.Kind == DecisionKind.BehaviorChoice);
+        state = RoundTrip(ChooseCards(state, program));
+        Assert.Equal(ZoneKind.RunnerGrip, ZoneOf(state, RunnerFillerProgram));
+        Assert.Null(state.RunState!.PersistentContext?.RememberedCards);
+
+        state = RoundTrip(ToAction(state));
+        Assert.Equal(ZoneKind.RunnerGrip, ZoneOf(state, RunnerFillerProgram));
+    }
+
+    private static GameState InstallBetaBuildProgram(GameState state)
+    {
+        ServerId remote = ElevationBoard.ServerId(state, ElevationBoard.Remote);
+        state = Apply(state, action => action.Parameters is PlayCardParameters play && play.TargetServerId == remote).State;
+        state = PassUntil(state, static value => value.PendingDecision?.Kind == DecisionKind.BehaviorInstallChoice);
+        state = RoundTrip(Apply(state, Actions(state).First(action => action.Parameters is BehaviorInstallChoiceParameters { Choice: not null })).State);
+        Assert.Equal(ZoneKind.RunnerRig, ZoneOf(state, RunnerFillerProgram));
+        return state;
+    }
+
     // Aircheck: when its successful run ends, the Runner may run a remote server, as part of the same action.
     [Theory]
     [InlineData(true)]

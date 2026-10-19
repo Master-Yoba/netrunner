@@ -76,6 +76,19 @@ public sealed record RunPersistentContext
         (RememberedCards ?? []).Where(value => value.SourceCardId != remembered.SourceCardId || value.Key != remembered.Key)
             .Append(remembered).ToArray());
 
+    /// <summary>The run's attacked server changed (a move or a redirect); the remembered facts stay with the run.</summary>
+    internal RunPersistentContext WithServer(ServerId serverId) => new(RunId, serverId, StolenAgendas, Abilities,
+        AccessOccurrenceCount, RememberedCards);
+
+    /// <summary>
+    /// VP-RETURN-AT-RUN-END: a remembered card left play, so it is forgotten; a copy installed again is a new object.
+    /// </summary>
+    internal RunPersistentContext WithoutRemembered(CardInstanceId cardId)
+    {
+        RunRememberedCard[] kept = (RememberedCards ?? []).Where(value => value.CardId != cardId).ToArray();
+        return new(RunId, ServerId, StolenAgendas, Abilities, AccessOccurrenceCount, kept.Length == 0 ? null : kept);
+    }
+
     internal static bool Matches(RunPersistentContext? left, RunPersistentContext? right) =>
         left is null ? right is null : right is not null
             && left.RunId == right.RunId && left.ServerId == right.ServerId

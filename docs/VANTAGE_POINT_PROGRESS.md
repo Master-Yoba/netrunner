@@ -390,3 +390,10 @@ On probe cards 90049 to 90059 (`VantagePointRunGapTests`):
   subroutines, but the source, not the ICE, is then "this ICE". VP.5 picks per card.
 - **VP-ADVANCEMENT-COST:** existing vocabulary plus the trigger condition `RunOnAnotherServer`: an optional trigger
   requiring its source's advancement counters removes one (Sacrifice Zone Expansion).
+
+**Review (PR #155).** The first round's two:
+- moving the run (Proprionegation) or redirecting it now moves its persistent context with it, so a program Beta Build
+  remembered survives the move;
+- a remembered card that leaves play is forgotten: a copy installed again is a new object, and the
+  validator rejects a live run that remembers an uninstalled card. Once the run has ended, its snapshot is fixed. Only
+  a run-end reaction could uninstall and then reinstall the card before the return resolves, and no card in the pool does.

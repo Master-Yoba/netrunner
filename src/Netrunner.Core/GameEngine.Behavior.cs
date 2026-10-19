@@ -360,7 +360,8 @@ public static partial class GameEngine
                 return;
             case BehaviorInstructionKind.RememberForRun:
                 if (working.RunState is { } rememberingRun
-                    && ResolveBehaviorCards(working, frame, instruction.Target) is [var remembered])
+                    && ResolveBehaviorCards(working, frame, instruction.Target) is [var remembered]
+                    && IsInstalledCard(working, remembered))
                 {
                     working.RunState = rememberingRun.WithPersistentContext(
                         (rememberingRun.PersistentContext ?? new RunPersistentContext(rememberingRun.Id, rememberingRun.AttackedServer, [], []))
