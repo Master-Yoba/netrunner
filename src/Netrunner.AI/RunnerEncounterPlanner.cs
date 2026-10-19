@@ -77,12 +77,22 @@ internal static class RunnerEncounterPlanner
                         AgentAction? first;
                         if (method.Bioroid)
                         {
-                            first = context.Features.Actions.FirstOrDefault(action => action.Parameters is RunBioroidAbilityParameters choice
-                                && Contains(mask, choice.SubroutineOrdinal));
+                            // VP-BIOROID-MULTI-BREAK: a use may break two of the subroutines (Ansel 2.0); that use goes first.
+                            first = context.Features.Actions.Where(action => action.Parameters is RunBioroidAbilityParameters choice
+                                    && Contains(mask, choice.SubroutineOrdinal)
+                                    && (choice.SecondSubroutineOrdinal is not { } second || Contains(mask, second)))
+                                .OrderBy(static action => ((RunBioroidAbilityParameters)action.Parameters).SecondSubroutineId is null)
+                                .FirstOrDefault();
                             // v24 (bot loop 1): an ability may cost credits instead of a click (N-Pot's 3 credits a subroutine);
                             // as clicks, the Runner with none left saw no way through and passed.
                             if (context.ReadsBehaviorSubroutines && first?.Parameters is RunBioroidAbilityParameters { Cost: { Kind: BehaviorCostKind.Credits } price })
                                 credits = count * price.Amount;
+                            else if (first?.Parameters is RunBioroidAbilityParameters { Cost.Amount: > 1 } multi)
+                            {
+                                int perUse = context.Features.Actions.Any(action => action.Parameters is RunBioroidAbilityParameters pair
+                                    && pair.AbilityKey == multi.AbilityKey && pair.SecondSubroutineId is not null) ? 2 : 1;
+                                clicks = (count + perUse - 1) / perUse * multi.Cost.Amount;
+                            }
                             else clicks = count;
                         }
                         else if (method.Breaker is { } breaker)

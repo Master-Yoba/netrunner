@@ -57,8 +57,7 @@ public static partial class GameEngine
         {
             bool inRunnerScoreArea = sourceZone.Kind == ZoneKind.RunnerScore;
             bool inArchives = sourceZone.Kind == ZoneKind.CorpDiscard;
-            if (source.OwnerSide != window.ControllerSide
-                || sourceZone.OwnerSide != source.OwnerSide && !inRunnerScoreArea)
+            if (sourceZone.OwnerSide != source.OwnerSide && !inRunnerScoreArea)
             {
                 continue;
             }
@@ -84,7 +83,8 @@ public static partial class GameEngine
             foreach (BehaviorPaidAbility ability in definition.PaidAbilities)
             {
                 if (inRunnerScoreArea && !ability.UsableFromRunnerScoreArea
-                    || inArchives && !ability.UsableFromArchives)
+                    || inArchives && !ability.UsableFromArchives
+                    || AbilityUserSide(source.OwnerSide, ability) != window.ControllerSide)
                 {
                     continue;
                 }
@@ -777,6 +777,17 @@ public static partial class GameEngine
             || ability.Timing == window.RunTiming;
     }
 
+    /// <summary>VP-OPPONENT-ABILITY: the side that uses an ability: the card's owner, or its opponent (Rotary).</summary>
+    internal static PlayerSide AbilityUserSide(PlayerSide owner, BehaviorPaidAbility ability) =>
+        ability.UsedByOpponent ? (owner == PlayerSide.Corp ? PlayerSide.Runner : PlayerSide.Corp) : owner;
+
+    /// <summary>The side that uses a source's ability, by key; shared with the validator.</summary>
+    internal static PlayerSide AbilityUserSide(IBehaviorCatalog catalog, CardInstanceState source, string abilityKey) =>
+        catalog.TryGet(source.DefinitionId, out CardBehaviorDefinition? definition)
+        && definition.PaidAbilities.FirstOrDefault(ability => string.Equals(ability.Key, abilityKey, StringComparison.Ordinal)) is { } declared
+            ? AbilityUserSide(source.OwnerSide, declared)
+            : source.OwnerSide;
+
     private static IEnumerable<(CardInstanceState Card, ZoneState Zone)> EnumerateAbilitySources(WorkingState working)
     {
         // The first card with each ID, as a scan of the cards finds it, built once a source zone is reached (S5.0: a
@@ -1191,7 +1202,7 @@ public static partial class GameEngine
 
         CardInstanceState source = GetCard(working, submitted.SourceCardId);
         PlayerState controller = GetPlayer(working, decisionOwner.Value);
-        if (controller.Side != source.OwnerSide)
+        if (controller.Side != AbilityUserSide(working.BehaviorCatalog, source, submitted.AbilityKey))
         {
             throw new ResolutionFailureException(
                 "An ability controller must be the pending decision owner and source-card owner.");
@@ -1401,7 +1412,7 @@ public static partial class GameEngine
         }
 
         if (source.DefinitionId != frame.DefinitionId
-            || source.OwnerSide != GetPlayer(working, frame.Controller).Side)
+            || AbilityUserSide(working.BehaviorCatalog, source, frame.AbilityKey) != GetPlayer(working, frame.Controller).Side)
         {
             throw new ResolutionFailureException("Ability source card no longer matches its captured definition or owner.");
         }
@@ -1483,7 +1494,9 @@ public static partial class GameEngine
                 || (selfRemove && IsAbilityRemoveZone(currentSourceZone, source))
                 || AbilityLifecycleRules.IsEmptyPoolSelfTrash(definition, declaration, frame,
                     source, currentSourceZone, working.RulesState, working.Turn)
-                || AbilityLifecycleRules.IsSelfPlay(declaration, frame, source, currentSourceZone);
+                || AbilityLifecycleRules.IsSelfPlay(declaration, frame, source, currentSourceZone)
+                || AbilityLifecycleRules.IsSelfTrashEffect(declaration, frame, source, currentSourceZone)
+                || MaySwapItsSource(definition, declaration.Key, currentSourceZone.Kind);
             if (!paid || !validLifecycleZone || (selfTrash && selfRemove))
             {
                 throw new ResolutionFailureException("Ability source card moved outside its permitted lifecycle.");

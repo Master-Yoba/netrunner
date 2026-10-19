@@ -406,3 +406,26 @@ The third round's one: the turn frame's clone kept no follow-up run, so Aircheck
 reaction asked for a decision after it (Zahya's optional gain). The clone and the one rebuild that keeps the frame's
 stage now carry it. The other VP.5a fields survive every copy: the run's state and persistent context pass them on, and
 a card filter's excluded subtype is part of its equality.
+
+### VP.5b: the gaps writing VP.5's specs found (19 October 2026)
+
+Writing the specs found six primitives that VP.5a's pass had judged expressible. They are proven on probe cards 90061
+to 90067 (`VantagePointBindingGapTests`):
+- **VP-TRAP-ICE:** `IceType.Trap`, for ICE with none of the three breaker types (Vicsek: "Trap - AP - Observer"). Only a
+  breaker that interfaces with every piece of ICE (Mayfly) breaks it, or a typed one while the ICE gains every type
+  (Chromatophores). No icebreaker interfaces with traps alone.
+- **VP-BIOROID-MULTI-BREAK:** an encountered-ICE break ability may cost two lost clicks and break up to two subroutines
+  (Ansel 2.0). Each use names its subroutine, or two in printed order (`SecondSubroutineId`, omitted while unused). The
+  engine and the validator share the offers, which are each unbroken subroutine and each pair. The bots' encounter planner
+  counts a pair as one use.
+- **VP-OPPONENT-ABILITY:** `BehaviorPaidAbility.UsedByOpponent`: only the card's opponent uses the ability, and they pay
+  for and resolve it (Rotary's "Only the Corp can use this ability"). The engine and the validator share one rule for
+  the side that uses an ability.
+- **VP-SWAP-WITH:** `SwapInstalledIce` may name its first piece of ICE in its argument: `self`, the source (ezaM), or a
+  binding (`trigger-subject`, the ICE Sipa's Runner just passed). Its target is the chosen ICE. With none chosen,
+  nothing is swapped.
+- **VP-TAG-COST:** a card's play cost of tags (`BehaviorCostKind.Tags`) removes the Runner's tags, whoever plays the card,
+  and the card can't be played while the Runner has too few (Unleash). Before, plays took only credit, click and trash
+  costs.
+- **VP-DECK-BOTTOM:** a card a move takes from a deck into that same deck goes to its bottom (ezaM's look at R&D's top).
+  Before, a move within one zone did nothing.

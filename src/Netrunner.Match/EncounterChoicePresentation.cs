@@ -943,13 +943,17 @@ public static class EncounterChoicePresenter
             || !IsStableIdentifier(bioroid.AbilityKey)
             || bioroid.Cost is null
             || bioroid.Cost.Kind != BehaviorCostKind.LoseClick
-            || bioroid.Cost.Amount != 1)
+            || !EncounteredBioroidAbilitySpec.IsSupportedCost(bioroid.Cost))
         {
             return false;
         }
 
-        label = $"USE BIOROID · BREAK SUBROUTINE {((long)bioroid.SubroutineOrdinal + 1).ToString(CultureInfo.InvariantCulture)} · LOSE "
-            + $"{bioroid.Cost.Amount.ToString(CultureInfo.InvariantCulture)} CLICK";
+        string broken = bioroid.SecondSubroutineOrdinal is { } second
+            ? $"SUBROUTINES {((long)bioroid.SubroutineOrdinal + 1).ToString(CultureInfo.InvariantCulture)} AND "
+                + ((long)second + 1).ToString(CultureInfo.InvariantCulture)
+            : $"SUBROUTINE {((long)bioroid.SubroutineOrdinal + 1).ToString(CultureInfo.InvariantCulture)}";
+        label = $"USE BIOROID · BREAK {broken} · LOSE "
+            + $"{bioroid.Cost.Amount.ToString(CultureInfo.InvariantCulture)} CLICK{(bioroid.Cost.Amount == 1 ? "" : "S")}";
         return true;
     }
 

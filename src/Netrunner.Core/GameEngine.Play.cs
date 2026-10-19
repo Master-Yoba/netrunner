@@ -202,7 +202,7 @@ public static partial class GameEngine
             {
                 // A "Double" card's additional cost spends a click on top of
                 // the click of the play action itself; a trash cost is paid by the play action.
-                if (behaviorCost.Kind == BehaviorCostKind.Clicks || IsPlayTrashCost(behaviorCost))
+                if (behaviorCost.Kind is BehaviorCostKind.Clicks or BehaviorCostKind.Tags || IsPlayTrashCost(behaviorCost))
                 {
                     continue;
                 }
@@ -222,7 +222,8 @@ public static partial class GameEngine
 
         if (cost != printedCost
             || GetPlayer(working, side).Credits < cost
-            || GetPlayer(working, side).Clicks < 1 + AdditionalPlayClicks(working, card, definition))
+            || GetPlayer(working, side).Clicks < 1 + AdditionalPlayClicks(working, card, definition)
+            || !CanPayPlayTagCost(working, definition))
         {
             return false;
         }
@@ -736,7 +737,7 @@ public static partial class GameEngine
         {
             foreach (BehaviorCost cost in definition.Costs)
             {
-                if (cost.Kind == BehaviorCostKind.Clicks || IsPlayTrashCost(cost))
+                if (cost.Kind is BehaviorCostKind.Clicks or BehaviorCostKind.Tags || IsPlayTrashCost(cost))
                 {
                     continue;
                 }
@@ -763,6 +764,17 @@ public static partial class GameEngine
     }
 
     /// <summary>VP-TRASH-AS-COST: an additional cost to trash one card of a kind, paid by the play action.</summary>
+    /// <summary>
+    /// VP-TAG-COST: a play cost removing tags (Unleash: "As an additional cost to play this operation, remove 1 tag")
+    /// removes the Runner's, whoever plays the card; the Runner must have them.
+    /// </summary>
+    private static bool CanPayPlayTagCost(WorkingState working, CardBehaviorDefinition definition)
+    {
+        int tags = definition.Costs.Where(static cost => cost.Kind == BehaviorCostKind.Tags).Sum(static cost => cost.Amount);
+        return tags == 0
+            || (working.RulesState?.Players.SingleOrDefault(value => value.PlayerId == GetPlayer(working, PlayerSide.Runner).Id)?.Tags ?? 0) >= tags;
+    }
+
     private static bool IsPlayTrashCost(BehaviorCost cost) =>
         cost is { Kind: BehaviorCostKind.Additional, AdditionalKind: BehaviorAdditionalCostKind.TrashCards, Amount: 1 };
 

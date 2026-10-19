@@ -1784,7 +1784,7 @@ public static partial class GameEngine
         }
 
         PlayerState controller = GetPlayer(working, frame.Controller);
-        if (source.OwnerSide != controller.Side)
+        if ((frame.AbilityKey is { } usedAbility ? AbilityUserSide(working.BehaviorCatalog, source, usedAbility) : source.OwnerSide) != controller.Side)
         {
             throw new ResolutionFailureException(
                 "Behavior source card owner no longer matches its controller.");
@@ -1886,7 +1886,13 @@ public static partial class GameEngine
                     frame.Continuation,
                     frame.InstructionCursor,
                     BehaviorInstructionKind.AddSelfToScoreAreaAsAgenda);
-            bool validLifecycleZone = movedToScoreAreaAsAgenda || (frame.TriggerKey is not null
+            bool swappedItself = frame.TriggerKey is null && MaySwapItsSource(definition, frame.AbilityKey, currentSourceZone.Kind);
+            // VP-OPPONENT-ABILITY: an ability's effect trashed its own source (Rotary).
+            bool abilitySelfTrashReached = frame.TriggerKey is null
+                && frame.AbilityKey is not null
+                && BehaviorInstructionPath.HasReached(rootInstructions, frame.Continuation, frame.InstructionCursor, BehaviorInstructionKind.TrashSelf)
+                && IsAbilityTrashZone(currentSourceZone, source);
+            bool validLifecycleZone = movedToScoreAreaAsAgenda || swappedItself || abilitySelfTrashReached || (frame.TriggerKey is not null
                 ? catalogTriggerDetachedSource || catalogTriggerBegan || catalogTriggerLifecycleZone || hostedCreditOccurrenceAuthorized
                 : (selfTrash && IsAbilityTrashZone(currentSourceZone, source))
                     || (selfRemove && IsAbilityRemoveZone(currentSourceZone, source))
@@ -1973,7 +1979,8 @@ public static partial class GameEngine
                     ApplyClickDelta(working, payer, -cost.Amount);
                     break;
                 case BehaviorCostKind.Tags:
-                    ApplyTags(working, payer, -cost.Amount);
+                    // VP-TAG-COST: the Runner's tags, whoever plays the card (Unleash).
+                    ApplyTags(working, GetPlayer(working, PlayerSide.Runner).Id, -cost.Amount);
                     break;
                 case BehaviorCostKind.Counter:
                     AdjustCounter(working, frame.SourceCardId, cost.CounterName!, -cost.Amount);
@@ -4587,6 +4594,13 @@ public static partial class GameEngine
             else if (source.Kind == ZoneKind.BehaviorSetAside)
             {
                 throw new ResolutionFailureException("A behavior set-aside card must be reinserted before it can be shuffled.");
+            }
+            else if (kind == BehaviorTransferKind.Move && source.Kind is ZoneKind.CorpDeck or ZoneKind.RunnerStack)
+            {
+                // VP-DECK-BOTTOM: a deck's card moved into that deck goes to its bottom (ezaM: "You may add that card to the
+                // bottom of R&D"). The deck stays hidden; only its order changes.
+                ReplaceZone(working, new ZoneState(source.Id, source.Kind, source.OwnerSide, source.ServerId,
+                    source.CardIds.Where(id => id != cardId).Append(cardId).ToArray()));
             }
             RestoreBehaviorVisibility(working, cardId, destination, frozenSelection, kind);
             remainingSetAside.RemoveAll(selected => selected.CardId == cardId);

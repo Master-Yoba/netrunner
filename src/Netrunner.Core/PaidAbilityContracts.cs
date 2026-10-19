@@ -118,7 +118,8 @@ public sealed class BehaviorPaidAbility : IEquatable<BehaviorPaidAbility>
         IReadOnlyList<BehaviorInstruction> instructions,
         BehaviorAbilityUsageLimit usageLimit,
         bool usableFromRunnerScoreArea = false,
-        bool usableFromArchives = false)
+        bool usableFromArchives = false,
+        bool usedByOpponent = false)
     {
         if (!StableIdentifier.TryValidate(key))
         {
@@ -148,6 +149,7 @@ public sealed class BehaviorPaidAbility : IEquatable<BehaviorPaidAbility>
         UsageLimit = usageLimit;
         UsableFromRunnerScoreArea = usableFromRunnerScoreArea;
         UsableFromArchives = usableFromArchives;
+        UsedByOpponent = usedByOpponent;
         Costs = Freeze(costs, nameof(costs));
         Conditions = Freeze(conditions, nameof(conditions));
         Targets = Freeze(targets, nameof(targets));
@@ -209,6 +211,14 @@ public sealed class BehaviorPaidAbility : IEquatable<BehaviorPaidAbility>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool UsableFromArchives { get; private set; }
 
+    /// <summary>
+    /// VP-OPPONENT-ABILITY: only the card's opponent can use this ability (Rotary: "Only the Corp can use this ability"). It
+    /// is paid and resolved by that player.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool UsedByOpponent { get; private set; }
+
     public bool Equals(BehaviorPaidAbility? other) =>
         other is not null
         && string.Equals(Key, other.Key, StringComparison.Ordinal)
@@ -217,6 +227,7 @@ public sealed class BehaviorPaidAbility : IEquatable<BehaviorPaidAbility>
         && UsageLimit == other.UsageLimit
         && UsableFromRunnerScoreArea == other.UsableFromRunnerScoreArea
         && UsableFromArchives == other.UsableFromArchives
+        && UsedByOpponent == other.UsedByOpponent
         && SequenceEquals(Costs, other.Costs)
         && SequenceEquals(Conditions, other.Conditions)
         && SequenceEquals(Targets, other.Targets)

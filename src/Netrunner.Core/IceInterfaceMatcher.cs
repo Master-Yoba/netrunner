@@ -51,7 +51,7 @@ public static class IceInterfaceMatcher
                 || breakerSubtypes.Contains(required, StringComparer.Ordinal));
     }
 
-    /// <summary>Returns whether a value is a legal concrete ICE subtype.</summary>
+    /// <summary>Returns whether a value is a legal concrete ICE subtype; a trap (VP-TRAP-ICE) has no breaker type.</summary>
     public static bool IsConcrete(IceType type) => type is
-        IceType.Barrier or IceType.CodeGate or IceType.Sentry;
+        IceType.Barrier or IceType.CodeGate or IceType.Sentry or IceType.Trap;
 }

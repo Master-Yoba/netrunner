@@ -3591,6 +3591,22 @@ public static partial class GameEngine
                 $"Subroutine '{parameters.SubroutineId}' has an ordinal outside the encountered ICE declaration.");
         }
 
+        // VP-BIOROID-MULTI-BREAK: the second subroutine of "break up to 2" is checked as the first is.
+        RunSubroutineState? secondSubroutine = null;
+        if (parameters.SecondSubroutineId is { } secondId)
+        {
+            secondSubroutine = encounter.Subroutines.SingleOrDefault(candidate => candidate.Id == secondId);
+            if (declaration.BreakCount < 2
+                || secondSubroutine is null
+                || secondSubroutine.Ordinal != parameters.SecondSubroutineOrdinal
+                || secondSubroutine.Broken
+                || secondSubroutine.Resolved
+                || run.EncounterSubroutineSpec(working.BehaviorCatalog, iceSpec, encounter.Id, secondSubroutine.Ordinal) is null)
+            {
+                throw new ResolutionFailureException("The bioroid ability's second subroutine is stale or forged.");
+            }
+        }
+
         PlayerState runner = GetPlayer(working, PlayerSide.Runner);
         if (declaration.Cost.Kind == BehaviorCostKind.Credits)
         {
@@ -3616,7 +3632,7 @@ public static partial class GameEngine
         var nextSubroutines = new List<RunSubroutineState>(encounter.Subroutines.Count);
         foreach (RunSubroutineState candidate in encounter.Subroutines)
         {
-            nextSubroutines.Add(candidate.Id == subroutine.Id
+            nextSubroutines.Add(candidate.Id == subroutine.Id || candidate.Id == secondSubroutine?.Id
                 ? new RunSubroutineState(
                     candidate.Version,
                     candidate.Id,
@@ -3639,7 +3655,7 @@ public static partial class GameEngine
             subroutine.Id,
             declaration.Key,
             declaration.Cost.Kind == BehaviorCostKind.Credits ? 0 : declaration.Cost.Amount,
-            declaration.Cost.Kind == BehaviorCostKind.Credits ? declaration.Cost.Amount : 0));
+            declaration.Cost.Kind == BehaviorCostKind.Credits ? declaration.Cost.Amount : 0).WithSecondSubroutine(secondSubroutine?.Id));
         SetRunTiming(working, brokenRun.WithTiming(
             RunTimingStep.EncounterPaidWindow,
             brokenRun.CurrentIceIndex,
@@ -3657,6 +3673,30 @@ public static partial class GameEngine
             brokenRun.Encounter,
             brokenRun.AccessState));
         QueueSubroutinesBrokenOccurrences(working, working.RunState!, encounter);
+    }
+
+    /// <summary>
+    /// The breaks an encountered-ICE ability offers: each unbroken subroutine, and with "break up to 2"
+    /// (VP-BIOROID-MULTI-BREAK, Ansel 2.0) each pair of them in printed order. Shared with the validator.
+    /// </summary>
+    internal static IEnumerable<RunBioroidAbilityParameters> BioroidAbilityOffers(
+        CardInstanceId iceId,
+        EncounteredBioroidAbilitySpec ability,
+        IReadOnlyList<RunSubroutineState> subroutines)
+    {
+        RunSubroutineState[] unbroken = subroutines.Where(static value => !value.Broken && !value.Resolved).ToArray();
+        for (int first = 0; first < unbroken.Length; first++)
+        {
+            yield return new RunBioroidAbilityParameters(iceId, unbroken[first].Id, ability.Key, ability.Cost, unbroken[first].Ordinal);
+            for (int second = first + 1; ability.BreakCount >= 2 && second < unbroken.Length; second++)
+            {
+                if (unbroken[second].Ordinal > unbroken[first].Ordinal)
+                {
+                    yield return new RunBioroidAbilityParameters(iceId, unbroken[first].Id, ability.Key, ability.Cost,
+                        unbroken[first].Ordinal, unbroken[second].Id, unbroken[second].Ordinal);
+                }
+            }
+        }
     }
 
     private static void ConsumeRunPumpBreaker(
@@ -3923,25 +3963,18 @@ public static partial class GameEngine
                         continue;
                     }
 
-                    foreach (RunSubroutineState subroutine in run.Encounter.Subroutines)
+                    foreach (RunBioroidAbilityParameters offer in BioroidAbilityOffers(encounteredIce.Id, ability, run.Encounter.Subroutines))
                     {
-                        if (subroutine.Broken || subroutine.Resolved)
-                        {
-                            continue;
-                        }
-
+                        string broken = offer.SecondSubroutineOrdinal is { } second
+                            ? $"subroutines {offer.SubroutineOrdinal + 1} and {second + 1}"
+                            : $"subroutine {offer.SubroutineOrdinal + 1}";
                         actions.Add(new LegalAction(
                             working.Allocator.NextActionId(),
                             ActionKind.UseBioroidAbility,
                             ability.Cost.Kind == BehaviorCostKind.Credits
-                                ? $"Use {ability.Key} to break subroutine {subroutine.Ordinal + 1} on {encounteredIce.Id.Value} (pay {ability.Cost.Amount} credits)"
-                                : $"Use {ability.Key} to break subroutine {subroutine.Ordinal + 1} on {encounteredIce.Id.Value} (lose {ability.Cost.Amount} click)",
-                            new RunBioroidAbilityParameters(
-                                encounteredIce.Id,
-                                subroutine.Id,
-                                ability.Key,
-                                ability.Cost,
-                                subroutine.Ordinal)));
+                                ? $"Use {ability.Key} to break {broken} on {encounteredIce.Id.Value} (pay {ability.Cost.Amount} credits)"
+                                : $"Use {ability.Key} to break {broken} on {encounteredIce.Id.Value} (lose {ability.Cost.Amount} click{(ability.Cost.Amount == 1 ? "" : "s")})",
+                            offer));
                     }
                 }
             }

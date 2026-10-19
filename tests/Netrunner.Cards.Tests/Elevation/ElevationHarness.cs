@@ -85,6 +85,15 @@ internal static class ElevationHarness
     internal const string ProbeUnleashIce = "90058";
     internal const string ProbeSacrificeZoneAgenda = "90059";
 
+    /// <summary>VP.5b: the probes for the primitives VP.5's binding found missing after VP.5a.</summary>
+    internal const string ProbeTrapIce = "90061";
+    internal const string ProbeDoubleBreakIce = "90062";
+    internal const string ProbeOpponentAbilityHardware = "90063";
+    internal const string ProbeSwapSelfIce = "90064";
+    internal const string ProbeSwapPassedProgram = "90065";
+    internal const string ProbeTagCostOperation = "90066";
+    internal const string ProbeDeckBottomOperation = "90067";
+
     /// <summary>The neutral Gateway identities a match board gets by default.</summary>
     internal const string CorpNeutralIdentity = "30077";
 
@@ -505,6 +514,93 @@ internal static class ElevationHarness
                         BehaviorTriggerScope.Self, null,
                         [new BehaviorInstruction(BehaviorInstructionKind.AddTags, amount: 1, recipient: BehaviorPlayerSelector.Runner)]),
                 ]))
+            .AddIce(new IceBehaviorSpec(new CardDefinitionId(ProbeTrapIce), 0, IceType.Trap, 0, [new EndRunSubroutineSpec()], []))
+            .AddIce(new IceBehaviorSpec(new CardDefinitionId(ProbeDoubleBreakIce), 9, IceType.Sentry, 0,
+                [new EndRunSubroutineSpec(), new EndRunSubroutineSpec(), new EndRunSubroutineSpec()], [],
+                encounteredBioroidAbilities:
+                [
+                    new EncounteredBioroidAbilitySpec("probe-double-break", new BehaviorCost(BehaviorCostKind.LoseClick, 2), breakCount: 2),
+                ]))
+            .AddIce(new IceBehaviorSpec(new CardDefinitionId(ProbeSwapSelfIce), 1, IceType.CodeGate, 0, [new EndRunSubroutineSpec()], []))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeSwapSelfIce),
+                PlayerSide.Corp,
+                paidAbilities:
+                [
+                    new BehaviorPaidAbility(
+                        "probe-swap-self",
+                        BehaviorAbilityTiming.ActionPhase,
+                        BehaviorAbilityActivation.ClickAction,
+                        [new BehaviorCost(BehaviorCostKind.Clicks, 1)],
+                        [],
+                        [],
+                        [
+                            new BehaviorInstruction(BehaviorInstructionKind.Choose, choice: new BehaviorChoiceSpec(
+                                "probe-swap-other",
+                                BehaviorChooser.Controller,
+                                BehaviorChoiceMode.Mandatory,
+                                BehaviorChoiceCardinality.Exactly(1),
+                                target: new BehaviorTarget(BehaviorTargetKind.InstalledCard, selector: BehaviorTarget.OtherSelector,
+                                    filter: new BehaviorCardFilter(BehaviorCardType.Ice, ownerSide: PlayerSide.Corp)))),
+                            new BehaviorInstruction(BehaviorInstructionKind.SwapInstalledIce, argument: "self",
+                                target: new BehaviorTarget(BehaviorTargetKind.ChosenCard, selector: "probe-swap-other")),
+                        ],
+                        BehaviorAbilityUsageLimit.Unlimited),
+                ]))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeSwapPassedProgram),
+                PlayerSide.Runner,
+                triggers:
+                [
+                    new BehaviorTrigger("probe-swap-passed", OccurrenceKind.IcePassed, TriggerMode.Optional,
+                        BehaviorTriggerScope.Controller, null,
+                        [
+                            new BehaviorInstruction(BehaviorInstructionKind.Choose, choice: new BehaviorChoiceSpec(
+                                "probe-swap-passed-other",
+                                BehaviorChooser.Controller,
+                                BehaviorChoiceMode.Mandatory,
+                                BehaviorChoiceCardinality.Exactly(1),
+                                target: new BehaviorTarget(BehaviorTargetKind.InstalledCard,
+                                    filter: new BehaviorCardFilter(BehaviorCardType.Ice, ownerSide: PlayerSide.Corp)))),
+                            new BehaviorInstruction(BehaviorInstructionKind.SwapInstalledIce, argument: "trigger-subject",
+                                target: new BehaviorTarget(BehaviorTargetKind.ChosenCard, selector: "probe-swap-passed-other")),
+                        ]),
+                ]))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeDeckBottomOperation),
+                PlayerSide.Corp,
+                instructions:
+                [
+                    new BehaviorInstruction(BehaviorInstructionKind.Choose, choice: new BehaviorChoiceSpec(
+                        "probe-deck-top",
+                        BehaviorChooser.Controller,
+                        BehaviorChoiceMode.Optional,
+                        BehaviorChoiceCardinality.UpTo(1),
+                        target: BehaviorTarget.TopOfZone(BehaviorZone.Deck, 1, new BehaviorCardFilter(ownerSide: PlayerSide.Corp)))),
+                    new BehaviorInstruction(BehaviorInstructionKind.MoveCard, sourceZone: BehaviorZone.Deck, destinationZone: BehaviorZone.Deck,
+                        target: new BehaviorTarget(BehaviorTargetKind.ChosenCard, selector: "probe-deck-top")),
+                ]))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeTagCostOperation),
+                PlayerSide.Corp,
+                costs: [new BehaviorCost(BehaviorCostKind.Tags, 1)],
+                instructions: [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 3)]))
+            .Add(new CardBehaviorDefinition(
+                new CardDefinitionId(ProbeOpponentAbilityHardware),
+                PlayerSide.Runner,
+                paidAbilities:
+                [
+                    new BehaviorPaidAbility(
+                        "probe-opponent-trash",
+                        BehaviorAbilityTiming.ActionPhase,
+                        BehaviorAbilityActivation.ClickAction,
+                        [new BehaviorCost(BehaviorCostKind.Clicks, 1), new BehaviorCost(BehaviorCostKind.Credits, 2)],
+                        [BehaviorCondition.Tagged(PlayerSide.Runner)],
+                        [],
+                        [new BehaviorInstruction(BehaviorInstructionKind.TrashSelf)],
+                        BehaviorAbilityUsageLimit.Unlimited,
+                        usedByOpponent: true),
+                ]))
             .Add(new CardBehaviorDefinition(
                 new CardDefinitionId(ProbeEncounterWatcherResource),
                 PlayerSide.Runner,
@@ -898,6 +994,13 @@ internal static class ElevationHarness
                 new(ProbeSeekerIce, "Probe Knowledge Seeker", "corp", "neutral-corp", "ice", ["Code Gate"], 3, 3, false, 0, 1, null, null, null, null, 0, null, null, null),
                 new(ProbeLetheIce, "Probe Lethe", "corp", "neutral-corp", "ice", ["Barrier"], 3, 3, false, 0, 1, null, null, null, null, 0, null, null, null),
                 new(ProbeEncounterWatcherResource, "Probe Encounter Watcher", "runner", "neutral-runner", "resource", [], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(ProbeTrapIce, "Probe Trap", "corp", "neutral-corp", "ice", ["Trap"], 3, 3, false, 0, 0, null, null, null, null, 0, null, null, null),
+                new(ProbeDoubleBreakIce, "Probe Double Break", "corp", "neutral-corp", "ice", ["Sentry", "Bioroid"], 3, 3, false, 0, 9, null, null, null, null, 0, null, null, null),
+                new(ProbeOpponentAbilityHardware, "Probe Opponent Ability", "runner", "neutral-runner", "hardware", [], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(ProbeSwapSelfIce, "Probe Swap Self", "corp", "neutral-corp", "ice", ["Code Gate"], 3, 3, false, 0, 1, null, null, null, null, 0, null, null, null),
+                new(ProbeSwapPassedProgram, "Probe Swap Passed", "runner", "neutral-runner", "program", [], 3, 3, false, 0, null, 1, null, null, null, 0, null, null, null),
+                new(ProbeTagCostOperation, "Probe Tag Cost", "corp", "neutral-corp", "operation", [], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
+                new(ProbeDeckBottomOperation, "Probe Deck Bottom", "corp", "neutral-corp", "operation", [], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
                 new(ProbeKompromatEvent, "Probe Kompromat", "runner", "neutral-runner", "event", ["Run"], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
                 new(ProbeReanimationOperation, "Probe Reanimation", "corp", "neutral-corp", "operation", [], 3, 3, false, 0, null, null, null, null, null, 0, null, null, null),
                 new(ProbeLiabilityIce, "Probe Liability Ice", "corp", "neutral-corp", "ice", ["Barrier", "Liability"], 3, 3, false, 8, 1, null, null, null, null, 0, null, null, null),

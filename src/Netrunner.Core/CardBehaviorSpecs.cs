@@ -169,15 +169,16 @@ public sealed record EncounteredBioroidAbilitySpec
         if (!IsSupportedCost(cost))
         {
             throw new ArgumentException(
-                "An encountered-ICE break ability costs exactly one typed lost click or a positive number of credits.",
+                "An encountered-ICE break ability costs typed lost clicks or a positive number of credits.",
                 nameof(cost));
         }
 
-        if (breakCount != 1)
+        // VP-BIOROID-MULTI-BREAK: "Break up to 2 subroutines" (Ansel 2.0); each action names the subroutines it breaks.
+        if (breakCount is < 1 or > MaxBreakCount)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(breakCount),
-                "An encountered-bioroid ability must break exactly one subroutine.");
+                "An encountered-bioroid ability breaks one subroutine, or up to two.");
         }
 
         Key = key;
@@ -190,12 +191,15 @@ public sealed record EncounteredBioroidAbilitySpec
     {
     }
 
+    /// <summary>The most subroutines one use breaks ("up to 2", Ansel 2.0).</summary>
+    public const int MaxBreakCount = 2;
+
     /// <summary>
-    /// A lost click (bioroids), or credits (EL-RUNNER-ICE-ABILITY: N-Pot's
+    /// Lost clicks (bioroids; two for Ansel 2.0, VP-BIOROID-MULTI-BREAK), or credits (EL-RUNNER-ICE-ABILITY: N-Pot's
     /// "3[credit]: Break 1 subroutine on this ice. Only the Runner can use this ability").
     /// </summary>
     public static bool IsSupportedCost(BehaviorCost cost) =>
-        cost.Kind == BehaviorCostKind.LoseClick && cost.Amount == 1
+        cost.Kind == BehaviorCostKind.LoseClick && cost.Amount is > 0 and <= MaxBreakCount
         || cost.Kind == BehaviorCostKind.Credits && cost.Amount > 0;
 
     [JsonInclude]
@@ -504,6 +508,12 @@ public enum IceType
     CodeGate,
     Sentry,
     Any,
+
+    /// <summary>
+    /// VP-TRAP-ICE: ICE with none of the three breaker types (Vicsek, a trap). Only a breaker that interfaces with every
+    /// piece of ICE breaks it, unless it gains the types.
+    /// </summary>
+    Trap,
 }
 
 /// <summary>
@@ -525,6 +535,12 @@ public sealed record IcebreakerBehaviorSpec
         BehaviorDynamicPumpDeclaration? dynamicPump = null,
         IcebreakerRunEndCleanupSpec? runEndCleanup = null)
     {
+        if (interfaceType == IceType.Trap || !Enum.IsDefined(interfaceType))
+        {
+            throw new ArgumentException(
+                $"Icebreaker '{definitionId}' must interface with a breaker type or with every piece of ICE.", nameof(interfaceType));
+        }
+
         DefinitionId = definitionId;
         BaseStrength = baseStrength;
         InterfaceType = interfaceType;

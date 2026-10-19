@@ -1560,6 +1560,13 @@ public sealed record BehaviorInstruction
             }
         }
 
+        // VP-SWAP-WITH: a swap may name its first piece of ICE, the source ("self", ezaM) or a binding ("trigger-subject":
+        // the ICE Sipa's Runner passed), and take the other from its target.
+        if (Kind == BehaviorInstructionKind.SwapInstalledIce && Argument is not null && !StableIdentifier.TryValidate(Argument))
+        {
+            throw new ArgumentException("A swap names its first piece of ICE by a stable key.", nameof(Argument));
+        }
+
         if (Kind == BehaviorInstructionKind.ChangeAttackedServer
             && (!Enum.TryParse(Argument, ignoreCase: false, out ServerKind redirect) || redirect == ServerKind.Remote))
         {
@@ -4251,6 +4258,10 @@ internal static class BehaviorCatalogFingerprint
         if (value.UsableFromArchives)
         {
             builder.Append(",fromArchives=1");
+        }
+        if (value.UsedByOpponent)
+        {
+            builder.Append(",byOpponent=1");
         }
     }
 
