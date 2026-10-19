@@ -28,8 +28,9 @@ root, output, godot, mode = sys.argv[1:]
 # Expanded decks only: the basic ones are a subset of their cards (27 September).
 matrix = [("runner", "expanded", "standard"), ("corp", "expanded", "standard")]
 if mode != "--quick":
-    # A6: Hard against a human Corp is the Runner that plans.
-    matrix += [("runner", "expanded", "easy"), ("corp", "expanded", "hard")]
+    # A6: Hard against a human Corp is the Runner that plans. Not on the teaching decks: their frozen tutorial bot has no
+    # Hard tier and plays (and saves) Standard for it, so the case runs on NSG's Core Sets decks.
+    matrix += [("runner", "expanded", "easy"), ("corp", "nsg-core", "hard")]
     # EL.8: a Gateway + Elevation game saves and resumes with its format.
     matrix += [("runner", "elevation", "standard"), ("corp", "elevation", "hard")]
     # VP.8: a Startup 2026 game (Méliès U against Tāo's Read-Write Share) saves and resumes with its format.

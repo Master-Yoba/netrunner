@@ -710,9 +710,9 @@ The client presents every new state:
   client as the human seat of its side, against the latest bot: 14 of 14 pass.
 - **The M5 client smoke's matrix** gains a Startup 2026 game, Méliès U against Tāo, which saves and resumes on each side.
   Both pass.
-- **A pre-existing failure:** that smoke's Gateway case of Hard against a human Corp fails with "Chosen opponent was not
-  persisted". It fails the same way at `dev` (96cea91), and the gates don't run this smoke. It is recorded for the client
-  track, not fixed here.
+- **A pre-existing failure, resolved after VP.8:** that smoke's "Hard against a human Corp" row ran on the teaching decks.
+  Their frozen tutorial bot has no Hard tier and saves Standard for it, so the row could never pass. It now runs on NSG's
+  Core Sets decks, and the whole matrix passes (8 cases, 16 phases).
 - Some new states needed no new view:
   - hosted resources (Hackerspace) sit on their host, as any hosted card does;
   - a trap ICE shows its printed subtypes, as all cards do;
