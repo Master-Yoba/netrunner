@@ -36,6 +36,13 @@ public sealed record MatchViewModel(
     /// public to both sides, each naming its host in <see cref="CardViewModel.HostCardId"/>.
     /// </summary>
     public IReadOnlyList<CardViewModel> HostedFaceUp { get; init; } = Array.Empty<CardViewModel>();
+    /// <summary>
+    /// VP-HOST-FACEDOWN: cards hosted face down on a Runner program (Read-Write Share), each naming its host. The Corp sees
+    /// unknown cards; the Runner sees its own.
+    /// </summary>
+    public IReadOnlyList<CardViewModel> HostedFaceDown { get; init; } = Array.Empty<CardViewModel>();
+    /// <summary>VP-SECRET-IDENTITY: the copy of Méliès U the Corp set (HQ, R&amp;D or Archives), in the Corp's view only.</summary>
+    public string? SecretIdentitySide { get; init; }
     /// <summary>Each side's removed-from-game pile; public.</summary>
     public IReadOnlyList<CardViewModel> CorpRemovedFromGame { get; init; } = Array.Empty<CardViewModel>();
     public IReadOnlyList<CardViewModel> RunnerRemovedFromGame { get; init; } = Array.Empty<CardViewModel>();
@@ -292,6 +299,12 @@ public sealed record PlayerViewModel(
     /// modifiers. Null means the observation did not supply memory state.
     /// </summary>
     public int? MemoryLimit { get; init; }
+
+    /// <summary>VP-BAD-PUBLICITY: the Corp's public bad publicity, once it has some.</summary>
+    public int? BadPublicity { get; init; }
+
+    /// <summary>VP-SECRET-IDENTITY: the side Méliès U shows while flipped (HQ, R&amp;D or Archives); public only then.</summary>
+    public string? IdentitySide { get; init; }
 
     public bool IsTagStateKnown => Tags.HasValue;
 
@@ -560,6 +573,9 @@ public sealed record RunFocusViewModel(
     /// </summary>
     public IReadOnlyList<RunBreachAccessModifierViewModel> BreachAccessModifiers { get; init; } =
         Array.Empty<RunBreachAccessModifierViewModel>();
+
+    /// <summary>VP-BAD-PUBLICITY: the run's bad publicity credits left to spend, only while there are some.</summary>
+    public int BadPublicityCredits { get; init; }
 
     /// <summary>Localized, non-authoritative breach-access notes for this run.</summary>
     public IReadOnlyList<string> BreachAccessNotes => BreachAccessModifiers
@@ -940,6 +956,10 @@ public static class ObservationViewMapper
             RunnerHeap = ReadCards(publicState, "runnerHeap", metadataResolver, abilityCue),
             HostedFaceUp = ReadCards(publicState, "runnerHostedFaceUp", metadataResolver, abilityCue)
                 .Concat(ReadCards(publicState, "corpHostedFaceUp", metadataResolver, abilityCue)).ToArray(),
+            HostedFaceDown = ReadCards(publicState, "runnerHostedFaceDown", metadataResolver, abilityCue)
+                .Concat(ReadCards(privateState, "hostedFaceDown", metadataResolver, abilityCue))
+                .GroupBy(card => card.Id).Select(group => group.Last()).ToArray(),
+            SecretIdentitySide = ReadNullableString(privateState, "secretIdentitySide"),
             CorpRemovedFromGame = ReadCards(publicState, "corpRemovedFromGame", metadataResolver, abilityCue),
             RunnerRemovedFromGame = ReadCards(publicState, "runnerRemovedFromGame", metadataResolver, abilityCue),
             PlayArea = ReadCards(publicState, "corpPlayArea", metadataResolver, abilityCue)
@@ -1367,6 +1387,8 @@ public static class ObservationViewMapper
             CoreDamage = coreDamage,
             UsedMemory = usedMemory,
             MemoryLimit = memoryLimit,
+            BadPublicity = TryReadOptionalInt(map, "badPublicity", out int badPublicity) ? badPublicity : null,
+            IdentitySide = ReadNullableString(map, "identitySide"),
         };
     }
 
@@ -1540,6 +1562,7 @@ public static class ObservationViewMapper
             ReadNullableCard(map, "initiatingSource", metadataResolver, abilityCue))
         {
             BreachAccessModifiers = new ReadOnlyCollection<RunBreachAccessModifierViewModel>(breachModifiers),
+            BadPublicityCredits = ReadNullableInt(map, "badPublicityCredits") ?? 0,
         };
     }
 

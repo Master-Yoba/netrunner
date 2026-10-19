@@ -569,11 +569,14 @@ public partial class GameTableControl : Control
 		_turnLabel.Text = FormatTurn(view);
 		_runLabel.Text = FormatRun(view);
 		_corpResources.SymbolText = $"[click] {ClickPips(view.Corp.Clicks, 3)} · [agenda point] {view.Corp.AgendaPoints}";
+		// VP-BAD-PUBLICITY: public, shown once the Corp has some.
+		if (view.Corp.BadPublicity is > 0 and var badPublicity)
+			_corpResources.SymbolText += $" · Bad publicity {badPublicity}";
 		ShowCount(_corpCredits, view.Corp.Credits);
 		ShowCount(_runnerCredits, view.Runner.Credits);
 		_runnerResources.SymbolText = $"[click] {ClickPips(view.Runner.Clicks, 4)} · [agenda point] {view.Runner.AgendaPoints}\n"
 			+ $"[tag] {view.Runner.Tags?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "—"}";
-		_corpScoreLabel.Text = $"Score {view.Corp.AgendaPoints} · Threat {view.ThreatLevel}";
+		_corpScoreLabel.Text = $"Score {view.Corp.AgendaPoints} · Threat {view.ThreatLevel}" + IdentitySideText(view);
 		if (view.Runner.UsedMemory is { } used && view.Runner.MemoryLimit is { } limit)
 			_runnerResources.SymbolText += $" · [MU] {used}/{limit}";
 		_runnerScoreLabel.Text = $"Score pile · {view.RunnerScore.Count} · {view.Runner.AgendaPoints} agenda point(s)";
@@ -839,6 +842,22 @@ public partial class GameTableControl : Control
 		OrderIceRows(iceCards, innerFirst);
 	}
 
+	/// <summary>
+	/// VP-SECRET-IDENTITY: Méliès U's side, once flipped, for both players; before that, the copy the Corp set, for the Corp
+	/// alone.
+	/// </summary>
+	private static string IdentitySideText(MatchViewModel view)
+	{
+		static string Server(string side) => side switch
+		{
+			nameof(ServerKind.Headquarters) => "HQ",
+			nameof(ServerKind.RAndD) => "R&D",
+			_ => side,
+		};
+		if (view.Corp.IdentitySide is { } shown) return $" · Showing {Server(shown)}";
+		return view.SecretIdentitySide is { } secret ? $" · Secret copy: {Server(secret)}" : "";
+	}
+
 	private void RenderRunnerRig(
 		MatchViewModel view,
 		Dictionary<string, TableCardControl> nextVisibleCards)
@@ -848,7 +867,8 @@ public partial class GameTableControl : Control
 		IReadOnlyList<CardViewModel> cards = view.RunnerRig;
 		// Cards hosted faceup on a console (Bling, Madani) sit on their host like installed hosted cards.
 		HashSet<string> faceUpHosted = view.HostedFaceUp.Select(card => card.Id).ToHashSet(StringComparer.Ordinal);
-		var hosted = cards.Concat(view.HostedFaceUp)
+		// VP-HOST-FACEDOWN: cards hosted face down (Read-Write Share) sit on their host too; the Corp sees only their backs.
+		var hosted = cards.Concat(view.HostedFaceUp).Concat(view.HostedFaceDown)
 			.Where(card => card.HostCardId is { Length: > 0 })
 			.GroupBy(card => card.HostCardId!, StringComparer.Ordinal)
 			.ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.Ordinal);
@@ -1362,6 +1382,8 @@ public partial class GameTableControl : Control
 			$"runnerhand:{view.RunnerHand.Count}:{CardsFingerprint(view.RunnerHand.VisibleCards)}",
 			$"rigrig:{CardsFingerprint(view.RunnerRig)}",
 			$"hostedfaceup:{CardsFingerprint(view.HostedFaceUp)}",
+			$"hostedfacedown:{CardsFingerprint(view.HostedFaceDown)}",
+			$"identity-side:{view.Corp.IdentitySide}:{view.SecretIdentitySide}:{view.Corp.BadPublicity}",
 			$"removed:{CardsFingerprint(view.CorpRemovedFromGame)}:{CardsFingerprint(view.RunnerRemovedFromGame)}",
 			$"corpscore:{CardsFingerprint(view.CorpScore)}",
 			$"runnerscore:{CardsFingerprint(view.RunnerScore)}",
@@ -1453,7 +1475,8 @@ public partial class GameTableControl : Control
 			return "No active run";
 		}
 
-		return $"RUN · {GetServerDisplayName(run.AttackedServerId)} · {run.FocusLabel}";
+		string badPublicity = run.BadPublicityCredits > 0 ? $" · {run.BadPublicityCredits} bad publicity credit(s)" : "";
+		return $"RUN · {GetServerDisplayName(run.AttackedServerId)} · {run.FocusLabel}{badPublicity}";
 	}
 
 	private void CacheServerDisplayNames(IReadOnlyList<ServerViewModel> servers)

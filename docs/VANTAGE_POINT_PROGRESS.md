@@ -628,3 +628,42 @@ at full price but checked with the discount, so it was rejected. The effect's in
 The fourth round's finding is deferred to VP.8's tracker work (A9 over the new hidden zones). The Runner's samples and card
 tracker don't keep the R&D card Hiram's look shows, so the bot forgets it once the look ends. The engine and the
 observation are right; only the bot's knowledge is lost.
+
+## VP.8 — Integration: decks, formats, bots, client and the milestone gate (19 October 2026)
+
+### Decks (D-VP-6)
+
+No Startup battle box has been published, so Startup 2026's decks are real players' tournament lists. The user approved
+the set on 19 October 2026.
+- **Source:** every Startup event on Always Be Running since Vantage Point joined Startup (17 April 2026): 31 events,
+  137 linked NetrunnerDB lists. 132 use only the Startup pool and are legal under Balance Update 26.09; one breaks the
+  limit on agendas worth 3 or more points.
+- **Selection:** each faction's two best lists, by event size over placement, one per identity. That makes eight Corp
+  and six Runner decks, with fourteen identities. Half come from the 2026 Worlds Startup side event (29 players): its
+  first, second, third and fourth places.
+- `data/decks/startup-2026-decks.json` records each list's NetrunnerDB link, author and placement. The names,
+  summaries and archetypes are ours. Between them the lists hold 37 of the 66 Vantage Point cards.
+- `CardFormatTests.Startup2026DecksAreTournamentListsLegalAndFullyBound` checks that each is legal and fully bound.
+
+### Formats and the menu (D-VP-5, D-VP-7)
+
+- **Startup 2026** is complete: the Startup pool, all three packs legal, and Balance Update 26.09's bans and agenda limit.
+  The format snapshot names the `startup` pool, which the schema now lists.
+- **`PlayFormats`:**
+  - offers it with its fourteen decks;
+  - maps its presets and the Startup behavior catalog to the format;
+  - records it in saves, which reload (`PlayFormatsTests`).
+- **The menu** offers "Startup 2026" beside the other formats, with random opponents drawn from its decks. The menu
+  smoke checks its eight Corp and six Runner decks.
+- **Ladders and fuzz:** `startup-2026` is a `--content` pool (48 pairings, pool version `startup-2026-v1`), and
+  `affected-pools.sh` and `card-fingerprints` list it.
+
+### Mycoweb over the Startup pool
+
+VP.5's deviation is closed. The Startup catalog (`startup-vp.8`) rebuilds Mycoweb over its own ICE, so Mycoweb resolves
+Vantage Point's sentries and code gates too. Two kinds of subroutine are never offered:
+- Mycoweb's own;
+- one that acts on its own ICE, such as Knowledge Seeker's virus counter, which would land on Mycoweb.
+
+The Elevation pool's Mycoweb is unchanged, and so is every other Elevation card's fingerprint. `BehaviorCatalogBuilder.Replace`
+swaps the one definition.

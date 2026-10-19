@@ -2,8 +2,8 @@
 # EL.8: plays every deck of an Elevation-pool format through the client, as the
 # human seat of its side, with the M4 full-match smoke (the contract agent clicks
 # for the human; the latest bot is the opponent). The format is Gateway + Elevation
-# (the default) or NSG Core Sets. Usage:
-#   scripts/elevation-deck-smoke.sh [--format gateway-elevation|nsg-core-sets] [--jobs N] [--output <new dir>]
+# (the default), NSG Core Sets or Startup 2026 (VP.8). Usage:
+#   scripts/elevation-deck-smoke.sh [--format gateway-elevation|nsg-core-sets|startup-2026] [--jobs N] [--output <new dir>]
 set -euo pipefail
 
 root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -11,7 +11,7 @@ source "$root/scripts/env.sh"
 jobs=2
 format=gateway-elevation
 output="$root/artifacts/elevation-deck-smoke/$(date -u +%Y%m%dT%H%M%SZ)"
-usage="Usage: scripts/elevation-deck-smoke.sh [--format gateway-elevation|nsg-core-sets] [--jobs N] [--output <new dir>]"
+usage="Usage: scripts/elevation-deck-smoke.sh [--format gateway-elevation|nsg-core-sets|startup-2026] [--jobs N] [--output <new dir>]"
 while (($#)); do
   case "$1" in
     --format) format="$2"; shift 2 ;;
@@ -35,6 +35,12 @@ case "$format" in
       nsg-core-pork-chops nsg-core-quick-returns)
     runners=(nsg-core-bowel-movements nsg-core-dashing-mad nsg-core-enthusiasm nsg-core-flow-and-ebb nsg-core-prick-thyself
       nsg-core-professional-opportunities nsg-core-sabbatical nsg-core-shootin-n-lootin nsg-core-tickets-please) ;;
+  startup-2026)
+    # D-VP-6: real players' tournament lists.
+    corps=(startup-leo-glacier startup-precision-design-campaigns startup-melies-u startup-au-co-upgrades
+      startup-reality-plus-tags startup-editorial-tempo startup-zwicky-measured-response startup-built-to-last)
+    runners=(startup-loup-cookbook startup-ryo-chain-reaction startup-muslihat-clean-getaway startup-zahya-runs
+      startup-magdalene startup-tao-overlap) ;;
   *) echo "$usage" >&2; exit 2 ;;
 esac
 cases=()
