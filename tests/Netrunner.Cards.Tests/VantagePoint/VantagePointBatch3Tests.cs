@@ -183,20 +183,73 @@ public sealed class VantagePointBatch3Tests
         Assert.Equal(corpCredits, Player(state, PlayerSide.Corp).Credits);
     }
 
+    // The review of #157: the Runner's samples don't carry the copy the Corp set. Two states differing only in it sample
+    // alike, and the side is drawn among the three; the Corp's own sample keeps it.
+    [Fact]
+    [Trait("VantagePointCard", MeliesU)]
+    public void TheRunnersSamplesDrawMeliesUsSecretCopyAgain()
+    {
+        GameState state = new ElevationBoard { CorpDeckFiller = 3 }
+            .Add(MeliesU, Place.CorpIdentity)
+            .Begin(catalog: Startup);
+        state = SpendRemainingClicks(ToAction(state));
+        while (state.Turn.ActiveSide == PlayerSide.Corp && !IsChoice(state))
+        {
+            state = SpendRemainingClicks(Pass(state));
+        }
+
+        GameState rd = ChooseOption(state, "rd");
+        GameState hq = ChooseOption(state, "hq");
+        var pool = new OpponentCardPool.Placeholders(new CardDefinitionId(HedgeFund), new CardDefinitionId(HedgeFund));
+        var sides = new HashSet<ServerKind>();
+        for (ulong seed = 1; seed <= 30; seed++)
+        {
+            GameState left = ObservationSampler.Sample(rd, PlayerSide.Runner, SamplerKnowledge.None, pool, ElevationHarness.Runtime,
+                new DeterministicRandom(seed));
+            GameState right = ObservationSampler.Sample(hq, PlayerSide.Runner, SamplerKnowledge.None, pool, ElevationHarness.Runtime,
+                new DeterministicRandom(seed));
+            Assert.Equal(left.RulesState!.SecretIdentity, right.RulesState!.SecretIdentity);
+            Assert.Equal(left.RandomState, right.RandomState);
+            sides.Add(left.RulesState!.SecretIdentity!.Side);
+            Assert.Equal(rd.RulesState!.SecretIdentity, ObservationSampler.Sample(rd, PlayerSide.Corp, SamplerKnowledge.None, pool,
+                ElevationHarness.Runtime, new DeterministicRandom(seed)).RulesState!.SecretIdentity);
+        }
+
+        Assert.Equal(3, sides.Count);
+    }
+
+    // The review of #157: a central server with nothing installed is a destination; a remote is chosen by one of its cards.
     [Fact]
     [Trait("VantagePointCard", LotusHaze)]
-    public void LotusHazeMovesARezzedUpgradeToAnotherServer()
+    public void LotusHazeMovesARezzedUpgradeToAnEmptyCentralServer()
     {
         GameState state = ToAbility(BeginWithoutPassing(new ElevationBoard()
             .Add(LotusHaze, Place.CorpScore, counters: new Dictionary<string, int> { ["agenda"] = 3 })
-            .Add(PerfectRecall, Place.Root, rezzed: true)
-            .Add(Paywall, Place.Ice, server: ElevationBoard.Hq)), "lotus-haze-move");
+            .Add(PerfectRecall, Place.Root, rezzed: true)), "lotus-haze-move");
         state = Apply(state, static action => action.Parameters is AbilityActionParameters { AbilityKey: "lotus-haze-move" }).State;
         state = ChooseCards(PassUntil(state, IsChoice), Card(state, PerfectRecall));
+        state = ChooseOption(PassUntil(state, IsChoice), "rd");
+
+        state = RoundTrip(ToAction(state));
+        Assert.Equal(ElevationBoard.ServerId(state, ElevationBoard.Rd),
+            state.Zones.Single(zone => zone.CardIds.Contains(Card(state, PerfectRecall))).ServerId);
+    }
+
+    [Fact]
+    [Trait("VantagePointCard", LotusHaze)]
+    public void LotusHazeMovesARezzedUpgradeToARemoteServerByOneOfItsCards()
+    {
+        GameState state = ToAbility(BeginWithoutPassing(new ElevationBoard()
+            .Add(LotusHaze, Place.CorpScore, counters: new Dictionary<string, int> { ["agenda"] = 3 })
+            .Add(PerfectRecall, Place.Root, server: ElevationBoard.Hq, rezzed: true)
+            .Add(Paywall, Place.Ice)), "lotus-haze-move");
+        state = Apply(state, static action => action.Parameters is AbilityActionParameters { AbilityKey: "lotus-haze-move" }).State;
+        state = ChooseCards(PassUntil(state, IsChoice), Card(state, PerfectRecall));
+        state = ChooseOption(PassUntil(state, IsChoice), "remote");
         state = ChooseCards(PassUntil(state, IsChoice), Card(state, Paywall));
 
         state = RoundTrip(ToAction(state));
-        Assert.Equal(ElevationBoard.ServerId(state, ElevationBoard.Hq),
+        Assert.Equal(ElevationBoard.ServerId(state, ElevationBoard.Remote),
             state.Zones.Single(zone => zone.CardIds.Contains(Card(state, PerfectRecall))).ServerId);
     }
 
@@ -286,6 +339,19 @@ public sealed class VantagePointBatch3Tests
         Assert.Equal(ZoneKind.CorpHand, ZoneOf(state, Paywall));
         Assert.Equal(ZoneKind.CorpHand, ZoneOf(state, Lionsmane));
         Assert.Equal(0, Player(state, PlayerSide.Corp).Credits);
+    }
+
+    // The review of #157: Expendable is used from HQ only, so an installed Tocsin doesn't offer it.
+    [Fact]
+    [Trait("VantagePointCard", Tocsin)]
+    public void AnInstalledTocsinDoesNotOfferItsExpendableSearch()
+    {
+        GameState state = new ElevationBoard()
+            .Add(Tocsin, Place.Ice, rezzed: true)
+            .Add(Paywall, Place.CorpDeck)
+            .Add(Lionsmane, Place.CorpDeck)
+            .Begin(catalog: Startup);
+        Assert.DoesNotContain(Actions(state), static action => action.Parameters is AbilityActionParameters { AbilityKey: "tocsin-search" });
     }
 
     // The VP.7 ladder's find: Scapegoat shuffling Methuselah (+1 memory) away from a full rig leaves the Runner over its

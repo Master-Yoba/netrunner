@@ -609,3 +609,12 @@ The last 10 cards, on `feat/vp7-batch3`:
 By hand, beyond VP.6's planned primitives, three cards needed a Core change: Hiram, Hype Machine and Lotus Haze. That
 makes **7 of 10 (70%)**. As the Startup pool's last batch, it carries most of the set's one-of-a-kind effects: an
 identity, a host and a hidden zone.
+
+**Review (PR #157).** The first round's three findings, all valid:
+- **The Runner's samples** (`ObservationSampler`) copied the rules state, so the Runner's planner simulated against the
+  copy of Méliès U the Corp had set. A Runner's sample now draws an unflipped side again among the three. Nothing is
+  drawn without a secret identity, so other games' samples are unchanged.
+- **Tocsin's Expendable** was also offered by an installed Tocsin. An ability usable from HQ is now usable only there.
+- **Lotus Haze** couldn't move an upgrade to a central server with nothing installed, since it chose the server by a card
+  in it. `MoveSourceToServerOf` may now name a central server by its zone. Lotus Haze chooses HQ, R&D, Archives, or a
+  remote by one of its cards.

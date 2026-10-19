@@ -221,7 +221,10 @@ public sealed class BehaviorPaidAbility : IEquatable<BehaviorPaidAbility>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool UsedByOpponent { get; private set; }
 
-    /// <summary>VP-ABILITY-FROM-HQ: the Corp can use this ability while the card is in HQ (Tocsin, an Expendable card).</summary>
+    /// <summary>
+    /// VP-ABILITY-FROM-HQ: the Corp uses this ability only while the card is in HQ (Tocsin, an Expendable card); installed,
+    /// the card doesn't offer it.
+    /// </summary>
     [JsonInclude]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool UsableFromHeadquarters { get; private set; }

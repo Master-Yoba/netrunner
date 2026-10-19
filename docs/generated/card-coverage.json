@@ -4981,7 +4981,8 @@
       "reviewer": "architect",
       "registered": true,
       "tests": [
-        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch3Tests.MeliesUSetsACopySecretlyAndFlipsOnTheMatchingCentralRun"
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch3Tests.MeliesUSetsACopySecretlyAndFlipsOnTheMatchingCentralRun",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch3Tests.TheRunnersSamplesDrawMeliesUsSecretCopyAgain"
       ],
       "fullTextComplete": true,
       "partial": false,
@@ -5006,7 +5007,8 @@
       "reviewer": "architect",
       "registered": true,
       "tests": [
-        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch3Tests.LotusHazeMovesARezzedUpgradeToAnotherServer"
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch3Tests.LotusHazeMovesARezzedUpgradeToAnEmptyCentralServer",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch3Tests.LotusHazeMovesARezzedUpgradeToARemoteServerByOneOfItsCards"
       ],
       "fullTextComplete": true,
       "partial": false,
@@ -5569,6 +5571,7 @@
       "reviewer": "architect",
       "registered": true,
       "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch3Tests.AnInstalledTocsinDoesNotOfferItsExpendableSearch",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.VantagePoint.VantagePointBatch3Tests.TocsinIsTrashedFromHqToFindABarrierAndASentry"
       ],
       "fullTextComplete": true,

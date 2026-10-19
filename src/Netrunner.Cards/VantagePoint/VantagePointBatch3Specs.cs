@@ -154,6 +154,9 @@ public static class VantagePointBatch3Specs
     // root of another server, named by one of its installed cards.
     private static readonly AgendaBehaviorSpec LotusHazeAgenda = new(VantagePointCardCodes.LotusHaze, agendaPoints: 2);
 
+    private static BehaviorInstruction LotusHazeMove(BehaviorZone central) =>
+        new(BehaviorInstructionKind.MoveSourceToServerOf, argument: "lotus-haze-upgrade", destinationZone: central);
+
     private static readonly CardBehaviorDefinition LotusHaze = new(
         VantagePointCardCodes.LotusHaze,
         PlayerSide.Corp,
@@ -167,9 +170,21 @@ public static class VantagePointBatch3Specs
                 [
                     ChooseCards("lotus-haze-upgrade", Installed(new BehaviorCardFilter(BehaviorCardType.Upgrade, ownerSide: PlayerSide.Corp, rezzed: true)),
                         BehaviorChoiceCardinality.Exactly(1)),
-                    ChooseCards("lotus-haze-server", Installed(CorpCard), BehaviorChoiceCardinality.Exactly(1)),
-                    new BehaviorInstruction(BehaviorInstructionKind.MoveSourceToServerOf, argument: "lotus-haze-upgrade",
-                        target: ChosenBy("lotus-haze-server")),
+                    // The review of #157: a central server is a destination even with nothing installed in it; a remote
+                    // exists only while it holds a card, so choosing one of its cards chooses it.
+                    ChooseOne(
+                        "lotus-haze-destination",
+                        BehaviorChooser.Corp,
+                        Option("hq", [LotusHazeMove(BehaviorZone.Headquarters)]),
+                        Option("rd", [LotusHazeMove(BehaviorZone.Deck)]),
+                        Option("archives", [LotusHazeMove(BehaviorZone.Archives)]),
+                        Option("remote",
+                        [
+                            ChooseCards("lotus-haze-server", new BehaviorTarget(BehaviorTargetKind.InstalledCard, BehaviorTarget.RemoteServerSelector),
+                                BehaviorChoiceCardinality.AsManyAsAble(1)),
+                            new BehaviorInstruction(BehaviorInstructionKind.MoveSourceToServerOf, argument: "lotus-haze-upgrade",
+                                target: ChosenBy("lotus-haze-server")),
+                        ])),
                 ]),
         ]);
 

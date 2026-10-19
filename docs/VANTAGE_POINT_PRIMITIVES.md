@@ -253,5 +253,5 @@ PR:
 |---|---|---|
 | `VP-CARD-TRASHED` | An occurrence: a card is trashed, with the card as its subject. | Hiram "0mission" Svensson |
 | `VP-SOURCE-SERVER-ROOT` | A selector for the cards in the root of the source's server. | Hype Machine |
-| `VP-MOVE-UPGRADE` | A move of a bound card, not the source, to the server of a chosen card. | Lotus Haze |
+| `VP-MOVE-UPGRADE` | A move of a bound card, not the source, to a central server or the server of a chosen card. | Lotus Haze |
 | `VP-LOOK-OPPONENT-DECK` | A private look at the opponent's deck cards, offered as a choice. | Hiram "0mission" Svensson |

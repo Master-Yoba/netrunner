@@ -85,7 +85,7 @@ public static partial class GameEngine
             {
                 if (inRunnerScoreArea && !ability.UsableFromRunnerScoreArea
                     || inArchives && !ability.UsableFromArchives
-                    || inHeadquarters && !ability.UsableFromHeadquarters
+                    || inHeadquarters != ability.UsableFromHeadquarters
                     || AbilityUserSide(source.OwnerSide, ability) != window.ControllerSide)
                 {
                     continue;

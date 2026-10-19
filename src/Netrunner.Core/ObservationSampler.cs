@@ -115,6 +115,7 @@ public static class ObservationSampler
                 throw new ArgumentException("Unknown card pool.", nameof(pool));
         }
 
+        RulesState? rules = WithHiddenSecretIdentity(state.RulesState, viewer, random);
         CardInstanceState[] sampled = [.. state.Cards.Select(card => dealt.TryGetValue(card.Id, out CardDefinitionId definition)
             ? new CardInstanceState(card.Id, definition, card.ZoneId, card.OwnerSide, card.FaceUp, card.Rezzed,
                 card.AdvancementCounters, card.HostCardId)
@@ -122,9 +123,21 @@ public static class ObservationSampler
         return new GameState(state.SchemaVersion, state.GameId, state.RulesVersion, state.CardDataVersion, state.Players,
             sampled, state.Zones, state.Servers, state.Turn, state.Outcome, random.NextUInt64(), state.Allocator,
             state.DecisionRevision, state.EventSequence, state.ResolutionStack, state.PendingDecision, state.ActionSequence,
-            state.InitialSeed, state.RunState, state.RulesState, state.BehaviorRegistryVersion, state.BehaviorCatalogFingerprint,
+            state.InitialSeed, state.RunState, rules, state.BehaviorRegistryVersion, state.BehaviorCatalogFingerprint,
             state.RuntimeCardCatalogVersion, state.RuntimeCardCatalogFingerprint).MarkSimulated();
     }
+
+    /// <summary>
+    /// VP-SECRET-IDENTITY: the Runner doesn't know which copy of Méliès U the Corp set until it flips, so a Runner's sample
+    /// draws the side again among the three it could be. Nothing is drawn without a secret identity, so other games' samples
+    /// are unchanged.
+    /// </summary>
+    private static RulesState? WithHiddenSecretIdentity(RulesState? rules, PlayerSide viewer, DeterministicRandom random) =>
+        viewer == PlayerSide.Runner && rules?.SecretIdentity is { Flipped: false }
+            ? rules.WithSecretIdentity(new SecretIdentityState(SecretIdentitySides[random.NextInt(SecretIdentitySides.Length)], Flipped: false))
+            : rules;
+
+    private static readonly ServerKind[] SecretIdentitySides = [ServerKind.Headquarters, ServerKind.RAndD, ServerKind.Archives];
 
     /// <summary>
     /// Bot plan S4.2c: one hidden world for several simulation states that share their card instances (the ends of lines
@@ -199,6 +212,9 @@ public static class ObservationSampler
             default:
                 throw new ArgumentException("Unknown card pool.", nameof(pool));
         }
+        // One drawn side for every state, as each hidden card has one identity in all of them.
+        ServerKind? secretSide = viewer == PlayerSide.Runner && states.Any(state => state.RulesState?.SecretIdentity is { Flipped: false })
+            ? SecretIdentitySides[random.NextInt(SecretIdentitySides.Length)] : null;
         ulong randomState = random.NextUInt64();
         return [.. states.Select(state => new GameState(state.SchemaVersion, state.GameId, state.RulesVersion, state.CardDataVersion, state.Players,
             [.. state.Cards.Select(card => (dealt.TryGetValue(card.Id, out CardDefinitionId definition) ? definition
@@ -207,7 +223,10 @@ public static class ObservationSampler
                 : card)],
             state.Zones, state.Servers, state.Turn, state.Outcome, randomState, state.Allocator,
             state.DecisionRevision, state.EventSequence, state.ResolutionStack, state.PendingDecision, state.ActionSequence,
-            state.InitialSeed, state.RunState, state.RulesState, state.BehaviorRegistryVersion, state.BehaviorCatalogFingerprint,
+            state.InitialSeed, state.RunState,
+            secretSide is { } side && state.RulesState?.SecretIdentity is { Flipped: false }
+                ? state.RulesState.WithSecretIdentity(new SecretIdentityState(side, Flipped: false)) : state.RulesState,
+            state.BehaviorRegistryVersion, state.BehaviorCatalogFingerprint,
             state.RuntimeCardCatalogVersion, state.RuntimeCardCatalogFingerprint).MarkSimulated())];
     }
 

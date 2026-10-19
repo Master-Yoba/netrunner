@@ -1705,6 +1705,14 @@ public sealed record BehaviorInstruction
                 break;
         }
 
+        if (Kind == BehaviorInstructionKind.MoveSourceToServerOf && DestinationZone is not null
+            && (Target is not null || DestinationZone is not (BehaviorZone.Headquarters or BehaviorZone.Deck or BehaviorZone.Archives)))
+        {
+            throw new ArgumentException(
+                "A move to a server names either a card in it or a central server's zone (VP-MOVE-UPGRADE).",
+                nameof(DestinationZone));
+        }
+
         if (Kind == BehaviorInstructionKind.MoveCard
             && (Target is not null || DestinationZone is not null || SourceZone is not null)
             && (Target is null || DestinationZone is null))
@@ -1773,6 +1781,7 @@ public sealed record BehaviorInstruction
             && Kind != BehaviorInstructionKind.ShuffleDeck
             && !(Kind == BehaviorInstructionKind.PlayCard && SourceZone is null
                 && DestinationZone is null or BehaviorZone.RemovedFromGame)
+            && !(Kind == BehaviorInstructionKind.MoveSourceToServerOf && SourceZone is null)
             && (SourceZone is not null || DestinationZone is not null))
         {
             throw new ArgumentException(

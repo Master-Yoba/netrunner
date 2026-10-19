@@ -760,17 +760,28 @@ public static partial class GameEngine
                 return;
             case BehaviorInstructionKind.MoveSourceToServerOf:
                 {
-                    IReadOnlyList<CardInstanceId> anchors = ResolveBehaviorCards(working, frame, instruction.Target);
-                    // VP-MOVE-UPGRADE: the argument names a bound card to move instead of the source (Lotus Haze).
+                    // VP-MOVE-UPGRADE: the argument names a bound card to move instead of the source (Lotus Haze), and a
+                    // destination zone names a central server, which may hold no card to choose.
+                    ServerState? destination = instruction.DestinationZone is { } central
+                        ? working.Servers.Single(server => server.Kind == central switch
+                        {
+                            BehaviorZone.Headquarters => ServerKind.Headquarters,
+                            BehaviorZone.Deck => ServerKind.RAndD,
+                            _ => ServerKind.Archives,
+                        })
+                        : instruction.Target is { Kind: BehaviorTargetKind.ChosenCard } chosenServer && IsProvenEmptyChosenCard(frame, chosenServer)
+                            ? null
+                            : ResolveBehaviorCards(working, frame, instruction.Target) is [var anchor]
+                                && ZoneForCard(working, anchor).ServerId is { } serverId
+                                ? working.Servers.Single(server => server.Id == serverId)
+                                : null;
                     CardInstanceState upgrade = GetCard(working, instruction.Argument is { } movedKey
                         ? frame.Bindings.SingleOrDefault(binding => string.Equals(binding.Key, movedKey, StringComparison.Ordinal))?.CardIds.SingleOrDefault()
                             ?? frame.SourceCardId
                         : frame.SourceCardId);
                     ZoneState from = ZoneForCard(working, upgrade.Id);
-                    if (anchors.Count == 1
+                    if (destination is { } server
                         && from.Kind == ZoneKind.ServerRoot
-                        && ZoneForCard(working, anchors[0]).ServerId is { } serverId
-                        && working.Servers.Single(server => server.Id == serverId) is { } server
                         && server.RootZoneId != from.Id)
                     {
                         MoveCard(working, upgrade, from, working.Zones.Single(zone => zone.Id == server.RootZoneId));
