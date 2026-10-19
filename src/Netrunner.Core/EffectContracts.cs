@@ -394,6 +394,11 @@ public sealed record GameplayOccurrenceEffect : EffectInstruction
                 or OccurrenceKind.FirstCardCreditGainThisTurn
                 or OccurrenceKind.FirstOperationPlayedThisTurn
                 or OccurrenceKind.FirstEventPlayedThisTurn
+                or OccurrenceKind.IcePassed
+                or OccurrenceKind.IceBypassed
+                or OccurrenceKind.IceFullyBroken
+                or OccurrenceKind.SubroutineBroken
+                or OccurrenceKind.EncounterEnded
                 or OccurrenceKind.DamageDone
                 or OccurrenceKind.CardsTrashedFromHq
                 or OccurrenceKind.HandSizeDiscarded))
@@ -401,13 +406,7 @@ public sealed record GameplayOccurrenceEffect : EffectInstruction
             throw new ArgumentOutOfRangeException(nameof(kind));
         }
 
-        if (kind == OccurrenceKind.RunEnded && successful is null)
-        {
-            throw new ArgumentException(
-                "A RunEnded occurrence must carry its persisted success outcome.",
-                nameof(successful));
-        }
-
+        // VP-NO-SUCCESSFUL-RUN: a RunEnded occurrence without an outcome is a run never declared successful (Flagship).
         if (kind != OccurrenceKind.RunEnded && successful is not null)
         {
             throw new ArgumentException(
@@ -726,6 +725,11 @@ public static class EffectInstructionValidator
                 or OccurrenceKind.FirstCardCreditGainThisTurn
                 or OccurrenceKind.FirstOperationPlayedThisTurn
                 or OccurrenceKind.FirstEventPlayedThisTurn
+                or OccurrenceKind.IcePassed
+                or OccurrenceKind.IceBypassed
+                or OccurrenceKind.IceFullyBroken
+                or OccurrenceKind.SubroutineBroken
+                or OccurrenceKind.EncounterEnded
                 or OccurrenceKind.DamageDone
                 or OccurrenceKind.CardsTrashedFromHq
                 or OccurrenceKind.HandSizeDiscarded))
@@ -764,15 +768,9 @@ public static class EffectInstructionValidator
                                 "An IceEncountered occurrence must identify both its encountered ICE subject and server.");
                         }
 
-                        if (occurrence.Kind == OccurrenceKind.RunEnded && occurrence.Successful is null)
-                        {
-                            Add(
-                                violations,
-                                "effects.run-ended-outcome-missing",
-                                $"{instructionPath}.successful",
-                                "A RunEnded occurrence must carry its success outcome.");
-                        }
-                        else if (occurrence.Kind != OccurrenceKind.RunEnded && occurrence.Successful is not null)
+                        // VP-NO-SUCCESSFUL-RUN: a RunEnded occurrence without an outcome is a run never declared successful
+                        // nor made unsuccessful (Flagship).
+                        if (occurrence.Kind != OccurrenceKind.RunEnded && occurrence.Successful is not null)
                         {
                             Add(
                                 violations,

@@ -328,6 +328,44 @@ public static partial class GameEngine
             case BehaviorInstructionKind.AddSelfToScoreAreaAsAgenda:
                 AddSourceToScoreAreaAsAgenda(working, frame, instruction);
                 return;
+            case BehaviorInstructionKind.ModifyAllIceStrengthForRun:
+                if (working.RunState is { } strengthRun)
+                {
+                    CardInstanceState strengthSource = GetCard(working, frame.SourceCardId);
+                    working.RunState = strengthRun.WithAllIceStrengthModifiers((strengthRun.AllIceStrengthModifiers ?? [])
+                        .Append(new RunAllIceStrengthModifier(strengthSource.DefinitionId, strengthSource.Id, instruction.Amount,
+                            frame.TriggerKey ?? frame.AbilityKey ?? CardBehaviorRestrictionReason))
+                        .ToArray());
+                }
+
+                AdvanceBehaviorCursor(working, frame);
+                return;
+            case BehaviorInstructionKind.EncounteredIceGainsSubroutine:
+                EncounteredIceGainsSubroutine(working, frame);
+                AdvanceBehaviorCursor(working, frame);
+                return;
+            case BehaviorInstructionKind.RestrictRun:
+                RestrictRunFromBehavior(working, frame, instruction);
+                AdvanceBehaviorCursor(working, frame);
+                return;
+            case BehaviorInstructionKind.RemoveAdvancementCounters:
+                foreach (CardInstanceId advancedId in ResolveBehaviorCards(working, frame, instruction.Target))
+                {
+                    CardInstanceState advanced = GetCard(working, advancedId);
+                    int advancementRemoved = Math.Min(advanced.AdvancementCounters, instruction.Amount);
+                    if (advancementRemoved == 0 || !IsInstalledCard(working, advancedId))
+                    {
+                        continue;
+                    }
+
+                    ReplaceCard(working, new CardInstanceState(advanced.Id, advanced.DefinitionId, advanced.ZoneId, advanced.OwnerSide,
+                        advanced.FaceUp, advanced.Rezzed, advanced.AdvancementCounters - advancementRemoved, advanced.HostCardId));
+                    Emit(working, EngineEventKinds.AdvancementCountersRemoved,
+                        new AdvancementCountersRemovedEventPayload(advanced.Id, advancementRemoved, advanced.AdvancementCounters - advancementRemoved));
+                }
+
+                AdvanceBehaviorCursor(working, frame);
+                return;
             case BehaviorInstructionKind.TakeBadPublicity:
                 ApplyBadPublicity(working, StaticOrDynamicAmount(working, frame, instruction));
                 AdvanceBehaviorCursor(working, frame);
@@ -508,8 +546,14 @@ public static partial class GameEngine
                     _ => throw new ResolutionFailureException("The AddTags recipient is invalid."),
                 };
                 AdvanceBehaviorCursor(working, frame);
-                working.ResolutionStack.Add(new EffectResolutionFrame(frame.Controller, new CostBundle(),
-                    new EffectBundle(new TagAdjustmentEffect(tagRecipient, instruction.Amount))));
+                // VP-RUNNER-TAGS: a dynamic amount (Vicsek's X) may be zero, which gives none.
+                int tagsGiven = StaticOrDynamicAmount(working, frame, instruction);
+                if (tagsGiven > 0)
+                {
+                    working.ResolutionStack.Add(new EffectResolutionFrame(frame.Controller, new CostBundle(),
+                        new EffectBundle(new TagAdjustmentEffect(tagRecipient, tagsGiven))));
+                }
+
                 return;
             case BehaviorInstructionKind.TrashSelf:
                 ResolveBehaviorTransfer(
@@ -765,6 +809,9 @@ public static partial class GameEngine
             case BehaviorInstructionKind.EndRun:
                 ResolveBehaviorEndRun(working, frame);
                 return;
+            case BehaviorInstructionKind.JackOut:
+                ResolveBehaviorEndRun(working, frame, jackOut: true);
+                return;
             case BehaviorInstructionKind.DealDamage:
                 ResolveBehaviorDamage(working, frame, instruction);
                 return;
@@ -792,6 +839,7 @@ public static partial class GameEngine
                             && catalog.TryGet(GetCard(working, change.CardId).DefinitionId, out CardRuntimeSpec? spec)
                                 ? spec.AgendaPoints
                                 : change.Points) ?? 0,
+                BehaviorDamageAmountKind.RunnerTags => RunnerTags(working),
                 _ => throw new ResolutionFailureException("Unknown damage amount operand."),
             };
             amount = checked(operand.BaseAmount + variable);
@@ -888,7 +936,8 @@ public static partial class GameEngine
     /// </summary>
     private static void ResolveBehaviorEndRun(
         WorkingState working,
-        BehaviorResolutionFrame frame)
+        BehaviorResolutionFrame frame,
+        bool jackOut = false)
     {
         // EL-ABILITY-END-RUN: a paid ability used during the run (LEO
         // Construction) ends it as a reaction does.
@@ -953,7 +1002,7 @@ public static partial class GameEngine
                 "EndRun requires a current run-owned catalog reaction occurrence.");
         }
 
-        if (PreventsRunEnd(working, run))
+        if (!jackOut && PreventsRunEnd(working, run))
         {
             // EL-PREVENT-END-RUN (Shred): the run goes on.
             AdvanceBehaviorCursor(working, frame);
@@ -966,7 +1015,8 @@ public static partial class GameEngine
             null,
             run.Successful,
             true,
-            RunEndReason.EndedByRule,
+            // VP-UNLESS-JACK-OUT: jacking out ends the run as the Runner's own act (CR 26.03 6.1.5).
+            jackOut ? RunEndReason.JackedOut : RunEndReason.EndedByRule,
             null,
             run.Encounter,
             run.AccessState);
@@ -979,6 +1029,30 @@ public static partial class GameEngine
         while (working.ResolutionStack.Count - 1 > runFrameIndex)
         {
             working.ResolutionStack.RemoveAt(working.ResolutionStack.Count - 1);
+        }
+
+        // VP-ENCOUNTER-ENDED (PR #154's review): ending the run mid-encounter ends the encounter; a waiting trigger
+        // resolves first, and the run frame completes the run when it resumes at RunEnd.
+        if (run.Encounter is { Status: RunEncounterStatus.Initialized } live
+            && HasActiveCatalogTrigger(working, OccurrenceKind.EncounterEnded, run.AttackedServer, live.IceId))
+        {
+            // PR #154's fifth review: as FinishIceSubroutineRun does, the encounter completes and keeps its ICE as the
+            // cursor while the reactions resolve, so a trigger's decision shows a valid state.
+            RunState completing = run.WithLingeringEffects(run.LingeringEffects
+                .Where(effect => effect.Expiry != RunLingeringEffectExpiry.Encounter).ToArray());
+            Emit(working, EngineEventKinds.EncounterCompleted, new EncounterCompletedEventPayload(run.Id, live.Id));
+            SetRunTiming(working, completing.WithTiming(
+                RunTimingStep.RunEnd,
+                run.CurrentIceIndex,
+                run.CurrentIceId,
+                run.Successful,
+                true,
+                ending.EndReason,
+                null,
+                new RunEncounterState(live.Version, live.Id, live.IceId, RunEncounterStatus.Complete, live.Subroutines),
+                run.AccessState));
+            QueueRunIceOccurrence(working, working.RunState!, OccurrenceKind.EncounterEnded, live.IceId);
+            return;
         }
 
         CompleteRun(working, ending);
@@ -2060,6 +2134,9 @@ public static partial class GameEngine
             BehaviorConditionKind.ClicksRemainingAtLeast => (condition.SubjectSide is { } clickSide
                 ? GetPlayer(working, clickSide)
                 : controller).Clicks >= condition.Value.GetValueOrDefault(),
+            BehaviorConditionKind.ClicksRemainingAtMost => (condition.SubjectSide is { } atMostSide
+                ? GetPlayer(working, atMostSide)
+                : controller).Clicks <= condition.Value.GetValueOrDefault(),
             BehaviorConditionKind.Installed => IsInstalledCard(working, frame.SourceCardId),
             BehaviorConditionKind.InstalledThisTurn => CurrentFacts(working, frame.Controller)?.InstalledCardIds.Contains(frame.SourceCardId) == true,
             BehaviorConditionKind.SuccessfulRun => working.RunState?.Successful == true,
@@ -2251,6 +2328,7 @@ public static partial class GameEngine
                         ? rezSpec!.RezCost ?? 0
                         : 0),
                 BehaviorAmountKind.ProtectedRemotesWithRootCards => ProtectedRemotesWithRootCards(working),
+                BehaviorAmountKind.RunnerTags => RunnerTags(working),
                 _ => throw new ResolutionFailureException($"Amount kind '{kind}' is not executable."),
             };
             return checked(counted * operand.Multiplier + operand.Offset);
@@ -5092,6 +5170,8 @@ public static partial class GameEngine
                 && GetCard(working, advanced).AdvancementCounters >= condition.Value.GetValueOrDefault(),
             BehaviorConditionKind.ClicksRemainingAtLeast =>
                 GetPlayer(working, condition.SubjectSide ?? GetPlayer(working, owner).Side).Clicks >= condition.Value.GetValueOrDefault(),
+            BehaviorConditionKind.ClicksRemainingAtMost =>
+                GetPlayer(working, condition.SubjectSide ?? GetPlayer(working, owner).Side).Clicks <= condition.Value.GetValueOrDefault(),
             BehaviorConditionKind.SourceInZone => sourceCardId is { } inZone && SourceZoneMatches(working, inZone, condition.Fact!),
             BehaviorConditionKind.SourceNotInZone => sourceCardId is { } notInZone && !SourceZoneMatches(working, notInZone, condition.Fact!),
             BehaviorConditionKind.SourceHostsAtLeast => sourceCardId is { } host

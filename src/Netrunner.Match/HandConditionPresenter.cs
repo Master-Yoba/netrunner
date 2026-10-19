@@ -26,6 +26,7 @@ public static class HandConditionPresenter
         BehaviorConditionKind.Tagged => $"{condition.SubjectSide?.ToString() ?? "Controller"} is tagged",
         BehaviorConditionKind.NotTagged => $"{condition.SubjectSide?.ToString() ?? "Controller"} is untagged",
         BehaviorConditionKind.ClicksRemainingAtLeast => $"at least {condition.Value} clicks remaining",
+        BehaviorConditionKind.ClicksRemainingAtMost => $"at most {condition.Value} clicks remaining",
         _ => "play requirement met",
     };
 }

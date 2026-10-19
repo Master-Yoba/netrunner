@@ -31,6 +31,9 @@ internal static class RunnerValues
     public static int Server(HeuristicContext context, AgentServer? server)
     {
         if (server is null) return 0;
+        // VP-NO-SUCCESSFUL-RUN (PR #154's third review): a rezzed root card that stops runs succeeding (Flagship) leaves the
+        // server nothing to give.
+        if (server.Root.Any(card => card is { Rezzed: true } && context.Definition(card)?.Behavior is { RunsCannotSucceed: true })) return 0;
         if (context.Generation >= 2) return ServerV2(context, server);
         int root = server.Root.Sum(card => card is null ? 190 : context.Definition(card)?.Agenda is { } agenda
             ? 500 + agenda.AgendaPoints * 180 : Trash(context, card));

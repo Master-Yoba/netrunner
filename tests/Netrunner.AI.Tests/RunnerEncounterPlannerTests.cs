@@ -83,6 +83,38 @@ public sealed class RunnerEncounterPlannerTests
         for (ulong seed = 1; seed <= 20; seed++) Assert.Equal("action:break-expiring", await fixture.Choose("easy", seed));
     }
 
+    /// <summary>
+    /// VP-ICE-GAINS-SUBROUTINE (PR #154's fourth review): a subroutine the ICE gained (Stick and Poke) does what its source
+    /// declares. Here both are a credit for the Corp, not worth breaking; read as unknown, the gained one forced a break.
+    /// </summary>
+    [Fact]
+    public async Task AGainedSubroutineIsReadFromItsSource()
+    {
+        var fixture = new PlannerFixture(credits: 3, iceStrength: 1, [new GainCreditsSubroutineSpec(PlayerSide.Corp, 1)]);
+        fixture.Breaker("decoder", strength: 3, pumpCost: 1, pumpStrength: 1, breakCost: 1);
+        fixture.Gained("stick-and-poke", new GainCreditsSubroutineSpec(PlayerSide.Corp, 1));
+        fixture.Action("break-gained", ActionKind.BreakSubroutines, new RunBreakParameters(new("card:decoder"), 1, subroutineOrdinals: [1]));
+        Assert.Equal("action:pass", await fixture.Choose());
+    }
+
+    /// <summary>
+    /// VP-ICE-GAINS-SUBROUTINE (PR #154's seventh review): survival is checked hit by hit. Stick and Poke's gained one damage
+    /// and a draw, then a printed one damage, leave a one-card grip alive with a card to draw, not worth 3 credits to break;
+    /// with nothing to draw, the second hit flatlines the Runner.
+    /// </summary>
+    [Theory]
+    [InlineData(1, "action:pass")]
+    [InlineData(0, "action:break-printed")]
+    public async Task AGainedSubroutinesDrawCountsTowardSurvival(int stack, string expected)
+    {
+        var fixture = new PlannerFixture(credits: 3, iceStrength: 1, [new DamageSubroutineSpec(DamageKind.Net, 1)]);
+        fixture.Breaker("decoder", strength: 3, pumpCost: 1, pumpStrength: 1, breakCost: 3);
+        fixture.Gained("stick-and-poke", new DamageSubroutineSpec(DamageKind.Net, 1, DamageSubroutineFollowUp.RunnerDrawsOne));
+        fixture.Cards(grip: 1, stack: stack);
+        fixture.Action("break-printed", ActionKind.BreakSubroutines, new RunBreakParameters(new("card:decoder"), 1, subroutineOrdinals: [0]));
+        Assert.Equal(expected, await fixture.Choose());
+    }
+
     private sealed class PlannerFixture : ICardEvaluationCatalog
     {
         private readonly Dictionary<CardDefinitionId, CardEvaluationDescriptor> _definitions = [];
@@ -90,6 +122,9 @@ public sealed class RunnerEncounterPlannerTests
         private readonly List<AgentAction> _actions = [];
         private readonly int _credits, _strength, _runCredits;
         private readonly IceSubroutineSpec[] _subroutines;
+        private string? _gainedFrom;
+        private (int Grip, int Stack)? _cards;
+        public void Cards(int grip, int stack) => _cards = (grip, stack);
         public PlannerFixture(int credits, int iceStrength, IceSubroutineSpec[] subroutines, int runCredits = 0)
         {
             _credits = credits; _strength = iceStrength; _subroutines = subroutines; _runCredits = runCredits;
@@ -112,6 +147,13 @@ public sealed class RunnerEncounterPlannerTests
             CardDefinitionId id = new("test:" + key);
             Card(key, new(new(id, PlayerSide.Runner, RuntimeCardClass.Program, installCost: 2, memoryUnits: 1), null, null,
                 new(id, strength, IceType.CodeGate, breakCost, 1, pumpCost, pumpStrength, runEndCleanup: disposable ? new("test-cleanup") : null), null, null, null, [], false));
+        }
+        public void Gained(string key, IceSubroutineSpec subroutine)
+        {
+            CardDefinitionId id = new("test:" + key);
+            Card(key, new(new(id, PlayerSide.Runner, RuntimeCardClass.Resource, installCost: 1),
+                new CardBehaviorDefinition(id, PlayerSide.Runner, gainedIceSubroutine: subroutine), null, null, null, null, null, [], false));
+            _gainedFrom = id.Value;
         }
         public void Counters(string key, int count)
         {
@@ -138,7 +180,8 @@ public sealed class RunnerEncounterPlannerTests
                 {
                     Id = "encounter:test",
                     Ice = ice,
-                    Subroutines = _subroutines.Select((_, ordinal) => new AgentSubroutine(ordinal, false, false)).ToImmutableArray(),
+                    Subroutines = _subroutines.Select((_, ordinal) => new AgentSubroutine(ordinal, false, false))
+                        .Concat(_gainedFrom is null ? [] : [new AgentSubroutine(_subroutines.Length, false, false, _gainedFrom)]).ToImmutableArray(),
                     StrengthQuote = new() { EffectiveValue = _strength },
                     BreakerStrengths = _rig.Where(card => _definitions[new(card.DefinitionId)].Icebreaker is not null)
                         .Select(card => new AgentBreakerStrength(card.Id, new() { EffectiveValue = _definitions[new(card.DefinitionId)].Icebreaker!.BaseStrength })).ToImmutableArray(),
@@ -151,6 +194,17 @@ public sealed class RunnerEncounterPlannerTests
                 Servers = [new("server:hq", ServerKind.Headquarters, [ice], [])],
                 Players = baseline.Board.Players with { Runner = baseline.Self with { Credits = _credits, Clicks = 0 } },
             };
+            if (_cards is { } cards)
+            {
+                board = board with { HiddenZoneCounts = board.HiddenZoneCounts with { RunnerGrip = cards.Grip, RunnerStack = cards.Stack } };
+                observation = observation with
+                {
+                    PrivateState = EngineJson.Deserialize<Dictionary<string, object?>>(EngineJson.Serialize(new AgentPrivateCards
+                    {
+                        Grip = Enumerable.Range(0, cards.Grip).Select(index => new AgentCard { Id = $"card:grip-{index}", DefinitionId = "test:grip" }).ToImmutableArray(),
+                    })),
+                };
+            }
             observation = observation with
             {
                 DecisionId = decision.Id.Value,

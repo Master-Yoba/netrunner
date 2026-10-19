@@ -154,10 +154,11 @@ public sealed class RunSuccessfulTriggerTests
             null,
             [instruction],
             (RunOutcomeRequirement)999));
-        Assert.Throws<ArgumentException>(() => new GameplayOccurrenceEffect(
+        // VP-NO-SUCCESSFUL-RUN: a run never declared successful ends with neither outcome (Flagship).
+        Assert.Null(new GameplayOccurrenceEffect(
             OccurrenceKind.RunEnded,
             runner,
-            serverId: server));
+            serverId: server).Successful);
         Assert.Throws<ArgumentException>(() => new GameplayOccurrenceEffect(
             OccurrenceKind.CardInstalled,
             runner,

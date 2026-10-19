@@ -21,7 +21,9 @@ internal static class RunnerEncounterPlanner
         AgentEncounter? encounter = run?.Encounter;
         IceBehaviorSpec? ice = context.Definition(encounter?.Ice)?.Ice;
         if (run?.Step != RunTimingStep.EncounterPaidWindow || encounter is null || ice is null) return result;
-        AgentSubroutine[] remaining = encounter.Subroutines.Where(subroutine => !subroutine.Broken && !subroutine.Resolved).OrderBy(subroutine => subroutine.Ordinal).ToArray();
+        AgentSubroutine[] remaining = encounter.Subroutines.Where(subroutine => !subroutine.Broken && !subroutine.Resolved)
+            // VP-ICE-GAINS-SUBROUTINE: a gained subroutine resolves before the printed ones, though its ordinal follows them.
+            .OrderBy(subroutine => subroutine.GainedFrom is null).ThenBy(subroutine => subroutine.Ordinal).ToArray();
         if (remaining.Length > 8) return result; // unsupported pool expansion is a conservative fallback
         int all = (1 << remaining.Length) - 1;
         int strength = encounter.StrengthQuote?.EffectiveValue ?? ice.Strength;
@@ -151,16 +153,27 @@ internal static class RunnerEncounterPlanner
             int personal = Math.Max(0, plan.Credits - run.RunCredits);
             int balance = context.Self.Credits - personal;
             int damage = 0, loss = 0, tags = 0;
-            bool ends = false, restricted = false;
+            // The grip as the subroutines resolve, in order: a hit larger than it flatlines the Runner, and a draw after a
+            // hit (Stick and Poke's gained subroutine, VP-ICE-GAINS-SUBROUTINE) refills it before the next.
+            int grip = context.Features.Hand.Length, stack = context.Features.Board.HiddenZoneCounts.RunnerStack;
+            bool ends = false, restricted = false, lethal = false;
             foreach (var pair in remaining.Select((subroutine, index) => (subroutine, index)))
             {
                 if ((plan.Mask & (1 << pair.index)) != 0 || ends) continue;
-                if (pair.subroutine.Ordinal >= ice.Subroutines.Count) return new(-200, 0, "encounter/unknown-subroutine", true, UsedFallback: true);
-                switch (ice.Subroutines[pair.subroutine.Ordinal])
+                IceSubroutineSpec? declared = pair.subroutine.GainedFrom is { } source
+                    ? (context.Catalog.TryGet(new(source), out var giver) ? giver.Behavior?.GainedIceSubroutine : null)
+                    : pair.subroutine.Ordinal < ice.Subroutines.Count ? ice.Subroutines[pair.subroutine.Ordinal] : null;
+                if (declared is null) return new(-200, 0, "encounter/unknown-subroutine", true, UsedFallback: true);
+                switch (declared)
                 {
                     case EndRunSubroutineSpec: ends = true; break;
                     case EndRunIfCreditsAtMostSubroutineSpec conditional: ends = balance <= conditional.CreditLimit; break;
-                    case DamageSubroutineSpec hit: damage += hit.Amount; break;
+                    case DamageSubroutineSpec hit:
+                        damage += hit.Amount;
+                        lethal |= hit.Amount > grip;
+                        grip -= hit.Amount;
+                        if (hit.FollowUp == DamageSubroutineFollowUp.RunnerDrawsOne && stack > 0 && !lethal) { grip++; stack--; }
+                        break;
                     case LoseCreditsSubroutineSpec drain:
                         int lost = Math.Min(balance, drain.Amount); balance -= lost; loss += lost * context.CreditValue; break;
                     case GiveTagsSubroutineSpec tag: tags += tag.Amount; break;
@@ -176,17 +189,18 @@ internal static class RunnerEncounterPlanner
                     // v24 (bot loop 1): an Elevation subroutine written as a behavior does what it does (N-Pot's end the run
                     // at threat 2 and 4, Lamplighter's on a tagged Runner); as nothing, the Runner broke one and passed.
                     case BehaviorSubroutineSpec when context.ReadsBehaviorSubroutines:
-                        SubroutineEffect effect = SubroutineEffect.Of(ice.Subroutines[pair.subroutine.Ordinal], context, encounter.Ice, tags,
+                        SubroutineEffect effect = SubroutineEffect.Of(declared, context, encounter.Ice, tags,
                             context.Features.Hand.Length);
                         ends |= effect.EndsRun;
                         damage += effect.Damage;
+                        lethal |= effect.Damage > grip;
+                        grip -= effect.Damage;
                         tags += effect.Tags;
                         int drained = Math.Min(balance, effect.CreditsLost); balance -= drained; loss += drained * context.CreditValue;
                         if (effect.InstallsIce) loss += 30;
                         break;
                 }
             }
-            bool lethal = damage > context.Features.Hand.Length;
             bool winning = !ends && !restricted && RunnerValues.Winning(context, RunnerValues.Attacked(context));
             int continuation = ends ? 0 : restricted ? 80 : Math.Max(600, RunnerValues.Server(context, RunnerValues.Attacked(context)));
             int score = continuation - damage * 160 - loss - (tags > 0 ? RunnerValues.TagRisk(context, tags) : 0)

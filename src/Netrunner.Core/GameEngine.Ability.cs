@@ -160,7 +160,8 @@ public static partial class GameEngine
                         definitionFingerprint,
                         sourceZone.Id,
                         sourceZone.Kind,
-                        selections));
+                        selections,
+                        ResolvedAbilityCreditCost(working, ability)));
                 }
             }
         }
@@ -977,6 +978,9 @@ public static partial class GameEngine
             BehaviorConditionKind.Tagged => AbilityTagsForCondition(working, controllerId, condition) > 0,
             BehaviorConditionKind.NotTagged => AbilityTagsForCondition(working, controllerId, condition) <= 0,
             BehaviorConditionKind.ClicksRemainingAtLeast => controller.Clicks >= condition.Value.GetValueOrDefault(),
+            BehaviorConditionKind.ClicksRemainingAtMost => (condition.SubjectSide is { } atMostSide
+                ? GetPlayer(working, atMostSide)
+                : controller).Clicks <= condition.Value.GetValueOrDefault(),
             BehaviorConditionKind.Installed => IsInstalledCard(working, source.Id),
             BehaviorConditionKind.InstalledThisTurn => CurrentAbilityFacts(working)?.InstalledCardIds.Contains(source.Id) == true,
             BehaviorConditionKind.SuccessfulRun => working.RunState?.Successful == true,
@@ -994,7 +998,9 @@ public static partial class GameEngine
             // A paid ability has no search continuation; a forged declaration
             // depending on one therefore fails closed.
             BehaviorConditionKind.FoundCard => false,
+            // VP-SPEND-ADVANCEMENT: an ability spending its source's advancement counters needs one (Sacrifice Zone Expansion).
             BehaviorConditionKind.SourceHostsAtLeast or BehaviorConditionKind.RezzedInstalledCopy
+                or BehaviorConditionKind.SourceAdvancementAtLeast
                 => OptionConditionMatches(working, controllerId, source.Id, condition),
             _ => SharedConditionMatches(working, controllerId, condition, source.Id) ?? false,
         };
@@ -1029,6 +1035,34 @@ public static partial class GameEngine
         return actual.HasValue && actual.Value == condition.Value;
     }
 
+    /// <summary>
+    /// An ability's credit cost: the declared amount, or VP-ACCESS-PAID-ABILITY's printed rez or play cost of the card being
+    /// accessed (null when there is no such card or it has neither cost).
+    /// </summary>
+    private static int? AbilityCreditCost(WorkingState working, BehaviorCost cost)
+    {
+        if (!cost.AccessedCardPrintedCost)
+        {
+            return cost.Amount;
+        }
+
+        return working.RunState is { Step: RunTimingStep.BreachAccessAbility, ChosenAccessCards.Count: > 0 } run
+            && working.RuntimeCardCatalog is { } catalog
+            && catalog.TryGet(GetCard(working, run.ChosenAccessCards[^1]).DefinitionId, out CardRuntimeSpec? printed)
+                ? printed.RezCost ?? printed.PlayCost
+                : null;
+    }
+
+    /// <summary>The whole credit cost an action offers, published only when one is the accessed card's printed cost.</summary>
+    private static int? ResolvedAbilityCreditCost(WorkingState working, BehaviorPaidAbility ability) =>
+        ability.Costs.Any(static cost => cost.AccessedCardPrintedCost)
+            ? ability.Costs.Where(static cost => cost.Kind == BehaviorCostKind.Credits).Sum(cost => AbilityCreditCost(working, cost) ?? 0)
+            : null;
+
+    private static int RequiredAbilityCreditCost(WorkingState working, BehaviorCost cost) =>
+        AbilityCreditCost(working, cost)
+        ?? throw new ResolutionFailureException("The accessed card has no printed rez or play cost to pay.");
+
     private static bool CanAffordAbility(
         WorkingState working,
         CardInstanceState source,
@@ -1052,12 +1086,14 @@ public static partial class GameEngine
             {
                 switch (cost.Kind)
                 {
+                    case BehaviorCostKind.Credits when AbilityCreditCost(working, cost) is not { } amount:
+                        return false;
                     case BehaviorCostKind.Credits when cost.CreditSourceSubtype is { } subtype:
                         restrictedCredits.TryGetValue(subtype, out long restrictedCost);
-                        restrictedCredits[subtype] = checked(restrictedCost + cost.Amount);
+                        restrictedCredits[subtype] = checked(restrictedCost + AbilityCreditCost(working, cost)!.Value);
                         break;
                     case BehaviorCostKind.Credits:
-                        credits = checked(credits + cost.Amount);
+                        credits = checked(credits + AbilityCreditCost(working, cost)!.Value);
                         break;
                     case BehaviorCostKind.Clicks:
                     case BehaviorCostKind.LoseClick:
@@ -1628,10 +1664,10 @@ public static partial class GameEngine
             switch (cost.Kind)
             {
                 case BehaviorCostKind.Credits when cost.CreditSourceSubtype is { } subtype:
-                    PaySourceRestrictedCredits(working, frame.Controller, cost.Amount, subtype);
+                    PaySourceRestrictedCredits(working, frame.Controller, RequiredAbilityCreditCost(working, cost), subtype);
                     break;
                 case BehaviorCostKind.Credits:
-                    PayCreditCost(working, frame.Controller, cost.Amount);
+                    PayCreditCost(working, frame.Controller, RequiredAbilityCreditCost(working, cost));
                     break;
                 case BehaviorCostKind.Clicks:
                     for (int click = 0; click < cost.Amount; click++)
@@ -1927,7 +1963,8 @@ public static partial class GameEngine
         && string.Equals(actual.CatalogFingerprint, expected.CatalogFingerprint, StringComparison.Ordinal)
         && string.Equals(actual.DefinitionFingerprint, expected.DefinitionFingerprint, StringComparison.Ordinal)
         && actual.SourceZoneId == expected.SourceZoneId
-        && actual.SourceZoneKind == expected.SourceZoneKind;
+        && actual.SourceZoneKind == expected.SourceZoneKind
+        && actual.ResolvedCreditCost == expected.ResolvedCreditCost;
 
     private static bool AbilityFramesMatch(
         AbilityFrame actual,

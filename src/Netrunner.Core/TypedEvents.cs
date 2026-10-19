@@ -10,6 +10,8 @@ public static class EngineEventKinds
     public const string DamageDealt = "damage-dealt";
     public const string TagsAdjusted = "tags-adjusted";
     public const string BadPublicityAdjusted = "bad-publicity-adjusted";
+    public const string AdvancementCountersRemoved = "advancement-counters-removed";
+    public const string IceGainedSubroutine = "ice-gained-subroutine";
     public const string MemoryAdjusted = "memory-adjusted";
     public const string ProgramTrashedForMemory = "program-trashed-for-memory";
     public const string CounterAdjusted = "counter-adjusted";
@@ -87,6 +89,8 @@ public enum HostedCreditPoolOperation
 [JsonDerivedType(typeof(DamageDealtEventPayload), "damage-dealt")]
 [JsonDerivedType(typeof(TagsAdjustedEventPayload), "tags-adjusted")]
 [JsonDerivedType(typeof(BadPublicityAdjustedEventPayload), "bad-publicity-adjusted")]
+[JsonDerivedType(typeof(AdvancementCountersRemovedEventPayload), "advancement-counters-removed")]
+[JsonDerivedType(typeof(IceGainedSubroutineEventPayload), "ice-gained-subroutine")]
 [JsonDerivedType(typeof(MemoryAdjustedEventPayload), "memory-adjusted")]
 [JsonDerivedType(typeof(ProgramTrashedForMemoryEventPayload), "program-trashed-for-memory")]
 [JsonDerivedType(typeof(CounterAdjustedEventPayload), "counter-adjusted")]
@@ -316,6 +320,97 @@ public sealed record BadPublicityAdjustedEventPayload : EngineEventPayload
     [JsonInclude]
     [JsonRequired]
     public int BadPublicityAfter { get; private set; }
+}
+
+/// <summary>
+/// VP-ICE-GAINS-SUBROUTINE: the encountered ICE gained a subroutine, before its others, for the rest of the encounter
+/// (Stick and Poke).
+/// </summary>
+public sealed record IceGainedSubroutineEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public IceGainedSubroutineEventPayload(
+        int version,
+        RunId runId,
+        EncounterId encounterId,
+        CardInstanceId iceId,
+        SubroutineId subroutineId,
+        int ordinal,
+        CardInstanceId sourceCardId)
+        : base(version)
+    {
+        RunId = runId;
+        EncounterId = encounterId;
+        IceId = iceId;
+        SubroutineId = subroutineId;
+        Ordinal = ordinal;
+        SourceCardId = sourceCardId;
+    }
+
+    public IceGainedSubroutineEventPayload(
+        RunId runId,
+        EncounterId encounterId,
+        CardInstanceId iceId,
+        SubroutineId subroutineId,
+        int ordinal,
+        CardInstanceId sourceCardId)
+        : this(1, runId, encounterId, iceId, subroutineId, ordinal, sourceCardId)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public RunId RunId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public EncounterId EncounterId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId IceId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public SubroutineId SubroutineId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int Ordinal { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId SourceCardId { get; private set; }
+}
+
+/// <summary>VP-SPEND-ADVANCEMENT: <see cref="Removed"/> advancement counters left an installed card (Sacrifice Zone Expansion).</summary>
+public sealed record AdvancementCountersRemovedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public AdvancementCountersRemovedEventPayload(int version, CardInstanceId cardId, int removed, int countersAfter)
+        : base(version)
+    {
+        CardId = cardId;
+        Removed = removed;
+        CountersAfter = countersAfter;
+    }
+
+    public AdvancementCountersRemovedEventPayload(CardInstanceId cardId, int removed, int countersAfter)
+        : this(1, cardId, removed, countersAfter)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId CardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int Removed { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int CountersAfter { get; private set; }
 }
 
 public sealed record TagsAdjustedEventPayload : EngineEventPayload
@@ -2324,6 +2419,8 @@ public sealed record EngineEvent
         DamageDealtEventPayload value => new EngineEvent(Version, Sequence, Kind, new DamageDealtEventPayload(value.Version, value.Target, value.Kind, value.Amount, value.CardsTrashed, value.CoreDamageAfter, value.Flatlined, value.SourceCardId, value.FlatlineRisk, value.TrashedCardPrintedCost, value.ConditionalEndRun)),
         TagsAdjustedEventPayload value => new EngineEvent(Version, Sequence, Kind, new TagsAdjustedEventPayload(value.Version, value.Target, value.Delta, value.TagsAfter)),
         BadPublicityAdjustedEventPayload value => new EngineEvent(Version, Sequence, Kind, new BadPublicityAdjustedEventPayload(value.Version, value.Delta, value.BadPublicityAfter)),
+        AdvancementCountersRemovedEventPayload value => new EngineEvent(Version, Sequence, Kind, new AdvancementCountersRemovedEventPayload(value.Version, value.CardId, value.Removed, value.CountersAfter)),
+        IceGainedSubroutineEventPayload value => new EngineEvent(Version, Sequence, Kind, new IceGainedSubroutineEventPayload(value.Version, value.RunId, value.EncounterId, value.IceId, value.SubroutineId, value.Ordinal, value.SourceCardId)),
         MemoryAdjustedEventPayload value => new EngineEvent(Version, Sequence, Kind, new MemoryAdjustedEventPayload(value.Version, value.Target, value.BaseMemory, value.UsedMemory)),
         ProgramTrashedForMemoryEventPayload value => new EngineEvent(Version, Sequence, Kind, new ProgramTrashedForMemoryEventPayload(value.Version, value.CardId, value.Owner, value.MemoryCost)),
         CounterAdjustedEventPayload value => new EngineEvent(Version, Sequence, Kind, new CounterAdjustedEventPayload(value.Version, value.CardId, value.CounterName, value.Delta, value.CountAfter)),
@@ -2454,6 +2551,18 @@ public static class EngineEventValidator
             case BadPublicityAdjustedEventPayload value:
                 RequireKind(@event, EngineEventKinds.BadPublicityAdjusted, path, violations);
                 RequireNumber(value.BadPublicityAfter, $"{path}.payload.badPublicityAfter", "Bad publicity", violations);
+                break;
+            case IceGainedSubroutineEventPayload value:
+                RequireKind(@event, EngineEventKinds.IceGainedSubroutine, path, violations);
+                RequireId(value.IceId.Value, $"{path}.payload.iceId", "card", violations);
+                RequireId(value.SourceCardId.Value, $"{path}.payload.sourceCardId", "card", violations);
+                RequireNumber(value.Ordinal, $"{path}.payload.ordinal", "Subroutine ordinal", violations);
+                break;
+            case AdvancementCountersRemovedEventPayload value:
+                RequireKind(@event, EngineEventKinds.AdvancementCountersRemoved, path, violations);
+                RequireId(value.CardId.Value, $"{path}.payload.cardId", "card", violations);
+                RequireNumber(value.Removed, $"{path}.payload.removed", "Advancement counters removed", violations, strictlyPositive: true);
+                RequireNumber(value.CountersAfter, $"{path}.payload.countersAfter", "Advancement counters", violations);
                 break;
             case TagsAdjustedEventPayload value:
                 RequireKind(@event, EngineEventKinds.TagsAdjusted, path, violations);

@@ -93,6 +93,33 @@ internal static class BehaviorRunRules
             && operand.ServerKind == serverKind);
     }
 
+    /// <summary>
+    /// The instructions a run modifier's reason key names on its source: the keyed trigger's or paid ability's, or, under
+    /// <see cref="GameEngine.CardBehaviorRestrictionReason"/>, the card's own; nested choices and branches included. The
+    /// validator authenticates run restrictions and all-ICE strength changes against them (PR #154's review).
+    /// </summary>
+    internal static IEnumerable<BehaviorInstruction> InstructionsUnder(CardBehaviorDefinition definition, string reasonKey) =>
+        Flatten(definition.Triggers.Where(trigger => string.Equals(trigger.Key, reasonKey, StringComparison.Ordinal))
+                .SelectMany(static trigger => trigger.Instructions)
+            .Concat(definition.PaidAbilities.Where(ability => string.Equals(ability.Key, reasonKey, StringComparison.Ordinal))
+                .SelectMany(static ability => ability.Instructions))
+            .Concat(string.Equals(reasonKey, GameEngine.CardBehaviorRestrictionReason, StringComparison.Ordinal)
+                ? definition.Instructions
+                : []));
+
+    private static IEnumerable<BehaviorInstruction> Flatten(IEnumerable<BehaviorInstruction> instructions)
+    {
+        foreach (BehaviorInstruction instruction in instructions)
+        {
+            yield return instruction;
+            foreach (BehaviorInstruction nested in Flatten((instruction.Choice?.Options ?? []).SelectMany(static option => option.Instructions)
+                .Concat(instruction.Branch is { } branch ? branch.WhenTrue.Concat(branch.WhenFalse) : [])))
+            {
+                yield return nested;
+            }
+        }
+    }
+
     internal static bool HasBreachAccessModifierDeclaration(
         CardBehaviorDefinition definition,
         ServerKind serverKind,

@@ -665,6 +665,12 @@ public static partial class GameEngine
                 player.Id,
                 frame.CardId,
                 destination.ServerId);
+            if (encounteredIceRemoved)
+            {
+                // VP-ENCOUNTER-ENDED (PR #154's third review): trashing the encountered ICE ended its encounter.
+                QueueRunIceOccurrence(working, working.RunState!, OccurrenceKind.EncounterEnded, encounter.IceId);
+            }
+
             return;
         }
 
@@ -1087,6 +1093,11 @@ public static partial class GameEngine
         }
 
         if (!Enum.IsDefined(initiationKind))
+        {
+            return null;
+        }
+
+        if (!IsAllowedInstallServer(working, cardId, destinationKind, serverId, createNewRemote))
         {
             return null;
         }
@@ -2305,6 +2316,30 @@ public static partial class GameEngine
         WorkingState working = WorkingState.From(state, behaviorCatalog, runtimeCardCatalog);
         InstallPlan plan = ValidateInstallFrame(working, frame, requireFinalLegality: false);
         return MaterializeInstallChoiceParameters(working, frame, plan);
+    }
+
+    /// <summary>
+    /// VP-INSTALL-SERVER-KIND: whether a card that may be installed only in some kinds of server (The Red Room, Flagship) may
+    /// go to this destination; a new server is a remote.
+    /// </summary>
+    private static bool IsAllowedInstallServer(
+        WorkingState working,
+        CardInstanceId cardId,
+        InstallDestinationKind destinationKind,
+        ServerId? serverId,
+        bool createNewRemote)
+    {
+        if (destinationKind != InstallDestinationKind.ServerRoot
+            || !working.BehaviorCatalog.TryGet(GetCard(working, cardId).DefinitionId, out CardBehaviorDefinition? definition)
+            || definition.InstallServerKinds is not { } allowed)
+        {
+            return true;
+        }
+
+        ServerKind? kind = createNewRemote
+            ? ServerKind.Remote
+            : working.Servers.FirstOrDefault(server => server.Id == serverId)?.Kind;
+        return kind is { } serverKind && allowed.Contains(serverKind);
     }
 
     private static IEnumerable<(InstallDestinationKind DestinationKind, ServerId? ServerId, bool CreateNewRemote)> InstallDestinations(

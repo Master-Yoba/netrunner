@@ -1015,6 +1015,11 @@ public static partial class GameEngine
                 or OccurrenceKind.FirstCardCreditGainThisTurn
                 or OccurrenceKind.FirstOperationPlayedThisTurn
                 or OccurrenceKind.FirstEventPlayedThisTurn
+                or OccurrenceKind.IcePassed
+                or OccurrenceKind.IceBypassed
+                or OccurrenceKind.IceFullyBroken
+                or OccurrenceKind.SubroutineBroken
+                or OccurrenceKind.EncounterEnded
                 or OccurrenceKind.DamageDone
                 or OccurrenceKind.CardsTrashedFromHq
                 or OccurrenceKind.HandSizeDiscarded))

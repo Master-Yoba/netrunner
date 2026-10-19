@@ -739,6 +739,23 @@ public static partial class GameEngine
 
         if (run.PendingMoveServerId is { } moveTo && frame.Step != RunTimingStep.RunEnd)
         {
+            // VP-ENCOUNTER-ENDED (PR #154's review): moving ends the encounter, whose reactions resolve first; the move
+            // follows when the cursor resumes.
+            if (run.Encounter is { Status: RunEncounterStatus.Initialized } live
+                && HasActiveCatalogTrigger(working, OccurrenceKind.EncounterEnded, run.AttackedServer, live.IceId))
+            {
+                // PR #154's sixth review: its effects expire with it (a pump, a Leech reduction), before the reactions.
+                RunState ended = run.WithEncounter(new RunEncounterState(live.Version, live.Id, live.IceId,
+                        RunEncounterStatus.Complete, live.Subroutines))
+                    .WithLingeringEffects(run.LingeringEffects
+                        .Where(effect => effect.Expiry != RunLingeringEffectExpiry.Encounter)
+                        .ToArray());
+                Emit(working, EngineEventKinds.EncounterCompleted, new EncounterCompletedEventPayload(run.Id, live.Id));
+                working.RunState = ended;
+                QueueRunIceOccurrence(working, ended, OccurrenceKind.EncounterEnded, live.IceId);
+                return;
+            }
+
             MoveRunnerToOutermostPosition(working, run, moveTo);
             return;
         }
@@ -883,6 +900,13 @@ public static partial class GameEngine
                 ? new RunEncounterState(bypassed.Version, bypassed.Id, bypassed.IceId, RunEncounterStatus.Complete, bypassed.Subroutines)
                 : null,
             passed.AccessState));
+        if (run.Encounter is { } bypassedEncounter)
+        {
+            // Resolved in order: bypassed, the encounter ends, the ICE is passed.
+            QueueRunIceOccurrence(working, working.RunState!, OccurrenceKind.IcePassed, bypassedEncounter.IceId);
+            QueueRunIceOccurrence(working, working.RunState!, OccurrenceKind.EncounterEnded, bypassedEncounter.IceId);
+            QueueRunIceOccurrence(working, working.RunState!, OccurrenceKind.IceBypassed, bypassedEncounter.IceId);
+        }
     }
 
     private const string PreventEndRunKey = "prevent-first-end-run";
@@ -1067,7 +1091,8 @@ public static partial class GameEngine
                 continue;
             }
 
-            IceSubroutineSpec subroutineSpec = iceSpec.Subroutines[subroutine.Ordinal];
+            IceSubroutineSpec subroutineSpec = currentRun.EncounterSubroutineSpec(working.BehaviorCatalog, iceSpec, encounter.Id, subroutine.Ordinal)
+                ?? throw new ResolutionFailureException($"Encounter subroutine at ordinal {subroutine.Ordinal} has no declaration.");
             if (subroutineSpec is TrashInstalledRunnerCardSubroutineSpec
                 or InstallCardSubroutineSpec
                 or PayCreditsOrTagSubroutineSpec
@@ -1221,6 +1246,7 @@ public static partial class GameEngine
                 null,
                 completed,
                 progressed.AccessState));
+            QueueRunIceOccurrence(working, working.RunState!, OccurrenceKind.EncounterEnded, encounter.IceId);
             return;
         }
 
@@ -1234,6 +1260,9 @@ public static partial class GameEngine
             CreatePriority(RunPriorityWindowKind.MovementPaid),
             completed,
             progressed.AccessState));
+        // CR 26.03 6.9.4a: the encounter ends, then the Runner passes the ICE (queued first, so it resolves second).
+        QueueRunIceOccurrence(working, working.RunState!, OccurrenceKind.IcePassed, encounter.IceId);
+        QueueRunIceOccurrence(working, working.RunState!, OccurrenceKind.EncounterEnded, encounter.IceId);
     }
 
     private static RunState ApplyRunRestriction(
@@ -1552,8 +1581,7 @@ public static partial class GameEngine
         CardInstanceState ice = GetCard(working, frame.IceId);
         if (ice.DefinitionId != frame.IceDefinitionId
             || !behaviorCatalog.TryGetIce(ice.DefinitionId, out IceBehaviorSpec? iceSpec)
-            || frame.Ordinal < 0
-            || frame.Ordinal >= iceSpec.Subroutines.Count
+            || run.EncounterSubroutineSpec(behaviorCatalog, iceSpec, encounter.Id, frame.Ordinal) is not { } frameSpec
             || encounter.Subroutines.SingleOrDefault(candidate => candidate.Id == frame.SubroutineId) is not { } subroutine
             || subroutine.Ordinal != frame.Ordinal)
         {
@@ -1565,7 +1593,7 @@ public static partial class GameEngine
             run,
             ice,
             subroutine,
-            iceSpec.Subroutines[frame.Ordinal],
+            frameSpec,
             frame.FrameIdentity).Choices;
     }
 
@@ -1704,13 +1732,12 @@ public static partial class GameEngine
         CardInstanceState ice = GetCard(working, frame.IceId);
         if (ice.DefinitionId != frame.IceDefinitionId
             || !working.BehaviorCatalog.TryGetIce(ice.DefinitionId, out IceBehaviorSpec? iceSpec)
-            || frame.Ordinal >= iceSpec.Subroutines.Count)
+            || run.EncounterSubroutineSpec(working.BehaviorCatalog, iceSpec, frame.EncounterId, frame.Ordinal) is not { } specification)
         {
             throw new ResolutionFailureException(
                 "The ICE subroutine choice is stale for the authenticated ICE catalog entry.");
         }
 
-        IceSubroutineSpec specification = iceSpec.Subroutines[frame.Ordinal];
         int pendingTags = 0;
         switch (parameters.Choice)
         {
@@ -1962,11 +1989,35 @@ public static partial class GameEngine
         }
     }
 
+    /// <summary>VP-NO-SUCCESSFUL-RUN: a rezzed card in the server's root forbids declaring a run on it successful.</summary>
+    private static bool RunCannotSucceed(WorkingState working, ServerId serverId) =>
+        working.Servers.FirstOrDefault(server => server.Id == serverId) is { } server
+        && working.Zones.FirstOrDefault(zone => zone.Id == server.RootZoneId) is { } root
+        && root.CardIds.Any(cardId => GetCard(working, cardId) is { Rezzed: true } card
+            && working.BehaviorCatalog.TryGet(card.DefinitionId, out CardBehaviorDefinition? definition)
+            && definition.RunsCannotSucceed);
+
     private static void StepRunSuccess(WorkingState working, RunState run)
     {
         if (run.CurrentIceIndex >= 0)
         {
             throw new ResolutionFailureException("A run can succeed only after all ICE has been passed.");
+        }
+
+        // VP-NO-SUCCESSFUL-RUN: the run ends here, neither successful nor unsuccessful (Flagship's reminder text).
+        if (RunCannotSucceed(working, run.AttackedServer))
+        {
+            SetRunTiming(working, run.WithTiming(
+                RunTimingStep.RunEnd,
+                -1,
+                null,
+                false,
+                false,
+                RunEndReason.NotDeclaredSuccessful,
+                null,
+                null,
+                run.AccessState));
+            return;
         }
 
         Emit(working, EngineEventKinds.RunSuccessful, new RunSuccessfulEventPayload(run.Id, run.AttackedServer));
@@ -2033,6 +2084,47 @@ public static partial class GameEngine
                 run.InitiatingPlayer,
                 subjectCardId: iceId,
                 serverId: run.AttackedServer))));
+    }
+
+    /// <summary>
+    /// VP-ICE-PASSED, VP-SUBROUTINE-BROKEN, VP-ENCOUNTER-ENDED: queues an occurrence about the run's current ICE, only when a
+    /// trigger waits on it, so runs without such cards keep their bytes.
+    /// </summary>
+    private static void QueueRunIceOccurrence(WorkingState working, RunState run, OccurrenceKind kind, CardInstanceId iceId)
+    {
+        if (!HasActiveCatalogTrigger(working, kind, run.AttackedServer, iceId))
+        {
+            return;
+        }
+
+        working.ResolutionStack.Add(new EffectResolutionFrame(
+            run.InitiatingPlayer,
+            new CostBundle(),
+            new EffectBundle(new GameplayOccurrenceEffect(kind, run.InitiatingPlayer, subjectCardId: iceId, serverId: run.AttackedServer))));
+    }
+
+    /// <summary>
+    /// VP-SUBROUTINE-BROKEN and VP-ICE-PASSED: after a break, the broken-subroutine occurrence, and the fully-broken one when
+    /// the break left no subroutine unbroken. The last queued resolves first, so fully broken follows the break.
+    /// </summary>
+    private static void QueueSubroutinesBrokenOccurrences(
+        WorkingState working,
+        RunState brokenRun,
+        RunEncounterState before)
+    {
+        if (brokenRun.Encounter is not { } after)
+        {
+            return;
+        }
+
+        if (after.Subroutines.Count > 0
+            && after.Subroutines.All(static subroutine => subroutine.Broken)
+            && !before.Subroutines.All(static subroutine => subroutine.Broken))
+        {
+            QueueRunIceOccurrence(working, brokenRun, OccurrenceKind.IceFullyBroken, after.IceId);
+        }
+
+        QueueRunIceOccurrence(working, brokenRun, OccurrenceKind.SubroutineBroken, after.IceId);
     }
 
     private static void StepBreachBoundary(WorkingState working, RunState run)
@@ -2185,7 +2277,8 @@ public static partial class GameEngine
         CardInstanceId? initiatingSource = run.InitiatingSource;
         ServerId attackedServer = run.AttackedServer;
         RunEndReason endReason = run.EndReason.Value;
-        bool successful = run.Successful;
+        // VP-NO-SUCCESSFUL-RUN (PR #154's review): a run never declared successful ended with neither outcome.
+        bool? successful = endReason == RunEndReason.NotDeclaredSuccessful ? null : run.Successful;
         CardInstanceId? activeRunEventId = run.ActiveRunEventId;
         bool realTurnRun = IsRealTurnRun(working, run);
 
@@ -2201,7 +2294,7 @@ public static partial class GameEngine
             runId,
             initiatingSide,
             endReason,
-            successful));
+            run.Successful));
         ExpireRunLingeringEffects(working, run);
         // CR 26.03 6.9.6/8.6.7: the played run event is trashed to the
         // Runner's heap faceup/public when the run ends; its hosted credits
@@ -2319,7 +2412,7 @@ public static partial class GameEngine
         PlayerId controller,
         CardInstanceId? sourceCardId,
         ServerId serverId,
-        bool successful,
+        bool? successful,
         RunPersistentContext? runContext = null)
     {
         working.ResolutionStack.Add(new EffectResolutionFrame(
@@ -2590,7 +2683,7 @@ public static partial class GameEngine
         // The source-zone guard is essential here: an agenda moved out of the
         // attacked server is no longer an accessed agenda and must not be
         // auto-stolen.
-        if (!HasRunRestriction(run, RunRestrictionKind.CannotStealOrTrashCorpCards)
+        if (!RunForbidsStealOrTrash(working, run)
             && run.ChosenAccessCards.Count > 0
             && TryGetCurrentAccessCard(working, run, out CardInstanceState? card, requireTrashableSource: false)
             && working.BehaviorCatalog.TryGetAgenda(card!.DefinitionId, out _)
@@ -2620,7 +2713,7 @@ public static partial class GameEngine
             throw new ResolutionFailureException("The access ability step requires a chosen access card.");
         }
 
-        if (HasRunRestriction(run, RunRestrictionKind.CannotStealOrTrashCorpCards))
+        if (RunForbidsStealOrTrash(working, run))
         {
             throw new ResolutionFailureException(
                 "The active run restriction forbids trashing Corp cards during access.");
@@ -2707,7 +2800,7 @@ public static partial class GameEngine
     private static void ConsumeRunPaidSteal(WorkingState working, RunState run, CardInstanceId cardId, int hostedCredits)
     {
         if (run.Step != RunTimingStep.BreachAccessAbility || run.ChosenAccessCards.Count == 0 || run.ChosenAccessCards[^1] != cardId
-            || HasRunRestriction(run, RunRestrictionKind.CannotStealOrTrashCorpCards)
+            || RunForbidsStealOrTrash(working, run)
             || !TryGetCurrentAccessCard(working, run, out CardInstanceState? card, requireTrashableSource: false)
             || !working.BehaviorCatalog.TryGetAgenda(card!.DefinitionId, out _))
         {
@@ -2742,7 +2835,7 @@ public static partial class GameEngine
             throw new ResolutionFailureException("The access ability step requires a chosen access card.");
         }
 
-        if (HasRunRestriction(run, RunRestrictionKind.CannotStealOrTrashCorpCards))
+        if (RunForbidsStealOrTrash(working, run))
         {
             throw new ResolutionFailureException(
                 "The active run restriction forbids stealing or trashing Corp cards during access.");
@@ -2883,9 +2976,89 @@ public static partial class GameEngine
             RunAccessState.Completed));
     }
 
-    private static bool HasRunRestriction(RunState run, RunRestrictionKind kind) =>
-        run.RunRestrictions is { Count: > 0 }
-        && run.RunRestrictions.Any(restriction => restriction.Kind == kind);
+    /// <summary>
+    /// VP-CANNOT-STEAL-OR-TRASH: the run forbids stealing or trashing the card being accessed (the last chosen access
+    /// card): every Corp card, or copies of a named one.
+    /// </summary>
+    private static bool RunForbidsStealOrTrash(WorkingState working, RunState run) =>
+        run.ForbidsStealOrTrash(run.ChosenAccessCards.Count > 0
+            ? working.Cards.FirstOrDefault(card => card.Id == run.ChosenAccessCards[^1])?.DefinitionId
+            : null);
+
+    /// <summary>
+    /// VP-CANNOT-STEAL-OR-TRASH: a card ability's restriction for the rest of the run, its source and behavior key kept as
+    /// provenance; a target names the definition it limits to.
+    /// </summary>
+    /// <summary>The reason a run modifier records for a card's own instructions, outside any keyed trigger or ability.</summary>
+    internal const string CardBehaviorRestrictionReason = "card-behavior";
+
+    /// <summary>
+    /// VP-ICE-GAINS-SUBROUTINE: the encountered ICE gains the source's subroutine, listed before its other subroutines; its
+    /// ordinal follows every ordinal the encounter already has.
+    /// </summary>
+    private static void EncounteredIceGainsSubroutine(WorkingState working, BehaviorResolutionFrame frame)
+    {
+        if (working.RunState is not { Encounter: { Status: RunEncounterStatus.Initialized } encounter } run
+            || encounter.Subroutines.Any(static subroutine => subroutine.Resolved)
+            || !working.BehaviorCatalog.TryGet(frame.DefinitionId, out CardBehaviorDefinition? source)
+            || source.GainedIceSubroutine is null)
+        {
+            return;
+        }
+
+        IReadOnlyList<RunGainedSubroutine> gained = run.GainedSubroutines ?? [];
+        int ordinal = Math.Max(
+            encounter.Subroutines.Select(static subroutine => subroutine.Ordinal).DefaultIfEmpty(-1).Max(),
+            gained.Where(value => value.EncounterId == encounter.Id).Select(static value => value.Ordinal).DefaultIfEmpty(-1).Max()) + 1;
+        RunSubroutineState added = new(new SubroutineId($"subroutine:{encounter.Id.Value}:{ordinal}"), ordinal);
+        RunState updated = run
+            .WithGainedSubroutines(gained.Append(new RunGainedSubroutine(encounter.Id, ordinal, frame.SourceCardId, frame.DefinitionId,
+                frame.TriggerKey ?? frame.AbilityKey ?? CardBehaviorRestrictionReason)).ToArray())
+            .WithEncounter(new RunEncounterState(
+                encounter.Version,
+                encounter.Id,
+                encounter.IceId,
+                encounter.Status,
+                encounter.Subroutines.Prepend(added).ToArray()));
+        working.RunState = updated;
+        Emit(working, EngineEventKinds.IceGainedSubroutine, new IceGainedSubroutineEventPayload(
+            run.Id, encounter.Id, encounter.IceId, added.Id, ordinal, frame.SourceCardId));
+    }
+
+    private static void RestrictRunFromBehavior(WorkingState working, BehaviorResolutionFrame frame, BehaviorInstruction instruction)
+    {
+        if (working.RunState is not { } run)
+        {
+            return;
+        }
+
+        CardDefinitionId? named = null;
+        if (instruction.Target is { } target)
+        {
+            CardInstanceId[] cards = ResolveBehaviorCards(working, frame, target).ToArray();
+            if (cards.Length != 1)
+            {
+                return;
+            }
+
+            named = GetCard(working, cards[0]).DefinitionId;
+        }
+
+        CardInstanceState source = GetCard(working, frame.SourceCardId);
+        RunBehaviorRestriction restriction = new(
+            Enum.Parse<RunRestrictionKind>(instruction.Argument!),
+            source.Id,
+            source.DefinitionId,
+            frame.TriggerKey ?? frame.AbilityKey ?? CardBehaviorRestrictionReason,
+            named);
+        IReadOnlyList<RunBehaviorRestriction> existing = run.BehaviorRestrictions ?? [];
+        if (existing.Contains(restriction))
+        {
+            return;
+        }
+
+        working.RunState = run.WithBehaviorRestrictions(existing.Append(restriction).ToArray());
+    }
 
     private static void ConsumeRunPass(WorkingState working, RunState run)
     {
@@ -2966,6 +3139,8 @@ public static partial class GameEngine
                         CreatePriority(RunPriorityWindowKind.MovementPaid),
                         null,
                         run.AccessState));
+                    // VP-ICE-PASSED: unrezzed ICE is passed without an encounter.
+                    QueueRunIceOccurrence(working, working.RunState!, OccurrenceKind.IcePassed, run.CurrentIceId.Value);
                 }
                 else
                 {
@@ -3327,6 +3502,7 @@ public static partial class GameEngine
                 priority.CorpMayRezNonIce),
             brokenRun.Encounter,
             brokenRun.AccessState));
+        QueueSubroutinesBrokenOccurrences(working, working.RunState!, encounter);
     }
 
     private static void ConsumeRunBioroidAbility(
@@ -3388,7 +3564,7 @@ public static partial class GameEngine
                 $"Subroutine '{parameters.SubroutineId}' is no longer an unbroken encounter subroutine.");
         }
 
-        if (subroutine.Ordinal < 0 || subroutine.Ordinal >= iceSpec.Subroutines.Count)
+        if (run.EncounterSubroutineSpec(working.BehaviorCatalog, iceSpec, encounter.Id, subroutine.Ordinal) is null)
         {
             throw new ResolutionFailureException(
                 $"Subroutine '{parameters.SubroutineId}' has an ordinal outside the encountered ICE declaration.");
@@ -3459,6 +3635,7 @@ public static partial class GameEngine
                 priority.CorpMayRezNonIce),
             brokenRun.Encounter,
             brokenRun.AccessState));
+        QueueSubroutinesBrokenOccurrences(working, working.RunState!, encounter);
     }
 
     private static void ConsumeRunPumpBreaker(
@@ -4100,16 +4277,14 @@ public static partial class GameEngine
             AddAbilityActions(
                 working,
                 actions,
-                suppressCorpCardTrash: HasRunRestriction(
-                    run,
-                    RunRestrictionKind.CannotStealOrTrashCorpCards));
+                suppressCorpCardTrash: RunForbidsStealOrTrash(working, run));
         }
 
         // CR 26.03 7.2.2/7.1.5: the basic trash is offered only for a
         // registered asset with a trash cost the Runner can pay. Agendas
         // instead resolve an automatic steal after NoAction.
         if (trashableAccess
-            && !HasRunRestriction(run, RunRestrictionKind.CannotStealOrTrashCorpCards)
+            && !RunForbidsStealOrTrash(working, run)
             && accessedCard is not null
             && !working.BehaviorCatalog.TryGetAgenda(accessedCard.DefinitionId, out _)
             && AccessTrashPayment(working, accessedCard) is { } trashPayment
@@ -4132,7 +4307,7 @@ public static partial class GameEngine
         // own action; "no action" then leaves it.
         if (currentAccess
             && accessedCard is not null
-            && !HasRunRestriction(run, RunRestrictionKind.CannotStealOrTrashCorpCards)
+            && !RunForbidsStealOrTrash(working, run)
             && working.BehaviorCatalog.TryGetAgenda(accessedCard.DefinitionId, out _)
             && StealCosts.For(working.Cards, working.Zones, working.BehaviorCatalog, accessedCard.DefinitionId) is var stealCost
             && (stealCost.Clicks > 0 || stealCost.Credits > 0))

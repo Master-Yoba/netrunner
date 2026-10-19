@@ -515,14 +515,16 @@ public static partial class ObservationBuilder
         };
         // VP-BAD-PUBLICITY: the fund's share of the run credits, public, and absent while zero.
         if (run.BadPublicityCredits != 0) view["badPublicityCredits"] = run.BadPublicityCredits;
+        // VP-ALL-ICE-STRENGTH (PR #154's eighth review): the run's change to every ICE's strength, public, and absent while
+        // there is none.
+        if (run.AllIceStrengthModifiers is { Count: > 0 } allIce) view["allIceStrength"] = allIce.Sum(static modifier => modifier.Delta);
 
         // Slice 4.5 exposes only public, typed status cues.  The cue envelope
         // intentionally omits source ICE/breaker identities, so an observer
         // learns that a restriction/ability/effect is active without gaining
         // hidden provenance.  Keep the additive envelope absent when no cue is
         // active to preserve unaffected legacy observation shapes.
-        bool runRestrictionActive = run.RunRestrictions?.Any(restriction =>
-            restriction.Kind == RunRestrictionKind.CannotStealOrTrashCorpCards) == true;
+        bool runRestrictionActive = run.HasStealOrTrashRestriction;
         bool bioroidAbilityReady = IsBioroidAbilityReady(state, run, behaviorCatalog);
         bool mayflyBreakArmed = run.LingeringEffects.Any(effect =>
             effect.Kind == RunLingeringEffectKind.IcebreakerRunEndCleanup
@@ -616,12 +618,23 @@ public static partial class ObservationBuilder
                 : null,
             ["status"] = encounter.Status,
             ["subroutines"] = encounter.Subroutines.Select(subroutine =>
-                new Dictionary<string, object?>
+            {
+                var entry = new Dictionary<string, object?>
                 {
                     ["ordinal"] = subroutine.Ordinal,
                     ["broken"] = subroutine.Broken,
                     ["resolved"] = subroutine.Resolved,
-                }).ToArray(),
+                };
+                // VP-ICE-GAINS-SUBROUTINE (PR #154's fourth review): a gained subroutine names the public card whose
+                // declaration it is (Stick and Poke), so a reader can tell what it does.
+                if (run.GainedSubroutines?.FirstOrDefault(gained => gained.EncounterId == encounter.Id
+                    && gained.Ordinal == subroutine.Ordinal) is { } gainedFrom)
+                {
+                    entry["gainedFrom"] = gainedFrom.SourceDefinitionId.Value;
+                }
+
+                return entry;
+            }).ToArray(),
             ["strengthQuote"] = iceQuote is null
                 ? null
                 : ValueQuoteView(state, iceQuote, viewer, accessVisible),

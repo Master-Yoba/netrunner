@@ -209,3 +209,21 @@ records it):
 
 Caveat Emptor, Lotus Haze and Stowaway were counted as existing vocabulary; they aren't. The audit is now 15 of 66.
 
+
+## VP.4 status (15 October 2026)
+
+The family "runs and ICE" landed in VP.4 (the progress record has each primitive's contract), with two notes:
+`VP-ACCESS-LIMIT` is declared but can't apply, since the no-success clause beside it forbids every breach it would limit;
+`VP-ICE-VIRUS-COUNTERS` turned out to be existing vocabulary.
+
+Binding VP.5's cards found seven more, which land in VP.5a before those cards:
+
+| Id | What | Cards |
+|---|---|---|
+| `VP-ENDED-RUN-SERVER` | A run-end ability names the ICE protecting the server of the run that ended. | Kompromat |
+| `VP-INSTALL-AND-REZ-LESS` | An install and a rez sharing one discount, and a condition on the rezzed card's subtype. | Reanimation Protocol |
+| `VP-RUN-AFTER-RUN` | When a run ends, a further run, here on a remote server. | Aircheck |
+| `VP-RETURN-AT-RUN-END` | When the run ends, the program an event installed returns to the stack's top unless it was uninstalled. | Beta Build |
+| `VP-PAID-REDIRECT` | When the Runner would approach a server, a payment changes the attacked server first. | Baker |
+| `VP-RESOLVE-SUBROUTINE` | A subroutine of a chosen piece of ICE resolves outside an encounter. | Unleash |
+| `VP-ADVANCEMENT-COST` | An optional trigger's cost of its source's advancement counters. | Sacrifice Zone Expansion |

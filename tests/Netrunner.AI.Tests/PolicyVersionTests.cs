@@ -124,6 +124,22 @@ public sealed class PolicyVersionTests
         }
     }
 
+    // PR #154's fifth review: a printed subroutine serializes, and so digests, as it did before gained subroutines.
+    [Fact]
+    public void APrintedSubroutineKeepsItsFeatureBytes()
+    {
+        Assert.Equal("{\"broken\":false,\"ordinal\":0,\"resolved\":true}", CanonicalJson.Serialize(new AgentSubroutine(0, false, true)));
+        Assert.Contains("\"gainedFrom\":\"test:giver\"", CanonicalJson.Serialize(new AgentSubroutine(1, false, false, "test:giver")),
+            StringComparison.Ordinal);
+        // PR #154's eighth review: so does a run with no change to every ICE's strength.
+        Assert.DoesNotContain("allIceStrength", CanonicalJson.Serialize(new AgentRun
+        {
+            Id = "run:test",
+            AttackedServer = "server:hq",
+            Breach = new([], null, null, [], [], RunAccessState.NotStarted),
+        }), StringComparison.Ordinal);
+    }
+
     [Fact]
     public void HiddenAdvancementsAreReadOnlyByTheNewFeatureVersion()
     {

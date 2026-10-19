@@ -70,7 +70,7 @@ public static class ActionLabelPresenter
             case AbilityActionParameters ability:
                 string effect = action.EffectLabel ?? Words(ability.AbilityKey);
                 string costs = string.Join(" + ", ability.Costs.Select((cost, index) =>
-                    Cost(cost, Card(ability.SourceCardId), ability.AdditionalCostSelectionsOrEmpty
+                    Cost(Resolved(ability, cost), Card(ability.SourceCardId), ability.AdditionalCostSelectionsOrEmpty
                         .FirstOrDefault(selection => selection.CostIndex == index)?.CardIds, cardName)));
                 return $"{Card(ability.SourceCardId)}: {effect}"
                     + (ability.TargetCardIds.Count > 0 ? $" · Target: {Cards(ability.TargetCardIds)}" : "")
@@ -148,11 +148,21 @@ public static class ActionLabelPresenter
     public static string AbilityChoiceLabel(LegalActionViewModel action, Func<string, string> cardName)
     {
         if (action.Parameters is not AbilityActionParameters ability) return action.Description;
-        string costs = string.Join(" + ", ability.Costs.Select(cost => Cost(cost, cardName(ability.SourceCardId.Value), null, cardName)));
+        string costs = string.Join(" + ", ability.Costs.Select(cost => Cost(Resolved(ability, cost), cardName(ability.SourceCardId.Value), null, cardName)));
         return (action.EffectLabel ?? Words(ability.AbilityKey))
             + (costs.Length > 0 ? " · Cost: " + costs : "")
             + (ability.Usage.Limit == BehaviorAbilityUsageLimit.OncePerTurn ? " · Once per turn" : "");
     }
+
+    /// <summary>
+    /// VP-ACCESS-PAID-ABILITY: a cost of the accessed card's printed cost (Lampades) reads as the credits it resolved to, what
+    /// is left of the action's resolved credit cost after its fixed credit costs.
+    /// </summary>
+    private static BehaviorCost Resolved(AbilityActionParameters ability, BehaviorCost cost) =>
+        cost.AccessedCardPrintedCost && ability.ResolvedCreditCost is { } resolved
+            ? new BehaviorCost(BehaviorCostKind.Credits, resolved - ability.Costs
+                .Where(other => other.Kind == BehaviorCostKind.Credits && !other.AccessedCardPrintedCost).Sum(other => other.Amount))
+            : cost;
 
     private static string Cost(BehaviorCost cost, string source, IReadOnlyList<CardInstanceId>? selected,
         Func<string, string> cardName) => cost.Kind switch

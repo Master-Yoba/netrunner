@@ -184,6 +184,9 @@ public sealed record AgentRun
     public AgentRunCues? Slice45Cues { get; init; }
     public ImmutableArray<AgentLingeringEffect> LingeringEffects { get; init; } = [];
     public ImmutableArray<AgentBreachModifier> BreachAccessModifiers { get; init; } = [];
+    /// <summary>VP-ALL-ICE-STRENGTH: what the run adds to every ICE's strength (Ezam), absent while nothing.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? AllIceStrength { get; init; }
 }
 public sealed record AgentRunPriority(RunPriorityWindowKind Window, PlayerSide Holder, int ConsecutivePasses,
     bool CorpMayRezApproachedIce, bool CorpMayRezNonIce);
@@ -196,7 +199,9 @@ public sealed record AgentEncounter
     public AgentValueQuote? StrengthQuote { get; init; }
     public ImmutableArray<AgentBreakerStrength> BreakerStrengths { get; init; } = [];
 }
-public sealed record AgentSubroutine(int Ordinal, bool Broken, bool Resolved);
+/// <param name="GainedFrom">VP-ICE-GAINS-SUBROUTINE: the definition of the card that gave the ICE this subroutine, else null.</param>
+public sealed record AgentSubroutine(int Ordinal, bool Broken, bool Resolved,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? GainedFrom = null);
 public sealed record AgentBreakerStrength(string CardId, AgentValueQuote StrengthQuote);
 public sealed record AgentValueQuote
 {

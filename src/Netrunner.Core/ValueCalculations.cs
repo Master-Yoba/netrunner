@@ -941,6 +941,7 @@ public static class EncounterStrength
         var terms = new List<ValueCalculationTerm>();
         AddLegacyIceTerms(terms, spec, serverKind, ice.Id);
         AddRunValueAdjustmentTerms(terms, cards, run, ice.Id);
+        AddAllIceStrengthTerms(terms, behaviorCatalog, cards, zones, run);
         AddDeclaredTerms(
             terms,
             spec.ValueModifiers,
@@ -1102,6 +1103,45 @@ public static class EncounterStrength
             count,
             spec.PumpStrength,
             IcebreakerPumpBehavior));
+    }
+
+    /// <summary>
+    /// VP-ALL-ICE-STRENGTH: every active installed card's strength change on all ICE (The Tungsten Tailor), then the run's
+    /// own (ezaM), in a stable order.
+    /// </summary>
+    private static void AddAllIceStrengthTerms(
+        List<ValueCalculationTerm> terms,
+        IBehaviorCatalog behaviorCatalog,
+        IReadOnlyList<CardInstanceState> cards,
+        IReadOnlyList<ZoneState> zones,
+        RunState? run)
+    {
+        foreach (CardInstanceState source in cards)
+        {
+            if (behaviorCatalog.TryGet(source.DefinitionId, out CardBehaviorDefinition? definition)
+                && definition.AllIceStrength != 0
+                && IsActiveInstalled(source.Id, cards, zones))
+            {
+                terms.Add(new ValueCalculationTerm(
+                    BehaviorValueSourceKind.Static,
+                    BehaviorValueOperation.Add,
+                    definition.AllIceStrength,
+                    "all-ice-strength",
+                    source.DefinitionId,
+                    source.Id));
+            }
+        }
+
+        foreach (RunAllIceStrengthModifier modifier in run?.AllIceStrengthModifiers ?? [])
+        {
+            terms.Add(new ValueCalculationTerm(
+                BehaviorValueSourceKind.Static,
+                BehaviorValueOperation.Add,
+                modifier.Delta,
+                modifier.ReasonKey,
+                modifier.SourceDefinitionId,
+                modifier.SourceCardId));
+        }
     }
 
     private static void AddRunValueAdjustmentTerms(

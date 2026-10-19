@@ -44,6 +44,10 @@ public static partial class GameEngine
                 && facts?.InstalledCardIds.Contains(installedNow) == true,
             BehaviorTriggerCondition.SubjectNotInstalledThisTurn => occurrence.SourceCardId is { } installedEarlier
                 && facts?.InstalledCardIds.Contains(installedEarlier) != true,
+            BehaviorTriggerCondition.SubjectOutermostFullyBroken => occurrence.SourceCardId is { } passed
+                && IsOutermostFullyBrokenIce(working, passed),
+            BehaviorTriggerCondition.SubjectStrengthAtMostZero => occurrence.SourceCardId is { } broken
+                && EncounteredIceStrength(working, broken) is <= 0,
             BehaviorTriggerCondition.TrashedSubjectWasInstalled => occurrence.Effect is GameplayOccurrenceEffect
             {
                 Kind: OccurrenceKind.AccessedCardTrashed,
@@ -51,6 +55,39 @@ public static partial class GameEngine
             },
             _ => false,
         };
+    }
+
+    /// <summary>
+    /// VP-ICE-PASSED: the ICE is outermost in its server's ICE zone (the last position of its ICE zone), and the
+    /// run's last encounter was with it and left no subroutine unbroken.
+    /// </summary>
+    private static bool IsOutermostFullyBrokenIce(WorkingState working, CardInstanceId iceId) =>
+        working.RunState is { Encounter: { } encounter } run
+        && encounter.IceId == iceId
+        && encounter.Subroutines.Count > 0
+        && encounter.Subroutines.All(static subroutine => subroutine.Broken)
+        && working.Servers.Single(server => server.Id == run.AttackedServer) is var server
+        && working.Zones.Single(zone => zone.Id == server.IceZoneId).CardIds is { Count: > 0 } ice
+        && ice[^1] == iceId;
+
+    /// <summary>VP-SUBROUTINE-BROKEN: the encountered ICE's current strength, or null outside its encounter.</summary>
+    private static int? EncounteredIceStrength(WorkingState working, CardInstanceId iceId)
+    {
+        if (working.RunState is not { Encounter.IceId: var encountered } run || encountered != iceId)
+        {
+            return null;
+        }
+
+        CardInstanceState ice = GetCard(working, iceId);
+        ServerState server = working.Servers.Single(value => value.Id == run.AttackedServer);
+        return EncounterStrength.ProjectIceQuote(
+            working.BehaviorCatalog,
+            working.Cards,
+            working.Zones,
+            working.RulesState,
+            run,
+            ice,
+            server.Kind)?.EffectiveValue;
     }
 
     private static void MarkCatalogTriggerUsed(WorkingState working, CardInstanceState source, BehaviorTrigger trigger)

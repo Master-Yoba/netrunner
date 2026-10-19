@@ -27,4 +27,13 @@ public enum BehaviorTriggerCondition
 
     /// <summary>VP-SCORING-FACTS: the occurrence's subject was not installed this turn (Word on the Street's payoff).</summary>
     SubjectNotInstalledThisTurn,
+
+    /// <summary>
+    /// VP-ICE-PASSED: the passed ICE (the subject) is the outermost protecting its server, and the Runner fully broke it in
+    /// the encounter that just ended (Sipa).
+    /// </summary>
+    SubjectOutermostFullyBroken,
+
+    /// <summary>VP-SUBROUTINE-BROKEN: the encountered ICE (the subject) has 0 or less strength (The Tungsten Tailor).</summary>
+    SubjectStrengthAtMostZero,
 }

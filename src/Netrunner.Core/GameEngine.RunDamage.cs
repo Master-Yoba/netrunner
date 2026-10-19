@@ -42,7 +42,7 @@ public static partial class GameEngine
                 DamageTrashedCardId: { } victim
             } frame
             || !working.BehaviorCatalog.TryGetIce(frame.IceDefinitionId, out IceBehaviorSpec? spec)
-            || spec.Subroutines[frame.Ordinal] is not DamageSubroutineSpec
+            || working.RunState?.EncounterSubroutineSpec(working.BehaviorCatalog, spec, frame.EncounterId, frame.Ordinal) is not DamageSubroutineSpec
             { FollowUp: DamageSubroutineFollowUp.EndRunIfTrashedCostOdd }
             || working.RuntimeCardCatalog is null
             || !working.RuntimeCardCatalog.TryGet(GetCard(working, victim).DefinitionId, out CardRuntimeSpec? metadata)) return null;
@@ -54,7 +54,7 @@ public static partial class GameEngine
         RunState run = working.RunState ?? throw new ResolutionFailureException("Damage requires its live encounter.");
         CardInstanceState ice = GetCard(working, frame.IceId);
         if (!working.BehaviorCatalog.TryGetIce(ice.DefinitionId, out IceBehaviorSpec? spec)
-            || spec.Subroutines[frame.Ordinal] is not DamageSubroutineSpec damage)
+            || run.EncounterSubroutineSpec(working.BehaviorCatalog, spec, frame.EncounterId, frame.Ordinal) is not DamageSubroutineSpec damage)
             throw new ResolutionFailureException("Damage continuation no longer matches its printed subroutine.");
         RunSubroutineState subroutine = run.Encounter!.Subroutines.Single(value => value.Id == frame.SubroutineId);
         if (damage.FollowUp == DamageSubroutineFollowUp.OfferJackOut)
@@ -77,6 +77,12 @@ public static partial class GameEngine
                 FinishIceSubroutineRun(working, run, ice, subroutine, RunEndReason.EndedByRule);
                 return;
             }
+        }
+
+        // VP-ICE-GAINS-SUBROUTINE: "The Runner draws 1 card" after the damage (Stick and Poke's subroutine).
+        if (damage.FollowUp == DamageSubroutineFollowUp.RunnerDrawsOne && working.Outcome.Kind != GameOutcomeKind.Won)
+        {
+            TryDrawCard(working, PlayerSide.Runner);
         }
 
         ResolveIceSubroutineWithoutChoice(working, run, ice, subroutine);
@@ -111,5 +117,7 @@ public static partial class GameEngine
         working.ResolutionStack[^1] = new RunTimingFrame(run.Id, RunTimingStep.Encounter);
         SetRunTiming(working, run.WithTiming(RunTimingStep.RunEnd, run.CurrentIceIndex,
             run.CurrentIceId, false, true, reason, null, completed, run.AccessState));
+        // VP-ENCOUNTER-ENDED: the encounter ends with the run (PR #154's review).
+        QueueRunIceOccurrence(working, working.RunState!, OccurrenceKind.EncounterEnded, encounter.IceId);
     }
 }

@@ -137,6 +137,18 @@ public sealed class ActionLabelPresenterTests
         Assert.Contains("Cost: Remove 2 tags", Label(Action(ActionKind.UseAbility, ability)), StringComparison.Ordinal);
     }
 
+    // VP-ACCESS-PAID-ABILITY (PR #154's fourth review): a cost of the accessed card's printed cost reads as what it resolved to.
+    [Fact]
+    public void PaidAbilityAccessedCardCostReadsAsItsResolvedCredits()
+    {
+        var ability = new AbilityActionParameters(new("card:1"), new("test:lampades"), "trash-accessed",
+            BehaviorAbilityTiming.AnyPaidWindow, BehaviorAbilityActivation.PaidAbility,
+            [new(BehaviorCostKind.Credits, 1), new(BehaviorCostKind.Credits, 0, accessedCardPrintedCost: true)], [],
+            new(BehaviorAbilityUsageLimit.Unlimited, 0), new string('a', 64), new string('b', 64), new("zone:rig"), ZoneKind.RunnerRig,
+            resolvedCreditCost: 4);
+        Assert.Contains("Cost: 1 credit + 3 credits", Label(Action(ActionKind.UseAbility, ability)), StringComparison.Ordinal);
+    }
+
     [Fact]
     public void MapperRetainsKnownTriggerAndReplacementSourcesWithoutChangingIssuedParameters()
     {

@@ -271,3 +271,94 @@ errors and 1 capped game; the Synchrocyclotron fixture comes from it, since the 
 | Editorial Division, Retirement Plan | One mode per subtype or kind searched or installed: the filter names one subtype or type. |
 | Let Them Dream | One mode per zone searched; the found agenda then goes to HQ or R&D's bottom. Banned in Startup 2026, so in no deck. |
 | Scapegoat | Removing bad publicity is offered only while the Corp has some. |
+
+## VP.4 — Primitives B: runs and ICE (15 October 2026)
+
+On probe cards 90033 to 90048 (`VantagePointRunIceTests`), each test citing the rule or the card it serves. Every
+existing game, replay and pin keeps its bytes: each new field is omitted while unused, and each new occurrence is queued
+only when a trigger waits on it.
+
+- **VP-ICE-PASSED:** the occurrences `IcePassed` (after an encounter, a bypass, or unrezzed ICE; CR 26.03 6.9.4a),
+  `IceBypassed` and `IceFullyBroken` (the break that leaves no subroutine unbroken). The trigger condition
+  `SubjectOutermostFullyBroken` reads the encounter that just ended (Sipa). `ClicksRemainingAtMost` is Vertigo's "no
+  clicks remaining".
+- **VP-SUBROUTINE-BROKEN:** `SubroutineBroken`, from every break: a breaker, a bioroid's click, a hosted counter. The
+  condition `SubjectStrengthAtMostZero` reads the ICE's current strength quote (The Tungsten Tailor).
+- **VP-ENCOUNTER-ENDED:** `EncounterEnded`, before the pass (Knowledge Seeker).
+- **VP-ALL-ICE-STRENGTH:** `CardBehaviorDefinition.AllIceStrength`, static while the card is active and installed, and
+  `ModifyAllIceStrengthForRun` (`RunState.AllIceStrengthModifiers`, ezaM). Both are terms of every ICE's strength
+  quote, so the engine and the bots' encounter planner read the same value.
+- **VP-ICE-GAINS-SUBROUTINE:** `EncounteredIceGainsSubroutine` gives the encountered ICE the source's
+  `GainedIceSubroutine`, a typed subroutine, listed before its others. Its encounter ordinal follows the printed ones.
+  `RunState.GainedSubroutines` keeps it for the run, so the resolved-subroutine ledger stays readable, and
+  `RunState.EncounterSubroutineSpec` resolves an ordinal, printed or gained, for the engine and the validator. The damage
+  follow-up `RunnerDrawsOne` is Stick and Poke's subroutine.
+- **VP-CANNOT-STEAL-OR-TRASH:** `RestrictRun`, kept in `RunState.BehaviorRestrictions` with its source, its ability's
+  key and, with a target, the named definition (Vertigo, Perfect Recall). `RunState.ForbidsStealOrTrash` decides it for
+  the engine, the validator and the run's public cue, with the ICE subroutines' restriction.
+- **VP-UNLESS-JACK-OUT:** `JackOut` ends the run as jacked out (CR 26.03 6.1.5). Shred's run-end prevention doesn't stop it
+  (Lionsmane, as the Runner's choice option).
+- **VP-NO-SUCCESSFUL-RUN:** `CardBehaviorDefinition.RunsCannotSucceed`. At the success step the run ends, neither
+  successful nor unsuccessful (`RunEndReason.NotDeclaredSuccessful`, Flagship).
+- **VP-ACCESS-LIMIT:** declared (`RunAccessLimitBesidesSelf`), and allowed only beside the no-success clause. It can't
+  apply: every breach follows a successful run, which that clause forbids while the card is rezzed, and the Corp can't
+  rez between the success step and the breach. Persistence doesn't reach it either, since the engine arms persistent
+  abilities only for a card trashed while accessed (CR 26.03 9.12.5).
+- **VP-ACCESS-PAID-ABILITY:** `BehaviorCost.AccessedCardPrintedCost`, a credit cost of the accessed card's printed rez
+  or play cost; a card with neither can't pay it (Lampades).
+- **VP-ICE-VIRUS-COUNTERS:** existing vocabulary: virus counters may sit on Corp ICE, the purge instruction clears them,
+  and `Derez` takes the source (Knowledge Seeker's probe).
+
+**For VP.5's cards**, also here:
+- `RunnerTags` as an amount for counts and damage.
+- `InstallServerKinds` (The Red Room, Flagship).
+- The conditions `RunAgainstSourceServer` and `RunAgainstAnotherServer`.
+- `RemoveAdvancementCounters`; an ability may require its source's advancement counters.
+- `AddToHand` from the rig (Lethe).
+
+**Binding VP.5 ahead** found seven further gaps, beyond the audit's primitives. They land in **VP.5a**, before VP.5's
+cards, as VP.2c did for VP.3:
+- `VP-ENDED-RUN-SERVER` (Kompromat);
+- `VP-INSTALL-AND-REZ-LESS` (Reanimation Protocol);
+- a run made when a run ends (Aircheck);
+- an installed program returned when the run ends (Beta Build);
+- a paid change of the approached server (Baker);
+- resolving a subroutine outside an encounter (Unleash);
+- an optional cost of the source's advancement counters (Sacrifice Zone Expansion).
+
+**Client.** A gained subroutine's ordinal follows the printed ones; VP.8's client shows its text from the source card.
+
+**Review (PR #154).** Codex's four findings, all fixed:
+- a saved run's all-ICE strength changes, and its card-ability restrictions, are now authenticated against the declaration
+  their reason key names;
+- a run never declared successful ends with neither outcome, so "if the run was unsuccessful" triggers don't fire;
+- a run ended mid-encounter by an ability (end the run, jacking out, a typed subroutine's end) ends the encounter too.
+
+The second review's three: an all-ICE strength change may not repeat beyond the resolutions that made it; a gained
+subroutine records the key of the trigger that gave it; moving the Runner mid-encounter ends the encounter first.
+
+The third review's four:
+- a saved restriction's source must be installed, or in Archives if it left play after resolving, and a once-per-turn
+  trigger or ability must show its use this turn;
+- an install that trashes the encountered ICE (CR 8.5.10) ends the encounter, as an occurrence;
+- the bots' run model reads jacking out as ending the run;
+- the Runner bot values a server whose runs can't succeed (a rezzed Flagship) at nothing.
+
+The fourth review's two:
+- an ability whose cost is the accessed card's printed cost (Lampades) offers its resolved credit cost on the action,
+  authenticated with it, so the label and the bots read what will be paid;
+- the Runner's view names a gained subroutine's source, and the encounter planner reads it from that source, before the
+  printed subroutines, as the encounter resolves them.
+
+The fifth review's two: a printed subroutine's feature bytes omit the gained source, so saved games' digests hold; and a
+behavior ending the run mid-encounter completes the encounter and keeps its ICE as the cursor while an "encounter ends"
+trigger resolves, so an optional one can ask (probe 90060).
+
+The sixth review's one: a move ending the encounter (Proprionegation) expires the encounter's effects before its
+reactions resolve, as the other ways an encounter ends do.
+
+The seventh review's one: the encounter planner checks survival hit by hit, in order, so a gained subroutine's draw
+refills the grip before the next hit. Without draws this is the old total check, so no existing game moves.
+
+The eighth review's one: the bots' whole-run forecast reads changes to every ICE's strength, from active cards and, through
+the observation (`allIceStrength`, absent while none), from the run itself.

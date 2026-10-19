@@ -163,6 +163,114 @@ public sealed class RunnerHeuristicPolicyTests
     }
 
     /// <summary>
+    /// VP-UNLESS-JACK-OUT (PR #154's third review): a behavior subroutine that jacks the Runner out ends the run in the run
+    /// model, as ending it does.
+    /// </summary>
+    [Fact]
+    public void AJackOutSubroutineEndsTheRunInTheRunModel()
+    {
+        CardDefinitionId ice = new("test:jack-out-ice");
+        var catalog = new ScenarioCatalog(
+            new CardEvaluationDescriptor(new(ice, PlayerSide.Corp, RuntimeCardClass.Ice, rezCost: 1),
+                new CardBehaviorDefinition(ice, PlayerSide.Corp, triggers:
+                [
+                    new BehaviorTrigger("test-jack-out", OccurrenceKind.IceSubroutine, TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Controller, null, [new BehaviorInstruction(BehaviorInstructionKind.JackOut)]),
+                ]), null, null, null, null, null, [], false));
+        AgentFeatures features = ObservationReader.Read(
+            Decision(new LegalAction(new("action:credit"), ActionKind.GainCredit, "ignored", new NoActionParameters())));
+        var context = new HeuristicContext(features, catalog, RunnerPolicyProfiles.Create("standard", 54, RunnerHeuristicPolicy.V37), HeuristicContext.PunisherGeneration);
+
+        SubroutineEffect effect = SubroutineEffect.Of(new BehaviorSubroutineSpec("test-jack-out"), context,
+            new AgentCard { Id = "card:ice", DefinitionId = ice.Value, Rezzed = true }, 0, 5);
+
+        Assert.True(effect.EndsRun);
+    }
+
+    /// <summary>
+    /// VP-ALL-ICE-STRENGTH (PR #154's eighth review): the whole-run forecast reads a change to every ICE's strength, from an
+    /// installed card (The Tungsten Tailor's -1) and from the run itself (Ezam's +2), as the engine's quote does.
+    /// </summary>
+    [Theory]
+    [InlineData(false, 0, 3)]
+    [InlineData(true, 0, 3 - 1)]
+    [InlineData(true, 2, 3 - 1 + 2)]
+    public void TheRunModelReadsChangesToEveryIcesStrength(bool tailor, int runChange, int expected)
+    {
+        CardDefinitionId ice = new("test:ice"), lowerer = new("test:tailor");
+        IceBehaviorSpec spec = new(ice, 3, IceType.Barrier, 1, [new EndRunSubroutineSpec()], []);
+        var catalog = new ScenarioCatalog(
+            new CardEvaluationDescriptor(new(ice, PlayerSide.Corp, RuntimeCardClass.Ice, rezCost: 1), null, spec, null, null, null, null, [], false),
+            new CardEvaluationDescriptor(new(lowerer, PlayerSide.Runner, RuntimeCardClass.Resource, installCost: 1),
+                new CardBehaviorDefinition(lowerer, PlayerSide.Runner, allIceStrength: -1), null, null, null, null, null, [], false));
+        Observation observation = Decision(new LegalAction(new("action:credit"), ActionKind.GainCredit, "ignored", new NoActionParameters()));
+        AgentFeatures read = ObservationReader.Read(observation);
+        AgentCard iceCard = new() { Id = "card:ice", DefinitionId = ice.Value, Rezzed = true };
+        AgentServer server = new("server:remote", ServerKind.Remote, [iceCard], []);
+        AgentFeatures features = read with
+        {
+            Board = read.Board with
+            {
+                Servers = [server],
+                RunnerRig = tailor ? [new AgentCard { Id = "card:tailor", DefinitionId = lowerer.Value }] : [],
+                Run = runChange == 0 ? null : new AgentRun
+                {
+                    Id = "run:test",
+                    AttackedServer = "server:hq",
+                    Breach = new([], null, null, [], [], RunAccessState.NotStarted),
+                    AllIceStrength = runChange,
+                },
+            },
+        };
+        var context = new HeuristicContext(features, catalog, RunnerPolicyProfiles.Create("standard", 54, RunnerHeuristicPolicy.V37), HeuristicContext.PunisherGeneration);
+
+        Assert.Equal(expected, RunModel.IceStrength(context, server, iceCard, spec));
+    }
+
+    /// <summary>
+    /// VP-NO-SUCCESSFUL-RUN (PR #154's third review): a rezzed root card stopping runs from succeeding (Flagship) leaves the
+    /// server worth nothing, an agenda beside it included; unrezzed, it doesn't.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AServerWhoseRunsCannotSucceedIsWorthNothing(bool rezzed)
+    {
+        CardDefinitionId agenda = new("test:agenda"), flagship = new("test:flagship");
+        var catalog = new ScenarioCatalog(
+            new CardEvaluationDescriptor(new(agenda, PlayerSide.Corp, RuntimeCardClass.Agenda, agendaPoints: 2, advancementRequirement: 3),
+                null, null, null, null, null, new(agenda, 2), [], false),
+            new CardEvaluationDescriptor(new(flagship, PlayerSide.Corp, RuntimeCardClass.Upgrade, rezCost: 1, trashCost: 2),
+                new CardBehaviorDefinition(flagship, PlayerSide.Corp, runsCannotSucceed: true), null, null, null, null, null, [], false));
+        Observation observation = Decision(new LegalAction(new("action:credit"), ActionKind.GainCredit, "ignored", new NoActionParameters()));
+        AgentBoard baseline = ObservationReader.Read(observation).Board;
+        AgentBoard board = baseline with
+        {
+            Servers =
+            [
+                new("server:remote", ServerKind.Remote, [],
+                [
+                    new AgentCard { Id = "card:agenda", DefinitionId = agenda.Value },
+                    new AgentCard { Id = "card:flagship", DefinitionId = flagship.Value, Rezzed = rezzed },
+                ]),
+            ],
+        };
+        observation = observation with { PublicState = EngineJson.Deserialize<Dictionary<string, object?>>(EngineJson.Serialize(board)) };
+        AgentFeatures features = ObservationReader.Read(observation);
+        int value = RunnerValues.Server(new HeuristicContext(features, catalog,
+            RunnerPolicyProfiles.Create("standard", 54, RunnerHeuristicPolicy.V37), HeuristicContext.PunisherGeneration), features.Board.Servers[0]);
+
+        if (rezzed)
+        {
+            Assert.Equal(0, value);
+        }
+        else
+        {
+            Assert.True(value > 0, $"value {value}");
+        }
+    }
+
+    /// <summary>
     /// Runner v32, the review of #134: what the tracker believes of the slot counts as it stands, and the prior covers only the
     /// rest: a slot half believed to be a known trap (an Urtica seen in HQ) has half the agenda chance of an untracked one.
     /// </summary>

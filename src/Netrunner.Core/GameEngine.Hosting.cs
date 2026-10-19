@@ -133,6 +133,7 @@ public static partial class GameEngine
             broken.CurrentIceIndex, broken.CurrentIceId, broken.Successful, broken.Unsuccessful, broken.EndReason,
             new RunPriorityState(priority.Version, RunPriorityWindowKind.EncounterPaid, PlayerSide.Runner, 0,
                 priority.CorpMayRezApproachedIce, priority.CorpMayRezNonIce), broken.Encounter, broken.AccessState));
+        QueueSubroutinesBrokenOccurrences(working, working.RunState!, encounter);
     }
 
     /// <summary>

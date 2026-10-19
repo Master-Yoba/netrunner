@@ -94,6 +94,27 @@ public enum OccurrenceKind
 
     /// <summary>VP-FIRST-EVENT: the first event the Runner played this turn; the subject is the event (Touchstone).</summary>
     FirstEventPlayedThisTurn,
+
+    /// <summary>
+    /// VP-ICE-PASSED: the Runner passed a piece of ICE (CR 26.03 6.9.4a), after an encounter, a bypass or unrezzed; the
+    /// subject is the ICE (Vertigo, Sipa).
+    /// </summary>
+    IcePassed,
+
+    /// <summary>VP-ICE-PASSED: the Runner bypassed the encountered ICE (CR 26.03 6.5.8); the subject is the ICE (Lethe).</summary>
+    IceBypassed,
+
+    /// <summary>VP-ICE-PASSED: the Runner broke the last unbroken subroutine of the encountered ICE; the subject is the ICE (Lethe).</summary>
+    IceFullyBroken,
+
+    /// <summary>
+    /// VP-SUBROUTINE-BROKEN: the Runner broke one or more subroutines of the encountered ICE; the subject is the ICE (The
+    /// Tungsten Tailor).
+    /// </summary>
+    SubroutineBroken,
+
+    /// <summary>VP-ENCOUNTER-ENDED: an encounter with a piece of ICE ended; the subject is the ICE (Knowledge Seeker).</summary>
+    EncounterEnded,
 }
 
 public enum OccurrencePhase
