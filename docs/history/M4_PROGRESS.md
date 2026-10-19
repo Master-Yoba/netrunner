@@ -457,7 +457,7 @@ embed a validated generated resource and perform no runtime network fetch.
 ## Slice 4.1 exit checklist
 
 - [x] ARCH-401 / ENG-400 / VER-401 implemented and reviewed.
-- [x] PRIME-AUDIT complete in `docs/M4_PRIMITIVES.md`.
+- [x] PRIME-AUDIT complete in `docs/history/M4_PRIMITIVES.md`.
 - [x] CARD-401 / COV-401 generated report distinguishes registered and complete.
 - [x] DATA-400 content-enabled build is deterministic and offline after build.
 - [x] UI-401 renders all 77 provisioned cards through an injected resolver.
@@ -649,7 +649,7 @@ errors; runtime action expansion and full verification remain pending.
   invented fact, or approximate target was added for either gap.
 - Provenance is the authenticated local System Gateway snapshot identified by
   `data/vendor/system-gateway/manifest.json`, with CR-26.03 citations recorded
-  in the module comments and corresponding audit rows in `docs/M4_PRIMITIVES.md`.
+  in the module comments and corresponding audit rows in `docs/history/M4_PRIMITIVES.md`.
   No card text or vendored metadata was copied into the registrations.
 - Focused evidence: Cards build passed with zero warnings/errors; the Cards
   suite passed 69/69; the Core behavior-contract/catalog filter passed 27/27;

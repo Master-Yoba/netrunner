@@ -1,6 +1,9 @@
 # Bot plan: implementation steps
 
-The steps that carry out [BOT_PLAN.md](BOT_PLAN.md). Each step says what to build, where, how it is accepted, and what
+> **History (19 October 2026):** the steps of the search-first plan ([BOT_PLAN_SEARCH_FIRST.md](BOT_PLAN_SEARCH_FIRST.md)).
+> Current bot work follows [the bot plan](../BOT_PLAN.md).
+
+The steps that carry out [BOT_PLAN.md](BOT_PLAN_SEARCH_FIRST.md). Each step says what to build, where, how it is accepted, and what
 to record. Steps are ordered; a step starts only when the one before it has met its gate, except where marked
 independent. Sizes: S is one to two days, M is three to six days, L is one to two weeks.
 
@@ -411,7 +414,7 @@ converted puzzle.
 - Wire `ai-regret score` (target pool, the suite's held-out split), `ai-puzzles`, and `ai-lint` counts on the latest
   saved run into `scripts/bot-check.sh` behind `BOT_CHECK_SUITES=1`, with a summary line each.
 - Update `AGENTS.md`'s "Testing Guidelines" bot paragraph to the plan's section 6 tiers, and
-  [BOT_LOOP_WORKFLOW.md](history/BOT_LOOP_WORKFLOW.md) section 7 to point there.
+  [BOT_LOOP_WORKFLOW.md](BOT_LOOP_WORKFLOW.md) section 7 to point there.
 
 ## S3. One live policy (M)
 
@@ -854,7 +857,7 @@ the plan is the way to get them, on the user's ask).
 
 ## H. The heuristic track (from 9 October 2026)
 
-Plan section 10.3. The rules are [STRATEGY_FUNDAMENTALS.md](STRATEGY_FUNDAMENTALS.md)'s; a step names the rule IDs it
+Plan section 10.3. The rules are [STRATEGY_FUNDAMENTALS.md](../STRATEGY_FUNDAMENTALS.md)'s; a step names the rule IDs it
 works. Branches are `feat/bot-h<n>`. H1 and H2 run in parallel with S5.1c.
 
 ### H1 The audit (S)

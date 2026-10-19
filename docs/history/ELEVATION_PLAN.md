@@ -1,11 +1,11 @@
 # Elevation implementation plan — the second card set
 
-Status: plan, 2 October 2026. Decided at Wave 5's decision point ([implementation plan](../IMPLEMENTATION_PLAN.md), section 2):
+Status: plan, 2 October 2026. Decided at Wave 5's decision point ([implementation plan](IMPLEMENTATION_PLAN.md), section 2):
 the next card set is Elevation, ahead of M6 and an RC, because the bots' remaining faults increasingly come from a pool
 too small to need deck-aware play.
 
 Companion documents:
-- **[ELEVATION_PRIMITIVES.md](../ELEVATION_PRIMITIVES.md):** the primitive audit, every card mapped to the vocabulary it
+- **[ELEVATION_PRIMITIVES.md](ELEVATION_PRIMITIVES.md):** the primitive audit, every card mapped to the vocabulary it
   needs.
 - **`data/elevation/batch-registry.json`:** the batch assignment.
 - **[M4 plan](M4_PLAN.md):** the Gateway milestone this one mirrors.
@@ -52,7 +52,7 @@ plays System Gateway, with:
 
 - **Engine:**
   - all 77 Gateway cards, on a behaviour vocabulary of 37 instruction kinds, 26 trigger occurrences, 13 condition kinds,
-    9 cost kinds and 2 static modifiers ([M4 primitive audit](../M4_PRIMITIVES.md));
+    9 cost kinds and 2 static modifiers ([M4 primitive audit](M4_PRIMITIVES.md));
   - 10,000 clean official fuzz games (Wave 5).
 - **Card data:** one local-only pack (`sg`, 77 records) from the pinned upstream commit
   `236140cf84491c23995b028bc791281837520b97`, which already contains `elev`. The build accepts one input directory.
@@ -232,7 +232,7 @@ The ICE, the run events, and the run-interacting hardware, resources, upgrades a
 ## 5. Card assignment
 
 `data/elevation/batch-registry.json` holds every card's batch and the primitives it needs (`newPrimitives`).
-[ELEVATION_PRIMITIVES.md](../ELEVATION_PRIMITIVES.md) is the readable form. EL.1's audit review may move cards between
+[ELEVATION_PRIMITIVES.md](ELEVATION_PRIMITIVES.md) is the readable form. EL.1's audit review may move cards between
 batches; the registry is the source of truth.
 
 | Batch | Cards | Using only existing vocabulary |
@@ -310,7 +310,7 @@ Status on 3 October 2026 (EL.8): see [the progress record](ELEVATION_PROGRESS.md
 
 ## 10. Prep done (branch `feat/elevation-prep`)
 
-- **This plan, and [ELEVATION_PRIMITIVES.md](../ELEVATION_PRIMITIVES.md):** the audit of all 82 cards.
+- **This plan, and [ELEVATION_PRIMITIVES.md](ELEVATION_PRIMITIVES.md):** the audit of all 82 cards.
 - **`data/elevation/batch-registry.json`:** every card's batch and planned primitives, status `planned`.
 - **E6 tooling:**
   - `netrunner-cli card-vocabulary [--json]`: each registered card's engine vocabulary, by reflection over its

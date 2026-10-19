@@ -3,7 +3,7 @@
 Status: planning audit, 2 October 2026, reviewed in EL.1 (see "EL.1 review" below and the registry, which is the source
 of truth), from the Elevation card data at the pinned upstream commit
 (`236140cf84491c23995b028bc791281837520b97`, pack `elev`, 82 records, local-only). Mechanics are summarized in our
-own words; no card text is reproduced. The plan is [ELEVATION_PLAN.md](history/ELEVATION_PLAN.md); the machine-readable
+own words; no card text is reproduced. The plan is [ELEVATION_PLAN.md](ELEVATION_PLAN.md); the machine-readable
 assignment is `data/elevation/batch-registry.json`.
 
 The primitives below are what the engine lacks today, judged against its vocabulary on 2 October (37 instruction kinds,

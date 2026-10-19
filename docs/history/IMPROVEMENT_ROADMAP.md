@@ -1,6 +1,6 @@
 # Post-M5 improvement roadmap
 
-> **AI track (4 October 2026):** the bot work continues in [BOT_PLAN.md](../BOT_PLAN.md), which is authoritative over the
+> **AI track (4 October 2026):** the bot work continues in [BOT_PLAN.md](BOT_PLAN_SEARCH_FIRST.md), which is authoritative over the
 > A* entries below.
 
 Status: Waves 0 to 4.5 done ([Wave 4.5 summary](WAVE_4_5_PROGRESS.md#wave-45-summary-1-october-2026)); Wave 5 done ([progress](WAVE_5_PROGRESS.md)); Wave 5.5 built ([progress](WAVE_5_5_PROGRESS.md))
@@ -491,7 +491,7 @@ Hard knows the opponent's list, Standard and Easy the pool, and Easy forgets on 
 
 ### Next: the Elevation card set
 
-Planned in [ELEVATION_PLAN.md](ELEVATION_PLAN.md) (primitive audit: [ELEVATION_PRIMITIVES.md](../ELEVATION_PRIMITIVES.md)):
+Planned in [ELEVATION_PLAN.md](ELEVATION_PLAN.md) (primitive audit: [ELEVATION_PRIMITIVES.md](ELEVATION_PRIMITIVES.md)):
 - slices EL.1 to EL.8: preparation, three primitive slices each followed by a card batch, and integration;
 - C2's format snapshots and A7 are part of it;
 - the E6 Core-growth budget is measured per card batch with `make core-growth`.

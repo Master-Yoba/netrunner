@@ -1,6 +1,6 @@
 # The bot loop workflow
 
-> **Demoted (4 October 2026):** an outside-player arm runs only when the user asks, under [BOT_PLAN.md](../BOT_PLAN.md)
+> **Demoted (4 October 2026):** an outside-player arm runs only when the user asks, under [BOT_PLAN.md](BOT_PLAN_SEARCH_FIRST.md)
 > section 7. Sections 1–5 here are its how-to; section 7 (verification) is replaced by BOT_PLAN.md section 6, and
 > findings become puzzles and lints rather than one-off fixes.
 
@@ -88,7 +88,7 @@ Confirm each finding against the replay before fixing anything:
 
 ## 7. Verify
 
-> Replaced by [BOT_PLAN.md](../BOT_PLAN.md) section 6 and the tiers in `AGENTS.md` (bot plan S2.3); kept as the record of
+> Replaced by [BOT_PLAN.md](BOT_PLAN_SEARCH_FIRST.md) section 6 and the tiers in `AGENTS.md` (bot plan S2.3); kept as the record of
 > how loops were verified.
 
 Order the checks so a failure shows before the long runs start, with no other load on the machine. Each step runs only

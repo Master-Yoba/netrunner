@@ -10,7 +10,7 @@ fine, can push to GH”, accepting the result and authorizing publication. This
 supersedes the earlier local-only workflow and pending-acceptance statements
 below, which describe the history as of 23 September. Individual manual matrix
 details were not supplied or inferred. See the [acceptance record](../evidence/m5-8/acceptance.json)
-and [gate report](../M5_GATE.md#human-acceptance).
+and [gate report](M5_GATE.md#human-acceptance).
 
 ## Scope authorization and acceptance reconciliation
 
@@ -354,7 +354,7 @@ Branch: `feat/m5-8-final-gate`. Local checkpoints: `90457ea` repairs mandatory
 memory cleanup after Retribution removes a memory provider; `6c40688` freezes
 profiles/manifests and adds the measured headless gate; `a6f9300` adds the exported
 offline proof and ships generic card backs. No strategic policy weights change.
-Full results, commands, limitations and hashes are in [M5_GATE.md](../M5_GATE.md).
+Full results, commands, limitations and hashes are in [M5_GATE.md](M5_GATE.md).
 
 The frozen Standard suite completes **1,000/1,000 actual terminal games**, all
 replays verified, zero caps or failures, balanced 250 per preset pairing. Easy

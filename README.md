@@ -6,45 +6,35 @@ presentation client, and every human or AI player acts through the same legal
 action boundary.
 
 The product definition is in [the PRD](docs/netrunner_solo_prd_v0.2.md). The
-dependency-ordered engineering roadmap is in
-[the implementation plan](docs/IMPLEMENTATION_PLAN.md).
-M5 (offline solo mode: heuristic opponents, benchmarks, save/resume and
-developer tooling) is complete. Current work follows the
-[improvement roadmap](docs/history/IMPROVEMENT_ROADMAP.md) (engine, AI opponent and
-UI/UX waves); Wave 0 is recorded in [its progress record](docs/history/WAVE_0_PROGRESS.md).
-[The docs index](docs/README.md) lists current documents; milestone history is
-in `docs/history/`.
+milestones M0 to M5 (the engine, System Gateway, the client and offline solo play),
+the post-M5 improvement waves and the Elevation and Vantage Point card sets are
+complete; their plans and records are in [`docs/history/`](docs/history/). Current
+work follows [the bot plan](docs/BOT_PLAN.md). [The docs index](docs/README.md)
+lists the current documents.
 
 ## Current state
 
-All 77 System Gateway designs have complete behavior and registered tests in
-[the generated report](docs/generated/card-coverage.md). With authenticated
-content provisioned, the desktop client plays official basic and expanded
-teaching presets as either side against the offline Standard or Easy bot,
-including setup, mulligan, seed selection and a new-match flow. See
-[the M4 progress record](docs/history/M4_PROGRESS.md) for the final gate evidence and
-[preset revalidation](docs/history/M4_PRESET_REVALIDATION.md) for exact deck provenance.
-Support is scoped to System Gateway:
-
-- `Netrunner.Core`: typed state, deterministic RNG, atomic legal actions,
-  serializable resolution, canonical hashes, scenarios, and replay.
-- `Netrunner.Cards`: static metadata, fixture behavior, and strict local-only
-  System Gateway normalization/validation.
-- `Netrunner.AI`: offline-agent boundary, toy/run agents, and full-turn contract policy.
-- `Netrunner.LLM`: provider-neutral LLM transport contracts.
-- `Netrunner.Cli`: working `full-match`, `simulate`, `scenario`, `play`, `replay`, `m2-proof`, and
-  `card-data` commands.
-- `Netrunner.Match`: asynchronous authoritative-state ownership and filtered presentation.
-- `Netrunner.Godot`: Godot 4.7.2 .NET client with card and decision presentation.
-- headless Core, Cards, AI, CLI, and Match test projects.
-
-The verified M2 proof covers deterministic save/load and replay, public run
-event lifecycle, Archives disclosure, per-activation breaker limits,
-wallet/hosted-credit payment choices, and exact breach-access timing traces.
-
-See [the M1 completion record](docs/history/M1_COMPLETION.md) for the reviewed contracts
-and gate evidence, and [the M2 progress record](docs/history/M2_PROGRESS.md) for the
-M2 contract, the curated proof, and the independent-review rework log.
+- **Cards:** all 225 cards of System Gateway, Elevation and Vantage Point have complete
+  behavior and registered tests ([the generated report](docs/generated/card-coverage.md)).
+- **Formats:** with authenticated content provisioned, the client plays as either side
+  against the offline bot:
+  - System Gateway's teaching and sample decks;
+  - the Core Battle Box (Gateway + Elevation);
+  - NSG's Core Sets decks;
+  - Startup 2026, whose decks are 14 tournament lists.
+- **Opponents:** Easy, Standard and Hard, with personalities. The current policy
+  versions are in [the bot plan](docs/BOT_PLAN.md).
+- **Projects:**
+  - `Netrunner.Core`: typed state, deterministic RNG, atomic legal actions, serializable
+    resolution, canonical hashes, scenarios, replay and the state invariant validator.
+  - `Netrunner.Cards`: card metadata, compiled card behaviors, formats, card pools and decks.
+  - `Netrunner.AI`: the heuristic Corp and Runner policies, planners, tracker and evaluation.
+  - `Netrunner.LLM`: provider-neutral LLM transport contracts.
+  - `Netrunner.Match`: authoritative-state ownership, play formats, saves, presentation,
+    fuzzing, ladders and the bot measurement suites.
+  - `Netrunner.Cli`: match, replay, fuzz, ladder, benchmark and bot-measurement commands.
+  - `Netrunner.Godot`: the Godot 4.7.2 .NET client.
+  - Headless Core, Cards, AI, CLI and Match test projects.
 
 ## Linux development setup
 

@@ -3,7 +3,7 @@
 Batch execution and all 80 executable tactical positions are implemented,
 with 40 positions per side and frozen roots, resource bounds and policy seeds.
 The original contract manifests retain the unchanged v6 baseline. The later
-Standard/Easy manifests and [M5 integration gate](M5_GATE.md) provide measured
+Standard/Easy manifests and [M5 integration gate](history/M5_GATE.md) provide measured
 policy evidence; human acceptance remains separate.
 
 ## Run offline
@@ -156,7 +156,7 @@ it isolates its late result. CI also needs an outer job/process timeout.
 
 The final Standard completion threshold, per-side tactical targets, Easy suite
 and save/UI gates remain distinct acceptance criteria. The integrated M5.8
-launcher and evidence are described in [M5_GATE.md](M5_GATE.md); neither an
+launcher and evidence are described in [M5_GATE.md](history/M5_GATE.md); neither an
 individual benchmark command nor headless success establishes human acceptance.
 
 ## Tactical fixture construction

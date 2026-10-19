@@ -3,7 +3,7 @@
 Baseline: `8f27bac` production code, full-game contract policy v6.
 This is an evaluation-work inventory, not a claim of missing card rules.
 All 77 designs already have full behavior and registered rules tests in
-[the generated coverage report](../generated/gateway-coverage.md).
+[the generated coverage report](../generated/card-coverage.md).
 
 ## Observation and metadata seams for M5.1
 

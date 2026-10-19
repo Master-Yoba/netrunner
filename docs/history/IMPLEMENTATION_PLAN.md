@@ -1,5 +1,8 @@
 # Netrunner Solo implementation plan
 
+> **Complete:** the milestones M0 to M5 are done; later work followed the improvement roadmap, the card set plans and
+> [the bot plan](../BOT_PLAN.md). Kept for its architecture and decisions.
+
 Status: executable plan for PRD v0.2  
 Baseline date: 27 August 2026  
 Rules baseline: Null Signal Comprehensive Rules v26.03  
@@ -25,11 +28,11 @@ scope progression.
 | M2 | Representative Netrunner run | 5–7 weeks | Run/ICE/break/access path passes timing scenarios |
 | M3 | Native playable micro-decks | 4–6 weeks | The same M2 match is playable through Godot |
 | M4 | Complete Gateway rules/cards | 12–18 weeks | All designs implemented, reviewed, and card-tested |
-| M4.9 | Card-table UI and understandable history | See [UI plan](history/M4_9_UI_PLAN.md) | Native layout, history/visibility and manual usability gate before M5 |
-| M4.10 | Editor-friendly UI and live visual authoring | Implemented; [user acceptance pending](history/M4_10_UI_PROGRESS.md) | Reusable production scenes, persistent Inspector styling, safe live previews and manual authoring gate before M5 |
-| M4.11 | Drag-to-play and install | Implemented; [validation](history/M4_11_UI_PROGRESS.md) | Board-first hand play/install, preserved menu fallback and native interaction gate |
-| M4.12 | Hand fan and direct board actions | Implemented; [validation](history/M4_12_UI_PROGRESS.md) | Native hand hover/drag, legal credit/draw affordances, Archives browsing and cancellable Run selection |
-| M5 | Complete offline solo mode | See [detailed M5 plan](history/M5_PLAN.md) | Both heuristic bots pass tactical/stress gates; deterministic save/resume and offline client flow work |
+| M4.9 | Card-table UI and understandable history | See [UI plan](M4_9_UI_PLAN.md) | Native layout, history/visibility and manual usability gate before M5 |
+| M4.10 | Editor-friendly UI and live visual authoring | Implemented; [user acceptance pending](M4_10_UI_PROGRESS.md) | Reusable production scenes, persistent Inspector styling, safe live previews and manual authoring gate before M5 |
+| M4.11 | Drag-to-play and install | Implemented; [validation](M4_11_UI_PROGRESS.md) | Board-first hand play/install, preserved menu fallback and native interaction gate |
+| M4.12 | Hand fan and direct board actions | Implemented; [validation](M4_12_UI_PROGRESS.md) | Native hand hover/drag, legal credit/draw affordances, Archives browsing and cancellable Run selection |
+| M5 | Complete offline solo mode | See [detailed M5 plan](M5_PLAN.md) | Both heuristic bots pass tactical/stress gates; deterministic save/resume and offline client flow work |
 | M6 | Safe LLM/hybrid mode | 4–6 weeks | Intent play, constrained actions, timeout/takeover pass |
 | RC | Polish, packaging, QA | 3–5 weeks | Release matrix and all PRD exit criteria pass |
 
@@ -38,10 +41,10 @@ is stable. M5 benchmark design can start during M4, but bot tuning must not
 become a substitute for missing rules behavior.
 
 After M5, three proposed improvement tracks cover the
-[engine and architecture](history/ENGINE_ARCHITECTURE_PLAN.md), the
-[AI opponent](history/AI_OPPONENT_PLAN.md) and the
-[UI/UX redesign](history/UI_UX_REDESIGN_PLAN.md). The
-[improvement roadmap](history/IMPROVEMENT_ROADMAP.md) orders their phases (E*, A*,
+[engine and architecture](ENGINE_ARCHITECTURE_PLAN.md), the
+[AI opponent](AI_OPPONENT_PLAN.md) and the
+[UI/UX redesign](UI_UX_REDESIGN_PLAN.md). The
+[improvement roadmap](IMPROVEMENT_ROADMAP.md) orders their phases (E*, A*,
 U*) into gated waves and recommends where M6 fits. At Wave 5's decision
 point the next card set (Elevation) was chosen ahead of M6; see section 2.
 
@@ -70,7 +73,7 @@ than assuming compatibility from package versions.
 
 ### Wave 5 decision point: the next card set is Elevation (1 October 2026)
 
-The [roadmap](history/IMPROVEMENT_ROADMAP.md)'s Wave 5 ends with a choice between M6
+The [roadmap](IMPROVEMENT_ROADMAP.md)'s Wave 5 ends with a choice between M6
 (LLM/hybrid mode), the next card set and an RC. **Decided: the next card set,
 Elevation.**
 
@@ -83,12 +86,12 @@ Elevation.**
 - **Why not an RC:** a release with one learn-to-play pool is small, and
   Startup needs Elevation, then Vantage Point.
 - **Why Elevation:** the bots' remaining faults (see the
-  [Wave 4.5 progress](history/WAVE_4_5_PROGRESS.md)) increasingly come from a pool too
+  [Wave 4.5 progress](WAVE_4_5_PROGRESS.md)) increasingly come from a pool too
   small to need deck-aware play. More cards and the remaining Netrunner
   mechanics give the planner, the fitted evaluation (A7's per-format weights)
   and the personalities more to work with.
 
-The plan is [ELEVATION_PLAN.md](history/ELEVATION_PLAN.md) (2 October 2026). What starting the card set requires, before its
+The plan is [ELEVATION_PLAN.md](ELEVATION_PLAN.md) (2 October 2026). What starting the card set requires, before its
 first batch:
 
 - **E6 Core-growth budget:** at least 80% of Elevation's cards need no Core
@@ -316,12 +319,12 @@ finish human-vs-contract-agent games through the client.
 
 ### M5 — Complete offline solo experience
 
-The [detailed M5 implementation plan](history/M5_PLAN.md) expands this milestone against
+The [detailed M5 implementation plan](M5_PLAN.md) expands this milestone against
 the 22 September 2026 code baseline. It defines the agent architecture, tactical
 and self-play benchmarks, save/checkpoint lifecycle, client and developer flows,
 dependency-ordered slices, and acceptance evidence. Existing contract agents,
 replay and diagnostic session recovery remain foundations. The M5 slices are
-implemented with [progress and verification records](history/M5_PROGRESS.md) and a
+implemented with [progress and verification records](M5_PROGRESS.md) and a
 [measured integration gate](M5_GATE.md). The user gave general playtest acceptance
 and authorized publication on 25 September 2026; its scope is recorded in
 [the acceptance section](M5_GATE.md#human-acceptance). Automated games and

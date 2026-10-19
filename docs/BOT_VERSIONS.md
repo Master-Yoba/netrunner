@@ -1,7 +1,9 @@
 # Bot versions: the evidence record
 
-The running record of [BOT_PLAN.md](BOT_PLAN.md): every policy version's evidence (regret, puzzles, lints, ladders) and
-the reference costs every step is budgeted against. The steps are in [BOT_PLAN_STEPS.md](BOT_PLAN_STEPS.md).
+The running record of [the bot plan](BOT_PLAN.md): every policy version's evidence (regret, puzzles, lints, ladders) and
+the reference costs every step is budgeted against. The entries up to 15 October 2026 belong to the search-first plan
+([history/BOT_PLAN_SEARCH_FIRST.md](history/BOT_PLAN_SEARCH_FIRST.md)) and its steps
+([history/BOT_PLAN_STEPS.md](history/BOT_PLAN_STEPS.md)); "plan section N" in them means that plan.
 
 ## Reference costs
 
@@ -206,7 +208,7 @@ ratings, no errors; 347 s against 396 s (−12%), so about 410 two-entrant deals
 
 **Shelved:** an exact direct observation-to-features mapper (at most the read's 14%, but a hand-written copy of the
 serializer's semantics over some forty record types) and a thin state-to-features view. The rest of the engine's
-simulation cost is step S5.0 of [BOT_PLAN_STEPS.md](BOT_PLAN_STEPS.md), before S5.1.
+simulation cost is step S5.0 of [BOT_PLAN_STEPS.md](history/BOT_PLAN_STEPS.md), before S5.1.
 
 **For S1.2:** a whole-game rollout from an average turn start is now about 55 to 67 ms, so the teacher at 32 samples of
 about 4 candidates is about 8 s a root, and 8,000 roots about 18 CPU-hours: at the 5.9× the box's 12 workers measured
@@ -1010,7 +1012,7 @@ seats, Corp set 5 − set 4 −10 Elo [−42, 18], Runner +14 [−19, 42], not s
 **Reading.** Not met on the root-value fit: the measurement has two confounds, so it is not a verdict on set 5's
 features, and S4.1 is not revisited. The planner's value adds the rollout's log-odds to the heuristic's score, so the
 leaf moves only part of a choice; and the leaf was fitted at roots, while the planner reads it where the turn ends.
-S4.2b removes both (`docs/BOT_PLAN_STEPS.md`).
+S4.2b removes both (`docs/history/BOT_PLAN_STEPS.md`).
 
 ### S4.2b: the planner's value in win probability (7 October 2026)
 
@@ -2693,4 +2695,5 @@ Corp v38 (LEO's identity kept live), Corp v39 (Idiosyncresis worked) and Runner 
 their declared ladders and are removed, with their ladder entrants (`standard-c38`, `standard-c39`, `standard-r38`),
 tests and fixtures, after chiriboga's rule that a failed idea's code goes and its record stays (as #145 did). Their
 records above stand. The live versions are Corp v31 and v34, and Runner v27, v28, v30, v32, v35 and v37; their games are
-unchanged. The heuristic track pauses here for the Vantage Point card set (bot plan, section 10.4).
+unchanged. The heuristic track pauses here for the Vantage Point card set (the search-first plan, section 10.4). It
+resumes under [the bot plan](BOT_PLAN.md)'s next steps (19 October 2026).

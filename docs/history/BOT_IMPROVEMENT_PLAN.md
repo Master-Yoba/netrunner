@@ -1,7 +1,7 @@
 # Bot improvement plan: LLM review loops on the Elevation pools
 
-> **Closed (4 October 2026):** LLM review loops are no longer the improvement engine. [BOT_PLAN.md](../BOT_PLAN.md) is
-> authoritative; loops 1 and 2 stay as records, and their findings become puzzles ([BOT_PLAN_STEPS.md](../BOT_PLAN_STEPS.md), S2).
+> **Closed (4 October 2026):** LLM review loops are no longer the improvement engine. [BOT_PLAN.md](BOT_PLAN_SEARCH_FIRST.md) is
+> authoritative; loops 1 and 2 stay as records, and their findings become puzzles ([BOT_PLAN_STEPS.md](BOT_PLAN_STEPS.md), S2).
 
 Status: written 3 October 2026, on the user's direction. Loops 1 and 2 are done ([BOT_LOOP_1.md](BOT_LOOP_1.md),
 [BOT_LOOP_2.md](BOT_LOOP_2.md)); the loops wait for the user's decision. Each loop follows

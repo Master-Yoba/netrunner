@@ -1,6 +1,6 @@
 # Elevation progress — the second card set
 
-Plan: [Elevation implementation plan](ELEVATION_PLAN.md). Audit: [ELEVATION_PRIMITIVES.md](../ELEVATION_PRIMITIVES.md).
+Plan: [Elevation implementation plan](ELEVATION_PLAN.md). Audit: [ELEVATION_PRIMITIVES.md](ELEVATION_PRIMITIVES.md).
 Registry: `data/elevation/batch-registry.json`. Evidence is from the Linux x86_64 development box.
 
 ## Branches

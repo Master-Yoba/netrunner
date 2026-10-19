@@ -17,7 +17,7 @@ The gate includes the complete repository regression, formatting verification,
 M1 win proofs, pinned M2 replay proof, card-data diagnostics, the 77-card gallery,
 all earlier client smokes, and the responsiveness check. It regenerates coverage
 and requires exactly 77 registered, tested and full-text-complete designs, zero
-partial designs and zero diagnostics. See [coverage](../generated/gateway-coverage.md)
+partial designs and zero diagnostics. See [coverage](../generated/card-coverage.md)
 and [preset provenance](M4_PRESET_REVALIDATION.md).
 
 The final integration matrix is:

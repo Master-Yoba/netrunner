@@ -1,5 +1,8 @@
 # Vantage Point implementation plan — the third card set
 
+> **Complete (19 October 2026):** every slice merged (VP.8, PR #158). The record is in
+> [VANTAGE_POINT_PROGRESS.md](VANTAGE_POINT_PROGRESS.md).
+
 Status: plan, 14 October 2026. The user's decision (14 October): after the bot's heuristic track found no large misplay
 left on the Core Battle Box (the misplay sweep, `docs/BOT_VERSIONS.md`), the next work is the Vantage Point card set.
 It completes Startup 2026 (System Gateway, Elevation and Vantage Point), the format the game was waiting for (D-EL-3,
@@ -9,8 +12,8 @@ Companion documents:
 - **[VANTAGE_POINT_PRIMITIVES.md](VANTAGE_POINT_PRIMITIVES.md):** the primitive audit, every card mapped to the vocabulary
   it needs.
 - **`data/vantage-point/batch-registry.json`** (VP.1): the batch assignment.
-- **[Elevation plan](history/ELEVATION_PLAN.md):** the milestone this one mirrors, and its
-  [progress record](history/ELEVATION_PROGRESS.md).
+- **[Elevation plan](ELEVATION_PLAN.md):** the milestone this one mirrors, and its
+  [progress record](ELEVATION_PROGRESS.md).
 
 ## 1. Scope and gate
 
@@ -113,7 +116,7 @@ Each slice is a branch and a PR into `dev`, gated as AGENTS.md says:
 - the full gates once per batch, in the worktree (`make gates REF=…`);
 - the per-slice fuzz on the affected pools, and a ladder for each new bot version.
 
-Progress goes to `docs/VANTAGE_POINT_PROGRESS.md`.
+Progress goes to `docs/history/VANTAGE_POINT_PROGRESS.md`.
 
 ### VP.1 — Preparation: card data, coverage, formats, the audit's review
 
@@ -209,7 +212,7 @@ review").
 
 ## 6. Per-batch process
 
-Elevation's ([Elevation plan](history/ELEVATION_PLAN.md), section 6), with one step added from what Elevation taught:
+Elevation's ([Elevation plan](ELEVATION_PLAN.md), section 6), with one step added from what Elevation taught:
 1. **Primitives first,** in the previous slice, with engine tests and, for new timing windows, a scenario fixture with CR
    citations.
 2. **Bind every card:** compiled specs in `Netrunner.Cards` (`src/Netrunner.Cards/VantagePoint/`), registered in the
@@ -226,7 +229,7 @@ Elevation's ([Elevation plan](history/ELEVATION_PLAN.md), section 6), with one s
      never advanced, rezzed or used is found while its batch is open, not after.
 7. **Proofs:** extend the simulation decks and run the batch's headless proof (agent-driven, seed-pinned).
 8. **The client:** each new state shown in a smoke-flagged scene; the M3, latency and main-menu smokes stay green.
-9. **Progress:** the batch recorded in `docs/VANTAGE_POINT_PROGRESS.md`: status, deviations, evidence and pins.
+9. **Progress:** the batch recorded in `docs/history/VANTAGE_POINT_PROGRESS.md`: status, deviations, evidence and pins.
 
 ## 7. Milestone gate checklist
 
@@ -241,7 +244,7 @@ Elevation's ([Elevation plan](history/ELEVATION_PLAN.md), section 6), with one s
   - the deck-pool ladder has no deck warning; the Core Battle Box ladder unchanged or measured;
   - `ai-belief` is above its prior on the new pool.
 - [ ] **Client:** every new state presented; accessibility re-checked; the smoke matrices include a new deck.
-- [ ] `docs/VANTAGE_POINT_PROGRESS.md` complete, with evidence and deviations.
+- [ ] `docs/history/VANTAGE_POINT_PROGRESS.md` complete, with evidence and deviations.
 
 ## 8. Client work index
 
