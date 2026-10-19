@@ -199,6 +199,43 @@ public sealed class VantagePointRunGapTests
         Assert.Equal(3, Player(state, PlayerSide.Runner).Clicks);
     }
 
+    // PR #155's review: the run Aircheck queues survives another run-end reaction that asks first (Zahya's optional gain),
+    // with the state saved and restored while it waits.
+    [Fact]
+    public void ARunAfterRunWaitsForTheOtherRunEndReactions()
+    {
+        GameState state = new ElevationBoard(PlayerSide.Runner) { HqFiller = 1 }
+            .Add("30010", Place.RunnerIdentity)
+            .Add(ProbeAircheckEvent, Place.Grip)
+            .Add(CorpFillerAsset, Place.Root)
+            .Begin(catalog: VantagePointProbe);
+        ServerId hq = ElevationBoard.ServerId(state, ElevationBoard.Hq);
+        ServerId remote = ElevationBoard.ServerId(state, ElevationBoard.Remote);
+        state = Apply(state, action => action.Parameters is PlayCardParameters play && play.TargetServerId == hq).State;
+        state = PassUntil(state, static value => value.RunState is null
+            && value.PendingDecision?.Kind is DecisionKind.TriggerOrdering or DecisionKind.TriggerChoice);
+        // Aircheck's run-again resolves first: the ordering whose first trigger asks for the remote.
+        GameState? queued = null;
+        foreach (LegalAction first in state.PendingDecision!.Kind == DecisionKind.TriggerOrdering ? Actions(state) : [null!])
+        {
+            GameState candidate = first is null ? state : Apply(state, first).State;
+            candidate = UseTrigger(candidate);
+            if (candidate.PendingDecision?.Kind == DecisionKind.BehaviorChoice)
+            {
+                queued = ChooseCards(candidate, Card(candidate, CorpFillerAsset));
+                break;
+            }
+        }
+
+        state = Assert.IsType<GameState>(queued);
+        // Zahya's optional trigger now asks; the queued run survives the save.
+        state = RoundTrip(state);
+        Assert.True(HasTrigger(state));
+        Assert.Equal(remote, Assert.IsType<TurnFrame>(state.ResolutionStack[0]).FollowUpRunServerId);
+        state = RoundTrip(Pass(state));
+        Assert.Equal(remote, state.RunState?.AttackedServer);
+    }
+
     // Baker: when the Runner would approach Archives on its run, paying changes the attacked server (CR 26.03 6.9.4g).
     [Theory]
     [InlineData("hq", ElevationBoard.Hq, 0)]

@@ -401,3 +401,8 @@ On probe cards 90049 to 90059 (`VantagePointRunGapTests`):
 The second round's one: a behavior subroutine resolved outside a run can still end the run (Grubber's and Semak-Samun's
 options, or N-Pot's threat), and that now does nothing, as a printed end-the-run subroutine already did. A behavior
 subroutine that changes the run or its encounter (ezaM's strength) isn't offered with no run.
+
+The third round's one: the turn frame's clone kept no follow-up run, so Aircheck's run was lost whenever another run-end
+reaction asked for a decision after it (Zahya's optional gain). The clone and the one rebuild that keeps the frame's
+stage now carry it. The other VP.5a fields survive every copy: the run's state and persistent context pass them on, and
+a card filter's excluded subtype is part of its equality.
