@@ -45,6 +45,39 @@ public sealed class LlmOpponentAgentTests
         Assert.Contains(model.Requests, request => request.Contains("HQ [", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task ToolArgumentsThatArentAnObjectGetAToolErrorAndTheDecisionGoesOn()
+    {
+        var model = new ToolCallingModel("[]", "\"Hedge Fund\"", "42", "{not json", "null");
+        StrategicVerdict verdict = await new ModelDecider(model, new LlmSampling(), maxToolCalls: 5)
+            .DecideAsync(Netrunner.Core.PlayerSide.Corp, "Options:\n1. Click for a credit\n", 1, CancellationToken.None);
+
+        Assert.Equal(1, verdict.Option);
+        Assert.Null(verdict.Failure);
+        Assert.Equal(5, verdict.ToolCalls);
+        Assert.Equal(
+            ["The arguments must be a JSON object.", "The arguments must be a JSON object.", "The arguments must be a JSON object.",
+                "The arguments weren't valid JSON.", "There is no tool called 'look'."],
+            model.ToolReplies);
+    }
+
+    /// <summary>Calls the tool "look" once with each given argument text, then answers option 1.</summary>
+    private sealed class ToolCallingModel(params string[] arguments) : ILlmChatClient
+    {
+        private int _calls;
+
+        public List<string> ToolReplies { get; } = [];
+
+        public Task<LlmChatResponse> CompleteAsync(LlmChatRequest request, CancellationToken cancellationToken = default)
+        {
+            if (request.Messages[^1].Role == "tool") ToolReplies.Add(request.Messages[^1].Content!);
+            LlmChatMessage message = _calls < arguments.Length
+                ? new LlmChatMessage("assistant", null, [new LlmToolCall($"call-{_calls}", "look", arguments[_calls++])])
+                : new LlmChatMessage("assistant", "{\"option\": 1, \"reason\": \"done looking\"}");
+            return Task.FromResult(new LlmChatResponse(message, "stop", new LlmUsage(10, 5)));
+        }
+    }
+
     /// <summary>
     /// Answers in a fixed cycle: the last option, a malformed answer and then the first option, an option
     /// out of range twice (the heuristic's choice stands), and a server error (likewise).

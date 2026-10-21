@@ -87,7 +87,9 @@ public sealed class ModelDecider(ILlmChatClient client, LlmSampling sampling, Ru
         string argument;
         try
         {
-            JsonObject arguments = JsonNode.Parse(string.IsNullOrWhiteSpace(call.Arguments) ? "{}" : call.Arguments)?.AsObject() ?? [];
+            JsonNode? parsed = JsonNode.Parse(string.IsNullOrWhiteSpace(call.Arguments) ? "{}" : call.Arguments);
+            if (parsed is not null and not JsonObject) return "The arguments must be a JSON object.";
+            JsonObject arguments = parsed as JsonObject ?? [];
             argument = (arguments.FirstOrDefault().Value as JsonValue)?.ToString() ?? "";
         }
         catch (JsonException)
