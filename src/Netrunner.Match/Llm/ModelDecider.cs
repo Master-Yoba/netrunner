@@ -28,7 +28,12 @@ public interface IStrategicDecider
 /// and a model whose thinking budget runs out can't go on thinking in its answer.
 /// </param>
 /// <param name="Deadline">The longest a decision may take; past it the decision fails and the heuristic's choice stands.</param>
-public sealed record ModelDeciderSettings(int MaxToolCalls = 3, bool CardText = true, bool StructuredAnswer = false, TimeSpan? Deadline = null);
+/// <param name="Defer">
+/// Makes the heuristic's choice the default, to leave only for a gain the model can name: free overrides lost more
+/// games than they won against the heuristic alone (the latency sweep's 16 Gateway deals).
+/// </param>
+public sealed record ModelDeciderSettings(int MaxToolCalls = 3, bool CardText = true, bool StructuredAnswer = false, TimeSpan? Deadline = null,
+    bool Defer = false);
 
 /// <summary>
 /// Asks a model over an OpenAI-compatible chat, one conversation per decision, with a rules summary, the rules for
@@ -54,7 +59,7 @@ public sealed class ModelDecider(ILlmChatClient client, LlmSampling sampling, Ru
     {
         var messages = new List<LlmChatMessage>
         {
-            LlmChatMessage.System(SystemPrompt(side, Lookups())),
+            LlmChatMessage.System(SystemPrompt(side, Lookups(), _settings.Defer)),
             LlmChatMessage.User(request + LlmRulesPrimer.RulesFor(request, rules) + "Answer with {\"option\": <number>, \"reason\": \"one sentence\"}."),
         };
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -194,13 +199,12 @@ public sealed class ModelDecider(ILlmChatClient client, LlmSampling sampling, Ru
             : "Look up a card or a rule with the tools only when the summary below and the cards in view don't settle it; "
               + "every lookup keeps your opponent waiting.\n";
 
-    private static string SystemPrompt(PlayerSide side, string lookups) => $$"""
+    private static string SystemPrompt(PlayerSide side, string lookups, bool defer) => $$"""
         You play Android: Netrunner (Null Signal Games' comprehensive rules) as the {{side}}, against a bot. The Corp
         wins with 7 agenda points scored, or when the Runner can't take damage; the Runner wins with 7 agenda points
         stolen, or when R&D is empty when the Corp must draw.
         Each message shows the board as you see it, the cards in view, and your legal options for the next click.
-        A heuristic bot scored the options; it is a fair baseline that makes known mistakes. Take its choice when it
-        is right, and another option when you see a better plan. Think about the whole turn, not only this click.
+        {{(defer ? Deferring : Advising)}} Think about the whole turn, not only this click.
         {{lookups}}- Corp: protect HQ and R&D early; put agendas only where the Runner can't break in this turn; keep credits
           to rez the ICE that matters; score when you can; a remote is for an agenda or an asset.
         - Runner: build economy and breakers; run where agendas are likely and you can get in; don't run into ICE
@@ -209,6 +213,13 @@ public sealed class ModelDecider(ILlmChatClient client, LlmSampling sampling, Ru
 
         {{LlmRulesPrimer.Text}}
         """;
+
+    private const string Advising = "A heuristic bot scored the options; it is a fair baseline that makes known mistakes. "
+        + "Take its choice when it is right, and another option when you see a better plan.";
+
+    private const string Deferring = "A heuristic bot scored the options and its choice is your default: it plays soundly "
+        + "over a whole game. Choose another option only for a gain you can name that it misses, such as an agenda you can "
+        + "steal or score this turn, a loss you avoid, or a card or rule its reason gets wrong; otherwise answer with its option.";
 
     private static JsonObject ToolSchema(string name, string description) => new()
     {

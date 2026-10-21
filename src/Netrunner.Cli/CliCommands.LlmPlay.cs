@@ -13,7 +13,7 @@ public static partial class CliCommands
     /// <summary>
     /// ai-llm-play --output new-dir [--side corp|runner|both] [--games N] [--seed S] [--opponent ENTRANT]
     /// [--temperature T] [--top-p P] [--top-k K] [--reasoning low|medium|xhigh] [--max-tool-calls N]
-    /// [--tools none|rules|all] [--thinking-budget TOKENS] [--structured-answer] [--deadline-seconds S]
+    /// [--tools none|rules|all] [--thinking-budget TOKENS] [--structured-answer] [--deadline-seconds S] [--defer] [--shortlist N]
     /// [--parallel N] [--model NAME] [--rules-root DIR]. The LLM opponent (Wave 4.5, P3) plays Gateway games
     /// against a bot, N at a time (one per server slot; one by default). Each game is saved as
     /// <c>ai-ladder --save-games</c> saves it, with the LLM's decisions beside it, so ai-lint and ai-llm-review
@@ -24,8 +24,8 @@ public static partial class CliCommands
         string destination = "", opponent = "standard", rulesRoot = Path.Combine("data", "vendor", "rules");
         string? sides = "both", model = null, reasoning = "low";
         int games = 2, maxToolCalls = 3, firstGame = 0, parallel = 1;
-        int? thinkingBudget = null;
-        bool cardText = true, structured = false;
+        int? thinkingBudget = null, shortlist = null;
+        bool cardText = true, structured = false, defer = false;
         TimeSpan? deadline = null;
         ulong seed = 1;
         double? temperature = 0.6, topP = 0.95;
@@ -62,6 +62,8 @@ public static partial class CliCommands
                         break;
                     case "--thinking-budget": thinkingBudget = int.Parse(Next(), NumberStyles.None, CultureInfo.InvariantCulture); break;
                     case "--structured-answer": structured = true; break;
+                    case "--defer": defer = true; break;
+                    case "--shortlist": shortlist = int.Parse(Next(), NumberStyles.None, CultureInfo.InvariantCulture); break;
                     case "--deadline-seconds":
                         deadline = TimeSpan.FromSeconds(double.Parse(Next(), NumberStyles.Float, CultureInfo.InvariantCulture));
                         break;
@@ -78,6 +80,7 @@ public static partial class CliCommands
             if (destination.Length == 0) throw new ArgumentException("ai-llm-play requires --output <new directory>.");
             if (games is < 1 or > 1000) throw new ArgumentException("--games requires 1 to 1000.");
             if (parallel is < 1 or > 16) throw new ArgumentException("--parallel requires 1 to 16.");
+            if (shortlist is < 2) throw new ArgumentException("--shortlist requires at least 2 options.");
             if (!RatingLadder.EntrantOrder.Contains(opponent)) throw new ArgumentException($"Unknown opponent entrant '{opponent}'.");
             if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode)
                 throw new ArgumentException("ai-llm-play needs previously provisioned official content embedded at build time.");
@@ -93,7 +96,7 @@ public static partial class CliCommands
 
         Directory.CreateDirectory(destination);
         var sampling = new LlmSampling(temperature, topP, topK, null, reasoning, ThinkingBudget: thinkingBudget);
-        var settings = new ModelDeciderSettings(maxToolCalls, cardText, structured, deadline);
+        var settings = new ModelDeciderSettings(maxToolCalls, cardText, structured, deadline, defer);
         RulesIndex? rules = File.Exists(Path.Combine(rulesRoot, "index.json")) ? RulesIndex.Load(rulesRoot) : null;
         using var client = new OpenAiCompatibleChatClient(options);
         IReadOnlyList<string> contents = RulesFuzzRunner.ContentIds("gateway");
@@ -112,11 +115,11 @@ public static partial class CliCommands
             DateTime started = DateTime.UtcNow;
             LadderGameResult result = await RatingLadder.PlayAsync(game, RatingLadder.DefaultActionCap, saved => LadderGameArchive.Write(destination, saved),
                 (entrant, side, definition) => entrant == "llm"
-                    ? agent = WithProgress(LlmOpponentAgent.Create(side, definition, client, sampling, rules, settings), game.Id, progress)
+                    ? agent = WithProgress(LlmOpponentAgent.Create(side, definition, client, sampling, rules, settings, shortlist), game.Id, progress)
                     : RatingLadder.CreateAgent(entrant, side, definition), cancellationToken: cancellationToken).ConfigureAwait(false);
             List<LlmOpponentDecision> decisions = agent?.Decisions ?? [];
             File.WriteAllText(Path.Combine(destination, game.Id.Replace('~', '_') + ".llm.json"),
-                EngineJson.Serialize(new { schemaVersion = 1, game = game.Id, model = options.Model, sampling, settings, decisions }));
+                EngineJson.Serialize(new { schemaVersion = 1, game = game.Id, model = options.Model, sampling, settings, shortlist, decisions }));
             string winner = result.Error is not null ? "error" : result.Capped ? "capped" : result.CorpScore == 1 ? "Corp" : "Runner";
             played[slot] = (result, decisions, FormattableString.Invariant(
                 $"ai-llm-play {game.Id}: LLM {(llmCorp ? "Corp" : "Runner")}, winner {winner}, {result.Actions} actions, {decisions.Count} asked, {decisions.Count(decision => decision.Outcome == "model" && decision.Chosen != decision.Advised)} overrode the heuristic, {decisions.Count(decision => decision.Outcome == "invalid")} invalid, {decisions.Count(decision => decision.Outcome == "failed")} failed, {(DateTime.UtcNow - started).TotalSeconds:0}s{(result.Error is null ? "" : $": {result.Error}")}"));

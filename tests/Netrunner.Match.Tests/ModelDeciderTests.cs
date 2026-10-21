@@ -68,6 +68,20 @@ public sealed class ModelDeciderTests
     }
 
     [Fact]
+    public async Task DeferringMakesTheHeuristicsChoiceTheDefault()
+    {
+        var model = new ScriptedModel("{\"option\": 1, \"reason\": \"economy\"}", "{\"option\": 1, \"reason\": \"economy\"}");
+        await new ModelDecider(model, new LlmSampling(), null, new ModelDeciderSettings(MaxToolCalls: 0))
+            .DecideAsync(PlayerSide.Corp, Request, 2, CancellationToken.None);
+        await new ModelDecider(model, new LlmSampling(), null, new ModelDeciderSettings(MaxToolCalls: 0, Defer: true))
+            .DecideAsync(PlayerSide.Corp, Request, 2, CancellationToken.None);
+
+        Assert.Contains("when you see a better plan", model.Requests[0].Messages[0].Content, StringComparison.Ordinal);
+        Assert.Contains("its choice is your default", model.Requests[1].Messages[0].Content, StringComparison.Ordinal);
+        Assert.DoesNotContain("when you see a better plan", model.Requests[1].Messages[0].Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ADecisionPastItsDeadlineFailsSoTheHeuristicsChoiceStands()
     {
         var decider = new ModelDecider(new SilentModel(), new LlmSampling(), null,
