@@ -14,6 +14,16 @@ Artwork is optional and local-only. Launching, playing, importing, exporting,
 and validating a cache never downloads anything. Only `card-art fetch` contacts
 the image source. Standard builds and executable packages contain no card faces.
 
+## Card backs
+
+The committed backs in `src/Netrunner.Godot/card-backs` are original artwork,
+rendered from `tools/card-backs/*.svg` by `make card-backs-render`.
+`make card-art-fetch` also runs `make card-backs-fetch`, which downloads the
+official NSG backs into ignored `.tools/card-backs`, checking pinned SHA-256s.
+`make play` and `make verify` point `NETRUNNER_CARD_BACK_DIRECTORY` there, so
+the official backs replace the originals wherever they are provisioned. The NSG
+visual-assets license does not cover card backs, so they stay local-only.
+
 ## Download and validate
 
 After installing the repository toolchain:

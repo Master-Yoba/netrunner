@@ -1,14 +1,11 @@
 # Card backs
 
-Corp and Runner card backs by Null Signal Games.
-Source: https://chiriboga.cronbach.com/images/images.zip
-Members: images/Corp_back.png and images/Runner_back.png.
-Retrieved 2026-09-06; extracted unchanged.
-Committed so CI can run the official M4.9 UI gate; a local copy under the
-ignored `.tools/card-backs` directory still overrides these files.
-The NSG visual-assets license does not cover card backs:
-https://nullsignal.games/about/nsg-visual-assets/
-Keep these out of any distributed build until licensing is settled.
+Original Corp and Runner card backs made for this project; no third-party
+artwork. The sources are `tools/card-backs/corp.svg` and `runner.svg`;
+`make card-backs-render` rasterizes them here at 300x418 with Godot.
 
-- runner.png: SHA256 7ca7086e60bd70dbd5be799ad0a5c876860e0a82d5e0ed569c2862682474b797
-- corp.png: SHA256 1b9ac73029558ff7f695d483941c71acbf02a3f791fb2fda7d3c8b7b5cf7c155
+The official Null Signal Games backs are not committed: the NSG visual-assets
+license does not cover them (https://nullsignal.games/about/nsg-visual-assets/).
+`make card-backs-fetch` (also run by `make card-art-fetch`) downloads them into
+the ignored `.tools/card-backs` directory, which overrides these files through
+`NETRUNNER_CARD_BACK_DIRECTORY` in `scripts/play.sh` and `scripts/verify.sh`.
