@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 1,
+  "target": "teacher",
+  "suite": "data/ai/regret/gateway-elevation",
+  "outcomeWeight": 0.2,
+  "sides": [
+    {
+      "side": "corp",
+      "train": 622,
+      "heldOut": 195,
+      "heldOutRoots": 195,
+      "arms": [
+        {
+          "arm": "teacher\u0027s mean",
+          "teacherLogLoss": 0.6067141155486104,
+          "teacherMeanAbsoluteError": 0.22541320464803433,
+          "outcomeLogLoss": 0.7124343035094147
+        },
+        {
+          "arm": "set 4, shipped weights",
+          "teacherLogLoss": 0.4930136455048084,
+          "teacherMeanAbsoluteError": 0.1391964133775076,
+          "outcomeLogLoss": 0.5843904601618518
+        },
+        {
+          "arm": "set 4, fitted to the teacher",
+          "teacherLogLoss": 0.48465609404250315,
+          "teacherMeanAbsoluteError": 0.1338279908156315,
+          "outcomeLogLoss": 0.525854196293187
+        },
+        {
+          "arm": "set 5, fitted to the teacher",
+          "teacherLogLoss": 0.4658464793576332,
+          "teacherMeanAbsoluteError": 0.11494829084838433,
+          "outcomeLogLoss": 0.5141595810215276
+        }
+      ],
+      "paired": [
+        {
+          "arm": "set 4 shipped",
+          "logLoss": {
+            "mean": -0.027167166147175008,
+            "lower": -0.03907239044081511,
+            "upper": -0.015391380328763107
+          },
+          "absolute": {
+            "mean": -0.024248122529123263,
+            "lower": -0.035166708940997375,
+            "upper": -0.012637741057743547
+          }
+        },
+        {
+          "arm": "set 4 fitted",
+          "logLoss": {
+            "mean": -0.01880961468486949,
+            "lower": -0.0269795116664958,
+            "upper": -0.010577132967178703
+          },
+          "absolute": {
+            "mean": -0.018879699967247143,
+            "lower": -0.027093555145636956,
+            "upper": -0.009964031900823086
+          }
+        }
+      ]
+    },
+    {
+      "side": "runner",
+      "train": 962,
+      "heldOut": 268,
+      "heldOutRoots": 268,
+      "arms": [
+        {
+          "arm": "teacher\u0027s mean",
+          "teacherLogLoss": 0.6776859882430906,
+          "teacherMeanAbsoluteError": 0.2068003040225348,
+          "outcomeLogLoss": 0.6746562358851984
+        },
+        {
+          "arm": "set 4, shipped weights",
+          "teacherLogLoss": 0.6386484604259665,
+          "teacherMeanAbsoluteError": 0.1622386893596104,
+          "outcomeLogLoss": 0.62961190911517
+        },
+        {
+          "arm": "set 4, fitted to the teacher",
+          "teacherLogLoss": 0.5922289972503949,
+          "teacherMeanAbsoluteError": 0.11534257565271028,
+          "outcomeLogLoss": 0.5537528395551464
+        },
+        {
+          "arm": "set 5, fitted to the teacher",
+          "teacherLogLoss": 0.5813855085335308,
+          "teacherMeanAbsoluteError": 0.10682973864049355,
+          "outcomeLogLoss": 0.5426349290437369
+        }
+      ],
+      "paired": [
+        {
+          "arm": "set 4 shipped",
+          "logLoss": {
+            "mean": -0.05726295189243568,
+            "lower": -0.07500577431576956,
+            "upper": -0.039135157682876065
+          },
+          "absolute": {
+            "mean": -0.05540895071911687,
+            "lower": -0.0723961752515055,
+            "upper": -0.03843154207059143
+          }
+        },
+        {
+          "arm": "set 4 fitted",
+          "logLoss": {
+            "mean": -0.0108434887168646,
+            "lower": -0.016275180165604215,
+            "upper": -0.0064176335893158295
+          },
+          "absolute": {
+            "mean": -0.008512837012216666,
+            "lower": -0.01290572526406057,
+            "upper": -0.004275065882949378
+          }
+        }
+      ]
+    }
+  ]
+}

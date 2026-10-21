@@ -1,0 +1,216 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scenes/GameSymbolLabel.cs" id="symbols"]
+
+[ext_resource type="PackedScene" path="res://scenes/components/PileView.tscn" id="1_pile"]
+[ext_resource type="Theme" path="res://themes/M4Theme.tres" id="3_theme"]
+
+[ext_resource type="PackedScene" path="res://scenes/components/CreditIndicator.tscn" id="credits"]
+[ext_resource type="PackedScene" path="res://scenes/components/BoardPile.tscn" id="deck"]
+[ext_resource type="Script" path="res://scenes/FactionEmblem.cs" id="emblem"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_area"]
+content_margin_left = 8.0
+content_margin_top = 10.0
+content_margin_right = 8.0
+content_margin_bottom = 6.0
+bg_color = Color(0, 0, 0, 0)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_inner"]
+content_margin_left = 8.0
+content_margin_top = 6.0
+content_margin_right = 8.0
+content_margin_bottom = 6.0
+bg_color = Color(0.03, 0.045, 0.06, 0.82)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.17, 0.24, 0.31, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_identity"]
+content_margin_left = 8.0
+content_margin_top = 6.0
+content_margin_right = 8.0
+content_margin_bottom = 6.0
+bg_color = Color(0.035, 0.12, 0.12, 0)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[node name="PlayerArea" type="PanelContainer"]
+custom_minimum_size = Vector2(0, 178)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+theme = ExtResource("3_theme")
+theme_override_styles/panel = SubResource("StyleBoxFlat_area")
+
+[node name="Content" type="HBoxContainer" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_constants/separation = 6
+
+[node name="Summary" type="PanelContainer" parent="Content"]
+custom_minimum_size = Vector2(174, 0)
+layout_mode = 2
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_inner")
+
+[node name="Content" type="VBoxContainer" parent="Content/Summary"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+mouse_filter = 2
+theme_override_constants/separation = 2
+
+[node name="Plate" type="HBoxContainer" parent="Content/Summary/Content"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 6
+
+[node name="Emblem" type="Control" parent="Content/Summary/Content/Plate"]
+custom_minimum_size = Vector2(22, 22)
+layout_mode = 2
+mouse_filter = 2
+script = ExtResource("emblem")
+Side = 1
+
+[node name="Side" type="Label" parent="Content/Summary/Content/Plate"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_type_variation = &"DisplayLabel"
+theme_override_colors/font_color = Color(0.56, 0.95, 0.91, 1)
+theme_override_font_sizes/font_size = 15
+text = "RUNNER"
+vertical_alignment = 1
+text_overrun_behavior = 3
+
+[node name="Credits" parent="Content/Summary/Content" instance=ExtResource("credits")]
+layout_mode = 2
+
+[node name="Resources" type="RichTextLabel" parent="Content/Summary/Content"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/default_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/normal_font_size = 14
+script = ExtResource("symbols")
+SymbolText = "[click] 0 · [agenda point] 0"
+fit_content = true
+scroll_active = false
+custom_minimum_size = Vector2(150, 0)
+
+[node name="HandCaption" type="Label" parent="Content/Summary/Content"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.62, 0.76, 0.75, 1)
+theme_override_font_sizes/font_size = 10
+text = "Grip · hand"
+text_overrun_behavior = 3
+
+[node name="Score" type="Label" parent="Content/Summary/Content"]
+visible = false
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.62, 0.76, 0.75, 1)
+theme_override_font_sizes/font_size = 10
+text = "Score pile · 0"
+text_overrun_behavior = 3
+
+[node name="Scored" parent="Content/Summary/Content" instance=ExtResource("deck")]
+layout_mode = 2
+size_flags_horizontal = 0
+text = "Score\n—"
+tooltip_text = "Runner score area · stolen agendas"
+
+[node name="Identity" type="PanelContainer" parent="Content"]
+custom_minimum_size = Vector2(96, 150)
+layout_mode = 2
+size_flags_vertical = 4
+tooltip_text = "Runner identity"
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_identity")
+
+[node name="Content" type="VBoxContainer" parent="Content/Identity"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 1
+alignment = 1
+
+[node name="Caption" type="Label" parent="Content/Identity/Content"]
+visible = false
+custom_minimum_size = Vector2(0, 17)
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.62, 0.76, 0.75, 1)
+theme_override_font_sizes/font_size = 9
+text = "IDENTITY"
+text_overrun_behavior = 3
+
+[node name="Cards" type="MarginContainer" parent="Content/Identity/Content"]
+layout_mode = 2
+size_flags_vertical = 0
+mouse_filter = 2
+
+[node name="Deck" parent="Content" instance=ExtResource("deck")]
+custom_minimum_size = Vector2(105, 147)
+layout_mode = 2
+text = "Stack\n—"
+tooltip_text = "Runner Stack · face-down pile"
+
+[node name="Discard" parent="Content" instance=ExtResource("deck")]
+custom_minimum_size = Vector2(105, 147)
+layout_mode = 2
+text = "Heap\n—"
+tooltip_text = "Runner Heap · public discard pile"
+
+[node name="Rig" type="PanelContainer" parent="Content"]
+custom_minimum_size = Vector2(315, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_inner")
+
+[node name="Content" type="VBoxContainer" parent="Content/Rig"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+mouse_filter = 2
+theme_override_constants/separation = 1
+alignment = 1
+
+[node name="Caption" type="Label" parent="Content/Rig/Content"]
+visible = false
+custom_minimum_size = Vector2(0, 17)
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.62, 0.76, 0.75, 1)
+theme_override_font_sizes/font_size = 9
+text = "RIG"
+text_overrun_behavior = 3
+
+[node name="Scroll" type="ScrollContainer" parent="Content/Rig/Content"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+mouse_filter = 2
+follow_focus = true
+vertical_scroll_mode = 0
+
+[node name="Cards" type="HBoxContainer" parent="Content/Rig/Content/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 0
+mouse_filter = 2
+theme_override_constants/separation = 8

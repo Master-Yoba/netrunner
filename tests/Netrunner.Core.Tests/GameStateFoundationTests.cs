@@ -176,6 +176,129 @@ public sealed class GameStateFoundationTests
     }
 }
 
+public sealed class RemovedFromGameZoneTests
+{
+    [Fact]
+    public void RemovedFromGameZonesAreLazyAndRoundTripWhenPresent()
+    {
+        GameState baseline = GameState.CreateNew(42);
+        Assert.DoesNotContain(baseline.Zones, zone =>
+            zone.Kind is ZoneKind.CorpRemovedFromGame or ZoneKind.RunnerRemovedFromGame);
+        Assert.Equal(15, baseline.Zones.Count);
+
+        GameState withZones = Rebuild(
+            baseline,
+            baseline.Zones.Append(new ZoneState(
+                new ZoneId("zone:corp-rfg"),
+                ZoneKind.CorpRemovedFromGame,
+                PlayerSide.Corp)).Append(new ZoneState(
+                new ZoneId("zone:runner-rfg"),
+                ZoneKind.RunnerRemovedFromGame,
+                PlayerSide.Runner)));
+
+        StateInvariantValidator.Validate(withZones);
+        string json = EngineJson.Serialize(withZones);
+        GameState restored = EngineJson.DeserializeState(json);
+        Assert.Equal(json, EngineJson.Serialize(restored));
+        Assert.Equal(PlayerSide.Corp, restored.GetZone(ZoneKind.CorpRemovedFromGame).OwnerSide);
+        Assert.Equal(PlayerSide.Runner, restored.GetZone(ZoneKind.RunnerRemovedFromGame).OwnerSide);
+    }
+
+    [Fact]
+    public void RemovedFromGameZonesMustBeUniqueOwnerCorrectAndServerless()
+    {
+        GameState baseline = GameState.CreateNew(42);
+        ZoneState first = new(
+            new ZoneId("zone:rfg-corp-one"),
+            ZoneKind.CorpRemovedFromGame,
+            PlayerSide.Corp);
+        ZoneState second = new(
+            new ZoneId("zone:rfg-corp-two"),
+            ZoneKind.CorpRemovedFromGame,
+            PlayerSide.Corp);
+        Assert.False(StateInvariantValidator.TryValidate(
+            Rebuild(baseline, baseline.Zones.Append(first).Append(second)),
+            out IReadOnlyList<StateInvariantViolation> duplicateViolations));
+        Assert.Contains(duplicateViolations, violation => violation.Code == "zones.required-kind-count");
+
+        ZoneState wrongOwner = new(
+            new ZoneId("zone:rfg-wrong-owner"),
+            ZoneKind.CorpRemovedFromGame,
+            PlayerSide.Runner);
+        Assert.False(StateInvariantValidator.TryValidate(
+            Rebuild(baseline, baseline.Zones.Append(wrongOwner)),
+            out IReadOnlyList<StateInvariantViolation> ownerViolations));
+        Assert.Contains(ownerViolations, violation => violation.Code == "zones.owner-mismatch");
+
+        ZoneState serverOwned = new(
+            new ZoneId("zone:rfg-server"),
+            ZoneKind.RunnerRemovedFromGame,
+            PlayerSide.Runner,
+            new ServerId("server:unexpected"));
+        Assert.False(StateInvariantValidator.TryValidate(
+            Rebuild(baseline, baseline.Zones.Append(serverOwned)),
+            out IReadOnlyList<StateInvariantViolation> serverViolations));
+        Assert.Contains(serverViolations, violation => violation.Code == "zones.server-unexpected");
+    }
+
+    [Fact]
+    public void RemovedFromGameCardsMustBeFaceup()
+    {
+        GameState baseline = GameState.CreateNew(42);
+        ZoneId zoneId = new("zone:rfg-facedown");
+        CardInstanceId cardId = new("card:rfg-facedown");
+        CardInstanceState card = new(
+            cardId,
+            new CardDefinitionId("def:rfg-facedown"),
+            zoneId,
+            PlayerSide.Corp,
+            faceUp: false);
+        GameState invalid = Rebuild(
+            baseline,
+            baseline.Zones.Append(new ZoneState(
+                zoneId,
+                ZoneKind.CorpRemovedFromGame,
+                PlayerSide.Corp,
+                null,
+                [cardId])),
+            [card]);
+
+        Assert.False(StateInvariantValidator.TryValidate(
+            invalid,
+            out IReadOnlyList<StateInvariantViolation> violations));
+        Assert.Contains(violations, violation => violation.Code == "cards.removed-from-game-facedown");
+    }
+
+    private static GameState Rebuild(
+        GameState source,
+        IEnumerable<ZoneState> zones,
+        IEnumerable<CardInstanceState>? cards = null) => new(
+        source.SchemaVersion,
+        source.GameId,
+        source.RulesVersion,
+        source.CardDataVersion,
+        source.Players,
+        cards?.ToArray() ?? source.Cards,
+        zones.ToArray(),
+        source.Servers,
+        source.Turn,
+        source.Outcome,
+        source.RandomState,
+        source.Allocator,
+        source.DecisionRevision,
+        source.EventSequence,
+        source.ResolutionStack,
+        source.PendingDecision,
+        source.ActionSequence,
+        source.InitialSeed,
+        source.RunState,
+        source.RulesState,
+        source.BehaviorRegistryVersion,
+        source.BehaviorCatalogFingerprint,
+        source.RuntimeCardCatalogVersion,
+        source.RuntimeCardCatalogFingerprint);
+}
+
 public sealed class StateInvariantTests
 {
     [Fact]

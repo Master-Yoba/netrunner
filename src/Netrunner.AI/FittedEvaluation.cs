@@ -1,0 +1,202 @@
+using System.Reflection;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using Netrunner.Core;
+
+namespace Netrunner.AI;
+
+/// <summary>One side's logistic model: standardized features, weights and a bias.</summary>
+public sealed record LogisticSideModel(
+    [property: JsonRequired] double[] Mean,
+    [property: JsonRequired] double[] Deviation,
+    [property: JsonRequired] double[] Weights,
+    [property: JsonRequired] double Bias)
+{
+    public double Probability(IReadOnlyList<double> features)
+    {
+        double logit = Bias;
+        for (int index = 0; index < Weights.Length; index++)
+            logit += Weights[index] * (features[index] - Mean[index]) / Deviation[index];
+        return 1 / (1 + Math.Exp(-logit));
+    }
+
+    /// <summary>
+    /// Deterministic ridge-regularized logistic regression by batch gradient
+    /// descent on standardized features (A5). Small, linear and reproducible:
+    /// the same samples always give the same weights.
+    /// </summary>
+    /// <param name="outcomes">Each sample's target probability: an outcome (0 or 1), or a soft one (S4.2: the teacher's value).</param>
+    /// <param name="sampleWeights">Each sample's weight in the loss (S4.2: the outcome rows count 0.2); all 1 when null.</param>
+    public static LogisticSideModel Fit(IReadOnlyList<double[]> samples, IReadOnlyList<double> outcomes, double ridge = 0.01,
+        int iterations = 4000, double learningRate = 0.5, IReadOnlyList<double>? sampleWeights = null)
+    {
+        ArgumentNullException.ThrowIfNull(samples);
+        ArgumentNullException.ThrowIfNull(outcomes);
+        if (samples.Count == 0 || samples.Count != outcomes.Count) throw new ArgumentException("Samples and outcomes must pair up.");
+        if (sampleWeights is not null && sampleWeights.Count != samples.Count) throw new ArgumentException("Weights must pair with samples.");
+        double totalWeight = sampleWeights?.Sum() ?? samples.Count;
+        int width = samples[0].Length;
+        double[] mean = new double[width], deviation = new double[width];
+        for (int feature = 0; feature < width; feature++)
+        {
+            mean[feature] = samples.Average(sample => sample[feature]);
+            double variance = samples.Average(sample => Math.Pow(sample[feature] - mean[feature], 2));
+            deviation[feature] = variance > 1e-12 ? Math.Sqrt(variance) : 1;
+        }
+        double Weight(int sample) => sampleWeights?[sample] ?? 1;
+        double[][] standardized = samples.Select(sample => sample.Select((value, feature) => (value - mean[feature]) / deviation[feature]).ToArray()).ToArray();
+        double[] weights = new double[width];
+        double bias = 0;
+        double[] gradient = new double[width];
+        for (int iteration = 0; iteration < iterations; iteration++)
+        {
+            Array.Clear(gradient);
+            double biasGradient = 0;
+            for (int sample = 0; sample < standardized.Length; sample++)
+            {
+                double logit = bias;
+                for (int feature = 0; feature < width; feature++) logit += weights[feature] * standardized[sample][feature];
+                double residual = Weight(sample) * (outcomes[sample] - 1 / (1 + Math.Exp(-logit)));
+                biasGradient += residual;
+                for (int feature = 0; feature < width; feature++) gradient[feature] += residual * standardized[sample][feature];
+            }
+            bias += learningRate * biasGradient / totalWeight;
+            for (int feature = 0; feature < width; feature++)
+                weights[feature] += learningRate * (gradient[feature] / totalWeight - ridge * weights[feature]);
+        }
+        return new(mean, deviation, weights, bias);
+    }
+
+    /// <summary>Mean log loss of the model's predictions (lower is better).</summary>
+    public static double LogLoss(Func<double[], double> predict, IReadOnlyList<double[]> samples, IReadOnlyList<double> outcomes)
+    {
+        ArgumentNullException.ThrowIfNull(predict);
+        double total = 0;
+        for (int index = 0; index < samples.Count; index++)
+        {
+            double probability = Math.Clamp(predict(samples[index]), 1e-6, 1 - 1e-6);
+            total -= outcomes[index] * Math.Log(probability) + (1 - outcomes[index]) * Math.Log(1 - probability);
+        }
+        return total / samples.Count;
+    }
+}
+
+/// <summary>The versioned fitted evaluation document under <c>data/ai</c>.</summary>
+public sealed record FittedEvaluationDocument(
+    [property: JsonRequired] int SchemaVersion,
+    [property: JsonRequired] string Version,
+    [property: JsonRequired] IReadOnlyList<string> FeatureNames,
+    [property: JsonRequired] LogisticSideModel Corp,
+    [property: JsonRequired] LogisticSideModel Runner,
+    string? Provenance = null);
+
+/// <summary>
+/// A5: the position evaluation fitted to self-play outcomes: the observing
+/// side's probability of winning, from <see cref="EvaluationFeatures"/>. The
+/// planner compares positions on its log-odds.
+/// </summary>
+public static class FittedEvaluation
+{
+    private static readonly Lazy<FittedEvaluationDocument> V1 = new(() => Load(1));
+    private static readonly Lazy<FittedEvaluationDocument> V2 = new(() => Load(2));
+
+    /// <summary>Bot plan S4.2: set 5 fitted to the teacher, and set 4's features refitted to it (the attribution arm).</summary>
+    private static readonly Lazy<FittedEvaluationDocument> V5 = new(() => Load("evaluation-v5", 5));
+    private static readonly Lazy<FittedEvaluationDocument> V4Teacher = new(() => Load("evaluation-v4-teacher", 4));
+
+    /// <summary>Bot plan S4.2b: set 5 and set 4's features fitted to the play-out's value where the root side's turn ends.</summary>
+    private static readonly Lazy<FittedEvaluationDocument> V5Lines = new(() => Load("evaluation-v5-lines", 5));
+    private static readonly Lazy<FittedEvaluationDocument> V4Lines = new(() => Load("evaluation-v4-lines", 4));
+
+    /// <summary>
+    /// The feature set an evaluation reads: its own number, except 6, set 4's features with weights fitted to the teacher
+    /// (S4.2's control arm), and S4.2b's end-of-line fits, 7 (set 5) and 8 (set 4's features).
+    /// </summary>
+    public static int FeatureSetOf(int version) => version switch { 6 or 8 => 4, 7 => 5, _ => version };
+
+    /// <summary>
+    /// A7: the behavior-registry version of the System Gateway + Elevation pool
+    /// (ElevationBehaviorCatalog.Version), whose games plan with that pool's own fit.
+    /// </summary>
+    public const string GatewayElevationBehaviorVersion = "gateway-elevation-el.1";
+
+    private static readonly Lazy<FittedEvaluationDocument> GatewayElevationV2 = new(() => Load("evaluation-gateway-elevation-v2", 2));
+
+    /// <summary>The first fitted evaluation (A5), which Corp v9 and Runner v8 plan with.</summary>
+    public static FittedEvaluationDocument Document => V1.Value;
+
+    /// <summary>
+    /// A7: a pool's own fit where it beat the general fit on that pool's held-out games: the Gateway + Elevation
+    /// pool for feature sets 2 to 4 (+0.030 and +0.026 log loss, EL.8). Every other game uses the general fit.
+    /// </summary>
+    public static FittedEvaluationDocument DocumentFor(int version, string? behaviorVersion) =>
+        version is 2 or 3 or 4 && behaviorVersion == GatewayElevationBehaviorVersion ? GatewayElevationV2.Value : DocumentFor(version);
+
+    public static FittedEvaluationDocument DocumentFor(int version) => version switch
+    {
+        1 => V1.Value,
+        // Sets 3 and 4 correct one feature of set 2 and keep its fitted weights.
+        2 or 3 or 4 => V2.Value,
+        5 => V5.Value,
+        6 => V4Teacher.Value,
+        7 => V5Lines.Value,
+        8 => V4Lines.Value,
+        _ => throw new ArgumentOutOfRangeException(nameof(version), "Unknown fitted evaluation."),
+    };
+
+    /// <param name="knowledge">The observer's knowledge, which set 5 reads (the tracker, the opponent's list).</param>
+    public static double WinProbability(AgentFeatures features, ICardEvaluationCatalog catalog, int version = 1,
+        string? behaviorVersion = null, AgentKnowledge? knowledge = null)
+    {
+        ArgumentNullException.ThrowIfNull(features);
+        AgentOutcome outcome = features.Board.Outcome;
+        if (outcome.Kind != GameOutcomeKind.Ongoing) return outcome.Winner == features.Side ? 1 : 0;
+        FittedEvaluationDocument document = DocumentFor(version, behaviorVersion);
+        LogisticSideModel model = features.Side == PlayerSide.Corp ? document.Corp : document.Runner;
+        return model.Probability(EvaluationFeatures.Extract(features, catalog, FeatureSetOf(version), knowledge));
+    }
+
+    /// <summary>The win probability as a planner score: log-odds in thousandths, with wins and losses at the extremes.</summary>
+    public static long Score(AgentFeatures features, ICardEvaluationCatalog catalog, int version = 1, string? behaviorVersion = null,
+        AgentKnowledge? knowledge = null)
+    {
+        double probability = Math.Clamp(WinProbability(features, catalog, version, behaviorVersion, knowledge), 1e-6, 1 - 1e-6);
+        return (long)Math.Round(Math.Log(probability / (1 - probability)) * 1000);
+    }
+
+    /// <summary>The planner score with a personality's shift of its named terms (A6); Balanced is the plain score.</summary>
+    public static long Score(AgentFeatures features, ICardEvaluationCatalog catalog, int version, AgentPersonality personality,
+        string? behaviorVersion = null, AgentKnowledge? knowledge = null)
+    {
+        ArgumentNullException.ThrowIfNull(features);
+        if (personality == AgentPersonality.Balanced || version == 1 || features.Board.Outcome.Kind != GameOutcomeKind.Ongoing)
+            return Score(features, catalog, version, behaviorVersion, knowledge);
+        FittedEvaluationDocument document = DocumentFor(version, behaviorVersion);
+        LogisticSideModel model = features.Side == PlayerSide.Corp ? document.Corp : document.Runner;
+        double[] values = EvaluationFeatures.Extract(features, catalog, FeatureSetOf(version), knowledge);
+        double probability = Math.Clamp(model.Probability(values), 1e-6, 1 - 1e-6);
+        return (long)Math.Round(Math.Log(probability / (1 - probability)) * 1000)
+            + AgentPersonalities.Shift(personality, values, EvaluationFeatures.NamesFor(FeatureSetOf(version)));
+    }
+
+    private static readonly JsonSerializerOptions ReadOptions = new() { PropertyNameCaseInsensitive = true };
+
+    public static FittedEvaluationDocument Parse(string json) =>
+        JsonSerializer.Deserialize<FittedEvaluationDocument>(json, ReadOptions)
+        ?? throw new InvalidOperationException("The fitted evaluation document is empty.");
+
+    private static FittedEvaluationDocument Load(int version) => Load($"evaluation-v{version}", version);
+
+    /// <param name="version">The feature set the document's model reads.</param>
+    private static FittedEvaluationDocument Load(string name, int version)
+    {
+        string resource = $"Netrunner.AI.Data.ai.{name}.json";
+        using Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resource)
+            ?? throw new InvalidOperationException($"The fitted evaluation resource '{resource}' is missing.");
+        using var reader = new StreamReader(stream);
+        FittedEvaluationDocument document = Parse(reader.ReadToEnd());
+        if (!document.FeatureNames.SequenceEqual(EvaluationFeatures.NamesFor(version)))
+            throw new InvalidOperationException("The fitted evaluation's features don't match the feature extractor; refit it.");
+        return document;
+    }
+}

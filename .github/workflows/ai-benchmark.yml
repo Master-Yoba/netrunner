@@ -1,0 +1,40 @@
+name: Offline AI benchmark
+
+# Manual only: the full M5 gate takes up to three hours of Actions minutes.
+# Run `make m5-gate` locally before releases, or dispatch this when needed.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  official-m5-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      NETRUNNER_TIMEOUT_SCALE: 3
+      DOTNET_CLI_TELEMETRY_OPTOUT: 1
+      DOTNET_NOLOGO: 1
+      NUGET_XMLDOC_MODE: skip
+      NETRUNNER_M5_GATE_OUTPUT: artifacts/m5/scheduled-gate
+    steps:
+      - uses: actions/checkout@v4
+      - name: Provision build tools
+        run: ./scripts/bootstrap.sh
+      - name: Provision pinned official metadata before offline execution
+        run: ./scripts/update-card-data.sh --commit 236140cf84491c23995b028bc791281837520b97 --retrieval-date 2026-08-28
+      - name: Restore build dependencies
+        run: make restore
+      - name: Run frozen M5 Standard, Easy, comparison and tactical gates
+        run: make m5-gate
+      - name: Verify all frozen tactical fixtures
+        run: make ai-tactics-verify TACTICAL_ARGS='--workers 4 --output artifacts/m5/scheduled-tactics'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: offline-benchmark-summary
+          path: |
+            artifacts/m5/scheduled-gate/*-summary.json
+          if-no-files-found: warn
+          retention-days: 30

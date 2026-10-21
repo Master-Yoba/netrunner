@@ -48,10 +48,10 @@ fi
 
 if [[ ! -d "$bootstrap_godot" ]]; then
   echo "Installing Godot ${bootstrap_godot_version} .NET into $bootstrap_godot"
-  mkdir -p "$bootstrap_godot"
-  curl --fail --location --silent --show-error \
+  curl --fail --location --silent --show-error --retry 3 --retry-max-time 120 \
     "$bootstrap_godot_url" \
     --output "$bootstrap_tmp/$bootstrap_godot_zip"
+  mkdir -p "$bootstrap_godot"
   unzip -q "$bootstrap_tmp/$bootstrap_godot_zip" -d "$bootstrap_godot"
   find "$bootstrap_godot" -maxdepth 2 -type f -name 'Godot*' -exec chmod +x {} \;
 fi
@@ -69,8 +69,13 @@ fi
 
 source "$bootstrap_root/scripts/env.sh"
 
+if [[ -z "${GODOT4:-}" || ! -f "$GODOT4" || ! -x "$GODOT4" ]]; then
+  echo "Bootstrap failed: no Godot .NET executable was discovered in $bootstrap_godot." >&2
+  exit 1
+fi
+bootstrap_godot_detected_version="$("$GODOT4" --version)"
 echo ".NET SDK: $(dotnet --version)"
-echo "Godot: $($GODOT4 --version)"
+echo "Godot: $bootstrap_godot_detected_version"
 echo "ripgrep: $("$bootstrap_rg/rg" --version | head -n 1)"
 
 if [[ ! -f "$bootstrap_root/Netrunner.sln" ]]; then

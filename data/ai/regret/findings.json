@@ -1,0 +1,173 @@
+{
+  "description": "Bot plan S1.1: every saved decision of the loop and strategy tests, as regret suite roots (split held-out, source finding).",
+  "findings": [
+    {
+      "fixture": "loop1-topan-last-card",
+      "sequence": 140,
+      "side": "runner",
+      "test": "BotLoop1Tests.TopanDoesNotInstallItsLastCardIntoAFlatline"
+    },
+    {
+      "fixture": "loop1-semak-samun-damage",
+      "sequence": 120,
+      "side": "runner",
+      "test": "BotLoop1Tests.SemakSamunsDamageIsNotTakenWithTooFewCards"
+    },
+    {
+      "fixture": "loop1-measured-response",
+      "sequence": 285,
+      "side": "runner",
+      "test": "BotLoop1Tests.MeasuredResponseIsPaidRatherThanFlatlining"
+    },
+    {
+      "fixture": "loop1-005",
+      "sequence": 120,
+      "side": "runner",
+      "test": "BotLoop1Tests.TopanIsNotUsedWithOnlyEventsInTheGrip"
+    },
+    {
+      "fixture": "loop1-007",
+      "sequence": 128,
+      "side": "runner",
+      "test": "BotLoop1Tests.MadaniDoesNotHostWithNoProgramInTheGrip"
+    },
+    {
+      "fixture": "loop1-002",
+      "sequence": 131,
+      "side": "corp",
+      "test": "BotLoop1Tests.TheCorpSpringsByteWhenTheRunnerAccessesItFromRAndD"
+    },
+    {
+      "fixture": "loop1-101",
+      "sequence": 401,
+      "side": "corp",
+      "test": "BotLoop1Tests.PoetrisScoringInstallFromRAndDIsTaken"
+    },
+    {
+      "fixture": "loop1-002",
+      "sequence": 52,
+      "side": "corp",
+      "test": "BotLoop1Tests.PhatGioanBaotixitaIsRezzedToGatherCounters"
+    },
+    {
+      "fixture": "loop1-003",
+      "sequence": 167,
+      "side": "corp",
+      "test": "BotLoop1Tests.HumanoidResourcesIsRezzedWithTheClicksToUseIt"
+    },
+    {
+      "fixture": "loop1-006",
+      "sequence": 154,
+      "side": "runner",
+      "test": "BotLoop1Tests.MutualFavorIsNotPlayedWhenEveryIceTypeIsCovered"
+    },
+    {
+      "fixture": "loop1-006",
+      "sequence": 251,
+      "side": "runner",
+      "test": "BotLoop1Tests.ASecondMarjanahIsNotInstalled"
+    },
+    {
+      "fixture": "loop1-006",
+      "sequence": 532,
+      "side": "runner",
+      "test": "BotLoop1Tests.CleanGetawayIsPlayedOnARunTheRunnerSeesSucceed"
+    },
+    {
+      "fixture": "loop1-006",
+      "sequence": 606,
+      "side": "runner",
+      "test": "BotLoop1Tests.NPotIsBrokenWholeAtThreatFive"
+    },
+    {
+      "fixture": "loop1-007",
+      "sequence": 47,
+      "side": "runner",
+      "test": "BotLoop1Tests.NPotsCreditBreakIsUsedWithNoClicksLeft"
+    },
+    {
+      "fixture": "loop1-005",
+      "sequence": 127,
+      "side": "runner",
+      "test": "BotLoop1Tests.MeasuredResponseIsTrashedFromHqWhenItWouldFlatline"
+    },
+    {
+      "fixture": "loop1-005",
+      "sequence": 130,
+      "side": "runner",
+      "test": "BotLoop1Tests.AnUnknownRemoteIsNotRunWithAGripAnAmbushWouldFlatline"
+    },
+    {
+      "fixture": "loop1-001",
+      "sequence": 327,
+      "side": "corp",
+      "test": "BotLoop1Tests.MahkotaLangitGridDoesNotReplaceItsOwnUnrezzedCopy"
+    },
+    {
+      "fixture": "loop1-003",
+      "sequence": 329,
+      "side": "corp",
+      "test": "BotLoop1Tests.PettyCashIsNotPlayedFromArchivesWithoutItsCost"
+    },
+    {
+      "fixture": "loop1-002",
+      "sequence": 57,
+      "side": "corp",
+      "test": "BotLoop1Tests.PtUntaiansCounterIsPaidForOnAnUnrezzedTrap"
+    },
+    {
+      "fixture": "loop2-006",
+      "sequence": 140,
+      "side": "runner",
+      "test": "BotLoop2Tests.MuslihaTsFreeCardIsTakenEvenAsASecondCopy"
+    },
+    {
+      "fixture": "loop2-204",
+      "sequence": 78,
+      "side": "runner",
+      "test": "BotLoop2Tests.ALoneScatterFieldIsSeenAtStrengthFour"
+    },
+    {
+      "fixture": "loop2-203",
+      "sequence": 704,
+      "side": "runner",
+      "test": "BotLoop2Tests.OneCardInTheGripDrawsBeforeRunningUnknownIce"
+    },
+    {
+      "fixture": "loop2-201",
+      "sequence": 163,
+      "side": "corp",
+      "test": "BotLoop2Tests.PublicAccessPlazaIsRezzedForItsTurnIncome"
+    },
+    {
+      "fixture": "loop2-202",
+      "sequence": 394,
+      "side": "corp",
+      "test": "BotLoop2Tests.AmazeAmusementsIsNotRezzedInARemoteWithNoAgenda"
+    },
+    {
+      "fixture": "strategy1-measured-response",
+      "sequence": 781,
+      "side": "runner",
+      "test": "BotStrategy1Tests.AfterASuccessfulRunTheGripIsDrawnUpAgainstMeasuredResponse"
+    },
+    {
+      "fixture": "strategy1-match-point-draw",
+      "sequence": 329,
+      "side": "runner",
+      "test": "BotStrategy1Tests.AtMatchPointAnEmptyGripDrawsBeforeRunningATrap"
+    },
+    {
+      "fixture": "strategy1-petty-cash",
+      "sequence": 101,
+      "side": "corp",
+      "test": "BotStrategy1Tests.PettyCashIsPlayedBeforeTheTurnsFirstActionFinishes"
+    },
+    {
+      "fixture": "strategy1-ip-enforcement",
+      "sequence": 603,
+      "side": "corp",
+      "test": "BotStrategy1Tests.IpEnforcementTakesBackAStolenAgenda"
+    }
+  ]
+}

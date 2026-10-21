@@ -1,0 +1,11 @@
+{
+  "corp": [
+    { "code": "30037", "quantity": 3 },
+    { "code": "30072", "quantity": 3 }
+  ],
+  "runner": [
+    { "code": "30005", "quantity": 3 },
+    { "code": "30006", "quantity": 3 },
+    { "code": "30029", "quantity": 3 }
+  ]
+}

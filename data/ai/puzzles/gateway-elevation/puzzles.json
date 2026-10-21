@@ -1,0 +1,1063 @@
+[
+  {
+    "id": "topan-last-card",
+    "title": "Topan doesn't install the last card into a flatline",
+    "category": "punisher-risk",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop1-topan-last-card",
+    "sequence": 140,
+    "side": "runner",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "useAbility",
+          "parameters": {
+            "abilityKey": "topan-install"
+          }
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "BotLoop1Tests.TopanDoesNotInstallItsLastCardIntoAFlatline"
+  },
+  {
+    "id": "semak-samun-damage",
+    "title": "Semak-samun's damage isn't taken with too few cards",
+    "category": "punisher-risk",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop1-semak-samun-damage",
+    "sequence": 120,
+    "side": "runner",
+    "acceptance": {
+      "accept": [
+        {
+          "parameters": {
+            "optionKeys": [
+              "end-run"
+            ]
+          }
+        }
+      ]
+    },
+    "source": "BotLoop1Tests.SemakSamunsDamageIsNotTakenWithTooFewCards"
+  },
+  {
+    "id": "measured-response-paid",
+    "title": "Measured Response is paid rather than flatlining",
+    "category": "punisher-risk",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop1-measured-response",
+    "sequence": 285,
+    "side": "runner",
+    "acceptance": {
+      "accept": [
+        {
+          "parameters": {
+            "optionKeys": [
+              "pay-eight"
+            ]
+          }
+        }
+      ]
+    },
+    "source": "BotLoop1Tests.MeasuredResponseIsPaidRatherThanFlatlining"
+  },
+  {
+    "id": "topan-only-events",
+    "title": "Topan isn't used with only events in the grip",
+    "category": "hand-management",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop1-005",
+    "sequence": 120,
+    "side": "runner",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "useAbility",
+          "parameters": {
+            "abilityKey": "topan-install"
+          }
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "BotLoop1Tests.TopanIsNotUsedWithOnlyEventsInTheGrip"
+  },
+  {
+    "id": "madani-no-program",
+    "title": "Madani doesn't host with no program in the grip",
+    "category": "hand-management",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop1-007",
+    "sequence": 128,
+    "side": "runner",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "useAbility",
+          "parameters": {
+            "abilityKey": "madani-host"
+          }
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "BotLoop1Tests.MadaniDoesNotHostWithNoProgramInTheGrip"
+  },
+  {
+    "id": "byte-springs",
+    "title": "The Corp springs Byte! when the Runner accesses it from R&D",
+    "category": "access-and-trash",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop1-002",
+    "sequence": 131,
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "useTrigger"
+        }
+      ]
+    },
+    "source": "BotLoop1Tests.TheCorpSpringsByteWhenTheRunnerAccessesItFromRAndD"
+  },
+  {
+    "id": "phat-gioan-rezzed",
+    "title": "Ph\u1eadt Gioan Baotixita is rezzed to gather counters",
+    "category": "rez-timing",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop1-002",
+    "sequence": 52,
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "rezCard",
+          "parameters": {
+            "cardId": "def:35051"
+          }
+        }
+      ]
+    },
+    "source": "BotLoop1Tests.PhatGioanBaotixitaIsRezzedToGatherCounters"
+  },
+  {
+    "id": "humanoid-resources-rezzed",
+    "title": "Humanoid Resources is rezzed with the clicks to use it",
+    "category": "rez-timing",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop1-003",
+    "sequence": 167,
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "rezCard",
+          "parameters": {
+            "cardId": "def:35039"
+          }
+        }
+      ]
+    },
+    "source": "BotLoop1Tests.HumanoidResourcesIsRezzedWithTheClicksToUseIt"
+  },
+  {
+    "id": "mutual-favor-covered",
+    "title": "Mutual Favor isn't played when every ICE type is covered",
+    "category": "hand-management",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop1-006",
+    "sequence": 154,
+    "side": "runner",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "playCard",
+          "parameters": {
+            "cardId": "def:30011"
+          }
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "BotLoop1Tests.MutualFavorIsNotPlayedWhenEveryIceTypeIsCovered"
+  },
+  {
+    "id": "second-marjanah",
+    "title": "A second Marjanah isn't installed",
+    "category": "hand-management",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop1-006",
+    "sequence": 251,
+    "side": "runner",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "installCard",
+          "parameters": {
+            "cardId": "def:30016"
+          }
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "BotLoop1Tests.ASecondMarjanahIsNotInstalled"
+  },
+  {
+    "id": "clean-getaway",
+    "title": "Clean Getaway is played on a run the Runner sees succeed",
+    "category": "economy",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop1-006",
+    "sequence": 532,
+    "side": "runner",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "playCard",
+          "parameters": {
+            "cardId": "def:35014"
+          }
+        }
+      ]
+    },
+    "source": "BotLoop1Tests.CleanGetawayIsPlayedOnARunTheRunnerSeesSucceed"
+  },
+  {
+    "id": "n-pot-whole",
+    "title": "N-Pot is broken whole at threat five",
+    "category": "punisher-risk",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop1-006",
+    "sequence": 606,
+    "side": "runner",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "pumpBreaker"
+        }
+      ]
+    },
+    "source": "BotLoop1Tests.NPotIsBrokenWholeAtThreatFive"
+  },
+  {
+    "id": "n-pot-credit-break",
+    "title": "N-Pot's credit break is used with no clicks left",
+    "category": "economy",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop1-007",
+    "sequence": 47,
+    "side": "runner",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "useBioroidAbility"
+        }
+      ]
+    },
+    "source": "BotLoop1Tests.NPotsCreditBreakIsUsedWithNoClicksLeft"
+  },
+  {
+    "id": "measured-response-trashed",
+    "title": "Measured Response is trashed from HQ when it would flatline",
+    "category": "access-and-trash",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop1-005",
+    "sequence": 127,
+    "side": "runner",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "trashAccessedCard"
+        }
+      ]
+    },
+    "source": "BotLoop1Tests.MeasuredResponseIsTrashedFromHqWhenItWouldFlatline"
+  },
+  {
+    "id": "ambush-remote",
+    "title": "An unknown remote isn't run with a grip an ambush would flatline",
+    "category": "punisher-risk",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop1-005",
+    "sequence": 130,
+    "side": "runner",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "startRun",
+          "parameters": {
+            "serverId": "server:341"
+          }
+        },
+        {
+          "kind": "playCard",
+          "parameters": {
+            "targetServerId": "server:341"
+          }
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "BotLoop1Tests.AnUnknownRemoteIsNotRunWithAGripAnAmbushWouldFlatline"
+  },
+  {
+    "id": "mahkota-own-copy",
+    "title": "Mahkota Langit Grid doesn't replace its own unrezzed copy",
+    "category": "economy",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop1-001",
+    "sequence": 327,
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "installCard",
+          "parameters": {
+            "cardId": "def:35082",
+            "requiredReplacementCardIds": [
+              "def:35082"
+            ]
+          }
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "BotLoop1Tests.MahkotaLangitGridDoesNotReplaceItsOwnUnrezzedCopy"
+  },
+  {
+    "id": "petty-cash-archives",
+    "title": "Petty Cash isn't played from Archives without its cost",
+    "category": "economy",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop1-003",
+    "sequence": 329,
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "useAbility",
+          "parameters": {
+            "abilityKey": "petty-cash-from-archives"
+          }
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "BotLoop1Tests.PettyCashIsNotPlayedFromArchivesWithoutItsCost"
+  },
+  {
+    "id": "pt-untaian-paid",
+    "title": "PT Untaian's counter is paid for on an unrezzed trap",
+    "category": "economy",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop1-002",
+    "sequence": 57,
+    "acceptance": {
+      "accept": [
+        {
+          "parameters": {
+            "optionKeys": [
+              "pay"
+            ]
+          }
+        }
+      ]
+    },
+    "source": "BotLoop1Tests.PtUntaiansCounterIsPaidForOnAnUnrezzedTrap"
+  },
+  {
+    "id": "muslihat-free-card",
+    "title": "Muslihat's free card is taken even as a second copy",
+    "category": "hand-management",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "loop2-006",
+    "sequence": 140,
+    "side": "runner",
+    "acceptance": {
+      "accept": [
+        {
+          "parameters": {
+            "cardIds": [
+              "def:30016"
+            ]
+          }
+        }
+      ]
+    },
+    "source": "BotLoop2Tests.MuslihaTsFreeCardIsTakenEvenAsASecondCopy"
+  },
+  {
+    "id": "measured-response-draw",
+    "title": "After a successful run the grip is drawn up against Measured Response",
+    "category": "punisher-risk",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "strategy1-measured-response",
+    "sequence": 781,
+    "side": "runner",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "drawCard"
+        }
+      ]
+    },
+    "source": "BotStrategy1Tests.AfterASuccessfulRunTheGripIsDrawnUpAgainstMeasuredResponse"
+  },
+  {
+    "id": "match-point-draw",
+    "title": "At match point an empty grip draws before running a trap",
+    "category": "punisher-risk",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "strategy1-match-point-draw",
+    "sequence": 329,
+    "side": "runner",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "startRun"
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "BotStrategy1Tests.AtMatchPointAnEmptyGripDrawsBeforeRunningATrap"
+  },
+  {
+    "id": "petty-cash-first",
+    "title": "Petty Cash is played before the turn's first action finishes",
+    "category": "sequencing",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "strategy1-petty-cash",
+    "sequence": 101,
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "playCard",
+          "parameters": {
+            "cardId": "def:35081"
+          }
+        }
+      ]
+    },
+    "source": "BotStrategy1Tests.PettyCashIsPlayedBeforeTheTurnsFirstActionFinishes"
+  },
+  {
+    "id": "ip-enforcement-win",
+    "title": "IP Enforcement takes back a stolen agenda",
+    "category": "sequencing",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "strategy1-ip-enforcement",
+    "sequence": 603,
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "playCard",
+          "parameters": {
+            "cardId": "def:35066"
+          }
+        }
+      ]
+    },
+    "source": "BotStrategy1Tests.IpEnforcementTakesBackAStolenAgenda"
+  },
+  {
+    "id": "teacher-00152981",
+    "title": "The teacher's playCard at ation-box-muslihat-00086 #909",
+    "category": "run-targeting",
+    "kind": "decision",
+    "split": "teacher-v1",
+    "gameId": "standard-vs-standard-elevation-box-nebula-fast-advance~elevation-box-muslihat-00086",
+    "sequence": 909,
+    "side": "runner",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "startRun",
+          "parameters": {
+            "serverId": "server:10"
+          }
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.435\u00b10.029, next 0.261; S1.5 line teacher: the rejected run's best line closes the lead to 0.142"
+  },
+  {
+    "id": "teacher-e311a6ac",
+    "title": "The teacher's startRun at tion-box-magdalene-00210 #161",
+    "category": "run-targeting",
+    "kind": "decision",
+    "split": "teacher-v3",
+    "gameId": "standard-c29-vs-standard-c29-elevation-box-untaian-shell-game~elevation-box-magdalene-00210",
+    "sequence": 161,
+    "side": "runner",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "startRun",
+          "parameters": {
+            "serverId": "server:7"
+          }
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.219\u00b10.011, next 0.049"
+  },
+  {
+    "id": "teacher-47f84833",
+    "title": "The teacher's startRun at levation-box-topan-00052 #196",
+    "category": "run-targeting",
+    "kind": "decision",
+    "split": "teacher-v3",
+    "gameId": "standard-c29-vs-standard-elevation-box-untaian-shell-game~elevation-box-topan-00052",
+    "sequence": 196,
+    "side": "runner",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "startRun",
+          "parameters": {
+            "serverId": "server:7"
+          }
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.285\u00b10.019, next 0.030"
+  },
+  {
+    "id": "teacher-2920124f",
+    "title": "The teacher's startRun at ation-box-muslihat-00218 #313",
+    "category": "run-targeting",
+    "kind": "decision",
+    "split": "teacher-v2",
+    "gameId": "standard-c29-vs-standard-c29-elevation-box-nebula-fast-advance~elevation-box-muslihat-00218",
+    "sequence": 313,
+    "side": "runner",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "gainCredit"
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.613\u00b10.022, next 0.427; teacher v2 (live opponent): the lead falls to 0.063"
+  },
+  {
+    "id": "teacher-b39f5b92",
+    "title": "The teacher's continueRun at levation-box-topan-00103 #271",
+    "category": "run-targeting",
+    "kind": "decision",
+    "split": "teacher-v2",
+    "gameId": "standard-vs-standard-c29-elevation-box-zwicky-supermodernism~elevation-box-topan-00103",
+    "sequence": 271,
+    "side": "runner",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "continueRun"
+        }
+      ]
+    },
+    "negativeControl": false,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.318\u00b10.028, next 0.143; teacher v2 (live opponent): the lead falls to 0.112"
+  },
+  {
+    "id": "teacher-cb2c69f6",
+    "title": "The teacher's continueRun at tion-box-magdalene-00057 #686",
+    "category": "run-targeting",
+    "kind": "decision",
+    "split": "teacher-v3",
+    "gameId": "standard-vs-standard-elevation-box-zwicky-supermodernism~elevation-box-magdalene-00057",
+    "sequence": 686,
+    "side": "runner",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "continueRun"
+        }
+      ]
+    },
+    "negativeControl": false,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.853\u00b10.030, next 0.495"
+  },
+  {
+    "id": "teacher-4b40e915",
+    "title": "The teacher's continueRun at ation-box-muslihat-00062 #314",
+    "category": "run-targeting",
+    "kind": "decision",
+    "split": "teacher-v3",
+    "gameId": "standard-c29-vs-standard-elevation-box-nebula-fast-advance~elevation-box-muslihat-00062",
+    "sequence": 314,
+    "side": "runner",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "continueRun"
+        }
+      ]
+    },
+    "negativeControl": false,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.719\u00b10.023, next 0.502"
+  },
+  {
+    "id": "teacher-ad565c84",
+    "title": "The teacher's continueRun at ation-box-muslihat-00026 #756",
+    "category": "run-targeting",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "standard-c29-vs-standard-elevation-box-nebula-fast-advance~elevation-box-muslihat-00026",
+    "sequence": 756,
+    "side": "runner",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "continueRun"
+        }
+      ]
+    },
+    "negativeControl": false,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.824\u00b10.032, next 0.296"
+  },
+  {
+    "id": "teacher-20e668e7",
+    "title": "The teacher's rezCard at levation-box-topan-00130 #471",
+    "category": "rez-timing",
+    "kind": "decision",
+    "split": "teacher-v2",
+    "gameId": "standard-vs-standard-elevation-box-leo-glacier~elevation-box-topan-00130",
+    "sequence": 471,
+    "side": "corp",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "passPriority"
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.768\u00b10.029, next 0.549; teacher v2 (live opponent): the lead falls to 0.073"
+  },
+  {
+    "id": "teacher-e5d97a1a",
+    "title": "The teacher's rezCard at ation-box-muslihat-00137 #121",
+    "category": "rez-timing",
+    "kind": "decision",
+    "split": "teacher-v3",
+    "gameId": "standard-c29-vs-standard-elevation-box-untaian-shell-game~elevation-box-muslihat-00137",
+    "sequence": 121,
+    "side": "corp",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "passPriority"
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.947\u00b10.010, next 0.728"
+  },
+  {
+    "id": "teacher-44d22315",
+    "title": "The teacher's passPriority at ation-box-muslihat-00131 #184",
+    "category": "rez-timing",
+    "kind": "decision",
+    "split": "teacher-v2",
+    "gameId": "standard-vs-standard-c29-elevation-box-leo-glacier~elevation-box-muslihat-00131",
+    "sequence": 184,
+    "side": "corp",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "rezCard",
+          "parameters": {
+            "cardId": "def:30073"
+          }
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.673\u00b10.011, next 0.425; teacher v2 (live opponent): the accepted action is no longer the best"
+  },
+  {
+    "id": "teacher-bfad8833",
+    "title": "The teacher's rezCard at levation-box-topan-00022 #437",
+    "category": "rez-timing",
+    "kind": "decision",
+    "split": "teacher-v3",
+    "gameId": "standard-vs-standard-elevation-box-leo-glacier~elevation-box-topan-00022",
+    "sequence": 437,
+    "side": "corp",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "passPriority"
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.645\u00b10.020, next 0.240"
+  },
+  {
+    "id": "teacher-d031e97d",
+    "title": "The teacher's rezCard at tion-box-magdalene-00222 #254",
+    "category": "rez-timing",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "standard-c29-vs-standard-c29-elevation-box-untaian-shell-game~elevation-box-magdalene-00222",
+    "sequence": 254,
+    "side": "corp",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "rezCard",
+          "parameters": {
+            "cardId": "def:35054"
+          }
+        }
+      ]
+    },
+    "negativeControl": false,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.983\u00b10.008, next 0.720"
+  },
+  {
+    "id": "teacher-acda6263",
+    "title": "The teacher's rezCard at levation-box-topan-00229 #92",
+    "category": "rez-timing",
+    "kind": "decision",
+    "split": "held-out",
+    "gameId": "standard-vs-standard-c29-elevation-box-nebula-fast-advance~elevation-box-topan-00229",
+    "sequence": 92,
+    "side": "corp",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "rezCard",
+          "parameters": {
+            "cardId": "def:35063"
+          }
+        }
+      ]
+    },
+    "negativeControl": false,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 1.000\u00b10.000, next 0.795"
+  },
+  {
+    "id": "teacher-4da9c5de",
+    "title": "The teacher's rezCard at tion-box-magdalene-00192 #436",
+    "category": "rez-timing",
+    "kind": "decision",
+    "split": "teacher-v2",
+    "gameId": "standard-c29-vs-standard-elevation-box-leo-glacier~elevation-box-magdalene-00192",
+    "sequence": 436,
+    "side": "corp",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "rezCard",
+          "parameters": {
+            "cardId": "def:30038"
+          }
+        }
+      ]
+    },
+    "negativeControl": false,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.443\u00b10.009, next 0.243; teacher v2 (live opponent): the accepted action is no longer the best"
+  },
+  {
+    "id": "teacher-9becf188",
+    "title": "The teacher's rezCard at levation-box-topan-00151 #626",
+    "category": "rez-timing",
+    "kind": "decision",
+    "split": "tuning",
+    "gameId": "standard-vs-standard-c29-elevation-box-zwicky-supermodernism~elevation-box-topan-00151",
+    "sequence": 626,
+    "side": "corp",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "rezCard",
+          "parameters": {
+            "cardId": "def:30039"
+          }
+        }
+      ]
+    },
+    "negativeControl": false,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 1.000\u00b10.000, next 0.664"
+  },
+  {
+    "id": "teacher-d907ce15",
+    "title": "The teacher's playCard at ation-box-muslihat-00080 #773",
+    "category": "economy",
+    "kind": "decision",
+    "split": "teacher-v2",
+    "gameId": "standard-vs-standard-elevation-box-zwicky-supermodernism~elevation-box-muslihat-00080",
+    "sequence": 773,
+    "side": "corp",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "installCard",
+          "parameters": {
+            "cardId": "def:35039",
+            "destinationKind": "serverRoot",
+            "createNewRemote": true
+          }
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 1.000\u00b10.000, next 0.804; teacher v2 (live opponent): its best group's standard error is over 0.04"
+  },
+  {
+    "id": "teacher-8b1c9af3",
+    "title": "The teacher's useAbility at levation-box-topan-00022 #520",
+    "category": "economy",
+    "kind": "decision",
+    "split": "teacher-v2",
+    "gameId": "standard-c29-vs-standard-c29-elevation-box-leo-glacier~elevation-box-topan-00022",
+    "sequence": 520,
+    "side": "corp",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "passPriority"
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.999\u00b10.001, next 0.618; teacher v2 (live opponent): the lead falls to 0.034"
+  },
+  {
+    "id": "teacher-e0d88291",
+    "title": "The teacher's playCard at levation-box-topan-00223 #305",
+    "category": "economy",
+    "kind": "decision",
+    "split": "held-out",
+    "gameId": "standard-c29-vs-standard-elevation-box-zwicky-supermodernism~elevation-box-topan-00223",
+    "sequence": 305,
+    "side": "corp",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "installCard",
+          "parameters": {
+            "cardId": "def:30067",
+            "serverId": "server:1221",
+            "destinationKind": "serverRoot",
+            "createNewRemote": false
+          }
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 1.000\u00b10.000, next 0.066"
+  },
+  {
+    "id": "teacher-7a456081",
+    "title": "The teacher's installCard at ation-box-muslihat-00119 #1080",
+    "category": "agenda-exposure",
+    "kind": "decision",
+    "split": "teacher-v1",
+    "gameId": "standard-c29-vs-standard-c29-elevation-box-leo-glacier~elevation-box-muslihat-00119",
+    "sequence": 1080,
+    "side": "corp",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "installCard",
+          "parameters": {
+            "cardId": "def:30069",
+            "serverId": "server:2490",
+            "destinationKind": "serverRoot",
+            "createNewRemote": false
+          }
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.656\u00b10.029, next 0.248; S1.5 line teacher: the rejected install leads to the best line too (0.656, lead 0.000)"
+  },
+  {
+    "id": "teacher-9bcefcf7",
+    "title": "The teacher's installCard at levation-box-topan-00070 #658",
+    "category": "agenda-exposure",
+    "kind": "decision",
+    "split": "teacher-v3",
+    "gameId": "standard-c29-vs-standard-c29-elevation-box-leo-glacier~elevation-box-topan-00070",
+    "sequence": 658,
+    "side": "corp",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "drawCard"
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.938\u00b10.021, next 0.467"
+  },
+  {
+    "id": "teacher-9570ba07",
+    "title": "The teacher's installCard at levation-box-topan-00085 #444",
+    "category": "agenda-exposure",
+    "kind": "decision",
+    "split": "teacher-v2",
+    "gameId": "standard-c29-vs-standard-elevation-box-nebula-fast-advance~elevation-box-topan-00085",
+    "sequence": 444,
+    "side": "corp",
+    "acceptance": {
+      "reject": [
+        {
+          "kind": "installCard",
+          "parameters": {
+            "cardId": "def:30071",
+            "destinationKind": "serverRoot",
+            "createNewRemote": true
+          }
+        }
+      ]
+    },
+    "negativeControl": true,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 1.000\u00b10.000, next 0.610; teacher v2 (live opponent): the lead falls to 0.087"
+  },
+  {
+    "id": "teacher-93609fc4",
+    "title": "The teacher's installCard at ation-box-muslihat-00086 #707",
+    "category": "agenda-exposure",
+    "kind": "decision",
+    "split": "teacher-v2",
+    "gameId": "standard-c29-vs-standard-c29-elevation-box-nebula-fast-advance~elevation-box-muslihat-00086",
+    "sequence": 707,
+    "side": "corp",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "installCard",
+          "parameters": {
+            "cardId": "def:35060",
+            "serverId": "server:820",
+            "destinationKind": "serverRoot",
+            "createNewRemote": false
+          }
+        }
+      ]
+    },
+    "negativeControl": false,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.891\u00b10.022, next 0.730; teacher v2 (live opponent): the accepted action is no longer the best"
+  },
+  {
+    "id": "teacher-9316ce82",
+    "title": "The teacher's chooseBehavior at loop1-semak-samun-damage #120",
+    "category": "punisher-risk",
+    "kind": "decision",
+    "split": "teacher-v3",
+    "gameId": "finding-loop1-semak-samun-damage",
+    "sequence": 120,
+    "side": "runner",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "chooseBehavior",
+          "parameters": {
+            "optionKeys": [
+              "end-run"
+            ]
+          }
+        }
+      ]
+    },
+    "negativeControl": false,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.160\u00b10.009, next 0.000"
+  },
+  {
+    "id": "teacher-df4609f1",
+    "title": "The teacher's chooseBehavior at -loop1-measured-response #285",
+    "category": "punisher-risk",
+    "kind": "decision",
+    "split": "held-out",
+    "gameId": "finding-loop1-measured-response",
+    "sequence": 285,
+    "side": "runner",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "chooseBehavior",
+          "parameters": {
+            "optionKeys": [
+              "pay-eight"
+            ]
+          }
+        }
+      ]
+    },
+    "negativeControl": false,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.863\u00b10.017, next 0.000"
+  },
+  {
+    "id": "teacher-dc91ae5e",
+    "title": "The teacher's noAccessAction at ation-box-muslihat-00002 #664",
+    "category": "access-and-trash",
+    "kind": "decision",
+    "split": "teacher-v2",
+    "gameId": "standard-vs-standard-c29-elevation-box-nebula-fast-advance~elevation-box-muslihat-00002",
+    "sequence": 664,
+    "side": "runner",
+    "acceptance": {
+      "accept": [
+        {
+          "kind": "noAccessAction"
+        }
+      ]
+    },
+    "negativeControl": false,
+    "source": "regret suite, teacher 128 samples, 4-turn horizon",
+    "note": "best 0.290\u00b10.020, next 0.132; teacher v2 (live opponent): the lead falls to 0.021"
+  }
+]

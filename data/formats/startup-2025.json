@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "startup-2025",
+  "name": "Startup 2025",
+  "effectiveDate": "2025-11-03",
+  "complete": false,
+  "cardPool": "gateway-elevation",
+  "legalPacks": ["sg", "elev"],
+  "missingPacks": ["rebellion_without_rehearsal", "the_automata_initiative"],
+  "restriction": {
+    "id": "startup-balance-update-25-11",
+    "banned": ["30006", "30051", "30063", "34012", "34089", "34111"],
+    "restricted": []
+  },
+  "deckRules": {
+    "maxCopiesByName": 3,
+    "highValueAgendaLimit": null
+  },
+  "source": {
+    "snapshotId": "startup_8",
+    "cardPoolId": "startup_elevation",
+    "note": "System Gateway, Elevation and the Liberation cycle. Incomplete until Liberation lands: it validates decks of the cards this build has but is not offered for play."
+  }
+}

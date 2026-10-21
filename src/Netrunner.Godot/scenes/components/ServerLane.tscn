@@ -1,0 +1,89 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Theme" path="res://themes/M4Theme.tres" id="1_theme"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_lane"]
+content_margin_left = 8.0
+content_margin_top = 6.0
+content_margin_right = 8.0
+content_margin_bottom = 6.0
+bg_color = Color(1, 1, 1, 0.03)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.22, 0.25, 0.24, 1)
+corner_radius_top_left = 2
+corner_radius_top_right = 2
+corner_radius_bottom_right = 2
+corner_radius_bottom_left = 2
+
+[node name="ServerLane" type="PanelContainer"]
+custom_minimum_size = Vector2(285, 0)
+layout_mode = 2
+size_flags_vertical = 3
+clip_contents = true
+mouse_filter = 2
+theme = ExtResource("1_theme")
+theme_override_styles/panel = SubResource("StyleBoxFlat_lane")
+
+[node name="Content" type="VBoxContainer" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+mouse_filter = 2
+theme_override_constants/separation = 2
+
+[node name="Header" type="Button" parent="Content"]
+custom_minimum_size = Vector2(0, 22)
+layout_mode = 2
+flat = true
+focus_mode = 2
+mouse_default_cursor_shape = 2
+theme_type_variation = &"LaneHeading"
+text = "Server"
+
+[node name="RunMarker" type="Label" parent="Content"]
+custom_minimum_size = Vector2(0, 20)
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.98, 0.76, 0.37, 1)
+theme_override_font_sizes/font_size = 9
+text = ""
+horizontal_alignment = 1
+text_overrun_behavior = 3
+
+[node name="RootCaption" type="Label" parent="Content"]
+visible = false
+layout_mode = 2
+mouse_filter = 2
+theme_type_variation = &"LaneHeading"
+theme_override_colors/font_color = Color(0.62, 0.76, 0.75, 1)
+theme_override_font_sizes/font_size = 9
+text = "ROOT"
+text_overrun_behavior = 3
+
+[node name="RootCards" type="HBoxContainer" parent="Content"]
+custom_minimum_size = Vector2(0, 150)
+layout_mode = 2
+mouse_filter = 2
+clip_contents = false
+theme_override_constants/separation = -27
+alignment = 1
+
+[node name="IceCaption" type="Label" parent="Content"]
+visible = false
+layout_mode = 2
+mouse_filter = 2
+theme_type_variation = &"LaneHeading"
+theme_override_colors/font_color = Color(0.62, 0.76, 0.75, 1)
+theme_override_font_sizes/font_size = 9
+text = "ICE · inner → outer"
+text_overrun_behavior = 3
+
+[node name="IceCards" type="VBoxContainer" parent="Content"]
+custom_minimum_size = Vector2(0, 64)
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_constants/separation = 4

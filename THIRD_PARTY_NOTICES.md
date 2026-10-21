@@ -12,6 +12,9 @@ files and lock/restore artifacts.
 | xUnit.net and assertions | 2.9.3 | Apache-2.0 | Tests |
 | xUnit Visual Studio runner | 3.1.5 | Apache-2.0 | Test discovery/execution |
 | Newtonsoft.Json | 13.0.3 | MIT | Transitive test-platform dependency |
+| Rajdhani (Indian Type Foundry) | Google Fonts, retrieved 2026-09-29 | SIL OFL 1.1 | UI display type, `src/Netrunner.Godot/fonts/rajdhani` |
+| IBM Plex Sans and IBM Plex Mono (IBM) | Google Fonts, retrieved 2026-09-29 | SIL OFL 1.1 | UI body and number type, `src/Netrunner.Godot/fonts/ibm-plex-*` |
+| Null Signal Games game symbols and faction glyphs | NSG Visual Assets | CC BY-ND 4.0 | UI icons and identity emblems; see `src/Netrunner.Godot/icons/SOURCE.md` |
 
 The installed NuGet package metadata is the authority for exact transitive
 versions and license expressions. Run:
@@ -42,3 +45,27 @@ upstream notice does not establish a redistribution grant, so the generated
 frames, or backs are fetched or included. The checked-in normalized schema and
 synthetic fixtures are project implementation artifacts, not official card
 data.
+
+The Netrunner Comprehensive Rules are a local reference snapshot committed to
+this repository by explicit project decision. Unlike the card metadata above,
+the rules source is a live web page with no immutable revision, so provenance
+is recorded as `(source URL, rules version, retrieval date, and the sha256 of
+the normalized source bytes)` rather than a commit. The current pin is
+`https://rules.nullsignal.games/`, rules version `26.03`, retrieval date
+`2026-09-01`, source sha256
+`ae93dad66bd14cd197c8bb3ddbe0df2a4d5ad14e0461682d602009fbb582f8e2`, rendered
+to per-chapter Markdown, `index.json`, and `manifest.json` under
+`data/vendor/rules/`. The `source.html` is stored in a normalized form: the
+page's single Cloudflare email-obfuscation token (which is re-randomized on
+every request) is decoded to its `mailto:` value, leaving all rules content
+unchanged, so the committed bytes and their sha256 are stable across fetches.
+
+```bash
+./scripts/update-rules.sh --retrieval-date 2026-09-01
+```
+
+These files are inert reference material only; they are never parsed into, or
+consumed at runtime by, the rules engine or the AI runtime. The license identity
+is `NOASSERTION`: the upstream rules are copyrighted by Null Signal Games, and
+no redistribution grant is asserted. Although committed here for local
+reference use, verify redistribution rights before any public distribution.

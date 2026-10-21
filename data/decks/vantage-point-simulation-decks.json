@@ -1,0 +1,1053 @@
+{
+  "schemaVersion": 1,
+  "retrievedDate": "2026-10-15",
+  "publishedSourceUrl": "https://nullsignal.games/products/vantage-point/",
+  "metadataCommitSha": "236140cf84491c23995b028bc791281837520b97",
+  "provenanceNote": "Simulation decks for the Vantage Point batch proofs (ours, not published lists): each exercises the bound Vantage Point cards with System Gateway and Elevation support, within Startup 2026's deck rules.",
+  "decks": [
+    {
+      "presetId": "vp-sim-editorial-corp",
+      "name": "Editorial Division simulation",
+      "summary": "Editorial Division with the bad publicity liabilities, Witch Hunt, Grubber and the Vulture Fund economy, Lethe and Paywall and Hype Machine.",
+      "side": "corp",
+      "identityCode": "36046",
+      "sourceUrl": "https://github.com/Master-Yoba/netrunner/blob/dev/docs/history/VANTAGE_POINT_PROGRESS.md",
+      "cards": [
+        {
+          "code": "36047",
+          "quantity": 3
+        },
+        {
+          "code": "35059",
+          "quantity": 3
+        },
+        {
+          "code": "35060",
+          "quantity": 3
+        },
+        {
+          "code": "36050",
+          "quantity": 3
+        },
+        {
+          "code": "35063",
+          "quantity": 1
+        },
+        {
+          "code": "35064",
+          "quantity": 2
+        },
+        {
+          "code": "30055",
+          "quantity": 1
+        },
+        {
+          "code": "30072",
+          "quantity": 2
+        },
+        {
+          "code": "30074",
+          "quantity": 2
+        },
+        {
+          "code": "30073",
+          "quantity": 2
+        },
+        {
+          "code": "36049",
+          "quantity": 3
+        },
+        {
+          "code": "36048",
+          "quantity": 2
+        },
+        {
+          "code": "36057",
+          "quantity": 2
+        },
+        {
+          "code": "36063",
+          "quantity": 3
+        },
+        {
+          "code": "36054",
+          "quantity": 2
+        },
+        {
+          "code": "30075",
+          "quantity": 3
+        },
+        {
+          "code": "36053",
+          "quantity": 2
+        },
+        {
+          "code": "36052",
+          "quantity": 2
+        },
+        {
+          "code": "36051",
+          "quantity": 2
+        },
+        {
+          "code": "36055",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "presetId": "vp-sim-poetri-corp",
+      "name": "Poétrï Double simulation",
+      "summary": "Poétrï Luxury Brands with Synchrocyclotron, the Double operations, Caveat Emptor and Méliès City Luxury Line.",
+      "side": "corp",
+      "identityCode": "35036",
+      "sourceUrl": "https://github.com/Master-Yoba/netrunner/blob/dev/docs/history/VANTAGE_POINT_PROGRESS.md",
+      "cards": [
+        {
+          "code": "36026",
+          "quantity": 3
+        },
+        {
+          "code": "35038",
+          "quantity": 3
+        },
+        {
+          "code": "35037",
+          "quantity": 3
+        },
+        {
+          "code": "30036",
+          "quantity": 1
+        },
+        {
+          "code": "30039",
+          "quantity": 2
+        },
+        {
+          "code": "35041",
+          "quantity": 3
+        },
+        {
+          "code": "35042",
+          "quantity": 2
+        },
+        {
+          "code": "30072",
+          "quantity": 3
+        },
+        {
+          "code": "30074",
+          "quantity": 3
+        },
+        {
+          "code": "30073",
+          "quantity": 2
+        },
+        {
+          "code": "36027",
+          "quantity": 3
+        },
+        {
+          "code": "30037",
+          "quantity": 3
+        },
+        {
+          "code": "36033",
+          "quantity": 3
+        },
+        {
+          "code": "36034",
+          "quantity": 2
+        },
+        {
+          "code": "36032",
+          "quantity": 2
+        },
+        {
+          "code": "30075",
+          "quantity": 3
+        },
+        {
+          "code": "30041",
+          "quantity": 2
+        },
+        {
+          "code": "30042",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "presetId": "vp-sim-weyland-corp",
+      "name": "Weyland Myōshu simulation",
+      "summary": "Weyland Consortium: Built to Last with Luana Campos, Vulture Fund, Myōshu, Sacrifice Zone Expansion, Event Horizon, Flywheel, Reanimation Protocol, Flagship and Shackleton Grid and Tocsin.",
+      "side": "corp",
+      "identityCode": "30059",
+      "sourceUrl": "https://github.com/Master-Yoba/netrunner/blob/dev/docs/history/VANTAGE_POINT_PROGRESS.md",
+      "cards": [
+        {
+          "code": "35071",
+          "quantity": 1
+        },
+        {
+          "code": "35070",
+          "quantity": 3
+        },
+        {
+          "code": "30060",
+          "quantity": 1
+        },
+        {
+          "code": "30068",
+          "quantity": 3
+        },
+        {
+          "code": "30069",
+          "quantity": 1
+        },
+        {
+          "code": "35075",
+          "quantity": 1
+        },
+        {
+          "code": "35076",
+          "quantity": 2
+        },
+        {
+          "code": "30072",
+          "quantity": 2
+        },
+        {
+          "code": "30073",
+          "quantity": 2
+        },
+        {
+          "code": "36057",
+          "quantity": 2
+        },
+        {
+          "code": "35072",
+          "quantity": 2
+        },
+        {
+          "code": "30071",
+          "quantity": 3
+        },
+        {
+          "code": "36063",
+          "quantity": 3
+        },
+        {
+          "code": "36061",
+          "quantity": 2
+        },
+        {
+          "code": "30075",
+          "quantity": 3
+        },
+        {
+          "code": "35077",
+          "quantity": 2
+        },
+        {
+          "code": "36056",
+          "quantity": 2
+        },
+        {
+          "code": "36058",
+          "quantity": 2
+        },
+        {
+          "code": "36059",
+          "quantity": 2
+        },
+        {
+          "code": "36062",
+          "quantity": 2
+        },
+        {
+          "code": "36064",
+          "quantity": 1
+        },
+        {
+          "code": "36065",
+          "quantity": 1
+        },
+        {
+          "code": "36060",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "presetId": "vp-sim-melies-corp",
+      "name": "Méliès U simulation",
+      "summary": "Méliès U with Knowledge Seeker, Cultivate and Lotus Haze, beside the Untaian deck's ezaM, Lionsmane, Vicsek and Unleash.",
+      "side": "corp",
+      "identityCode": "36036",
+      "sourceUrl": "https://github.com/Master-Yoba/netrunner/blob/dev/docs/history/VANTAGE_POINT_PROGRESS.md",
+      "cards": [
+        {
+          "code": "30041",
+          "quantity": 2
+        },
+        {
+          "code": "30044",
+          "quantity": 1
+        },
+        {
+          "code": "30045",
+          "quantity": 3
+        },
+        {
+          "code": "30061",
+          "quantity": 2
+        },
+        {
+          "code": "30069",
+          "quantity": 2
+        },
+        {
+          "code": "30071",
+          "quantity": 1
+        },
+        {
+          "code": "30072",
+          "quantity": 2
+        },
+        {
+          "code": "30074",
+          "quantity": 2
+        },
+        {
+          "code": "30075",
+          "quantity": 2
+        },
+        {
+          "code": "35048",
+          "quantity": 3
+        },
+        {
+          "code": "35049",
+          "quantity": 1
+        },
+        {
+          "code": "35051",
+          "quantity": 1
+        },
+        {
+          "code": "35053",
+          "quantity": 1
+        },
+        {
+          "code": "35054",
+          "quantity": 1
+        },
+        {
+          "code": "35055",
+          "quantity": 1
+        },
+        {
+          "code": "35056",
+          "quantity": 1
+        },
+        {
+          "code": "35061",
+          "quantity": 2
+        },
+        {
+          "code": "35081",
+          "quantity": 2
+        },
+        {
+          "code": "36039",
+          "quantity": 2
+        },
+        {
+          "code": "36041",
+          "quantity": 2
+        },
+        {
+          "code": "36042",
+          "quantity": 2
+        },
+        {
+          "code": "36044",
+          "quantity": 2
+        },
+        {
+          "code": "36045",
+          "quantity": 1
+        },
+        {
+          "code": "36040",
+          "quantity": 2
+        },
+        {
+          "code": "36043",
+          "quantity": 2
+        },
+        {
+          "code": "36037",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "presetId": "vp-sim-vic-runner",
+      "name": "Vic simulation",
+      "summary": "Virtual Intelligence, P.I. with Sell Out, Tailgate, Borrowed Goods, Underdome Irregulars, Word on the Street, Kompromat and Rotary.",
+      "side": "runner",
+      "identityCode": "36009",
+      "sourceUrl": "https://github.com/Master-Yoba/netrunner/blob/dev/docs/history/VANTAGE_POINT_PROGRESS.md",
+      "cards": [
+        {
+          "code": "36011",
+          "quantity": 3
+        },
+        {
+          "code": "36012",
+          "quantity": 3
+        },
+        {
+          "code": "30030",
+          "quantity": 3
+        },
+        {
+          "code": "30029",
+          "quantity": 2
+        },
+        {
+          "code": "30028",
+          "quantity": 3
+        },
+        {
+          "code": "35015",
+          "quantity": 2
+        },
+        {
+          "code": "30011",
+          "quantity": 1
+        },
+        {
+          "code": "36013",
+          "quantity": 2
+        },
+        {
+          "code": "30013",
+          "quantity": 1
+        },
+        {
+          "code": "30031",
+          "quantity": 2
+        },
+        {
+          "code": "30015",
+          "quantity": 2
+        },
+        {
+          "code": "30016",
+          "quantity": 2
+        },
+        {
+          "code": "35020",
+          "quantity": 2
+        },
+        {
+          "code": "30032",
+          "quantity": 1
+        },
+        {
+          "code": "36016",
+          "quantity": 3
+        },
+        {
+          "code": "36025",
+          "quantity": 1
+        },
+        {
+          "code": "35022",
+          "quantity": 2
+        },
+        {
+          "code": "35034",
+          "quantity": 3
+        },
+        {
+          "code": "30033",
+          "quantity": 2
+        },
+        {
+          "code": "36010",
+          "quantity": 2
+        },
+        {
+          "code": "36014",
+          "quantity": 1
+        },
+        {
+          "code": "30018",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "presetId": "vp-sim-tao-runner",
+      "name": "Tāo stealth simulation",
+      "summary": "Tāo Salonga with Methuselah, Touchstone, Corsair, Stowaway, Take a Dive, Aircheck, Beta Build, Sipa and Baker and Read-Write Share.",
+      "side": "runner",
+      "identityCode": "30019",
+      "sourceUrl": "https://github.com/Master-Yoba/netrunner/blob/dev/docs/history/VANTAGE_POINT_PROGRESS.md",
+      "cards": [
+        {
+          "code": "30030",
+          "quantity": 3
+        },
+        {
+          "code": "30021",
+          "quantity": 1
+        },
+        {
+          "code": "30029",
+          "quantity": 2
+        },
+        {
+          "code": "30028",
+          "quantity": 2
+        },
+        {
+          "code": "36002",
+          "quantity": 1
+        },
+        {
+          "code": "35025",
+          "quantity": 1
+        },
+        {
+          "code": "36020",
+          "quantity": 2
+        },
+        {
+          "code": "36021",
+          "quantity": 2
+        },
+        {
+          "code": "30031",
+          "quantity": 2
+        },
+        {
+          "code": "36004",
+          "quantity": 2
+        },
+        {
+          "code": "30026",
+          "quantity": 2
+        },
+        {
+          "code": "30025",
+          "quantity": 2
+        },
+        {
+          "code": "35032",
+          "quantity": 1
+        },
+        {
+          "code": "36024",
+          "quantity": 3
+        },
+        {
+          "code": "35031",
+          "quantity": 1
+        },
+        {
+          "code": "30032",
+          "quantity": 1
+        },
+        {
+          "code": "30027",
+          "quantity": 3
+        },
+        {
+          "code": "35034",
+          "quantity": 2
+        },
+        {
+          "code": "30033",
+          "quantity": 1
+        },
+        {
+          "code": "36025",
+          "quantity": 1
+        },
+        {
+          "code": "35033",
+          "quantity": 1
+        },
+        {
+          "code": "30034",
+          "quantity": 2
+        },
+        {
+          "code": "36018",
+          "quantity": 2
+        },
+        {
+          "code": "36019",
+          "quantity": 2
+        },
+        {
+          "code": "36023",
+          "quantity": 1
+        },
+        {
+          "code": "36015",
+          "quantity": 1
+        },
+        {
+          "code": "36022",
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "presetId": "vp-sim-leo-corp",
+      "name": "LEO bioroid simulation",
+      "summary": "LEO Construction with Ansel 2.0, Reverb, Sleipnir, Vertigo and Perfect Recall.",
+      "side": "corp",
+      "identityCode": "35035",
+      "sourceUrl": "https://github.com/Master-Yoba/netrunner/blob/dev/docs/history/VANTAGE_POINT_PROGRESS.md",
+      "cards": [
+        {
+          "code": "30036",
+          "quantity": 1
+        },
+        {
+          "code": "30037",
+          "quantity": 2
+        },
+        {
+          "code": "30039",
+          "quantity": 2
+        },
+        {
+          "code": "30041",
+          "quantity": 2
+        },
+        {
+          "code": "30048",
+          "quantity": 2
+        },
+        {
+          "code": "30068",
+          "quantity": 2
+        },
+        {
+          "code": "30069",
+          "quantity": 2
+        },
+        {
+          "code": "30070",
+          "quantity": 2
+        },
+        {
+          "code": "30071",
+          "quantity": 2
+        },
+        {
+          "code": "30075",
+          "quantity": 3
+        },
+        {
+          "code": "35038",
+          "quantity": 3
+        },
+        {
+          "code": "35039",
+          "quantity": 1
+        },
+        {
+          "code": "35041",
+          "quantity": 3
+        },
+        {
+          "code": "35042",
+          "quantity": 1
+        },
+        {
+          "code": "35044",
+          "quantity": 2
+        },
+        {
+          "code": "35079",
+          "quantity": 1
+        },
+        {
+          "code": "35081",
+          "quantity": 3
+        },
+        {
+          "code": "35082",
+          "quantity": 1
+        },
+        {
+          "code": "36028",
+          "quantity": 2
+        },
+        {
+          "code": "36029",
+          "quantity": 2
+        },
+        {
+          "code": "36030",
+          "quantity": 2
+        },
+        {
+          "code": "36031",
+          "quantity": 2
+        },
+        {
+          "code": "36035",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "presetId": "vp-sim-untaian-corp",
+      "name": "Untaian trap simulation",
+      "summary": "PT Untaian with ezaM, Lionsmane, Vicsek, Unleash and The Red Room.",
+      "side": "corp",
+      "identityCode": "35047",
+      "sourceUrl": "https://github.com/Master-Yoba/netrunner/blob/dev/docs/history/VANTAGE_POINT_PROGRESS.md",
+      "cards": [
+        {
+          "code": "30041",
+          "quantity": 2
+        },
+        {
+          "code": "30044",
+          "quantity": 1
+        },
+        {
+          "code": "30045",
+          "quantity": 3
+        },
+        {
+          "code": "30048",
+          "quantity": 2
+        },
+        {
+          "code": "30061",
+          "quantity": 2
+        },
+        {
+          "code": "30069",
+          "quantity": 2
+        },
+        {
+          "code": "30071",
+          "quantity": 1
+        },
+        {
+          "code": "30072",
+          "quantity": 2
+        },
+        {
+          "code": "30074",
+          "quantity": 2
+        },
+        {
+          "code": "30075",
+          "quantity": 2
+        },
+        {
+          "code": "35048",
+          "quantity": 3
+        },
+        {
+          "code": "35049",
+          "quantity": 3
+        },
+        {
+          "code": "35051",
+          "quantity": 1
+        },
+        {
+          "code": "35053",
+          "quantity": 1
+        },
+        {
+          "code": "35054",
+          "quantity": 3
+        },
+        {
+          "code": "35055",
+          "quantity": 1
+        },
+        {
+          "code": "35056",
+          "quantity": 1
+        },
+        {
+          "code": "35061",
+          "quantity": 2
+        },
+        {
+          "code": "35081",
+          "quantity": 2
+        },
+        {
+          "code": "36039",
+          "quantity": 2
+        },
+        {
+          "code": "36041",
+          "quantity": 2
+        },
+        {
+          "code": "36042",
+          "quantity": 2
+        },
+        {
+          "code": "36044",
+          "quantity": 2
+        },
+        {
+          "code": "36045",
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "presetId": "vp-sim-topan-runner",
+      "name": "Topan simulation",
+      "summary": "Topan with Chain Reaction, The Tungsten Tailor, Lampades, Stick and Poke, Hackerspace and Nurse Hạnh.",
+      "side": "runner",
+      "identityCode": "35002",
+      "sourceUrl": "https://github.com/Master-Yoba/netrunner/blob/dev/docs/history/VANTAGE_POINT_PROGRESS.md",
+      "cards": [
+        {
+          "code": "30003",
+          "quantity": 2
+        },
+        {
+          "code": "30004",
+          "quantity": 2
+        },
+        {
+          "code": "30005",
+          "quantity": 2
+        },
+        {
+          "code": "30008",
+          "quantity": 2
+        },
+        {
+          "code": "30018",
+          "quantity": 2
+        },
+        {
+          "code": "30027",
+          "quantity": 2
+        },
+        {
+          "code": "30028",
+          "quantity": 3
+        },
+        {
+          "code": "30029",
+          "quantity": 2
+        },
+        {
+          "code": "30030",
+          "quantity": 3
+        },
+        {
+          "code": "30031",
+          "quantity": 2
+        },
+        {
+          "code": "30032",
+          "quantity": 1
+        },
+        {
+          "code": "30034",
+          "quantity": 2
+        },
+        {
+          "code": "35004",
+          "quantity": 2
+        },
+        {
+          "code": "35005",
+          "quantity": 1
+        },
+        {
+          "code": "35006",
+          "quantity": 1
+        },
+        {
+          "code": "35007",
+          "quantity": 1
+        },
+        {
+          "code": "35008",
+          "quantity": 2
+        },
+        {
+          "code": "35009",
+          "quantity": 2
+        },
+        {
+          "code": "35010",
+          "quantity": 2
+        },
+        {
+          "code": "35011",
+          "quantity": 1
+        },
+        {
+          "code": "36001",
+          "quantity": 2
+        },
+        {
+          "code": "36003",
+          "quantity": 1
+        },
+        {
+          "code": "36005",
+          "quantity": 2
+        },
+        {
+          "code": "36008",
+          "quantity": 1
+        },
+        {
+          "code": "36006",
+          "quantity": 1
+        },
+        {
+          "code": "36007",
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "presetId": "vp-sim-hiram-runner",
+      "name": "Hiram simulation",
+      "summary": "Hiram “0mission” Svensson with the Tāo deck's stealth hardware, Aircheck, Beta Build, Sipa, Baker and Read-Write Share.",
+      "side": "runner",
+      "identityCode": "36017",
+      "sourceUrl": "https://github.com/Master-Yoba/netrunner/blob/dev/docs/history/VANTAGE_POINT_PROGRESS.md",
+      "cards": [
+        {
+          "code": "30030",
+          "quantity": 3
+        },
+        {
+          "code": "30021",
+          "quantity": 1
+        },
+        {
+          "code": "30029",
+          "quantity": 2
+        },
+        {
+          "code": "30028",
+          "quantity": 2
+        },
+        {
+          "code": "36002",
+          "quantity": 1
+        },
+        {
+          "code": "35025",
+          "quantity": 1
+        },
+        {
+          "code": "36020",
+          "quantity": 2
+        },
+        {
+          "code": "36021",
+          "quantity": 2
+        },
+        {
+          "code": "30031",
+          "quantity": 2
+        },
+        {
+          "code": "36004",
+          "quantity": 2
+        },
+        {
+          "code": "30026",
+          "quantity": 2
+        },
+        {
+          "code": "30025",
+          "quantity": 2
+        },
+        {
+          "code": "35032",
+          "quantity": 1
+        },
+        {
+          "code": "36024",
+          "quantity": 3
+        },
+        {
+          "code": "35031",
+          "quantity": 1
+        },
+        {
+          "code": "30032",
+          "quantity": 1
+        },
+        {
+          "code": "30027",
+          "quantity": 3
+        },
+        {
+          "code": "35034",
+          "quantity": 2
+        },
+        {
+          "code": "30033",
+          "quantity": 1
+        },
+        {
+          "code": "36025",
+          "quantity": 1
+        },
+        {
+          "code": "35033",
+          "quantity": 1
+        },
+        {
+          "code": "30034",
+          "quantity": 2
+        },
+        {
+          "code": "36018",
+          "quantity": 2
+        },
+        {
+          "code": "36019",
+          "quantity": 2
+        },
+        {
+          "code": "36023",
+          "quantity": 1
+        },
+        {
+          "code": "36015",
+          "quantity": 1
+        },
+        {
+          "code": "36022",
+          "quantity": 1
+        }
+      ]
+    }
+  ]
+}

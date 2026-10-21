@@ -256,7 +256,15 @@ public sealed class ScenarioArtifact
                     $"{path}.zone",
                     Enum.IsDefined(card.Zone)
                         ? "Scenario card placement must use one of the foundational Corp or Runner zones; server/shared topology is not a compact scenario input."
-                        : $"'{card.Zone}' is not a supported zone kind.");
+                    : $"'{card.Zone}' is not a supported zone kind.");
+            }
+            else if (card.Zone is ZoneKind.CorpPlayArea or ZoneKind.RunnerPlayArea)
+            {
+                Add(
+                    violations,
+                    "scenario.invalid-zone",
+                    $"{path}.zone",
+                    "CorpPlayArea and RunnerPlayArea are active card-play/run zones and cannot be populated by a pre-run compact scenario.");
             }
 
             if (!Enum.IsDefined(card.OwnerSide))
@@ -367,10 +375,12 @@ public sealed class ScenarioArtifact
             case ZoneKind.CorpHand:
             case ZoneKind.CorpDiscard:
             case ZoneKind.CorpScore:
+            case ZoneKind.CorpPlayArea:
                 owner = PlayerSide.Corp;
                 return true;
             case ZoneKind.RunnerStack:
             case ZoneKind.RunnerGrip:
+            case ZoneKind.RunnerPlayArea:
             case ZoneKind.RunnerHeap:
             case ZoneKind.RunnerRig:
             case ZoneKind.RunnerScore:
@@ -396,10 +406,34 @@ public static class ScenarioBuilder
 
     public static GameState Build(ScenarioArtifact artifact)
     {
+        return BuildCore(artifact, null);
+    }
+
+    /// <summary>
+    /// Non-production test boundary for exercising reconstruction with an
+    /// injected runtime catalog. Scenario files do not own catalog pins.
+    /// </summary>
+    internal static GameState BuildWithRuntimeCatalogForTesting(
+        ScenarioArtifact artifact,
+        IRuntimeCardCatalog runtimeCardCatalog)
+    {
+        ArgumentNullException.ThrowIfNull(runtimeCardCatalog);
+        return BuildCore(artifact, runtimeCardCatalog);
+    }
+
+    private static GameState BuildCore(
+        ScenarioArtifact artifact,
+        IRuntimeCardCatalog? runtimeCardCatalog)
+    {
         ArgumentNullException.ThrowIfNull(artifact);
         artifact.Validate();
 
-        GameState baseState = GameState.CreateNew(artifact.Seed, artifact.RulesVersion, artifact.CardDataVersion);
+        GameState baseState = GameState.CreateNew(
+            artifact.Seed,
+            artifact.RulesVersion,
+            artifact.CardDataVersion,
+            runtimeCardCatalogVersion: runtimeCardCatalog?.Version,
+            runtimeCardCatalogFingerprint: runtimeCardCatalog?.Fingerprint);
         if (artifact.Cards.Count > 0)
         {
             baseState = AddCards(baseState, artifact.Cards);
@@ -410,7 +444,7 @@ public static class ScenarioBuilder
             baseState = AddResolution(baseState, artifact.Resolution);
         }
 
-        StateInvariantValidator.Validate(baseState);
+        StateInvariantValidator.Validate(baseState, null, runtimeCardCatalog);
         if (artifact.ExpectedStateHash is not null)
         {
             string actualHash = DeterministicHash.ForState(baseState);
@@ -509,7 +543,13 @@ public static class ScenarioBuilder
             eventSequence: baseState.EventSequence,
             resolutionStack: baseState.ResolutionStack,
             pendingDecision: baseState.PendingDecision,
-            initialSeed: baseState.InitialSeed);
+            initialSeed: baseState.InitialSeed,
+            runState: baseState.RunState,
+            rulesState: baseState.RulesState,
+            behaviorRegistryVersion: baseState.BehaviorRegistryVersion,
+            behaviorCatalogFingerprint: baseState.BehaviorCatalogFingerprint,
+            runtimeCardCatalogVersion: baseState.RuntimeCardCatalogVersion,
+            runtimeCardCatalogFingerprint: baseState.RuntimeCardCatalogFingerprint);
     }
 
     private static GameState AddResolution(GameState state, ScenarioResolutionSpec specification)

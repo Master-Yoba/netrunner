@@ -1,0 +1,14 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Theme" path="res://themes/M4Theme.tres" id="1_theme"]
+
+[node name="PileView" type="Button"]
+custom_minimum_size = Vector2(68, 26)
+layout_mode = 0
+theme = ExtResource("1_theme")
+mouse_default_cursor_shape = 2
+theme_type_variation = &"SecondaryAction"
+theme_override_font_sizes/font_size = 11
+text = "Pile · —"
+clip_text = true
+tooltip_text = "Browse this pile"

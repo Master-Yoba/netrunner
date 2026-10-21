@@ -1,0 +1,55 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scenes/HandFanControl.cs" id="script"]
+
+[node name="HandView" type="Control"]
+custom_minimum_size = Vector2(420, 190)
+mouse_filter = 2
+script = ExtResource("script")
+
+[node name="Caption" type="Label" parent="."]
+offset_left = 26.0
+offset_right = 360.0
+offset_bottom = 18.0
+mouse_filter = 2
+theme_override_font_sizes/font_size = 10
+theme_override_colors/font_color = Color(0.62, 0.76, 0.75, 1)
+text = "GRIP · YOUR HAND"
+
+[node name="Count" type="Label" parent="."]
+anchor_left = 1.0
+anchor_right = 1.0
+anchor_top = 0.5
+anchor_bottom = 0.5
+offset_left = -78.0
+offset_right = -8.0
+offset_top = -30.0
+offset_bottom = 12.0
+mouse_filter = 2
+theme_override_font_sizes/font_size = 32
+text = "0"
+horizontal_alignment = 1
+
+[node name="CountCaption" type="Label" parent="."]
+anchor_left = 1.0
+anchor_right = 1.0
+anchor_top = 0.5
+anchor_bottom = 0.5
+offset_left = -78.0
+offset_right = -8.0
+offset_top = 14.0
+offset_bottom = 30.0
+mouse_filter = 2
+theme_override_font_sizes/font_size = 10
+text = "IN HAND"
+horizontal_alignment = 1
+
+[node name="Empty" type="Label" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_right = -88.0
+mouse_filter = 2
+theme_override_font_sizes/font_size = 14
+text = "Your hand is empty"
+horizontal_alignment = 1
+vertical_alignment = 1

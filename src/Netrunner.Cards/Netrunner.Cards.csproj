@@ -2,5 +2,85 @@
   <ItemGroup>
     <ProjectReference Include="../Netrunner.Core/Netrunner.Core.csproj" />
   </ItemGroup>
-</Project>
 
+  <!-- DATA-401A is code/quantity-only data. It contains no card text or
+       artwork and is parsed/validated even while its cards remain disabled
+       until the behavior coverage gate closes. -->
+  <ItemGroup>
+    <EmbeddedResource Include="../../data/m4/presets.json"
+                      LogicalName="Netrunner.Cards.Data.m4.presets.json" />
+    <EmbeddedResource Include="../../data/m4/developer/decks.json"
+                      LogicalName="Netrunner.Cards.Data.m4.developer.decks.json" />
+    <!-- Wave 4 C1: the System Gateway-only sample decks, kept apart from
+         presets.json so the frozen M5 manifests' preset pin is unchanged. -->
+    <EmbeddedResource Include="../../data/decks/gateway-sample-decks.json"
+                      LogicalName="Netrunner.Cards.Data.decks.gateway-sample-decks.json" />
+    <EmbeddedResource Include="../../data/decks/elevation-simulation-decks.json"
+                      LogicalName="Netrunner.Cards.Data.decks.elevation-simulation-decks.json" />
+    <EmbeddedResource Include="../../data/decks/vantage-point-simulation-decks.json"
+                      LogicalName="Netrunner.Cards.Data.decks.vantage-point-simulation-decks.json" />
+    <EmbeddedResource Include="../../data/decks/gateway-elevation-decks.json"
+                      LogicalName="Netrunner.Cards.Data.decks.gateway-elevation-decks.json" />
+    <EmbeddedResource Include="../../data/decks/elevation-core-battle-box-decks.json"
+                      LogicalName="Netrunner.Cards.Data.decks.elevation-core-battle-box-decks.json" />
+    <EmbeddedResource Include="../../data/decks/nsg-core-sets-decks.json"
+                      LogicalName="Netrunner.Cards.Data.decks.nsg-core-sets-decks.json" />
+    <EmbeddedResource Include="../../data/decks/startup-2026-decks.json"
+                      LogicalName="Netrunner.Cards.Data.decks.startup-2026-decks.json" />
+    <!-- EL.1 C2: versioned format snapshots, validated by CardFormatCatalog. -->
+    <EmbeddedResource Include="../../data/formats/gateway.json"
+                      LogicalName="Netrunner.Cards.Data.formats.gateway.json" />
+    <EmbeddedResource Include="../../data/formats/gateway-elevation.json"
+                      LogicalName="Netrunner.Cards.Data.formats.gateway-elevation.json" />
+    <EmbeddedResource Include="../../data/formats/nsg-core-sets.json"
+                      LogicalName="Netrunner.Cards.Data.formats.nsg-core-sets.json" />
+    <EmbeddedResource Include="../../data/formats/startup-2025.json"
+                      LogicalName="Netrunner.Cards.Data.formats.startup-2025.json" />
+    <EmbeddedResource Include="../../data/formats/startup-2026.json"
+                      LogicalName="Netrunner.Cards.Data.formats.startup-2026.json" />
+  </ItemGroup>
+
+  <!--
+    DATA-400: official System Gateway metadata is a local-only, authenticated
+    input.  The source directory is ignored by Git; this target turns it into
+    a deterministic generated payload under obj/ so downstream assemblies
+    work offline and never read the source directory at runtime.  A tracked
+    seven-card fixture keeps clean CI and M2 tests self-contained.  A caller
+    that requests content (NetrunnerContentEnabled=true) gets an actionable
+    error instead of silently receiving synthetic data.
+  -->
+  <PropertyGroup>
+    <!--
+      Official metadata is never an ambient default.  The only supported
+      opt-in is NetrunnerContentEnabled=true; the mode property remains
+      overridable for an explicit synthetic fixture build.
+    -->
+    <NetrunnerContentEnabled Condition="'$(NetrunnerContentEnabled)' == ''">false</NetrunnerContentEnabled>
+    <NetrunnerCardDataInputRoot Condition="'$(NetrunnerCardDataInputRoot)' == ''">$(MSBuildProjectDirectory)/../../data/vendor/system-gateway</NetrunnerCardDataInputRoot>
+    <!-- EL.1: the Elevation pack is a second local-only snapshot with its own
+         manifest, authenticated and embedded beside System Gateway. -->
+    <NetrunnerElevationCardDataInputRoot Condition="'$(NetrunnerElevationCardDataInputRoot)' == ''">$([System.IO.Path]::GetDirectoryName($(NetrunnerCardDataInputRoot.TrimEnd('/'))))/elevation</NetrunnerElevationCardDataInputRoot>
+    <!-- VP.1: Vantage Point is a third local-only snapshot beside them. -->
+    <NetrunnerVantagePointCardDataInputRoot Condition="'$(NetrunnerVantagePointCardDataInputRoot)' == ''">$([System.IO.Path]::GetDirectoryName($(NetrunnerCardDataInputRoot.TrimEnd('/'))))/vantage-point</NetrunnerVantagePointCardDataInputRoot>
+    <NetrunnerCardDataSyntheticRoot Condition="'$(NetrunnerCardDataSyntheticRoot)' == ''">$(MSBuildProjectDirectory)/../../data/m4/synthetic</NetrunnerCardDataSyntheticRoot>
+    <NetrunnerCardDataMode Condition="'$(NetrunnerCardDataMode)' == '' and '$(NetrunnerContentEnabled)' == 'true'">official</NetrunnerCardDataMode>
+    <!-- A clean clone must remain deterministic even if an ignored source
+         directory happens to be present. Official content is opt-in. -->
+    <NetrunnerCardDataMode Condition="'$(NetrunnerCardDataMode)' == ''">synthetic</NetrunnerCardDataMode>
+    <NetrunnerCardDataGeneratedFile>$(MSBuildProjectDirectory)/obj/$(Configuration)/$(TargetFramework)/Netrunner.CardData/GeneratedCardData.g.cs</NetrunnerCardDataGeneratedFile>
+    <NetrunnerCardDataBuildScript>$(MSBuildProjectDirectory)/../../scripts/build-card-data.py</NetrunnerCardDataBuildScript>
+    <NetrunnerPythonCommand Condition="'$(NetrunnerPythonCommand)' == ''">python3</NetrunnerPythonCommand>
+  </PropertyGroup>
+
+  <Target Name="GenerateNetrunnerCardData" BeforeTargets="CoreCompile">
+    <Error Condition="'$(NetrunnerCardDataMode)' != 'official' and '$(NetrunnerCardDataMode)' != 'synthetic'"
+           Text="DATA-400: unsupported NetrunnerCardDataMode '$(NetrunnerCardDataMode)'; expected official or synthetic." />
+    <Error Condition="'$(NetrunnerCardDataMode)' == 'official' and '$(NetrunnerContentEnabled)' != 'true'"
+           Text="DATA-400: official card content is opt-in; set NetrunnerContentEnabled=true (and, when selecting a mode explicitly, NetrunnerCardDataMode=official). The default build uses the checked-in synthetic fixture." />
+    <Exec Command="&quot;$(NetrunnerPythonCommand)&quot; &quot;$(NetrunnerCardDataBuildScript)&quot; --mode $(NetrunnerCardDataMode) --input-root &quot;$(NetrunnerCardDataInputRoot)&quot; --synthetic-root &quot;$(NetrunnerCardDataSyntheticRoot)&quot; --elevation-root &quot;$(NetrunnerElevationCardDataInputRoot)&quot; --vantage-point-root &quot;$(NetrunnerVantagePointCardDataInputRoot)&quot; --output &quot;$(NetrunnerCardDataGeneratedFile)&quot;"
+          WorkingDirectory="$(MSBuildProjectDirectory)/../.." />
+    <ItemGroup>
+      <Compile Include="$(NetrunnerCardDataGeneratedFile)" Visible="false" />
+    </ItemGroup>
+  </Target>
+</Project>

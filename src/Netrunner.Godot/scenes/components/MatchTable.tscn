@@ -1,0 +1,77 @@
+[gd_scene format=3]
+
+[ext_resource type="Theme" path="res://themes/M4Theme.tres" id="theme"]
+[ext_resource type="PackedScene" path="res://scenes/components/GameBoard.tscn" id="board"]
+[ext_resource type="PackedScene" path="res://scenes/components/AccessPanel.tscn" id="access"]
+[ext_resource type="PackedScene" path="res://scenes/components/CardHoverPreview.tscn" id="hover"]
+[ext_resource type="PackedScene" path="res://scenes/components/MatchHistoryPanel.tscn" id="history"]
+[ext_resource type="PackedScene" path="res://scenes/components/DecisionDock.tscn" id="dock"]
+[ext_resource type="Script" path="res://scenes/components/TableWorkspace.cs" id="workspace"]
+
+[ext_resource type="PackedScene" path="res://scenes/components/BoardDragController.tscn" id="drag"]
+
+[node name="MatchTable" type="VBoxContainer"]
+size_flags_vertical = 3
+theme = ExtResource("theme")
+theme_override_constants/separation = 6
+
+[node name="StatusBar" type="VBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="LastAction" type="Label" parent="StatusBar"]
+layout_mode = 2
+theme_type_variation = &"TableStatus"
+theme_override_font_sizes/font_size = 13
+text = "Choose your opening hand."
+text_overrun_behavior = 3
+
+[node name="Instructions" type="Label" parent="StatusBar"]
+visible = false
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+autowrap_mode = 3
+text = "Practice board interactions"
+
+[node name="TableViewport" type="Control" parent="."]
+layout_mode = 2
+size_flags_vertical = 3
+clip_contents = true
+script = ExtResource("workspace")
+
+[node name="GameBoard" parent="TableViewport" instance=ExtResource("board")]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_right = -66.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="AccessPanel" parent="TableViewport" instance=ExtResource("access")]
+visible = false
+
+[node name="CardHoverPreview" parent="TableViewport" instance=ExtResource("hover")]
+visible = false
+
+[node name="History" parent="TableViewport" instance=ExtResource("history")]
+layout_mode = 1
+anchors_preset = 11
+anchor_left = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -60.0
+grow_horizontal = 0
+grow_vertical = 2
+
+[node name="DecisionDock" parent="TableViewport" instance=ExtResource("dock")]
+layout_mode = 1
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -214.0
+offset_right = -800.0
+offset_bottom = -8.0
+grow_vertical = 0
+
+[node name="BoardDragController" parent="TableViewport" instance=ExtResource("drag")]

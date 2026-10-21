@@ -9,8 +9,13 @@ artifacts/
 src/Netrunner.Godot/.godot/
 *.uid
 
+# Local developer tooling; install and update outside repository history.
+/src/Netrunner.Godot/addons/godot_ai/
+
 # Local tools and machine-specific settings
 .tools/
+.opencode/
+.pi/
 .env
 *.user
 *.suo
@@ -21,8 +26,31 @@ src/Netrunner.Godot/.godot/
 /data/vendor/system-gateway/cards.json
 /data/vendor/system-gateway/manifest.json
 /data/vendor/system-gateway/SOURCE_COPYRIGHT.md
+# Local-only official Elevation metadata, created by the same updater.
+/data/vendor/elevation/cards.json
+/data/vendor/elevation/manifest.json
+/data/vendor/elevation/SOURCE_COPYRIGHT.md
+# Local-only official Vantage Point metadata, created by the same updater.
+/data/vendor/vantage-point/cards.json
+/data/vendor/vantage-point/manifest.json
+/data/vendor/vantage-point/SOURCE_COPYRIGHT.md
 
 # OS/editor noise
 .DS_Store
 Thumbs.db
 *~
+
+# Local reference screenshots contain third-party card artwork.
+/chiriboga.png
+/docs/evidence/m4-9/reference/chiriboga.png
+
+# Local reference video contains third-party card artwork.
+/reference hand.mov
+__pycache__/
+
+# Client session exports from playtests stay local.
+session-*.zip
+/VISUAL_ASSETS/
+saved-*.zip
+tests/**/Fixtures/*.actual
+*.gz.partial

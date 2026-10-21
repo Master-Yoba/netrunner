@@ -254,6 +254,181 @@ public readonly record struct ActionId
     public override string ToString() => Value ?? string.Empty;
 }
 
+/// <summary>Stable identifier for one active run.</summary>
+[JsonConverter(typeof(StableIdJsonConverterFactory))]
+public readonly record struct RunId
+{
+    public RunId(string value) => Value = StableIdentifier.Validate(value, nameof(value));
+
+    public string Value { get; }
+
+    public static RunId Parse(string value) => new(value);
+
+    public static bool TryParse(string? value, out RunId id)
+    {
+        if (StableIdentifier.TryValidate(value))
+        {
+            id = new RunId(value!);
+            return true;
+        }
+
+        id = default;
+        return false;
+    }
+
+    public override string ToString() => Value ?? string.Empty;
+}
+
+/// <summary>Stable identifier for one run encounter.</summary>
+[JsonConverter(typeof(StableIdJsonConverterFactory))]
+public readonly record struct EncounterId
+{
+    public EncounterId(string value) => Value = StableIdentifier.Validate(value, nameof(value));
+
+    public string Value { get; }
+
+    public static EncounterId Parse(string value) => new(value);
+
+    public static bool TryParse(string? value, out EncounterId id)
+    {
+        if (StableIdentifier.TryValidate(value))
+        {
+            id = new EncounterId(value!);
+            return true;
+        }
+
+        id = default;
+        return false;
+    }
+
+    public override string ToString() => Value ?? string.Empty;
+}
+
+/// <summary>Stable identity for one serialized encounter subroutine.</summary>
+[JsonConverter(typeof(StableIdJsonConverterFactory))]
+public readonly record struct SubroutineId
+{
+    public SubroutineId(string value) => Value = StableIdentifier.Validate(value, nameof(value));
+
+    public string Value { get; }
+
+    public static SubroutineId Parse(string value) => new(value);
+
+    public static bool TryParse(string? value, out SubroutineId id)
+    {
+        if (StableIdentifier.TryValidate(value))
+        {
+            id = new SubroutineId(value!);
+            return true;
+        }
+
+        id = default;
+        return false;
+    }
+
+    public override string ToString() => Value ?? string.Empty;
+}
+
+/// <summary>Stable identity for one run-scoped lingering effect.</summary>
+[JsonConverter(typeof(StableIdJsonConverterFactory))]
+public readonly record struct RunEffectId
+{
+    public RunEffectId(string value) => Value = StableIdentifier.Validate(value, nameof(value));
+
+    public string Value { get; }
+
+    public static RunEffectId Parse(string value) => new(value);
+
+    public static bool TryParse(string? value, out RunEffectId id)
+    {
+        if (StableIdentifier.TryValidate(value))
+        {
+            id = new RunEffectId(value!);
+            return true;
+        }
+
+        id = default;
+        return false;
+    }
+
+    public override string ToString() => Value ?? string.Empty;
+}
+
+/// <summary>Stable identity for one committed occurrence snapshot.</summary>
+[JsonConverter(typeof(StableIdJsonConverterFactory))]
+public readonly record struct OccurrenceId
+{
+    public OccurrenceId(string value) => Value = StableIdentifier.Validate(value, nameof(value));
+
+    public string Value { get; }
+
+    public static OccurrenceId Parse(string value) => new(value);
+
+    public static bool TryParse(string? value, out OccurrenceId id)
+    {
+        if (StableIdentifier.TryValidate(value))
+        {
+            id = new OccurrenceId(value!);
+            return true;
+        }
+
+        id = default;
+        return false;
+    }
+
+    public override string ToString() => Value ?? string.Empty;
+}
+
+/// <summary>Stable identity for one registered conditional trigger.</summary>
+[JsonConverter(typeof(StableIdJsonConverterFactory))]
+public readonly record struct TriggerId
+{
+    public TriggerId(string value) => Value = StableIdentifier.Validate(value, nameof(value));
+
+    public string Value { get; }
+
+    public static TriggerId Parse(string value) => new(value);
+
+    public static bool TryParse(string? value, out TriggerId id)
+    {
+        if (StableIdentifier.TryValidate(value))
+        {
+            id = new TriggerId(value!);
+            return true;
+        }
+
+        id = default;
+        return false;
+    }
+
+    public override string ToString() => Value ?? string.Empty;
+}
+
+/// <summary>Stable identity for one registered prevention/replacement.</summary>
+[JsonConverter(typeof(StableIdJsonConverterFactory))]
+public readonly record struct InterruptId
+{
+    public InterruptId(string value) => Value = StableIdentifier.Validate(value, nameof(value));
+
+    public string Value { get; }
+
+    public static InterruptId Parse(string value) => new(value);
+
+    public static bool TryParse(string? value, out InterruptId id)
+    {
+        if (StableIdentifier.TryValidate(value))
+        {
+            id = new InterruptId(value!);
+            return true;
+        }
+
+        id = default;
+        return false;
+    }
+
+    public override string ToString() => Value ?? string.Empty;
+}
+
 /// <summary>
 /// The only serialized mutable allocation state used by the engine. The next
 /// number is consumed monotonically and can be restored with a save/replay.
@@ -312,6 +487,17 @@ public sealed class StableIdAllocator
 
     public ActionId NextActionId() => new(Issue("action"));
 
+    public RunId NextRunId() => new(Issue("run"));
+
+    public OccurrenceId NextOccurrenceId() => new(Issue("occurrence"));
+
+    public TriggerId NextTriggerId() => new(Issue("trigger"));
+
+    public InterruptId NextInterruptId() => new(Issue("interrupt"));
+
+    /// <summary>Issues an identity for a live generic behavior frame.</summary>
+    public string NextBehaviorFrameId() => Issue("behavior-frame");
+
     private string Issue(string prefix) =>
         $"{prefix}:{TakeSequence().ToString(CultureInfo.InvariantCulture)}";
 
@@ -342,7 +528,14 @@ public sealed class StableIdJsonConverterFactory : JsonConverterFactory
         || typeToConvert == typeof(ServerId)
         || typeToConvert == typeof(ZoneId)
         || typeToConvert == typeof(DecisionId)
-        || typeToConvert == typeof(ActionId);
+        || typeToConvert == typeof(ActionId)
+        || typeToConvert == typeof(RunId)
+        || typeToConvert == typeof(EncounterId)
+        || typeToConvert == typeof(SubroutineId)
+        || typeToConvert == typeof(RunEffectId)
+        || typeToConvert == typeof(OccurrenceId)
+        || typeToConvert == typeof(TriggerId)
+        || typeToConvert == typeof(InterruptId);
 
     public override JsonConverter CreateConverter(Type typeToConvert, JsonSerializerOptions options) =>
         typeToConvert == typeof(GameId)
@@ -361,7 +554,21 @@ public sealed class StableIdJsonConverterFactory : JsonConverterFactory
                                     ? new StableIdJsonConverter<DecisionId>(static value => DecisionId.Parse(value), static value => value.Value)
                                     : typeToConvert == typeof(ActionId)
                                         ? new StableIdJsonConverter<ActionId>(static value => ActionId.Parse(value), static value => value.Value)
-                                        : throw new InvalidOperationException($"Unsupported stable ID type '{typeToConvert}'.");
+                                        : typeToConvert == typeof(RunId)
+                                            ? new StableIdJsonConverter<RunId>(static value => RunId.Parse(value), static value => value.Value)
+                                            : typeToConvert == typeof(EncounterId)
+                                                ? new StableIdJsonConverter<EncounterId>(static value => EncounterId.Parse(value), static value => value.Value)
+                                                : typeToConvert == typeof(SubroutineId)
+                                                    ? new StableIdJsonConverter<SubroutineId>(static value => SubroutineId.Parse(value), static value => value.Value)
+                                                    : typeToConvert == typeof(RunEffectId)
+                                                        ? new StableIdJsonConverter<RunEffectId>(static value => RunEffectId.Parse(value), static value => value.Value)
+                                                        : typeToConvert == typeof(OccurrenceId)
+                                                            ? new StableIdJsonConverter<OccurrenceId>(static value => OccurrenceId.Parse(value), static value => value.Value)
+                                                            : typeToConvert == typeof(TriggerId)
+                                                                ? new StableIdJsonConverter<TriggerId>(static value => TriggerId.Parse(value), static value => value.Value)
+                                                                : typeToConvert == typeof(InterruptId)
+                                                                    ? new StableIdJsonConverter<InterruptId>(static value => InterruptId.Parse(value), static value => value.Value)
+                                                                    : throw new InvalidOperationException($"Unsupported stable ID type '{typeToConvert}'.");
 
     private sealed class StableIdJsonConverter<T> : JsonConverter<T>
         where T : struct

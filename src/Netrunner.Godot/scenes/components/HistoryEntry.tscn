@@ -1,0 +1,109 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scenes/components/HistoryEntry.cs" id="1_history_entry"]
+[ext_resource type="Theme" path="res://themes/M4Theme.tres" id="2_history_theme"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_history_surface"]
+bg_color = Color(0.055, 0.085, 0.105, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.18, 0.31, 0.36, 1)
+corner_radius_top_left = 5
+corner_radius_top_right = 5
+corner_radius_bottom_right = 5
+corner_radius_bottom_left = 5
+content_margin_left = 7.0
+content_margin_top = 5.0
+content_margin_right = 7.0
+content_margin_bottom = 5.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_history_raised"]
+bg_color = Color(0.075, 0.11, 0.13, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.18, 0.31, 0.36, 1)
+corner_radius_top_left = 5
+corner_radius_top_right = 5
+corner_radius_bottom_right = 5
+corner_radius_bottom_left = 5
+content_margin_left = 7.0
+content_margin_top = 6.0
+content_margin_right = 7.0
+content_margin_bottom = 6.0
+
+[node name="HistoryEntry" type="VBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme = ExtResource("2_history_theme")
+theme_override_constants/separation = 4
+script = ExtResource("1_history_entry")
+
+[node name="TurnLabel" type="Label" parent="."]
+layout_mode = 2
+mouse_filter = 2
+text = "TURN 1"
+theme_override_colors/font_color = Color(0.36, 0.9, 0.74, 1)
+theme_override_font_sizes/font_size = 11
+
+[node name="Row" type="PanelContainer" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_styles/panel = SubResource("StyleBox_history_surface")
+
+[node name="Content" type="HBoxContainer" parent="Row"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+
+[node name="Side" type="Label" parent="Row/Content"]
+custom_minimum_size = Vector2(48, 0)
+layout_mode = 2
+mouse_filter = 2
+text = "RUNNER"
+vertical_alignment = 1
+theme_override_colors/font_color = Color(0.4, 0.75, 1, 1)
+theme_override_font_sizes/font_size = 11
+
+[node name="Summary" type="Button" parent="Row/Content"]
+custom_minimum_size = Vector2(0, 42)
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 2
+theme_type_variation = &"HistoryControl"
+alignment = 0
+autowrap_mode = 3
+text = "▸ Runner runs Remote 1."
+theme_override_font_sizes/font_size = 12
+
+[node name="DetailsPanel" type="PanelContainer" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_styles/panel = SubResource("StyleBox_history_raised")
+visible = false
+
+[node name="Details" type="VBoxContainer" parent="DetailsPanel"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 4
+
+[node name="DetailRows" type="VBoxContainer" parent="DetailsPanel/Details"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 4
+
+[node name="CardsHeading" type="Label" parent="DetailsPanel/Details"]
+layout_mode = 2
+mouse_filter = 2
+text = "KNOWN CARDS"
+visible = false
+theme_override_colors/font_color = Color(0.64, 0.74, 0.79, 1)
+theme_override_font_sizes/font_size = 11
+
+[node name="CardRows" type="VBoxContainer" parent="DetailsPanel/Details"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 4

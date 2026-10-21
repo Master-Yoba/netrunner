@@ -1,0 +1,22 @@
+[gd_scene format=3]
+
+[node name="InteractionLabToolbar" type="HBoxContainer"]
+visible = false
+theme_override_constants/separation = 6
+
+[node name="Side" type="OptionButton" parent="."]
+custom_minimum_size = Vector2(94, 32)
+tooltip_text = "Choose Runner or Corp scenarios"
+accessibility_name = "Practice side"
+
+[node name="Scenarios" type="OptionButton" parent="."]
+custom_minimum_size = Vector2(280, 32)
+tooltip_text = "Choose an interaction to practice"
+accessibility_name = "Practice scenario"
+
+[node name="Reset" type="Button" parent="."]
+text = "Reset"
+tooltip_text = "Reset scenario"
+
+[node name="Exit" type="Button" parent="."]
+text = "Exit lab"

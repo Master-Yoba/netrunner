@@ -1,0 +1,29 @@
+{
+  "kind": "m5-developer-validation-summary",
+  "schemaVersion": 1,
+  "implementationCommit": "f2348c0",
+  "date": "2026-09-23",
+  "officialTests": 2039,
+  "officialTacticalBoundaries": 80,
+  "nativeCases": [
+    "disabled",
+    "runner-1920x1080",
+    "corp-2560x1440"
+  ],
+  "releaseGuard": {
+    "explicitFlag": true,
+    "developerSetting": true,
+    "controlsAbsent": true
+  },
+  "logSha256": {
+    "repositoryGate": "a5cf33ddbc08f8e1b63cff8c6f95c2ec65d7b1a3684d1025d1295333ac18efd9",
+    "officialTests": "2f1e92868f5257327b691d3deee3aa8c1233d5b972f475bd5bfc287b5191bc23",
+    "nativeMatrix": "29697e2be8f6de38dc17178ef2c6550bb9ab60103ccf3f1acd0cf455b380fd2f",
+    "releaseGuard": "aae6b95f0d7b119276203d88df1a5c186d41c5810c647897b1d9084e823fc84f",
+    "releasePackage": "7ff2ebffcd04da63673bc7fa08012ab7388b528cfc8c2749c54179f1cb5c5f67",
+    "renderedSmoke": "742dea4cb0d9c94ee4c2346336a7e3ea99fb6cd4cfdd00c0125f1484f7175cd1",
+    "cliAllowlist": "10416e3dc213d4f896dd9ced0800eec70277923ae7ca3e53e0bdc9194fc52ef2"
+  },
+  "screenshotSha256": "ebc5f345008c19fd0e4ab5fbbde640899c1b1c7ec52a7f9daca9e574c20dafec",
+  "humanAcceptance": false
+}

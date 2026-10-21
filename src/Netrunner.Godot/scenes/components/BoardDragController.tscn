@@ -1,0 +1,26 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scenes/BoardDragController.cs" id="script"]
+[ext_resource type="Resource" path="res://themes/DragAppearance.tres" id="appearance"]
+
+[node name="BoardDragController" type="Control"]
+z_index = 50
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("script")
+Appearance = ExtResource("appearance")
+
+[node name="Hint" type="Label" parent="."]
+visible = false
+mouse_filter = 2
+custom_minimum_size = Vector2(360, 32)
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 1)
+theme_override_constants/shadow_offset_x = 2
+theme_override_constants/shadow_offset_y = 2
+theme_override_font_sizes/font_size = 16

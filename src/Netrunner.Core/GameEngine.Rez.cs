@@ -1,0 +1,466 @@
+namespace Netrunner.Core;
+
+/// <summary>
+/// Runtime-catalog-backed rez projection and reducer. This path is kept
+/// separate from the runtime-free M2 ICE reducer so the two action contracts
+/// cannot accidentally share printed metadata or event semantics.
+/// </summary>
+public static partial class GameEngine
+{
+    /// <summary>
+    /// Re-materializes every legal runtime-catalog rez payload for the active
+    /// turn or run timing decision without consuming allocator state.
+    /// </summary>
+    internal static IReadOnlyList<RezCardParameters> MaterializeRezCardParameters(
+        GameState state,
+        IRuntimeCardCatalog runtimeCardCatalog)
+        => MaterializeRezCardParameters(state, BehaviorCatalog.Empty, runtimeCardCatalog);
+
+    /// <summary>
+    /// Re-materializes runtime rez payloads with both injected catalogs. The
+    /// behavior catalog is required for run-scoped cost snapshots; the
+    /// two-argument overload remains the compatibility path for unmodified
+    /// legacy callers.
+    /// </summary>
+    internal static IReadOnlyList<RezCardParameters> MaterializeRezCardParameters(
+        GameState state,
+        IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog runtimeCardCatalog)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(behaviorCatalog);
+        ArgumentNullException.ThrowIfNull(runtimeCardCatalog);
+        return MaterializeRezCardParameters(
+            WorkingState.From(state, behaviorCatalog, runtimeCardCatalog));
+    }
+
+    private static List<RezCardParameters> MaterializeRezCardParameters(WorkingState working)
+    {
+        if (working.RuntimeCardCatalog is null)
+        {
+            return [];
+        }
+
+        if (IsTurnRezTimingWindow(working))
+        {
+            return MaterializeTurnRezCardParameters(working);
+        }
+
+        if (IsRunRezTimingWindow(working))
+        {
+            return MaterializeRunRezCardParameters(working);
+        }
+
+        return [];
+    }
+
+    private static bool IsTurnRezTimingWindow(WorkingState working) =>
+        working.RuntimeCardCatalog is not null
+        && working.RunState is null
+        && working.Turn.ActiveSide is PlayerSide.Corp or PlayerSide.Runner
+        && working.ResolutionStack.Count == 1
+        && working.ResolutionStack[^1] is TurnFrame
+        {
+            ActiveSide: var activeSide,
+            Stage: TurnFrameStage.BeforeTurnPriority
+                or TurnFrameStage.ActionPriority
+                or TurnFrameStage.DiscardPriority,
+            PriorityWindow: TurnPriorityWindowKind.PaidRezAndScore
+                or TurnPriorityWindowKind.PaidAndRez,
+            PriorityHolder: PlayerSide.Corp,
+        } frame
+        && frame.TurnNumber == working.Turn.TurnNumber
+        && working.Turn.Phase == (activeSide == PlayerSide.Corp ? TurnPhase.Corp : TurnPhase.Runner)
+        && !HasOccupiedTransientPlayArea(working);
+
+    private static bool IsRunRezTimingWindow(WorkingState working)
+    {
+        if (working.RuntimeCardCatalog is null
+            || working.RunState is not { } run
+            || !IsPaidWindow(run.Step)
+            || run.Priority is not { PriorityHolder: PlayerSide.Corp }
+            || working.ResolutionStack.Count == 0
+            || working.ResolutionStack[^1] is not RunTimingFrame frame)
+        {
+            return false;
+        }
+
+        return frame.RunId == run.Id && frame.Step == run.Step;
+    }
+
+    private static List<RezCardParameters> MaterializeTurnRezCardParameters(WorkingState working)
+    {
+        PlayerState corp = GetPlayer(working, PlayerSide.Corp);
+        var materialized = new List<RezCardParameters>();
+
+        foreach ((ServerState server, ZoneState root) in PhysicalServerRoots(working))
+        {
+            AddAffordableRootRezCards(working, corp.Credits, server, root, materialized);
+        }
+
+        return materialized;
+    }
+
+    private static List<RezCardParameters> MaterializeRunRezCardParameters(WorkingState working)
+    {
+        RunState run = working.RunState!;
+        RunPriorityState priority = run.Priority!;
+        PlayerState corp = GetPlayer(working, PlayerSide.Corp);
+        var materialized = new List<RezCardParameters>();
+
+        ServerState? attackedServer = working.Servers.FirstOrDefault(server => server.Id == run.AttackedServer);
+        ZoneState? attackedIceZone = attackedServer is null
+            ? null
+            : working.Zones.FirstOrDefault(zone =>
+                zone.Id == attackedServer.IceZoneId
+                && zone.Kind == ZoneKind.ServerIce
+                && zone.ServerId == attackedServer.Id
+                && zone.OwnerSide == PlayerSide.Corp);
+
+        foreach ((ServerState server, ZoneState root) in PhysicalServerRoots(working))
+        {
+            if (priority.CorpMayRezApproachedIce
+                && run.Step == RunTimingStep.ApproachPaidWindow
+                && attackedServer is not null
+                && attackedIceZone is not null
+                && server.Id == attackedServer.Id
+                && run.CurrentIceIndex >= 0
+                && run.CurrentIceIndex < attackedIceZone.CardIds.Count
+                && run.CurrentIceId.HasValue
+                && attackedIceZone.CardIds[run.CurrentIceIndex] == run.CurrentIceId.Value)
+            {
+                CardInstanceId currentIceId = run.CurrentIceId.Value;
+                CardInstanceState? currentIce = working.Cards.FirstOrDefault(card => card.Id == currentIceId);
+                if (currentIce is not null
+                    && currentIce.ZoneId == attackedIceZone.Id
+                    && currentIce.OwnerSide == PlayerSide.Corp
+                    && !currentIce.Rezzed
+                    && TryGetRezCostQuote(
+                        working,
+                        currentIce,
+                        RuntimeCardClass.Ice,
+                        out int iceCost,
+                        out CostQuote? iceQuote)
+                    && corp.Credits + DeclaredHostedCredits(working, PlayerSide.Corp, BehaviorHostedCreditUseKind.RezInServer, currentIce) >= iceCost
+                    && RezRequirementsMet(working, currentIce))
+                {
+                    materialized.Add(new RezCardParameters(currentIce.Id, iceCost, iceQuote));
+                }
+
+                if (currentIce is not null && !currentIce.Rezzed && currentIce.ZoneId == attackedIceZone.Id)
+                {
+                    AddForfeitRezVariants(working, corp.Credits, currentIce, materialized);
+                }
+            }
+
+            if (priority.CorpMayRezNonIce)
+            {
+                AddAffordableRootRezCards(working, corp.Credits, server, root, materialized);
+            }
+        }
+
+        return materialized;
+    }
+
+    /// <summary>
+    /// EL-REZ-COST-PAYMENT: one rez per agenda in the Corp's score area that
+    /// it can forfeit to pay part of the rez cost (Biawak), when the rest is
+    /// affordable.
+    /// </summary>
+    private static void AddForfeitRezVariants(
+        WorkingState working,
+        int corpCredits,
+        CardInstanceState ice,
+        List<RezCardParameters> materialized)
+    {
+        if (!working.BehaviorCatalog.TryGet(ice.DefinitionId, out CardBehaviorDefinition? definition)
+            || definition.RezForfeitDiscount <= 0
+            || !TryGetRezCostQuote(working, ice, RuntimeCardClass.Ice, out int fullCost, out _)
+            || working.Zones.FirstOrDefault(zone => zone.Kind == ZoneKind.CorpScore) is not { } scoreArea)
+        {
+            return;
+        }
+
+        int reduced = Math.Max(0, fullCost - definition.RezForfeitDiscount);
+        // The same affordability as the ordinary rez: the wallet and declared hosted credits (EL.6 review).
+        if (corpCredits + DeclaredHostedCredits(working, PlayerSide.Corp, BehaviorHostedCreditUseKind.RezInServer, ice) < reduced)
+        {
+            return;
+        }
+
+        foreach (CardInstanceId agendaId in scoreArea.CardIds)
+        {
+            if (working.RuntimeCardCatalog?.TryGet(GetCard(working, agendaId).DefinitionId, out CardRuntimeSpec? spec) == true
+                && spec.CardClass == RuntimeCardClass.Agenda)
+            {
+                materialized.Add(new RezCardParameters(ice.Id, reduced, forfeitAgendaId: agendaId));
+            }
+        }
+    }
+
+    private static IEnumerable<(ServerState Server, ZoneState Root)> PhysicalServerRoots(WorkingState working)
+    {
+        foreach (ServerState server in working.Servers)
+        {
+            ZoneState? root = working.Zones.FirstOrDefault(zone =>
+                zone.Id == server.RootZoneId
+                && zone.Kind == ZoneKind.ServerRoot
+                && zone.ServerId == server.Id
+                && zone.OwnerSide == PlayerSide.Corp);
+            if (root is not null)
+            {
+                yield return (server, root);
+            }
+        }
+    }
+
+    private static void AddAffordableRootRezCards(
+        WorkingState working,
+        int corpCredits,
+        ServerState server,
+        ZoneState root,
+        List<RezCardParameters> materialized)
+    {
+        foreach (CardInstanceId cardId in root.CardIds)
+        {
+            CardInstanceState? card = working.Cards.FirstOrDefault(candidate => candidate.Id == cardId);
+            int assetCost = 0;
+            int upgradeCost = 0;
+            CostQuote? assetQuote = null;
+            CostQuote? upgradeQuote = null;
+            bool isAsset = card is not null
+                && TryGetRezCostQuote(working, card, RuntimeCardClass.Asset, out assetCost, out assetQuote);
+            bool isUpgrade = card is not null
+                && TryGetRezCostQuote(working, card, RuntimeCardClass.Upgrade, out upgradeCost, out upgradeQuote);
+            int cost = isAsset ? assetCost : upgradeCost;
+            CostQuote? quote = isAsset ? assetQuote : upgradeQuote;
+            if (card is null
+                || card.ZoneId != root.Id
+                || card.OwnerSide != PlayerSide.Corp
+                || card.Rezzed
+                || (!isAsset && !isUpgrade)
+                || (isAsset && server.Kind != ServerKind.Remote)
+                || corpCredits + DeclaredHostedCredits(working, PlayerSide.Corp, BehaviorHostedCreditUseKind.RezInServer, card) < cost
+                || !RezRequirementsMet(working, card))
+            {
+                continue;
+            }
+
+            materialized.Add(new RezCardParameters(card.Id, cost, quote));
+        }
+    }
+
+    private static bool TryGetRezCost(
+        WorkingState working,
+        CardInstanceState card,
+        RuntimeCardClass expectedClass,
+        out int cost)
+    {
+        cost = 0;
+        if (working.RuntimeCardCatalog is null
+            || !working.RuntimeCardCatalog.TryGet(card.DefinitionId, out CardRuntimeSpec? spec)
+            || spec.Side != PlayerSide.Corp
+            || spec.CardClass != expectedClass
+            || !spec.RezCost.HasValue
+            || spec.RezCost.Value < 0)
+        {
+            return false;
+        }
+
+        cost = spec.RezCost.Value;
+        return true;
+    }
+
+    private static bool TryGetRezCostQuote(
+        WorkingState working,
+        CardInstanceState card,
+        RuntimeCardClass expectedClass,
+        out int effectiveCost,
+        out CostQuote? quote)
+    {
+        quote = null;
+        effectiveCost = 0;
+        if (!TryGetRezCost(working, card, expectedClass, out int baseCost))
+        {
+            return false;
+        }
+
+        // VP-DYNAMIC-REZ-COST: an asset or upgrade quotes only its own rez-cost modifiers (Hype Machine).
+        quote = expectedClass == RuntimeCardClass.Ice
+            ? CostModifierProjection.IceRez(working, card, baseCost)
+            : CostModifierProjection.SelfRezAdjustments(working, card) is { Length: > 0 } selfAdjustments
+                ? new CostQuote(baseCost, selfAdjustments)
+                : null;
+        effectiveCost = quote?.EffectiveCost ?? baseCost;
+        return true;
+    }
+
+    private static void AddRezCardActions(WorkingState working, List<LegalAction> actions)
+    {
+        foreach (RezCardParameters parameters in MaterializeRezCardParameters(working))
+        {
+            actions.Add(new LegalAction(
+                working.Allocator.NextActionId(),
+                ActionKind.RezCard,
+                $"Rez card {parameters.CardId.Value}",
+                parameters));
+        }
+    }
+
+    private static void ConsumeRezCardAction(WorkingState working, RezCardParameters parameters)
+    {
+        IReadOnlyList<RezCardParameters> materialized = MaterializeRezCardParameters(working);
+        RezCardParameters? issued = materialized.FirstOrDefault(candidate =>
+            candidate.CardId == parameters.CardId
+            && candidate.CreditCost == parameters.CreditCost
+            && candidate.ForfeitAgendaId == parameters.ForfeitAgendaId
+            && CostQuotesEqual(candidate.CostQuote, parameters.CostQuote));
+        if (issued is null)
+        {
+            throw new ResolutionFailureException(
+                "The rez action does not match the complete current runtime-catalog rez set.");
+        }
+
+        CardInstanceState card = GetCard(working, parameters.CardId);
+        ZoneState installedZone = working.Zones.FirstOrDefault(zone => zone.Id == card.ZoneId)
+            ?? throw new ResolutionFailureException("The runtime rez card has no installed source zone.");
+        ServerId? installedServerId = installedZone.ServerId;
+        bool isTurnRez = IsTurnRezTimingWindow(working);
+        TurnFrame? turnParent = isTurnRez
+            ? working.ResolutionStack[^1] as TurnFrame
+            : null;
+        RunState? runParent = isTurnRez ? null : working.RunState;
+        PlayerState corp = GetPlayer(working, PlayerSide.Corp);
+        int effectiveCost = issued.CreditCost;
+        if (issued.ForfeitAgendaId is { } forfeited)
+        {
+            ForfeitScoredAgenda(working, PlayerSide.Corp, forfeited);
+        }
+
+        PayCreditsWithDeclaredHosted(working, corp.Id, BehaviorHostedCreditUseKind.RezInServer, card, effectiveCost);
+
+        ReplaceCard(working, new CardInstanceState(
+            card.Id,
+            card.DefinitionId,
+            card.ZoneId,
+            card.OwnerSide,
+            faceUp: true,
+            rezzed: true,
+            card.AdvancementCounters));
+        Emit(working, EngineEventKinds.CardRezzed, new CardRezzedEventPayload(
+            parameters.CardId,
+            effectiveCost));
+        if (working.RuntimeCardCatalog?.TryGet(card.DefinitionId, out CardRuntimeSpec? rezzedSpec) == true
+            && rezzedSpec.CardClass == RuntimeCardClass.Ice)
+        {
+            RecordOptInTurnEvent(working, TurnEventKind.IceRezzed);
+        }
+        TrashCorpUniqueRezConflicts(working, card.Id);
+
+        if (turnParent is { } frame)
+        {
+            working.ResolutionStack[^1] = new TurnFrame(
+                frame.Version,
+                frame.BehaviorId,
+                frame.ActiveSide,
+                frame.TurnNumber,
+                frame.Stage,
+                frame.PriorityWindow,
+                PlayerSide.Corp,
+                consecutivePasses: 0,
+                frame.ForcedActionEnd);
+            QueueCardRezzedOccurrence(working, corp.Id, card.Id, installedServerId);
+            return;
+        }
+
+        RunState run = runParent
+            ?? throw new ResolutionFailureException("A runtime rez action requires live run state.");
+        RunPriorityState priority = run.Priority
+            ?? throw new ResolutionFailureException("A runtime rez action requires run priority state.");
+        bool consumedApproachedIce = run.Step == RunTimingStep.ApproachPaidWindow
+            && priority.CorpMayRezApproachedIce
+            && run.CurrentIceId == parameters.CardId;
+        working.RunState = run.WithTiming(
+            run.Step,
+            run.CurrentIceIndex,
+            run.CurrentIceId,
+            run.Successful,
+            run.Unsuccessful,
+            run.EndReason,
+            new RunPriorityState(
+                priority.Version,
+                priority.Window,
+                PlayerSide.Corp,
+                consecutivePasses: 0,
+                corpMayRezApproachedIce: priority.CorpMayRezApproachedIce && !consumedApproachedIce,
+                corpMayRezNonIce: priority.CorpMayRezNonIce),
+            run.Encounter,
+            run.AccessState);
+        working.ResolutionStack[^1] = new RunTimingFrame(run.Id, run.Step);
+        QueueCardRezzedOccurrence(working, corp.Id, card.Id, installedServerId);
+    }
+
+    /// <summary>
+    /// Routes the committed runtime rez through the normal serializable
+    /// occurrence/checkpoint pipeline.  The parent timing continuation is
+    /// already advanced before this marker is pushed, so a yielded trigger
+    /// cannot repeat payment, rez state, or unique cleanup.
+    /// </summary>
+    private static void QueueCardRezzedOccurrence(
+        WorkingState working,
+        PlayerId controller,
+        CardInstanceId cardId,
+        ServerId? serverId)
+    {
+        working.ResolutionStack.Add(new EffectResolutionFrame(
+            controller,
+            new CostBundle(),
+            new EffectBundle(new GameplayOccurrenceEffect(
+                OccurrenceKind.CardRezzed,
+                controller,
+                cardId,
+                serverId))));
+    }
+
+    private static void TrashCorpUniqueRezConflicts(
+        WorkingState working,
+        CardInstanceId incomingCardId)
+    {
+        if (working.RuntimeCardCatalog is not { } runtimeCardCatalog
+            || !runtimeCardCatalog.TryGet(GetCard(working, incomingCardId).DefinitionId, out CardRuntimeSpec? incomingSpec)
+            || incomingSpec.Side != PlayerSide.Corp
+            || !incomingSpec.Unique
+            || incomingSpec.UniquenessKey is not { } uniquenessKey)
+        {
+            return;
+        }
+
+        CardInstanceId[] conflicts = working.Cards
+            .Where(card => card.Id != incomingCardId)
+            .Select(card => (Card: card, IsActive: RuntimeCardActivity.IsActive(card, working.Zones)))
+            .Where(value => value.IsActive)
+            .Where(value => runtimeCardCatalog.TryGet(value.Card.DefinitionId, out CardRuntimeSpec? spec)
+                && spec.Side == PlayerSide.Corp
+                && spec.Unique
+                && string.Equals(spec.UniquenessKey, uniquenessKey, StringComparison.Ordinal))
+            .Select(value => value.Card.Id)
+            .OrderBy(cardId => cardId.Value, StringComparer.Ordinal)
+            .ToArray();
+
+        foreach (CardInstanceId conflictId in conflicts)
+        {
+            CardInstanceState conflict = GetCard(working, conflictId);
+            ZoneState source = ZoneForCard(working, conflict.Id);
+            ZoneState archives = GetZone(working, ZoneKind.CorpDiscard);
+            TrashCard(working, conflict, source, archives);
+        }
+    }
+
+
+    /// <summary>Whether the Corp can pay one of a card's additional rez costs (Plutus).</summary>
+    private static bool RezRequirementsMet(WorkingState working, CardInstanceState card) =>
+        !working.BehaviorCatalog.TryGet(card.DefinitionId, out CardBehaviorDefinition? definition)
+        || definition.RezRequirements is not { } requirements
+        || requirements.Any(requirement =>
+            OptionConditionMatches(working, GetPlayer(working, PlayerSide.Corp).Id, card.Id, requirement));
+}

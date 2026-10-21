@@ -1,4 +1,4 @@
-.PHONY: bootstrap restore build test watch-core watch-cards format cli doctor godot-import event-smoke templates package-linux secrets benchmark-m0 verify
+.PHONY: bootstrap restore build test watch-core watch-cards format cli doctor godot-import event-smoke templates package-linux package-macos secrets benchmark-m0 verify m4-gate play m5-client-smoke
 
 bootstrap:
 	./scripts/bootstrap.sh
@@ -39,11 +39,120 @@ templates:
 package-linux:
 	./scripts/package-linux.sh
 
+package-macos:
+	./scripts/package-macos.sh
+
 secrets:
 	./scripts/check-secrets.sh
 
 benchmark-m0:
 	./scripts/benchmark-m0.sh
 
+.PHONY: m5-spec
+m5-spec:
+	python3 scripts/check-m5-spec.py
+
+.PHONY: ai-benchmark ai-benchmark-smoke ai-benchmark-developer
+ai-benchmark:
+	bash scripts/ai-benchmark.sh full $(BENCHMARK_ARGS)
+
+ai-benchmark-smoke:
+	bash scripts/ai-benchmark.sh smoke $(BENCHMARK_ARGS)
+
+ai-benchmark-developer:
+	bash scripts/ai-benchmark.sh developer $(BENCHMARK_ARGS)
+
+.PHONY: run-hud-soak
+run-hud-soak:
+	bash scripts/run-hud-soak.sh $(SOAK_ARGS)
+
+.PHONY: ui-capture
+ui-capture:
+	bash scripts/ui-capture.sh $(CAPTURE_ARGS)
+
+.PHONY: ai-ladder
+ai-ladder:
+	bash scripts/ai-ladder.sh $(LADDER_ARGS)
+
+.PHONY: ai-lint
+ai-lint:
+	bash scripts/ai-lint.sh $(LINT_ARGS)
+
+.PHONY: core-growth
+# E6 Core-growth report per card batch (docs/history/ELEVATION_PLAN.md), for example
+#   make core-growth CORE_GROWTH_ARGS='--registry data/m4/batch-registry.json --range slice-4.7=ade5111^..fa99e86'
+core-growth:
+	bash scripts/core-growth.sh $(CORE_GROWTH_ARGS)
+
+.PHONY: fuzz fuzz-developer fuzz-nightly
+fuzz:
+	bash scripts/fuzz.sh official $(FUZZ_ARGS)
+
+# Local nightly rules fuzzing (not CI, to save Actions minutes): 1,000 official
+# games with every action also checked in Simulation mode. Each run uses a new
+# seed from the date unless FUZZ_SEED is set.
+fuzz-nightly:
+	bash scripts/fuzz.sh official --games 1000 --differential --workers $$(nproc 2>/dev/null || sysctl -n hw.ncpu) \
+		--seed $(or $(FUZZ_SEED),$(shell date -u +%Y%m%d)) $(FUZZ_ARGS)
+
+fuzz-developer:
+	bash scripts/fuzz.sh developer $(FUZZ_ARGS)
+
+.PHONY: ai-tactics ai-tactics-verify
+ai-tactics:
+	bash scripts/ai-tactics.sh $(TACTICAL_ARGS)
+
+ai-tactics-verify:
+	bash scripts/ai-tactics.sh --verify-fixtures $(TACTICAL_ARGS)
+
 verify:
 	./scripts/verify.sh
+
+m4-gate:
+	./scripts/verify.sh --m4
+
+play:
+	./scripts/play.sh $(PLAY_ARGS)
+
+.PHONY: interaction-lab
+interaction-lab:
+	./scripts/interaction-lab.sh
+
+.PHONY: card-art-fetch card-art-validate card-art-pack card-art-unpack
+card-art-fetch card-art-validate card-art-pack card-art-unpack:
+	@./scripts/card-art.sh $(patsubst card-art-%,%,$@) $(ART_ARGS)
+card-art-fetch: card-backs-fetch
+
+.PHONY: card-backs-fetch card-backs-render
+card-backs-fetch:
+	@./scripts/card-backs.sh
+card-backs-render:
+	@./scripts/render-card-backs.sh
+
+m5-client-smoke:
+	bash scripts/m5-client-smoke.sh
+
+.PHONY: play-dev m5-developer-smoke
+play-dev:
+	bash scripts/play.sh --developer
+
+m5-developer-smoke:
+	bash scripts/m5-developer-smoke.sh
+
+.PHONY: m5-gate m5-quick m5-offline-proof
+m5-gate:
+	bash scripts/m5-gate.sh
+
+m5-quick:
+	bash scripts/m5-gate.sh --quick
+
+.PHONY: bot-check gates
+bot-check:
+	bash scripts/bot-check.sh
+
+# The full gates on a commit (REF, default HEAD) in a separate worktree, while work goes on here.
+gates:
+	bash scripts/gate-worktree.sh $(REF)
+
+m5-offline-proof:
+	python3 scripts/m5-offline-proof.py --art-cache "$(ART_CACHE)" $(OFFLINE_ARGS)

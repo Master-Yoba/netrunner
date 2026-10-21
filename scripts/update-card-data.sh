@@ -6,8 +6,9 @@ usage() {
 Usage: scripts/update-card-data.sh --commit <40-hex-sha> --retrieval-date YYYY-MM-DD
 
 The command downloads the official repository at one immutable commit, creates
-local-only System Gateway metadata, validates it offline, and atomically
-replaces data/vendor/system-gateway/{cards.json,manifest.json,SOURCE_COPYRIGHT.md}.
+local-only metadata for each official pack (System Gateway, Elevation and Vantage Point),
+validates each offline, and replaces
+data/vendor/{system-gateway,elevation,vantage-point}/{cards.json,manifest.json,SOURCE_COPYRIGHT.md}.
 EOF
 }
 
@@ -75,43 +76,63 @@ case "$tmp_dir" in
   *) die "mktemp returned an unexpected temporary path." ;;
 esac
 
+# Each official pack: upstream code, expected record count, local directory.
+pack_codes=(sg elev vp)
+pack_counts=(77 82 66)
+pack_dirs=(system-gateway elevation vantage-point)
+
 data_parent="$repo_root/data/vendor"
-target_dir="$data_parent/system-gateway"
 mkdir -p "$data_parent"
 [[ -d "$data_parent" && ! -L "$data_parent" ]] || die "data/vendor is not a normal directory."
-stage_dir="$(mktemp -d "$data_parent/.system-gateway-stage.XXXXXX")"
-case "$stage_dir" in
-  "$data_parent"/.system-gateway-stage.*) ;;
-  *) die "staging directory was created outside data/vendor." ;;
-esac
 
-backup_dir=""
-target_moved=0
-target_installed=0
+stage_dirs=()
+backup_dirs=()
+moved=()
+installed=()
 install_complete=0
 
 cleanup() {
   local status=$?
-  if ((install_complete == 0 && (target_moved == 1 || target_installed == 1))); then
-    if ((target_installed == 1)) && [[ -e "$target_dir" || -L "$target_dir" ]]; then
-      rm -rf -- "$target_dir"
+  local index
+  if ((install_complete == 0)); then
+    for index in "${!pack_dirs[@]}"; do
+      local target="$data_parent/${pack_dirs[$index]}"
+      if [[ "${installed[$index]:-0}" == 1 ]] && [[ -e "$target" || -L "$target" ]]; then
+        rm -rf -- "$target"
+      fi
+      if [[ "${moved[$index]:-0}" == 1 && -n "${backup_dirs[$index]:-}" && -e "${backup_dirs[$index]}" ]]; then
+        mv -- "${backup_dirs[$index]}" "$target" || status=1
+      fi
+    done
+  fi
+  for index in "${!stage_dirs[@]}"; do
+    if [[ -d "${stage_dirs[$index]}" ]]; then
+      rm -rf -- "${stage_dirs[$index]}"
     fi
-    if [[ -n "$backup_dir" && -e "$backup_dir" ]]; then
-      mv -- "$backup_dir" "$target_dir" || status=1
+  done
+  for index in "${!backup_dirs[@]}"; do
+    if [[ -n "${backup_dirs[$index]}" && -e "${backup_dirs[$index]}" ]]; then
+      rm -rf -- "${backup_dirs[$index]}"
     fi
-  fi
-  if [[ -d "$stage_dir" ]]; then
-    rm -rf -- "$stage_dir"
-  fi
-  if [[ -n "$backup_dir" && -e "$backup_dir" ]]; then
-    rm -rf -- "$backup_dir"
-  fi
+  done
   if [[ -d "$tmp_dir" ]]; then
     rm -rf -- "$tmp_dir"
   fi
   exit "$status"
 }
 trap cleanup EXIT
+
+for index in "${!pack_dirs[@]}"; do
+  stage="$(mktemp -d "$data_parent/.${pack_dirs[$index]}-stage.XXXXXX")"
+  case "$stage" in
+    "$data_parent"/."${pack_dirs[$index]}"-stage.*) ;;
+    *) die "staging directory was created outside data/vendor." ;;
+  esac
+  stage_dirs[$index]="$stage"
+  backup_dirs[$index]=""
+  moved[$index]=0
+  installed[$index]=0
+done
 
 curl_args=(
   --fail
@@ -154,6 +175,8 @@ root = f"netrunner-cards-json-{commit}"
 required = {
     f"{root}/COPYRIGHT.md",
     f"{root}/pack/sg.json",
+    f"{root}/pack/elev.json",
+    f"{root}/pack/vp.json",
     f"{root}/packs.json",
     f"{root}/cycles.json",
     f"{root}/schema/v1/card_schema.json",
@@ -198,44 +221,50 @@ def read(relative):
     with open(f"{source}/{relative}", encoding="utf-8") as handle:
         return json.load(handle)
 
-cards = read("pack/sg.json")
 packs = read("packs.json")
 schema = read("schema/v1/card_schema.json")
 cycles = read("cycles.json")
-if not isinstance(cards, list) or len(cards) != 77:
-    raise SystemExit(f"pack/sg.json must contain exactly 77 records, found {len(cards)}")
-pack_records = [record for record in packs if record.get("code") == "sg"]
-if len(pack_records) != 1:
-    raise SystemExit("packs.json must contain exactly one sg record")
-pack = pack_records[0]
-if pack.get("size") != 77 or pack.get("cycle_code") != "system-gateway":
-    raise SystemExit("the sg pack metadata is not the expected System Gateway record")
-if not any(cycle.get("code") == "system-gateway" for cycle in cycles):
-    raise SystemExit("cycles.json has no system-gateway cycle")
 items = schema.get("items", {})
 properties = items.get("properties", {})
 required = set(items.get("required", []))
 if items.get("additionalProperties") is not False or not required:
     raise SystemExit("schema/v1/card_schema.json is not the expected strict v1 schema")
-seen = set()
-for index, card in enumerate(cards):
-    if not isinstance(card, dict):
-        raise SystemExit(f"cards[{index}] is not an object")
-    unknown = set(card) - set(properties)
-    missing = required - set(card)
-    if unknown:
-        raise SystemExit(f"cards[{index}] has unknown fields: {sorted(unknown)}")
-    if missing:
-        raise SystemExit(f"cards[{index}] is missing required fields: {sorted(missing)}")
-    if card.get("pack_code") != "sg":
-        raise SystemExit(f"cards[{index}] is not in pack sg")
-    if card.get("side_code") not in {"corp", "runner"}:
-        raise SystemExit(f"cards[{index}] has an invalid side")
-    code = card.get("code")
-    if not isinstance(code, str) or len(code) != 5 or not code.isdigit() or code in seen:
-        raise SystemExit(f"cards[{index}] has a duplicate or invalid code")
-    seen.add(code)
-print("upstream-schema-check=pass records=77 schema=v1")
+expected_packs = {
+    "sg": (77, "system-gateway"),
+    "elev": (82, "elevation"),
+    "vp": (66, "vantage-point"),
+}
+for pack_code, (count, cycle_code) in expected_packs.items():
+    cards = read(f"pack/{pack_code}.json")
+    if not isinstance(cards, list) or len(cards) != count:
+        raise SystemExit(f"pack/{pack_code}.json must contain exactly {count} records, found {len(cards)}")
+    pack_records = [record for record in packs if record.get("code") == pack_code]
+    if len(pack_records) != 1:
+        raise SystemExit(f"packs.json must contain exactly one {pack_code} record")
+    pack = pack_records[0]
+    if pack.get("size") != count or pack.get("cycle_code") != cycle_code:
+        raise SystemExit(f"the {pack_code} pack metadata is not the expected {cycle_code} record")
+    if not any(cycle.get("code") == cycle_code for cycle in cycles):
+        raise SystemExit(f"cycles.json has no {cycle_code} cycle")
+    seen = set()
+    for index, card in enumerate(cards):
+        if not isinstance(card, dict):
+            raise SystemExit(f"{pack_code} cards[{index}] is not an object")
+        unknown = set(card) - set(properties)
+        missing = required - set(card)
+        if unknown:
+            raise SystemExit(f"{pack_code} cards[{index}] has unknown fields: {sorted(unknown)}")
+        if missing:
+            raise SystemExit(f"{pack_code} cards[{index}] is missing required fields: {sorted(missing)}")
+        if card.get("pack_code") != pack_code:
+            raise SystemExit(f"{pack_code} cards[{index}] is not in pack {pack_code}")
+        if card.get("side_code") not in {"corp", "runner"}:
+            raise SystemExit(f"{pack_code} cards[{index}] has an invalid side")
+        code = card.get("code")
+        if not isinstance(code, str) or len(code) != 5 or not code.isdigit() or code in seen:
+            raise SystemExit(f"{pack_code} cards[{index}] has a duplicate or invalid code")
+        seen.add(code)
+    print(f"upstream-schema-check=pass pack={pack_code} records={count} schema=v1")
 PY
 
 dotnet_cmd="dotnet"
@@ -243,66 +272,83 @@ if [[ -x "$repo_root/.tools/dotnet/dotnet" ]]; then
   dotnet_cmd="$repo_root/.tools/dotnet/dotnet"
 fi
 
-"$dotnet_cmd" run \
-  --project "$repo_root/src/Netrunner.Cli" \
-  --no-restore \
-  -- card-data normalize \
-  --upstream "$source_dir/pack/sg.json" \
-  --copyright "$source_dir/COPYRIGHT.md" \
-  --commit "$commit_sha" \
-  --retrieval-date "$retrieval_date" \
-  --output-dir "$stage_dir" \
-  --json
+for index in "${!pack_codes[@]}"; do
+  pack="${pack_codes[$index]}"
+  stage="${stage_dirs[$index]}"
+  "$dotnet_cmd" run \
+    --project "$repo_root/src/Netrunner.Cli" \
+    --no-restore \
+    -- card-data normalize \
+    --upstream "$source_dir/pack/$pack.json" \
+    --copyright "$source_dir/COPYRIGHT.md" \
+    --commit "$commit_sha" \
+    --retrieval-date "$retrieval_date" \
+    --output-dir "$stage" \
+    --pack "$pack" \
+    --json
 
-for generated in cards.json manifest.json SOURCE_COPYRIGHT.md; do
-  [[ -f "$stage_dir/$generated" ]] || die "normalizer did not produce '$generated'."
+  for generated in cards.json manifest.json SOURCE_COPYRIGHT.md; do
+    [[ -f "$stage/$generated" ]] || die "normalizer did not produce '$generated' for pack $pack."
+  done
+  entry_count=$(( $(find "$stage" -mindepth 1 -maxdepth 1 -print | wc -l) ))
+  [[ "$entry_count" == "3" ]] || die "normalizer produced unexpected staging entries for pack $pack."
+
+  target_dir="$data_parent/${pack_dirs[$index]}"
+  if [[ -d "$target_dir" && ! -L "$target_dir" ]]; then
+    while IFS= read -r -d '' entry; do
+      case "$(basename -- "$entry")" in
+        cards.json|manifest.json|SOURCE_COPYRIGHT.md)
+          [[ -f "$entry" && ! -L "$entry" ]] \
+            || die "refusing to replace '$target_dir': '$entry' is not a regular file."
+          ;;
+        *) die "refusing to replace '$target_dir': unexpected entry '$entry'." ;;
+      esac
+    done < <(find "$target_dir" -mindepth 1 -maxdepth 1 -print0)
+  elif [[ -e "$target_dir" || -L "$target_dir" ]]; then
+    die "refusing to replace non-directory target '$target_dir'."
+  fi
+
+  if [[ -f "$target_dir/cards.json" ]]; then
+    cp -- "$target_dir/cards.json" "$tmp_dir/previous-$pack-cards.json"
+    echo "--- normalized $pack card text diff (previous -> staged) ---"
+    diff -u --label previous --label staged "$tmp_dir/previous-$pack-cards.json" "$stage/cards.json" || true
+  else
+    echo "--- normalized $pack card text diff: no previous local snapshot ---"
+  fi
 done
-entry_count="$(find "$stage_dir" -mindepth 1 -maxdepth 1 -print | wc -l)"
-[[ "$entry_count" == "3" ]] || die "normalizer produced unexpected staging entries."
 
-if [[ -d "$target_dir" && ! -L "$target_dir" ]]; then
-  while IFS= read -r -d '' entry; do
-    case "$(basename -- "$entry")" in
-      cards.json|manifest.json|SOURCE_COPYRIGHT.md)
-        [[ -f "$entry" && ! -L "$entry" ]] \
-          || die "refusing to replace '$target_dir': '$entry' is not a regular file."
-        ;;
-      *) die "refusing to replace '$target_dir': unexpected entry '$entry'." ;;
-    esac
-  done < <(find "$target_dir" -mindepth 1 -maxdepth 1 -print0)
-elif [[ -e "$target_dir" || -L "$target_dir" ]]; then
-  die "refusing to replace non-directory target '$target_dir'."
-fi
+for index in "${!pack_dirs[@]}"; do
+  target_dir="$data_parent/${pack_dirs[$index]}"
+  if [[ -e "$target_dir" || -L "$target_dir" ]]; then
+    backup="$data_parent/.${pack_dirs[$index]}-backup.$$"
+    [[ ! -e "$backup" && ! -L "$backup" ]] || die "backup path already exists."
+    backup_dirs[$index]="$backup"
+    mv -- "$target_dir" "$backup"
+    moved[$index]=1
+  fi
+  mv -- "${stage_dirs[$index]}" "$target_dir"
+  installed[$index]=1
+done
 
-if [[ -f "$target_dir/cards.json" ]]; then
-  cp -- "$target_dir/cards.json" "$tmp_dir/previous-cards.json"
-  echo "--- normalized card text diff (previous -> staged) ---"
-  diff -u --label previous --label staged "$tmp_dir/previous-cards.json" "$stage_dir/cards.json" || true
-else
-  echo "--- normalized card text diff: no previous local snapshot ---"
-fi
-
-if [[ -e "$target_dir" || -L "$target_dir" ]]; then
-  backup_dir="$data_parent/.system-gateway-backup.$$"
-  [[ ! -e "$backup_dir" && ! -L "$backup_dir" ]] || die "backup path already exists."
-  mv -- "$target_dir" "$backup_dir"
-  target_moved=1
-fi
-mv -- "$stage_dir" "$target_dir"
-target_installed=1
-
-"$dotnet_cmd" run \
-  --project "$repo_root/src/Netrunner.Cli" \
-  --no-restore \
-  -- card-data validate --root "$repo_root" --json
-if [[ -n "$backup_dir" && -e "$backup_dir" ]]; then
-  rm -rf -- "$backup_dir"
-  backup_dir=""
-fi
+for pack in "${pack_codes[@]}"; do
+  "$dotnet_cmd" run \
+    --project "$repo_root/src/Netrunner.Cli" \
+    --no-restore \
+    -- card-data validate --root "$repo_root" --pack "$pack" --json
+done
+for index in "${!backup_dirs[@]}"; do
+  if [[ -n "${backup_dirs[$index]}" && -e "${backup_dirs[$index]}" ]]; then
+    rm -rf -- "${backup_dirs[$index]}"
+    backup_dirs[$index]=""
+  fi
+done
 install_complete=1
 
-echo "card-data-update=ok commit=$commit_sha retrieval-date=$retrieval_date records=77"
-sha256sum \
-  "$target_dir/cards.json" \
-  "$target_dir/manifest.json" \
-  "$target_dir/SOURCE_COPYRIGHT.md"
+for index in "${!pack_codes[@]}"; do
+  target_dir="$data_parent/${pack_dirs[$index]}"
+  echo "card-data-update=ok pack=${pack_codes[$index]} commit=$commit_sha retrieval-date=$retrieval_date records=${pack_counts[$index]}"
+  sha256sum \
+    "$target_dir/cards.json" \
+    "$target_dir/manifest.json" \
+    "$target_dir/SOURCE_COPYRIGHT.md"
+done

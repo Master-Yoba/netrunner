@@ -219,13 +219,38 @@ public static class ToyGameSetup
         ToyDeckRecipe corpRecipe,
         ToyDeckRecipe runnerRecipe)
     {
+        return CreateCore(seed, corpRecipe, runnerRecipe, null);
+    }
+
+    /// <summary>
+    /// Non-production test boundary for proving setup reconstruction retains
+    /// the runtime-card catalog identity carried by its base state.
+    /// </summary>
+    internal static GameState CreateWithRuntimeCatalogForTesting(
+        ulong seed,
+        ToyDeckRecipe corpRecipe,
+        ToyDeckRecipe runnerRecipe,
+        IRuntimeCardCatalog runtimeCardCatalog)
+    {
+        ArgumentNullException.ThrowIfNull(runtimeCardCatalog);
+        return CreateCore(seed, corpRecipe, runnerRecipe, runtimeCardCatalog);
+    }
+
+    private static GameState CreateCore(
+        ulong seed,
+        ToyDeckRecipe corpRecipe,
+        ToyDeckRecipe runnerRecipe,
+        IRuntimeCardCatalog? runtimeCardCatalog)
+    {
         ValidateRecipe(corpRecipe, PlayerSide.Corp, nameof(corpRecipe));
         ValidateRecipe(runnerRecipe, PlayerSide.Runner, nameof(runnerRecipe));
 
         GameState baseState = GameState.CreateNew(
             seed,
             rulesVersion: "26.03",
-            cardDataVersion: "fixture-1");
+            cardDataVersion: "fixture-1",
+            runtimeCardCatalogVersion: runtimeCardCatalog?.Version,
+            runtimeCardCatalogFingerprint: runtimeCardCatalog?.Fingerprint);
         var allocator = new StableIdAllocator(baseState.Allocator);
         var servers = baseState.Servers.ToList();
         var zones = baseState.Zones.ToList();
@@ -299,8 +324,14 @@ public static class ToyGameSetup
             [],
             null,
             baseState.ActionSequence,
-            baseState.InitialSeed);
-        StateInvariantValidator.Validate(expanded);
+            baseState.InitialSeed,
+            baseState.RunState,
+            baseState.RulesState,
+            baseState.BehaviorRegistryVersion,
+            baseState.BehaviorCatalogFingerprint,
+            baseState.RuntimeCardCatalogVersion,
+            baseState.RuntimeCardCatalogFingerprint);
+        StateInvariantValidator.Validate(expanded, null, runtimeCardCatalog);
 
         return GameEngine.BeginResolution(
             expanded,

@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "kind": "comprehensive-rules",
+  "sourceUrl": "https://rules.nullsignal.games/",
+  "upstreamUrl": "https://rules.nullsignal.games/",
+  "rulesVersion": "26.03",
+  "sourceTitle": "Netrunner Comprehensive Rules (v26.03)",
+  "retrievalDate": "2026-09-01",
+  "outputSha256": "ae93dad66bd14cd197c8bb3ddbe0df2a4d5ad14e0461682d602009fbb582f8e2",
+  "chapterCount": 11,
+  "ruleCount": 608,
+  "subRuleCount": 812,
+  "licenseIdentity": "NOASSERTION",
+  "licenseNote": "Committed to the repository by explicit project decision as a local reference snapshot. The upstream rules are copyrighted by Null Signal Games; no redistribution license is asserted (NOASSERTION). Verify redistribution rights before any public distribution.",
+  "files": {
+    "source": "source.html",
+    "index": "index.json",
+    "chapters": "chapters/"
+  }
+}

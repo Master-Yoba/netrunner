@@ -456,6 +456,29 @@ public sealed class ToyRulesTests
         Assert.Throws<JsonException>(() => EngineJson.DeserializeState(missingStage));
     }
 
+    [Fact]
+    public void ASearchFingerprintNamesASimulatedStateByItsContent()
+    {
+        GameState state = CreateState();
+        ApplyResult Simulate(ActionKind kind)
+        {
+            PendingDecision decision = state.PendingDecision!;
+            LegalAction action = decision.LegalActions.First(candidate => candidate.Kind == kind);
+            return GameEngine.Apply(state, new ActionSubmission(decision.Owner, decision.Id, decision.Revision, action.Id),
+                BehaviorCatalog.Empty, RuntimeCardCatalog.Empty(), ApplyMode.Simulation);
+        }
+
+        ApplyResult credit = Simulate(ActionKind.GainCredit);
+        ApplyResult again = Simulate(ActionKind.GainCredit);
+        ApplyResult draw = Simulate(ActionKind.DrawCard);
+
+        Assert.True(credit.State.IsSimulated);
+        Assert.Throws<InvalidOperationException>(() => EngineJson.Serialize(credit.State));
+        Assert.Equal(EngineJson.SearchFingerprint(credit.State), EngineJson.SearchFingerprint(again.State));
+        Assert.NotEqual(EngineJson.SearchFingerprint(credit.State), EngineJson.SearchFingerprint(draw.State));
+        Assert.NotEqual(EngineJson.SearchFingerprint(state), EngineJson.SearchFingerprint(credit.State));
+    }
+
     private static GameState CreateState(int cardCount = 6)
     {
         ToyDeckRecipe corp = new(

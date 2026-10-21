@@ -1,0 +1,1730 @@
+using System.Collections.ObjectModel;
+using System.Globalization;
+using System.Text.Json;
+using Netrunner.Core;
+
+namespace Netrunner.AI;
+
+/// <summary>
+/// Stable version for the bounded full-game contract-agent policy. The policy
+/// consumes issued actions and public installed-card observations, optionally
+/// joined to provider-neutral printed metadata. It never receives a
+/// <see cref="GameState"/>, RNG, or hidden-zone data.
+/// </summary>
+public static class FullGameContractAgentVersion
+{
+    public const int SchemaVersion = 5;
+
+    public const string AgentVersion = "full-game-contract-agent-v6";
+
+    public const string PolicyVersion = "full-game-contract-policy-v6";
+}
+
+/// <summary>
+/// Typed tie-break policy for multiple legal bioroid subroutine targets.
+/// The ordinal is supplied and authenticated by Core; agents never parse the
+/// opaque subroutine identity or inspect card text.
+/// </summary>
+public enum BioroidSubroutinePreference
+{
+    LowestOrdinalFirst,
+    HighestOrdinalFirst,
+}
+
+/// <summary>
+/// Action-class policy for <see cref="FullGameContractAgent"/> v6.
+///
+/// The action lists are typed <see cref="ActionKind"/> values, not prompt or
+/// description text. The dispatcher is deliberately organized by
+/// <see cref="DecisionKind"/> so future setup/install/run action classes can
+/// be added as typed cases without teaching the agent to parse strings.
+/// </summary>
+public sealed class FullGameContractPolicy
+{
+    public const int CurrentSchemaVersion = FullGameContractAgentVersion.SchemaVersion;
+
+    public const string Version = FullGameContractAgentVersion.PolicyVersion;
+
+    private static readonly ActionKind[] DefaultTurnActionOrder =
+    [
+        ActionKind.UseAbility,
+        ActionKind.InstallCard,
+        ActionKind.PlayCard,
+        ActionKind.StartRun,
+        ActionKind.AdvanceCard,
+        ActionKind.RemoveTag,
+        ActionKind.TrashTaggedResource,
+        ActionKind.PurgeVirusCounters,
+        ActionKind.GainCredit,
+        ActionKind.DrawCard,
+    ];
+
+    private static readonly ActionKind[] DefaultRunActionOrder =
+    [
+        ActionKind.UseAbility,
+        ActionKind.UseBioroidAbility,
+        ActionKind.RezCard,
+        ActionKind.RezIce,
+        ActionKind.BreakSubroutines,
+        ActionKind.PumpBreaker,
+        ActionKind.ChooseBreachCandidate,
+        ActionKind.TrashAccessedCard,
+        ActionKind.NoAccessAction,
+        ActionKind.ContinueRun,
+        ActionKind.JackOut,
+        ActionKind.PassPriority,
+    ];
+
+    public FullGameContractPolicy(
+        PlayerSide controlledSide,
+        int schemaVersion = CurrentSchemaVersion,
+        IEnumerable<ActionKind>? turnActionOrder = null,
+        IEnumerable<ActionKind>? runActionOrder = null,
+        BioroidSubroutinePreference bioroidSubroutinePreference =
+            BioroidSubroutinePreference.LowestOrdinalFirst)
+    {
+        if (!Enum.IsDefined(controlledSide))
+        {
+            throw new ArgumentOutOfRangeException(nameof(controlledSide));
+        }
+
+        if (schemaVersion != CurrentSchemaVersion)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(schemaVersion),
+                schemaVersion,
+                $"The full-game contract policy schema must be {CurrentSchemaVersion}.");
+        }
+
+        if (!Enum.IsDefined(bioroidSubroutinePreference))
+        {
+            throw new ArgumentOutOfRangeException(nameof(bioroidSubroutinePreference));
+        }
+
+        SchemaVersion = schemaVersion;
+        ControlledSide = controlledSide;
+        PolicyVersion = Version;
+        TurnActionOrder = FreezeAndValidate(
+            turnActionOrder ?? DefaultTurnActionOrder,
+            AllowedTurnActions,
+            nameof(turnActionOrder));
+        RunActionOrder = FreezeAndValidate(
+            runActionOrder ?? DefaultRunActionOrder,
+            AllowedRunActions,
+            nameof(runActionOrder));
+        BioroidSubroutinePreference = bioroidSubroutinePreference;
+    }
+
+    public int SchemaVersion { get; }
+
+    public string PolicyVersion { get; }
+
+    public PlayerSide ControlledSide { get; }
+
+    /// <summary>Typed priority for the currently materialized turn actions.</summary>
+    public IReadOnlyList<ActionKind> TurnActionOrder { get; }
+
+    /// <summary>Typed priority for the currently materialized run-window actions.</summary>
+    public IReadOnlyList<ActionKind> RunActionOrder { get; }
+
+    public BioroidSubroutinePreference BioroidSubroutinePreference { get; }
+
+    private static IReadOnlySet<ActionKind> AllowedTurnActions { get; } =
+        new HashSet<ActionKind>
+        {
+            ActionKind.UseAbility,
+            ActionKind.InstallCard,
+            ActionKind.PlayCard,
+            ActionKind.StartRun,
+            ActionKind.AdvanceCard,
+            ActionKind.RemoveTag,
+            ActionKind.TrashTaggedResource,
+            ActionKind.PurgeVirusCounters,
+            ActionKind.GainCredit,
+            ActionKind.DrawCard,
+        };
+
+    private static IReadOnlySet<ActionKind> AllowedRunActions { get; } =
+        new HashSet<ActionKind>
+        {
+            ActionKind.UseAbility,
+            ActionKind.UseBioroidAbility,
+            ActionKind.PassPriority,
+            ActionKind.RezCard,
+            ActionKind.RezIce,
+            ActionKind.BreakSubroutines,
+            ActionKind.PumpBreaker,
+            ActionKind.JackOut,
+            ActionKind.ContinueRun,
+            ActionKind.ChooseBreachCandidate,
+            ActionKind.TrashAccessedCard,
+            ActionKind.NoAccessAction,
+        };
+
+    public static FullGameContractPolicy Default(PlayerSide controlledSide) =>
+        new(controlledSide);
+
+    private static ReadOnlyCollection<ActionKind> FreezeAndValidate(
+        IEnumerable<ActionKind> actions,
+        IReadOnlySet<ActionKind> allowed,
+        string parameterName)
+    {
+        ArgumentNullException.ThrowIfNull(actions);
+        ActionKind[] copy = actions.ToArray();
+        if (copy.Length == 0)
+        {
+            throw new ArgumentException("An action priority list must not be empty.", parameterName);
+        }
+
+        var seen = new HashSet<ActionKind>();
+        foreach (ActionKind action in copy)
+        {
+            if (!allowed.Contains(action))
+            {
+                throw new ArgumentException(
+                    $"Action kind '{action}' is not supported by this v4 policy.",
+                    parameterName);
+            }
+
+            if (!seen.Add(action))
+            {
+                throw new ArgumentException(
+                    $"Action kind '{action}' appears more than once in the priority list.",
+                    parameterName);
+            }
+        }
+
+        return new ReadOnlyCollection<ActionKind>(copy);
+    }
+}
+
+/// <summary>
+/// Deterministic observation-only v6 agent for the Slice 4.7 shell.
+///
+/// It currently dispatches typed decision classes for turn timing, turn
+/// actions (bounded abilities/install/gain/draw), forced discard, generic
+/// behavior choices, engine-owned trigger choices, typed ICE-subroutine
+/// alternatives, and M2 run windows. It returns an existing engine-issued
+/// <see cref="ActionId"/> only;
+/// it never synthesizes a submission and never chooses <see
+/// cref="ActionKind.EndTurn"/>.
+/// </summary>
+public sealed class FullGameContractAgent : IGameAgent
+{
+    public const int CurrentSchemaVersion = FullGameContractAgentVersion.SchemaVersion;
+
+    public const string Version = FullGameContractAgentVersion.AgentVersion;
+
+    private readonly FullGameContractPolicy _policy;
+    private readonly IRuntimeCardCatalog? _runtimeCardCatalog;
+
+    public FullGameContractAgent(PlayerSide controlledSide, IRuntimeCardCatalog? runtimeCardCatalog = null)
+        : this(FullGameContractPolicy.Default(controlledSide), runtimeCardCatalog)
+    {
+    }
+
+    public FullGameContractAgent(FullGameContractPolicy policy, IRuntimeCardCatalog? runtimeCardCatalog = null)
+    {
+        ArgumentNullException.ThrowIfNull(policy);
+        if (policy.SchemaVersion != CurrentSchemaVersion)
+        {
+            throw new ArgumentException(
+                $"The full-game contract agent requires policy schema {CurrentSchemaVersion}.",
+                nameof(policy));
+        }
+
+        _policy = policy;
+        _runtimeCardCatalog = runtimeCardCatalog;
+        AgentVersion = Version;
+    }
+
+    public string AgentVersion { get; }
+
+    public FullGameContractPolicy Policy => _policy;
+
+    public ValueTask<ActionId> ChooseActionAsync(
+        Observation observation,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(observation);
+        cancellationToken.ThrowIfCancellationRequested();
+        ValidateObservationBoundary(observation);
+
+        if (observation.LegalActions.Count == 0)
+        {
+            throw new InvalidOperationException("The full-game agent received a decision with no legal actions.");
+        }
+
+        DecisionKind decisionKind = observation.Decision!.Kind;
+        LegalAction selected = decisionKind switch
+        {
+            DecisionKind.Setup => observation.LegalActions.First(action => action.Parameters is NumberChoiceParameters { Value: 0 }),
+            DecisionKind.ChooseNumber => SelectNumberChoice(observation.LegalActions),
+            DecisionKind.ChooseCard => SelectCardChoice(observation.LegalActions),
+            DecisionKind.MemoryCleanup => observation.LegalActions.First(action => action.Kind == ActionKind.TrashProgram
+                && action.Parameters is CardChoiceParameters),
+            DecisionKind.TriggerOrdering => observation.LegalActions.First(action => action.Kind == ActionKind.OrderTriggers
+                && action.Parameters is TriggerOrderParameters),
+            DecisionKind.TurnTiming => SelectTurnTiming(observation.LegalActions),
+            DecisionKind.TurnAction => SelectTurnAction(observation.LegalActions),
+            DecisionKind.TurnDiscard => SelectTurnDiscard(observation.LegalActions),
+            DecisionKind.BehaviorChoice => SelectBehaviorChoice(observation),
+            DecisionKind.InstallChoice => SelectInstallChoice(observation.LegalActions),
+            DecisionKind.BehaviorInstallChoice => SelectBehaviorInstallChoice(observation.LegalActions),
+            DecisionKind.InterruptChoice => SelectInterruptChoice(observation.LegalActions),
+            DecisionKind.TriggerChoice => SelectTriggerChoice(observation.LegalActions),
+            DecisionKind.IceSubroutineChoice => SelectIceSubroutineChoice(observation),
+            DecisionKind.RunTiming => SelectByPriority(
+                observation.LegalActions,
+                _policy.RunActionOrder,
+                FullGameActionClass.RunWindow,
+                _policy.BioroidSubroutinePreference),
+            _ => throw UnsupportedDecision(decisionKind),
+        };
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult(selected.Id);
+    }
+
+    private static LegalAction SelectTurnTiming(IReadOnlyList<LegalAction> actions) =>
+        SelectByPriority(
+            actions,
+            [ActionKind.ScoreAgenda, ActionKind.RezCard, ActionKind.UseAbility, ActionKind.PassPriority],
+            FullGameActionClass.TurnTiming);
+
+    private static LegalAction SelectNumberChoice(IReadOnlyList<LegalAction> actions)
+    {
+        EnsureActionShapes(actions, FullGameActionClass.ResolutionChoice);
+        LegalAction[] choices = actions.Where(static action =>
+                action.Kind == ActionKind.ChooseNumber
+                && action.Parameters is NumberChoiceParameters).ToArray();
+        if (choices.Length == 0)
+        {
+            throw new InvalidOperationException(
+                $"The full-game agent found no supported action in the {FullGameActionClass.ResolutionChoice} decision.");
+        }
+
+        return choices
+            .OrderBy(static action => ((NumberChoiceParameters)action.Parameters).Value)
+            .ThenBy(static action => action.Id.Value, StringComparer.Ordinal)
+            .First();
+    }
+
+    private static LegalAction SelectCardChoice(IReadOnlyList<LegalAction> actions)
+    {
+        EnsureActionShapes(actions, FullGameActionClass.ResolutionChoice);
+        return SelectSemantic(
+            actions.Where(static action =>
+                action.Kind == ActionKind.ChooseCard
+                && action.Parameters is CardChoiceParameters),
+            FullGameActionClass.ResolutionChoice);
+    }
+
+    private static LegalAction SelectTurnDiscard(IReadOnlyList<LegalAction> actions)
+    {
+        EnsureActionShapes(actions, FullGameActionClass.TurnDiscard);
+        return SelectSemantic(
+            actions.Where(static action =>
+                action.Kind == ActionKind.ChooseCard
+                && action.Parameters is CardChoiceParameters),
+            FullGameActionClass.TurnDiscard);
+    }
+
+    private LegalAction SelectBehaviorChoice(Observation observation)
+    {
+        IReadOnlyList<LegalAction> actions = observation.LegalActions;
+        EnsureActionShapes(actions, FullGameActionClass.BehaviorChoice);
+        LegalAction[] choices = actions
+            .Where(static action =>
+                action.Kind == ActionKind.ChooseBehavior
+                && action.Parameters is BehaviorChoiceParameters)
+            .ToArray();
+
+        // Corp installed-target choices (including Retribution) rank only
+        // public Runner rig objects; private searches retain semantic order.
+        if (_policy.ControlledSide == PlayerSide.Corp
+            && choices.All(action => action.Parameters is BehaviorChoiceParameters { OptionKeys.Count: 0 }))
+        {
+            LegalAction? scored = HighestPublicInstalledTarget(observation, choices, action =>
+                ((BehaviorChoiceParameters)action.Parameters).CardIds, BehaviorOrderKey);
+            if (scored is not null) return scored;
+        }
+
+        // The v6 teaching policy prefers an economy mode when one is offered
+        // (for example Predictive Planogram's typed `gain` option). Structured
+        // option/card payloads then outrank an optional skip, and the issued
+        // action ID preserves Core's declaration/materialization order for
+        // alternatives such as Manegarm and Funhouse. Target selections use
+        // the complete typed semantic key when no public installed target
+        // score applies. Action descriptions and private state are never read.
+        return SelectSemantic(
+            choices,
+            FullGameActionClass.BehaviorChoice,
+            BehaviorOrderKey);
+    }
+
+    /// <summary>A card-effect install (Synapse Global, Off the Books): the first offered install, else decline.</summary>
+    private static LegalAction SelectBehaviorInstallChoice(IReadOnlyList<LegalAction> actions) =>
+        actions.FirstOrDefault(static action => action.Kind == ActionKind.InstallCard
+            && action.Parameters is BehaviorInstallChoiceParameters { Choice: not null })
+        ?? actions.First(static action => action.Kind == ActionKind.InstallCard
+            && action.Parameters is BehaviorInstallChoiceParameters);
+
+    private static LegalAction SelectInstallChoice(IReadOnlyList<LegalAction> actions)
+    {
+        EnsureActionShapes(actions, FullGameActionClass.InstallChoice);
+        LegalAction[] choices = actions
+            .Where(static action =>
+                action.Kind == ActionKind.InstallCard
+                && action.Parameters is InstallCardParameters)
+            .ToArray();
+
+        LegalAction[] finalChoices = choices
+            .Where(static action => ((InstallCardParameters)action.Parameters).FinalizeSelection)
+            .ToArray();
+        if (finalChoices.Length > 0)
+        {
+            // Once Core issues a valid final action, completing the frozen
+            // selection is always preferred to taking another continuation.
+            return SelectSemantic(finalChoices, FullGameActionClass.InstallChoice);
+        }
+
+        return SelectSemantic(
+            choices.Where(static action => !((InstallCardParameters)action.Parameters).FinalizeSelection),
+            FullGameActionClass.InstallChoice);
+    }
+
+    private static LegalAction SelectInterruptChoice(IReadOnlyList<LegalAction> actions)
+    {
+        EnsureActionShapes(actions, FullGameActionClass.InterruptChoice);
+        LegalAction[] prevention = actions
+            .Where(static action =>
+                action.Kind is ActionKind.UsePrevention or ActionKind.DeclinePrevention
+                && action.Parameters is PreventionChoiceParameters)
+            .ToArray();
+        if (prevention.Length > 0)
+        {
+            LegalAction[] usePrevention = prevention
+                .Where(static action => action.Kind == ActionKind.UsePrevention)
+                .ToArray();
+            if (usePrevention.Length > 0)
+            {
+                // Prevent the greatest currently materialized amount. The
+                // amount is Core's frozen choice payload; the agent never
+                // recomputes damage or derives a payment.
+                return usePrevention
+                    .OrderByDescending(static action =>
+                        ((PreventionChoiceParameters)action.Parameters).Amount)
+                    .ThenBy(SemanticKey, StringComparer.Ordinal)
+                    .ThenBy(static action => action.Id.Value, StringComparer.Ordinal)
+                    .First();
+            }
+
+            return SelectSemantic(prevention, FullGameActionClass.InterruptChoice);
+        }
+
+        LegalAction[] replacements = actions
+            .Where(static action =>
+                action.Kind is ActionKind.UseReplacement or ActionKind.DeclineReplacement
+                && action.Parameters is ReplacementChoiceParameters)
+            .ToArray();
+
+        LegalAction[] use = replacements
+            .Where(static action => action.Kind == ActionKind.UseReplacement)
+            .ToArray();
+        if (use.Length > 0)
+        {
+            // Replacement use is the deterministic v4 preference. The typed
+            // interrupt ID and then the issued ActionId break any tie.
+            return SelectSemantic(use, FullGameActionClass.InterruptChoice);
+        }
+
+        return SelectSemantic(replacements, FullGameActionClass.InterruptChoice);
+    }
+
+    private static LegalAction SelectTriggerChoice(IReadOnlyList<LegalAction> actions)
+    {
+        EnsureActionShapes(actions, FullGameActionClass.TriggerChoice);
+        LegalAction[] triggers = actions
+            .Where(static action =>
+                action.Kind is ActionKind.UseTrigger or ActionKind.DeclineTrigger
+                && action.Parameters is TriggerChoiceParameters)
+            .ToArray();
+
+        // Trigger decisions are emitted by Core's checkpoint machinery. Use
+        // is the progress-making choice whenever it is legal; decline is a
+        // fail-closed fallback only when no use action was materialized. The
+        // trigger ID and issued ActionId make ties independent of list order.
+        LegalAction[] use = triggers
+            .Where(static action => action.Kind == ActionKind.UseTrigger)
+            .ToArray();
+        if (use.Length > 0)
+        {
+            return SelectSemantic(use, FullGameActionClass.TriggerChoice, TriggerKey);
+        }
+
+        return SelectSemantic(
+            triggers.Where(static action => action.Kind == ActionKind.DeclineTrigger),
+            FullGameActionClass.TriggerChoice,
+            TriggerKey);
+    }
+
+    private LegalAction SelectIceSubroutineChoice(Observation observation)
+    {
+        IReadOnlyList<LegalAction> actions = observation.LegalActions;
+        EnsureActionShapes(actions, FullGameActionClass.IceSubroutineChoice);
+        LegalAction[] choices = actions
+            .Where(static action =>
+                action.Kind == ActionKind.ResolveIceSubroutine
+                && action.Parameters is IceSubroutineChoiceParameters)
+            .ToArray();
+
+        if (choices.Any(action => action.Parameters is not IceSubroutineChoiceParameters choice
+            || !IceSubroutineChoiceBelongsToSide(choice, _policy.ControlledSide)))
+        {
+            throw new InvalidOperationException(
+                "The full-game agent received an ICE subroutine branch for the wrong acting side.");
+        }
+
+        LegalAction? scoredTrash = HighestPublicInstalledTarget(observation,
+            choices.Where(action => action.Parameters is IceSubroutineChoiceParameters
+            { Choice: IceSubroutineChoiceKind.TrashInstalledRunnerCard }),
+            action => [((IceSubroutineChoiceParameters)action.Parameters).CardId!.Value],
+            IceSubroutineChoiceOrderKey);
+        if (scoredTrash is not null) return scoredTrash;
+
+        // Prefer normal effect branches in their typed policy order:
+        // installed Runner-card trash, Corp install, then pay. Explicit
+        // tag/decline branches are typed fallbacks. The branch rank is an
+        // enum-derived typed policy value,
+        // not a description or a rules-text heuristic. Within a branch,
+        // stable physical card/frame/destination fields make list ordering
+        // irrelevant.
+        return SelectSemantic(
+            choices,
+            FullGameActionClass.IceSubroutineChoice,
+            IceSubroutineChoiceOrderKey);
+    }
+
+    private LegalAction? HighestPublicInstalledTarget(
+        Observation observation, IEnumerable<LegalAction> candidates,
+        Func<LegalAction, IReadOnlyList<CardInstanceId>> targetIds,
+        Func<LegalAction, string> semanticOrder)
+    {
+        LegalAction[] actions = candidates.ToArray();
+        if (_runtimeCardCatalog is null || _policy.ControlledSide != PlayerSide.Corp || actions.Length == 0)
+            return null;
+        if (!observation.PublicState.TryGetValue("runnerRig", out object? publicRig) || publicRig is null)
+            return null;
+        JsonElement rig = JsonSerializer.SerializeToElement(publicRig);
+        if (rig.ValueKind != JsonValueKind.Array) return null;
+        var scores = new Dictionary<CardInstanceId, long>();
+        foreach (JsonElement card in rig.EnumerateArray())
+        {
+            if (card.ValueKind != JsonValueKind.Object
+                || !card.TryGetProperty("id", out JsonElement id) || id.ValueKind != JsonValueKind.String
+                || !card.TryGetProperty("definitionId", out JsonElement definition) || definition.ValueKind != JsonValueKind.String
+                || !HasStableId(id.GetString()) || !HasStableId(definition.GetString()))
+                continue;
+            if (_runtimeCardCatalog.TryGet(new CardDefinitionId(definition.GetString()!), out CardRuntimeSpec? metadata)
+                && metadata.Side == PlayerSide.Runner
+                && metadata.CardClass is RuntimeCardClass.Program or RuntimeCardClass.Hardware or RuntimeCardClass.Resource)
+            {
+                // Printed install investment dominates memory. Both operands
+                // come from provider-neutral public metadata, never card text.
+                scores[new CardInstanceId(id.GetString()!)] = ((long)(metadata.InstallCost ?? 0) * 100) + metadata.MemoryUnits;
+            }
+        }
+        var ranked = actions.Select(action => (Action: action,
+            Score: targetIds(action).Sum(id => scores.GetValueOrDefault(id))))
+            .OrderByDescending(value => value.Score)
+            .ThenBy(value => semanticOrder(value.Action), StringComparer.Ordinal)
+            .ThenBy(value => value.Action.Id.Value, StringComparer.Ordinal).ToArray();
+        return ranked.Length > 0 && ranked[0].Score > 0 ? ranked[0].Action : null;
+    }
+
+    private static bool IceSubroutineChoiceBelongsToSide(
+        IceSubroutineChoiceParameters choice,
+        PlayerSide side) => choice.Choice switch
+        {
+            IceSubroutineChoiceKind.PayCredits or IceSubroutineChoiceKind.TakeTag
+                or IceSubroutineChoiceKind.JackOut or IceSubroutineChoiceKind.ContinueRun =>
+                side == PlayerSide.Runner,
+            IceSubroutineChoiceKind.TrashInstalledRunnerCard
+                or IceSubroutineChoiceKind.InstallCard
+                or IceSubroutineChoiceKind.Decline
+                or IceSubroutineChoiceKind.EndRun =>
+                side == PlayerSide.Corp,
+            _ => false,
+        };
+
+    private static int BehaviorPreference(LegalAction action) =>
+        action.Parameters is BehaviorChoiceParameters behavior
+            && behavior.OptionKeys.Any(static option =>
+                string.Equals(option, "gain", StringComparison.Ordinal))
+            ? 0
+            : 1;
+
+    private static string BehaviorOrderKey(LegalAction action) =>
+        action.Parameters is BehaviorChoiceParameters behavior
+            ? $"{BehaviorChoiceProgressRank(behavior)}:{BehaviorPreference(action)}:"
+                + (behavior.OptionKeys.Count > 0
+                    // Core materializes option alternatives in declaration
+                    // order. The issued ID is the only observation-safe
+                    // representation of that order; labels and descriptions
+                    // are intentionally not consulted.
+                    ? AgentActionOrdering.IssuedOrderKey(action.Id)
+                    : $"semantic:{SemanticKey(action)}")
+            : throw new InvalidOperationException(
+                "The full-game agent cannot order a malformed behavior choice.");
+
+    private static int BehaviorChoiceProgressRank(BehaviorChoiceParameters behavior) =>
+        behavior.OptionKeys.Count > 0 && behavior.CardIds.Count > 0
+            ? 0 // Structured option plus its frozen private card-cost payload.
+            : behavior.OptionKeys.Count > 0
+                ? 1 // A materialized option, including a normal/fallback mode.
+                : behavior.CardIds.Count > 0
+                    ? 2 // A target/search selection.
+                    : 3; // Explicit optional skip.
+
+    private static string TriggerKey(LegalAction action) =>
+        action.Parameters is TriggerChoiceParameters trigger
+            ? $"trigger:{trigger.TriggerId.Value}"
+            : throw new InvalidOperationException(
+                "The full-game agent cannot order a malformed trigger choice.");
+
+    private static string IceSubroutineChoiceOrderKey(LegalAction action)
+    {
+        if (action.Parameters is not IceSubroutineChoiceParameters choice)
+        {
+            throw new InvalidOperationException(
+                "The full-game agent cannot order a malformed ICE subroutine choice.");
+        }
+
+        int branchRank = choice.Choice switch
+        {
+            IceSubroutineChoiceKind.TrashInstalledRunnerCard => 0,
+            IceSubroutineChoiceKind.InstallCard => 1,
+            IceSubroutineChoiceKind.PayCredits => 2,
+            IceSubroutineChoiceKind.Decline => 3,
+            IceSubroutineChoiceKind.TakeTag => 4,
+            IceSubroutineChoiceKind.JackOut => 0,
+            IceSubroutineChoiceKind.ContinueRun => 1,
+            IceSubroutineChoiceKind.EndRun => 1,
+            _ => throw new InvalidOperationException(
+                "The full-game agent cannot order an unsupported ICE subroutine choice."),
+        };
+
+        int walletCost = choice.CreditCost - choice.HostedCredits;
+        int destinationRank = choice is
+        {
+            Choice: IceSubroutineChoiceKind.InstallCard,
+            CreateNewRemote: true,
+        }
+            ? 1
+            : 0;
+        return $"ice-subroutine:{branchRank.ToString("D2", CultureInfo.InvariantCulture)}"
+            + $":destination:{destinationRank.ToString(CultureInfo.InvariantCulture)}"
+            + $":wallet-cost:{walletCost.ToString("D10", CultureInfo.InvariantCulture)}"
+            + $":{SemanticKey(action)}";
+    }
+
+    private LegalAction SelectTurnAction(IReadOnlyList<LegalAction> actions)
+    {
+        EnsureActionShapes(actions, FullGameActionClass.TurnAction);
+
+        LegalAction[] candidates = actions
+            .Where(action =>
+                _policy.TurnActionOrder.Contains(action.Kind)
+                && IsActionAllowed(action, FullGameActionClass.TurnAction)
+                && HasExpectedParameters(action, FullGameActionClass.TurnAction)
+                && IsProactivelySelectable(action))
+            .ToArray();
+        if (candidates.Length == 0)
+        {
+            throw new InvalidOperationException(
+                $"The full-game agent found no supported {FullGameActionClass.TurnAction} action in the issued decision.");
+        }
+
+        // The category is derived from the immutable typed policy order. The
+        // install category then receives a small detached utility adjustment:
+        // a lower current effective cost is better, and a larger current
+        // savings term is better. This consumes only the quote on this fresh
+        // observation; there is deliberately no cross-observation cache from
+        // which a first-X bonus could persist after Core stops issuing it.
+        return candidates
+            .OrderByDescending(action => TurnActionUtilityScore(action, _policy.TurnActionOrder))
+            .ThenBy(SemanticKey, StringComparer.Ordinal)
+            .ThenBy(static action => action.Id.Value, StringComparer.Ordinal)
+            .First();
+    }
+
+    private static int TurnActionUtilityScore(
+        LegalAction action,
+        IReadOnlyList<ActionKind> actionOrder)
+    {
+        int priorityIndex = -1;
+        for (int index = 0; index < actionOrder.Count; index++)
+        {
+            if (actionOrder[index] == action.Kind)
+            {
+                priorityIndex = index;
+                break;
+            }
+        }
+
+        if (priorityIndex < 0)
+        {
+            return int.MinValue;
+        }
+
+        // Keep category ordering explicit and bounded. The maximum configured
+        // list contains only the four supported turn action kinds, so this
+        // leaves ample room for a detached install-cost adjustment without
+        // making normal category ordering depend on card text or state.
+        long score = (actionOrder.Count - priorityIndex) * 100_000L;
+        if (action.Parameters is InstallCardParameters install)
+        {
+            CostProjection projection = InstallCostProjection(install);
+            score -= projection.EffectiveCost;
+            score += projection.Savings;
+        }
+
+        return score switch
+        {
+            > int.MaxValue => int.MaxValue,
+            < int.MinValue => int.MinValue,
+            _ => (int)score,
+        };
+    }
+
+    private static CostProjection InstallCostProjection(InstallCardParameters install)
+    {
+        CostQuote? quote = install.CostQuote;
+        return quote is null
+            ? new CostProjection(install.CreditCost, 0)
+            : new CostProjection(quote.EffectiveCost, quote.BaseCost - quote.EffectiveCost);
+    }
+
+    private readonly record struct CostProjection(int EffectiveCost, int Savings);
+
+    private static LegalAction SelectByPriority(
+        IReadOnlyList<LegalAction> actions,
+        IReadOnlyList<ActionKind> priorities,
+        FullGameActionClass actionClass,
+        BioroidSubroutinePreference bioroidPreference =
+            BioroidSubroutinePreference.LowestOrdinalFirst)
+    {
+        EnsureActionShapes(actions, actionClass);
+        foreach (ActionKind priority in priorities)
+        {
+            LegalAction[] candidates = actions
+                .Where(action =>
+                    action.Kind == priority
+                    && HasExpectedParameters(action, actionClass)
+                    && IsProactivelySelectable(action))
+                .ToArray();
+            if (candidates.Length > 0)
+            {
+                if (priority == ActionKind.UseBioroidAbility)
+                {
+                    return SelectBioroidByOrdinal(candidates, bioroidPreference);
+                }
+
+                return SelectSemantic(candidates, actionClass);
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"The full-game agent found no supported {actionClass} action in the issued decision.");
+    }
+
+    private static LegalAction SelectBioroidByOrdinal(
+        IEnumerable<LegalAction> candidates,
+        BioroidSubroutinePreference preference)
+    {
+        Func<LegalAction, int> ordinal = static action =>
+            ((RunBioroidAbilityParameters)action.Parameters).SubroutineOrdinal;
+        IOrderedEnumerable<LegalAction> ordered = preference switch
+        {
+            BioroidSubroutinePreference.LowestOrdinalFirst => candidates.OrderBy(ordinal),
+            BioroidSubroutinePreference.HighestOrdinalFirst => candidates.OrderByDescending(ordinal),
+            _ => throw new InvalidOperationException("The bioroid subroutine preference is unsupported."),
+        };
+
+        return ordered
+            .ThenBy(SemanticKey, StringComparer.Ordinal)
+            .ThenBy(static action => action.Id.Value, StringComparer.Ordinal)
+            .First();
+    }
+
+    private static void EnsureActionShapes(
+        IReadOnlyList<LegalAction> actions,
+        FullGameActionClass actionClass)
+    {
+        var actionIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (LegalAction? action in actions)
+        {
+            if (action is null)
+            {
+                throw new InvalidOperationException(
+                    $"The full-game agent received a null legal action in the {actionClass} decision.");
+            }
+
+            if (!HasStableId(action.Id.Value)
+                || !actionIds.Add(action.Id.Value))
+            {
+                throw new InvalidOperationException(
+                    "The full-game agent received a missing or duplicate engine-issued ActionId.");
+            }
+
+            // EndTurn is intentionally ignored rather than selected. The
+            // Slice 4.5 turn reducer ends an action phase at zero clicks, and
+            // a legacy/forged EndTurn offer must never become an agent move.
+            if (action.Kind == ActionKind.EndTurn)
+            {
+                continue;
+            }
+
+            // Real engine decisions may contain action classes that this
+            // teaching policy does not yet select (install, play, score,
+            // and so on). They remain opaque observations and are ignored;
+            // policy-supported candidates still receive strict validation.
+            if (IsActionAllowed(action, actionClass)
+                && !HasExpectedParameters(action, actionClass))
+            {
+                throw new InvalidOperationException(
+                    $"The full-game agent received malformed parameters for '{action.Kind}' in the {actionClass} decision.");
+            }
+        }
+    }
+
+    private static bool IsActionAllowed(LegalAction action, FullGameActionClass actionClass) =>
+        actionClass switch
+        {
+            FullGameActionClass.TurnTiming => action.Kind is
+                ActionKind.ScoreAgenda
+                or ActionKind.RezCard
+                or ActionKind.UseAbility
+                or ActionKind.PassPriority,
+            FullGameActionClass.TurnAction => action.Kind is
+                ActionKind.UseAbility
+                or ActionKind.InstallCard
+                or ActionKind.PlayCard
+                or ActionKind.StartRun
+                or ActionKind.AdvanceCard
+                or ActionKind.RemoveTag
+                or ActionKind.TrashTaggedResource
+                or ActionKind.PurgeVirusCounters
+                or ActionKind.GainCredit
+                or ActionKind.DrawCard,
+            FullGameActionClass.ResolutionChoice => action.Kind is
+                ActionKind.ChooseNumber
+                or ActionKind.ChooseCard,
+            FullGameActionClass.TurnDiscard => action.Kind == ActionKind.ChooseCard,
+            FullGameActionClass.BehaviorChoice => action.Kind == ActionKind.ChooseBehavior,
+            FullGameActionClass.InstallChoice => action.Kind == ActionKind.InstallCard,
+            FullGameActionClass.InterruptChoice => action.Kind is
+                ActionKind.UsePrevention
+                or ActionKind.DeclinePrevention
+                or
+                ActionKind.UseReplacement
+                or ActionKind.DeclineReplacement,
+            FullGameActionClass.TriggerChoice => action.Kind is
+                ActionKind.UseTrigger
+                or ActionKind.DeclineTrigger,
+            FullGameActionClass.IceSubroutineChoice => action.Kind == ActionKind.ResolveIceSubroutine,
+            FullGameActionClass.RunWindow => action.Kind is
+                ActionKind.PassPriority
+                or ActionKind.RezCard
+                or ActionKind.RezIce
+                or ActionKind.BreakSubroutines
+                or ActionKind.PumpBreaker
+                or ActionKind.JackOut
+                or ActionKind.ContinueRun
+                or ActionKind.ChooseBreachCandidate
+                or ActionKind.TrashAccessedCard
+                or ActionKind.NoAccessAction
+                or ActionKind.UseAbility
+                or ActionKind.UseBioroidAbility,
+            _ => false,
+        };
+
+    private static bool HasExpectedParameters(
+        LegalAction action,
+        FullGameActionClass actionClass)
+    {
+        return (action.Kind, action.Parameters) switch
+        {
+            (ActionKind.PassPriority, NoActionParameters)
+                or (ActionKind.GainCredit, NoActionParameters)
+                or (ActionKind.DrawCard, NoActionParameters)
+                or (ActionKind.JackOut, NoActionParameters)
+                or (ActionKind.ContinueRun, NoActionParameters)
+                or (ActionKind.NoAccessAction, NoActionParameters) => true,
+            (ActionKind.ChooseNumber, NumberChoiceParameters) => actionClass == FullGameActionClass.ResolutionChoice,
+            (ActionKind.ChooseCard, CardChoiceParameters card) => HasStableId(card.CardId.Value),
+            (ActionKind.PlayCard, PlayCardParameters play) =>
+                actionClass == FullGameActionClass.TurnAction
+                && HasStableId(play.CardId.Value)
+                && play.CreditCost >= 0
+                && (play.TargetServerId is null || HasStableId(play.TargetServerId.Value.Value))
+                && (play.TrashCostCardId is null || HasStableId(play.TrashCostCardId.Value.Value)),
+            (ActionKind.StartRun, RunServerParameters run) =>
+                actionClass == FullGameActionClass.TurnAction
+                && HasStableId(run.ServerId.Value),
+            (ActionKind.AdvanceCard, AdvanceCardParameters advance) =>
+                actionClass == FullGameActionClass.TurnAction
+                && HasStableId(advance.CardId.Value)
+                && advance.CreditCost >= 0,
+            (ActionKind.ScoreAgenda, ScoreAgendaParameters score) =>
+                actionClass == FullGameActionClass.TurnTiming
+                && HasStableId(score.CardId.Value)
+                && score.AgendaPoints >= 0
+                && score.AdvancementRequirement >= 0,
+            (ActionKind.RemoveTag, RemoveTagParameters removeTag) =>
+                actionClass == FullGameActionClass.TurnAction
+                && removeTag.ClickCost >= 0
+                && removeTag.CreditCost >= 0,
+            (ActionKind.TrashTaggedResource, TrashTaggedResourceParameters trash) =>
+                actionClass == FullGameActionClass.TurnAction
+                && HasStableId(trash.CardId.Value)
+                && trash.ClickCost >= 0
+                && trash.CreditCost >= 0,
+            (ActionKind.PurgeVirusCounters, PurgeVirusCountersParameters purge) =>
+                actionClass == FullGameActionClass.TurnAction
+                && purge.ClickCost >= 0,
+            (ActionKind.ChooseBehavior, BehaviorChoiceParameters behavior) =>
+                HasValidBehaviorChoiceParameters(behavior),
+            (ActionKind.RezCard, RezCardParameters rez) => HasStableId(rez.CardId.Value) && rez.CreditCost >= 0
+                && (rez.CostQuote is null || rez.CostQuote.EffectiveCost == rez.CreditCost),
+            (ActionKind.RezIce, RunIceParameters ice) => HasStableId(ice.IceId.Value),
+            (ActionKind.BreakSubroutines, RunBreakParameters runBreak) =>
+                HasStableId(runBreak.BreakerId.Value)
+                && runBreak.Quantity > 0
+                && runBreak.HostedCredits >= 0
+                && (runBreak.SubroutineId is null || (HasStableId(runBreak.SubroutineId.Value.Value)
+                    && runBreak.Quantity == 1 && runBreak.HostedCredits == 0 && runBreak.CostQuote is null)),
+            (ActionKind.PumpBreaker, RunBreakerParameters breaker) =>
+                HasStableId(breaker.BreakerId.Value)
+                && breaker.HostedCredits >= 0,
+            (ActionKind.ChooseBreachCandidate, BreachCandidateParameters candidate) =>
+                (candidate.CardId is { } card && HasStableId(card.Value) && candidate.Source is null)
+                || (candidate.CardId is null
+                    && candidate.Source is { } source
+                    && Enum.IsDefined(source)),
+            (ActionKind.TrashAccessedCard, RunCardPaymentParameters payment) =>
+                HasStableId(payment.CardId.Value)
+                && payment.HostedCredits >= 0,
+            // VP-SCORE-STEAL-COST: a steal with additional costs (Méliès City Luxury Line, Magistrate Revontulet).
+            (ActionKind.StealAgenda, RunCardPaymentParameters paidSteal) =>
+                HasStableId(paidSteal.CardId.Value)
+                && paidSteal.HostedCredits >= 0,
+            (ActionKind.UseAbility, AbilityActionParameters ability) =>
+                IsValidAbilityAction(ability, actionClass),
+            (ActionKind.UseBioroidAbility, RunBioroidAbilityParameters bioroid) =>
+                IsValidBioroidAbilityAction(bioroid, actionClass),
+            (ActionKind.InstallCard, InstallCardParameters install) =>
+                IsValidInstallAction(install, actionClass),
+            (ActionKind.UseReplacement or ActionKind.DeclineReplacement, ReplacementChoiceParameters replacement) =>
+                HasStableId(replacement.InterruptId.Value),
+            (ActionKind.UsePrevention or ActionKind.DeclinePrevention, PreventionChoiceParameters prevention) =>
+                HasStableId(prevention.InterruptId.Value) && prevention.Amount >= 0,
+            (ActionKind.UseTrigger or ActionKind.DeclineTrigger, TriggerChoiceParameters trigger) =>
+                HasStableId(trigger.TriggerId.Value),
+            (ActionKind.ResolveIceSubroutine, IceSubroutineChoiceParameters choice) =>
+                IsValidIceSubroutineChoice(choice, actionClass),
+            _ => false,
+        };
+    }
+
+    private static bool HasValidBehaviorChoiceParameters(BehaviorChoiceParameters? behavior)
+    {
+        if (behavior is null
+            || !HasStableId(behavior.ChoiceKey)
+            || behavior.OptionKeys is null
+            || behavior.CardIds is null
+            || behavior.OptionKeys.Count > 1
+            || behavior.OptionKeys.Any(option => !HasStableId(option))
+            || behavior.CardIds.Any(card => !HasStableId(card.Value))
+            || behavior.OptionKeys.Distinct(StringComparer.Ordinal).Count() != behavior.OptionKeys.Count
+            || behavior.CardIds.Distinct().Count() != behavior.CardIds.Count)
+        {
+            return false;
+        }
+
+        // The Core choice reducer accepts one of three complete typed
+        // shapes: a materialized option, a card selection, or an explicit
+        // optional skip. An option plus card IDs is the structured private
+        // card-cost form used by Anoetic Void and remains a single issued
+        // action; it is never synthesized by the agent.
+        if (!behavior.FinalizeSelection)
+        {
+            return behavior.OptionKeys.Count == 0
+                && behavior.CardIds.Count == 1;
+        }
+
+        if (behavior.OptionKeys.Count > 0 && behavior.CardIds.Count > 0)
+        {
+            return behavior.OptionKeys.Count == 1;
+        }
+
+        return true;
+    }
+
+    private static bool IsValidInstallAction(
+        InstallCardParameters? install,
+        FullGameActionClass actionClass)
+    {
+        if (install is null
+            || actionClass is not (FullGameActionClass.TurnAction or FullGameActionClass.InstallChoice)
+            || !HasStableId(install.CardId.Value)
+            || install.HostCardId is { } host && (!HasStableId(host.Value) || host == install.CardId
+                || install.DestinationKind != InstallDestinationKind.RunnerRig)
+            || !Enum.IsDefined(install.DestinationKind)
+            || install.CreditCost < 0
+            || !HasValidInstallDestination(install)
+            || !HasStableCardIds(install.CandidateReplacementCardIds)
+            || !HasStableCardIds(install.RequiredReplacementCardIds)
+            || !HasStableCardIds(install.SelectedReplacementCardIds)
+            || !IsSubset(
+                install.RequiredReplacementCardIds,
+                install.CandidateReplacementCardIds)
+            || !IsSubset(
+                install.SelectedReplacementCardIds,
+                install.CandidateReplacementCardIds)
+            || !HasValidInstallSelectionShape(install, actionClass)
+            || !IsValidInstallCostQuote(install.CostQuote, install.CreditCost))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool HasValidInstallDestination(InstallCardParameters install)
+    {
+        if (install.ServerId is { } serverId && !HasStableId(serverId.Value))
+        {
+            return false;
+        }
+
+        return install.DestinationKind switch
+        {
+            InstallDestinationKind.RunnerRig =>
+                install.ServerId is null && !install.CreateNewRemote,
+            InstallDestinationKind.ServerRoot
+                or InstallDestinationKind.ServerIce =>
+                install.ServerId.HasValue != install.CreateNewRemote,
+            _ => false,
+        };
+    }
+
+    private static bool HasStableCardIds(IReadOnlyList<CardInstanceId>? cardIds)
+    {
+        if (cardIds is null)
+        {
+            return false;
+        }
+
+        var seen = new HashSet<CardInstanceId>();
+        foreach (CardInstanceId cardId in cardIds)
+        {
+            if (!HasStableId(cardId.Value) || !seen.Add(cardId))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool IsSubset(
+        IReadOnlyList<CardInstanceId> subset,
+        IReadOnlyList<CardInstanceId> superset) =>
+        subset.All(superset.Contains);
+
+    private static bool HasValidInstallSelectionShape(
+        InstallCardParameters install,
+        FullGameActionClass actionClass)
+    {
+        if (actionClass == FullGameActionClass.TurnAction)
+        {
+            return install.CandidateReplacementCardIds.Count == 0
+                ? install.FinalizeSelection
+                    && install.SelectedReplacementCardIds.Count == 0
+                : !install.FinalizeSelection
+                    && install.SelectedReplacementCardIds.Count == 0;
+        }
+
+        // A behavior install first chooses its ICE host without advancing
+        // the replacement selection; Core freezes that host on the next frame.
+        if (!install.FinalizeSelection && install.HostCardId is not null
+            && install.SelectedReplacementCardIds.Count == 0)
+        {
+            return true;
+        }
+
+        // InstallChoice is a continuation over the frozen candidate stream.
+        // A non-final action must append at least one remaining candidate. It
+        // may append the last candidate too: Core issues that action before a
+        // fresh observation can expose the corresponding final action. A final action
+        // may select zero cards when no replacement is required, but it must
+        // include every required replacement when one is issued.
+        if (install.CandidateReplacementCardIds.Count == 0)
+        {
+            return false;
+        }
+
+        if (install.FinalizeSelection)
+        {
+            return install.RequiredReplacementCardIds.All(install.SelectedReplacementCardIds.Contains);
+        }
+
+        return install.SelectedReplacementCardIds.Count > 0
+            && install.SelectedReplacementCardIds.Count <= install.CandidateReplacementCardIds.Count;
+    }
+
+    private static bool IsValidInstallCostQuote(CostQuote? quote, int creditCost)
+    {
+        if (quote is null)
+        {
+            return true;
+        }
+
+        if (quote.BaseCost < 0
+            || quote.EffectiveCost < 0
+            || quote.EffectiveCost != creditCost
+            || quote.Adjustments is null
+            || quote.Adjustments.Count == 0)
+        {
+            return false;
+        }
+
+        long expected = quote.BaseCost;
+        foreach (CostAdjustment? adjustment in quote.Adjustments)
+        {
+            if (adjustment is null
+                || adjustment.Kind != BehaviorCostModifierKind.RunnerInstallCreditCost
+                || adjustment.Delta == 0
+                || !HasStableId(adjustment.ReasonKey)
+                || (adjustment.SourceDefinitionId is { } definitionId
+                    && !HasStableId(definitionId.Value))
+                || (adjustment.SourceCardId is { } sourceCardId
+                    && !HasStableId(sourceCardId.Value)))
+            {
+                return false;
+            }
+
+            try
+            {
+                expected = checked(expected + adjustment.Delta);
+            }
+            catch (OverflowException)
+            {
+                return false;
+            }
+        }
+
+        expected = Math.Max(0, expected);
+        return expected == quote.EffectiveCost;
+    }
+
+    private static bool IsProactivelySelectable(LegalAction action) =>
+        action.Kind != ActionKind.UseAbility
+        || action.Parameters is AbilityActionParameters ability
+            && IsBoundedAbility(ability);
+
+    private static bool IsBoundedAbility(AbilityActionParameters ability) =>
+        ability.Costs.Any(static cost =>
+            cost is not null
+            && cost.Amount > 0
+            && cost.Kind is BehaviorCostKind.Clicks or BehaviorCostKind.LoseClick)
+        || ability.Usage is
+        {
+            Limit: BehaviorAbilityUsageLimit.OncePerTurn,
+            UsesThisTurn: 0,
+        };
+
+    private static bool HasStableId(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Length > 128)
+        {
+            return false;
+        }
+
+        return value.All(static character =>
+            !char.IsControl(character) && !char.IsWhiteSpace(character));
+    }
+
+    private static bool IsValidAbilityAction(
+        AbilityActionParameters? ability,
+        FullGameActionClass actionClass)
+    {
+        if (ability is null
+            || !HasStableId(ability.SourceCardId.Value)
+            || !HasStableId(ability.DefinitionId.Value)
+            || !HasStableId(ability.SourceZoneId.Value)
+            || !HasStableId(ability.AbilityKey)
+            || !Enum.IsDefined(ability.SourceZoneKind)
+            || !Enum.IsDefined(ability.Timing)
+            || !Enum.IsDefined(ability.Activation)
+            || !DeterministicHash.IsSha256Hex(ability.CatalogFingerprint)
+            || !DeterministicHash.IsSha256Hex(ability.DefinitionFingerprint)
+            || !IsAbilityTimingCompatible(ability, actionClass)
+            || ability.Costs is null
+            || ability.TargetCardIds is null
+            || ability.Usage is null)
+        {
+            return false;
+        }
+
+        if (!HasValidAbilityCosts(ability.Costs, ability.Activation))
+        {
+            return false;
+        }
+
+        var targetIds = new HashSet<CardInstanceId>();
+        foreach (CardInstanceId targetId in ability.TargetCardIds)
+        {
+            if (!HasStableId(targetId.Value) || !targetIds.Add(targetId))
+            {
+                return false;
+            }
+        }
+
+        if (!Enum.IsDefined(ability.Usage.Limit)
+            || ability.Usage.UsesThisTurn < 0
+            || (ability.Usage.Limit == BehaviorAbilityUsageLimit.OncePerTurn
+                && ability.Usage.UsesThisTurn > 1))
+        {
+            return false;
+        }
+
+        return HasValidAdditionalCostSelections(ability);
+    }
+
+    private static bool IsValidBioroidAbilityAction(
+        RunBioroidAbilityParameters? bioroid,
+        FullGameActionClass actionClass)
+    {
+        // The dedicated bioroid interface is emitted only in the Runner's
+        // encounter paid window. Its payload is intentionally narrower than
+        // a generic AbilityActionParameters snapshot: one ICE, one exact
+        // subroutine, one stable ability key, and one lost click or (EL.6,
+        // N-Pot) a positive credit cost. Keep this validation detached from
+        // authoritative state; Core owns whether those IDs still denote the
+        // current encountered/unbroken target.
+        return actionClass == FullGameActionClass.RunWindow
+            && bioroid is not null
+            && HasStableId(bioroid.IceId.Value)
+            && HasStableId(bioroid.SubroutineId.Value)
+            && bioroid.SubroutineOrdinal >= 0
+            && HasStableId(bioroid.AbilityKey)
+            && EncounteredBioroidAbilitySpec.IsSupportedCost(bioroid.Cost)
+            && bioroid.Cost is
+            {
+                CounterName: null,
+                AdditionalKey: null,
+                AdditionalTarget: null,
+                AdditionalKind: null,
+            };
+    }
+
+    private static bool IsValidIceSubroutineChoice(
+        IceSubroutineChoiceParameters? choice,
+        FullGameActionClass actionClass)
+    {
+        if (actionClass != FullGameActionClass.IceSubroutineChoice
+            || choice is null
+            || !HasStableId(choice.FrameIdentity)
+            || !Enum.IsDefined(choice.Choice)
+            || choice.CreditCost < 0
+            || choice.HostedCredits < 0
+            || (choice.CardId is { } cardId && !HasStableId(cardId.Value))
+            || (choice.ServerId is { } serverId && !HasStableId(serverId.Value)))
+        {
+            return false;
+        }
+
+        bool hasInstallDestination = choice.DestinationKind is not null
+            || choice.ServerId is not null
+            || choice.CreateNewRemote;
+        switch (choice.Choice)
+        {
+            case IceSubroutineChoiceKind.TrashInstalledRunnerCard:
+                return choice.CardId is { } trashCard
+                    && HasStableId(trashCard.Value)
+                    && !hasInstallDestination
+                    && choice.CreditCost == 0
+                    && choice.HostedCredits == 0;
+
+            case IceSubroutineChoiceKind.InstallCard:
+                if (choice.CardId is not { } installCard
+                    || !HasStableId(installCard.Value)
+                    || choice.DestinationKind is not { } destination
+                    || !Enum.IsDefined(destination)
+                    || choice.CreditCost < 0)
+                {
+                    return false;
+                }
+
+                return destination switch
+                {
+                    InstallDestinationKind.RunnerRig =>
+                        choice.ServerId is null && !choice.CreateNewRemote,
+                    InstallDestinationKind.ServerRoot
+                        or InstallDestinationKind.ServerIce =>
+                        choice.ServerId.HasValue != choice.CreateNewRemote,
+                    _ => false,
+                } && choice.HostedCredits == 0;
+
+            case IceSubroutineChoiceKind.PayCredits:
+                return choice.CardId is null
+                    && !hasInstallDestination
+                    && choice.CreditCost > 0
+                    && choice.HostedCredits <= choice.CreditCost;
+
+            case IceSubroutineChoiceKind.Decline:
+            case IceSubroutineChoiceKind.EndRun:
+            case IceSubroutineChoiceKind.JackOut:
+            case IceSubroutineChoiceKind.ContinueRun:
+            case IceSubroutineChoiceKind.TakeTag:
+                return choice.CardId is null
+                    && !hasInstallDestination
+                    && choice.CreditCost == 0
+                    && choice.HostedCredits == 0;
+
+            default:
+                return false;
+        }
+    }
+
+    private static bool IsAbilityTimingCompatible(
+        AbilityActionParameters ability,
+        FullGameActionClass actionClass) =>
+        actionClass switch
+        {
+            // The engine materializes ClickAction abilities only in the
+            // active turn's AwaitingAction window.
+            FullGameActionClass.TurnAction =>
+                ability.Activation == BehaviorAbilityActivation.ClickAction
+                && ability.Timing == BehaviorAbilityTiming.ActionPhase,
+
+            // Turn priority exposes the engine's generic paid window; no
+            // run-specific timing can be issued from this parent frame.
+            FullGameActionClass.TurnTiming =>
+                ability.Activation == BehaviorAbilityActivation.PaidAbility
+                && ability.Timing == BehaviorAbilityTiming.AnyPaidWindow,
+
+            // RunTiming does not expose the concrete run step in the typed
+            // observation. Accept exactly the paid timings currently emitted
+            // by Core, including the priority-free breach-access window.
+            FullGameActionClass.RunWindow =>
+                ability.Activation == BehaviorAbilityActivation.PaidAbility
+                && ability.Timing is
+                    BehaviorAbilityTiming.AnyPaidWindow
+                    or BehaviorAbilityTiming.InitiationPaidWindow
+                    or BehaviorAbilityTiming.ApproachPaidWindow
+                    or BehaviorAbilityTiming.EncounterPaidWindow
+                    or BehaviorAbilityTiming.MovementPaidWindow
+                    or BehaviorAbilityTiming.AfterMovePaidWindow
+                    or BehaviorAbilityTiming.BreachAccessPaidWindow,
+            _ => false,
+        };
+
+    private static bool HasValidAbilityCosts(
+        IReadOnlyList<BehaviorCost> costs,
+        BehaviorAbilityActivation activation)
+    {
+        int selfMovementCostCount = 0;
+        foreach (BehaviorCost? cost in costs)
+        {
+            if (!IsValidAbilityCost(cost))
+            {
+                return false;
+            }
+
+            if (cost!.Kind is BehaviorCostKind.TrashSelf or BehaviorCostKind.RemoveSelfFromGame
+                && ++selfMovementCostCount > 1)
+            {
+                return false;
+            }
+        }
+
+        int clickCostCount = costs.Count(static cost =>
+            cost is not null && cost.Kind == BehaviorCostKind.Clicks);
+        bool hasLoseClickCost = costs.Any(static cost =>
+            cost is not null && cost.Kind == BehaviorCostKind.LoseClick);
+
+        return activation switch
+        {
+            // One click cost of one or more clicks (Elevation's multi-click actions).
+            BehaviorAbilityActivation.ClickAction =>
+                clickCostCount == 1
+                && costs.Single(static cost => cost.Kind == BehaviorCostKind.Clicks).Amount >= 1
+                && !hasLoseClickCost,
+            BehaviorAbilityActivation.PaidAbility => clickCostCount == 0,
+            _ => false,
+        };
+    }
+
+    private static bool IsValidAbilityCost(BehaviorCost? cost)
+    {
+        if (cost is null || !Enum.IsDefined(cost.Kind))
+        {
+            return false;
+        }
+
+        bool validAmount = cost.Kind switch
+        {
+            BehaviorCostKind.Credits => cost.Amount >= 0,
+            BehaviorCostKind.Clicks
+                or BehaviorCostKind.LoseClick
+                or BehaviorCostKind.Counter
+                or BehaviorCostKind.Tags
+                or BehaviorCostKind.HostedCredits
+                or BehaviorCostKind.Additional => cost.Amount > 0,
+            BehaviorCostKind.TrashSelf
+                or BehaviorCostKind.RemoveSelfFromGame => cost.Amount == 1,
+            _ => false,
+        };
+        if (!validAmount)
+        {
+            return false;
+        }
+
+        if (cost.Kind == BehaviorCostKind.Counter)
+        {
+            if (!HasStableId(cost.CounterName))
+            {
+                return false;
+            }
+        }
+        else if (cost.CounterName is not null)
+        {
+            return false;
+        }
+
+        if (cost.Kind != BehaviorCostKind.Additional)
+        {
+            return cost.AdditionalKey is null
+                && cost.AdditionalTarget is null
+                && cost.AdditionalKind is null;
+        }
+
+        if (!HasStableId(cost.AdditionalKey))
+        {
+            return false;
+        }
+
+        return cost.AdditionalKind is { } additionalKind
+            && Enum.IsDefined(additionalKind)
+            && additionalKind == BehaviorAdditionalCostKind.TrashCards
+            && IsValidStructuredAdditionalTarget(cost.AdditionalTarget);
+    }
+
+    private static bool IsValidStructuredAdditionalTarget(BehaviorTarget? target) =>
+        target is not null
+        && target.Kind == BehaviorTargetKind.ZoneCards
+        && target.Selector is null
+        && target.Zone is { } zone
+        && Enum.IsDefined(zone)
+        && !target.Reveal
+        && IsValidCardFilter(target.Filter)
+        && target.Filter!.OwnerSide is { } ownerSide
+        && Enum.IsDefined(ownerSide);
+
+    private static bool IsValidCardFilter(BehaviorCardFilter? filter) =>
+        filter is not null
+        && Enum.IsDefined(filter.CardType)
+        && (filter.DefinitionId is null || HasStableId(filter.DefinitionId.Value.Value))
+        && (filter.OwnerSide is null || Enum.IsDefined(filter.OwnerSide.Value))
+        && (filter.Subtype is null || HasStableId(filter.Subtype));
+
+    private static bool HasValidAdditionalCostSelections(AbilityActionParameters ability)
+    {
+        int additionalCostCount = ability.Costs.Count(static cost =>
+            cost.Kind == BehaviorCostKind.Additional);
+        IReadOnlyList<AbilityAdditionalCostSelection>? selections =
+            ability.AdditionalCostSelections;
+
+        // Core's constructor normalizes an empty optional list to null. A
+        // null list therefore represents the valid no-additional-cost shape;
+        // structured additional costs must carry one selection per cost.
+        if (selections is null)
+        {
+            return additionalCostCount == 0;
+        }
+
+        if (selections.Count == 0 || selections.Count != additionalCostCount)
+        {
+            return false;
+        }
+
+        var seenIndexes = new HashSet<int>();
+        var allSelectedCards = new HashSet<CardInstanceId>();
+        foreach (AbilityAdditionalCostSelection? selection in selections)
+        {
+            if (selection is null
+                || selection.CostIndex < 0
+                || selection.CostIndex >= ability.Costs.Count
+                || !seenIndexes.Add(selection.CostIndex)
+                || ability.Costs[selection.CostIndex].Kind != BehaviorCostKind.Additional
+                || !string.Equals(
+                    selection.CostKey,
+                    ability.Costs[selection.CostIndex].AdditionalKey,
+                    StringComparison.Ordinal)
+                || !HasStableId(selection.CostKey)
+                || selection.CardIds is null
+                || selection.CardIds.Count == 0)
+            {
+                return false;
+            }
+
+            var selectedCards = new HashSet<CardInstanceId>();
+            if (selection.CardIds.Count != ability.Costs[selection.CostIndex].Amount)
+            {
+                return false;
+            }
+
+            foreach (CardInstanceId cardId in selection.CardIds)
+            {
+                if (!HasStableId(cardId.Value)
+                    || !selectedCards.Add(cardId)
+                    || !allSelectedCards.Add(cardId))
+                {
+                    return false;
+                }
+            }
+        }
+
+        return seenIndexes.Count == additionalCostCount;
+    }
+
+    private static LegalAction SelectSemantic(
+        IEnumerable<LegalAction> source,
+        FullGameActionClass actionClass,
+        Func<LegalAction, string>? orderKey = null)
+    {
+        LegalAction[] candidates = source.ToArray();
+        if (candidates.Length == 0)
+        {
+            throw new InvalidOperationException(
+                $"The full-game agent found no supported action in the {actionClass} decision.");
+        }
+
+        // Equal semantic payloads are still deterministic: the engine-issued
+        // stable ActionId is the final tie-breaker, never list position.
+        Func<LegalAction, string> stableOrderKey = orderKey ?? SemanticKey;
+        return candidates
+            .OrderBy(stableOrderKey, StringComparer.Ordinal)
+            .ThenBy(SemanticKey, StringComparer.Ordinal)
+            .ThenBy(static action => action.Id.Value, StringComparer.Ordinal)
+            .First();
+    }
+
+    private static string SemanticKey(LegalAction action) => action.Parameters switch
+    {
+        NoActionParameters => string.Empty,
+        CardChoiceParameters card => $"card:{card.CardId.Value}",
+        InstallCardParameters install => InstallKey(install),
+        NumberChoiceParameters number =>
+            $"number:{number.Value.ToString(CultureInfo.InvariantCulture)}",
+        PlayCardParameters play =>
+            $"play:{play.CardId.Value}:target:{play.TargetServerId?.Value ?? string.Empty}"
+            + $":cost:{play.CreditCost.ToString(CultureInfo.InvariantCulture)}"
+            + (play.TrashCostCardId is { } trashed ? $":trash:{trashed.Value}" : string.Empty),
+        RunServerParameters run => $"run:{run.ServerId.Value}",
+        AdvanceCardParameters advance =>
+            $"advance:{advance.CardId.Value}:{advance.CreditCost.ToString(CultureInfo.InvariantCulture)}",
+        ScoreAgendaParameters score =>
+            $"score:{score.CardId.Value}:{score.AgendaPoints.ToString(CultureInfo.InvariantCulture)}"
+            + $":requirement:{score.AdvancementRequirement.ToString(CultureInfo.InvariantCulture)}",
+        RemoveTagParameters removeTag =>
+            $"remove-tag:clicks:{removeTag.ClickCost.ToString(CultureInfo.InvariantCulture)}"
+            + $":credits:{removeTag.CreditCost.ToString(CultureInfo.InvariantCulture)}",
+        TrashTaggedResourceParameters trash =>
+            $"trash-tagged-resource:{trash.CardId.Value}"
+            + $":clicks:{trash.ClickCost.ToString(CultureInfo.InvariantCulture)}"
+            + $":credits:{trash.CreditCost.ToString(CultureInfo.InvariantCulture)}",
+        PurgeVirusCountersParameters purge =>
+            $"purge-virus-counters:{purge.ClickCost.ToString(CultureInfo.InvariantCulture)}",
+        RezCardParameters rez => $"rez:{rez.CardId.Value}:{rez.CreditCost.ToString(CultureInfo.InvariantCulture)}",
+        RunIceParameters ice => $"ice:{ice.IceId.Value}",
+        RunBreakerParameters breaker =>
+            $"breaker:{breaker.BreakerId.Value}:hosted:{breaker.HostedCredits.ToString(CultureInfo.InvariantCulture)}",
+        RunBreakParameters runBreak =>
+            $"break:{runBreak.BreakerId.Value}:quantity:{runBreak.Quantity.ToString(CultureInfo.InvariantCulture)}"
+            + $":hosted:{runBreak.HostedCredits.ToString(CultureInfo.InvariantCulture)}"
+            + $":subroutine:{runBreak.SubroutineId?.Value ?? string.Empty}"
+            + $":targets:{string.Join(",", runBreak.SubroutineOrdinals ?? [])}",
+        RunBioroidAbilityParameters bioroid =>
+            $"bioroid:ice:{bioroid.IceId.Value}:ordinal:{bioroid.SubroutineOrdinal.ToString(CultureInfo.InvariantCulture)}"
+            + $":subroutine:{bioroid.SubroutineId.Value}"
+            + $":ability:{bioroid.AbilityKey}"
+            + (bioroid.SecondSubroutineId is { } second ? $":second:{second.Value}" : string.Empty),
+        IceSubroutineChoiceParameters iceSubroutine =>
+            IceSubroutineChoiceKey(iceSubroutine),
+        RunCardPaymentParameters payment =>
+            $"payment:{payment.CardId.Value}:hosted:{payment.HostedCredits.ToString(CultureInfo.InvariantCulture)}",
+        BreachCandidateParameters candidate when candidate.CardId is { } card => $"breach-card:{card.Value}",
+        BreachCandidateParameters candidate when candidate.Source is { } source => $"breach-source:{source}",
+        BehaviorChoiceParameters behavior => BehaviorKey(behavior),
+        AbilityActionParameters ability => AbilityKey(ability),
+        ReplacementChoiceParameters replacement =>
+            $"replacement:{replacement.InterruptId.Value}",
+        PreventionChoiceParameters prevention =>
+            $"prevention:{prevention.InterruptId.Value}:{prevention.Amount.ToString(CultureInfo.InvariantCulture)}",
+        TriggerChoiceParameters trigger =>
+            $"trigger:{trigger.TriggerId.Value}",
+        _ => throw new InvalidOperationException(
+            $"The full-game agent cannot derive a semantic key for '{action.Kind}'."),
+    };
+
+    private static string InstallKey(InstallCardParameters install) =>
+        CanonicalJson.Serialize(new
+        {
+            Kind = ActionKind.InstallCard,
+            install.CardId,
+            install.DestinationKind,
+            install.ServerId,
+            install.CreateNewRemote,
+            install.CreditCost,
+            install.CandidateReplacementCardIds,
+            install.RequiredReplacementCardIds,
+            install.SelectedReplacementCardIds,
+            install.FinalizeSelection,
+            install.HostCardId,
+            install.CostQuote,
+        });
+
+    private static string IceSubroutineChoiceKey(IceSubroutineChoiceParameters choice) =>
+        CanonicalJson.Serialize(new
+        {
+            choice.FrameIdentity,
+            choice.Choice,
+            choice.CardId,
+            choice.DestinationKind,
+            choice.ServerId,
+            choice.CreateNewRemote,
+            choice.CreditCost,
+            choice.HostedCredits,
+        });
+
+    private static string AbilityKey(AbilityActionParameters ability)
+    {
+        // Costs, effect target IDs, and card IDs within a selection retain
+        // their declaration/physical-zone order. Selections themselves are
+        // keyed by CostIndex, so their transport order is not semantic and
+        // is normalized here. CanonicalJson then freezes every immutable
+        // field (including nested additional-target/filter data) without
+        // consulting descriptions or mutable state.
+        var selections = ability.AdditionalCostSelections?
+            .OrderBy(static selection => selection.CostIndex)
+            .Select(static selection => new
+            {
+                selection.CostIndex,
+                selection.CostKey,
+                CardIds = selection.CardIds,
+            })
+            .ToArray();
+
+        return CanonicalJson.Serialize(new
+        {
+            Kind = ActionKind.UseAbility,
+            ability.SourceCardId,
+            ability.DefinitionId,
+            ability.SourceZoneId,
+            ability.SourceZoneKind,
+            ability.AbilityKey,
+            ability.Timing,
+            ability.Activation,
+            ability.Costs,
+            ability.TargetCardIds,
+            AdditionalCostSelections = selections,
+            ability.Usage,
+            ability.CatalogFingerprint,
+            ability.DefinitionFingerprint,
+        });
+    }
+
+    private static string BehaviorKey(BehaviorChoiceParameters behavior)
+    {
+        string options = string.Join(",", behavior.OptionKeys);
+        string cards = string.Join(
+            ",",
+            behavior.CardIds
+                .Select(static card => card.Value)
+                .OrderBy(static value => value, StringComparer.Ordinal));
+        return $"behavior:{behavior.ChoiceKey}:options:{options}:cards:{cards}:final:{behavior.FinalizeSelection}";
+    }
+
+    private void ValidateObservationBoundary(Observation observation)
+    {
+        if (observation.LegalActions is null)
+        {
+            throw new InvalidOperationException("The observation did not contain a legal-action list.");
+        }
+
+        if (!Enum.IsDefined(observation.Viewer))
+        {
+            throw new InvalidOperationException($"The observation has an unsupported viewer '{observation.Viewer}'.");
+        }
+
+        if (observation.Viewer != _policy.ControlledSide)
+        {
+            throw new InvalidOperationException(
+                $"The observation viewer '{observation.Viewer}' does not match the agent side '{_policy.ControlledSide}'.");
+        }
+
+        ObservationDecision? decision = observation.Decision;
+        if (decision is null)
+        {
+            throw new InvalidOperationException(
+                "The full-game agent requires viewer-owned typed decision metadata.");
+        }
+
+        if (!HasStableId(decision.Id.Value)
+            || !HasStableId(observation.DecisionId)
+            || !HasStableId(decision.Owner.Value)
+            || decision.Revision <= 0
+            || !Enum.IsDefined(decision.OwnerSide))
+        {
+            throw new InvalidOperationException("The observation contains malformed decision metadata.");
+        }
+
+        if (decision.OwnerSide != observation.Viewer)
+        {
+            throw new InvalidOperationException(
+                $"The decision owner side '{decision.OwnerSide}' does not match observation viewer '{observation.Viewer}'.");
+        }
+
+        if (!string.Equals(decision.Id.Value, observation.DecisionId, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("The typed decision ID does not match the observation decision ID.");
+        }
+
+        if (!Enum.IsDefined(decision.Kind))
+        {
+            throw new InvalidOperationException($"The observation has an unsupported decision kind '{decision.Kind}'.");
+        }
+    }
+
+    private static InvalidOperationException UnsupportedDecision(DecisionKind kind) =>
+        new($"The full-game agent does not support decision kind '{kind}' in v4.");
+
+    private enum FullGameActionClass
+    {
+        ResolutionChoice,
+        TurnTiming,
+        TurnAction,
+        TurnDiscard,
+        BehaviorChoice,
+        InstallChoice,
+        InterruptChoice,
+        TriggerChoice,
+        IceSubroutineChoice,
+        RunWindow,
+    }
+}

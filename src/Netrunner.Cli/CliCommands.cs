@@ -5,18 +5,202 @@ using System.Text.Json;
 using Netrunner.AI;
 using Netrunner.Cards;
 using Netrunner.Core;
+using Netrunner.Match;
 
 namespace Netrunner.Cli;
 
-public static class CliCommands
+public static partial class CliCommands
 {
     private static readonly JsonSerializerOptions DoctorJsonOptions = new() { WriteIndented = true };
 
     public static int Run(string[] args, TextWriter output, TextWriter error)
     {
+        return RunCore(args, output, error, behaviorCatalog: null);
+    }
+
+    /// <summary>
+    /// Runs commands with an explicitly composed behavior catalog. This
+    /// internal seam keeps command-level composition tests scoped to M2 proof.
+    /// </summary>
+    internal static int RunWithBehaviorCatalog(
+        string[] args,
+        TextWriter output,
+        TextWriter error,
+        IBehaviorCatalog behaviorCatalog)
+    {
+        ArgumentNullException.ThrowIfNull(behaviorCatalog);
+        return RunCore(args, output, error, behaviorCatalog);
+    }
+
+    private static int RunCore(
+        string[] args,
+        TextWriter output,
+        TextWriter error,
+        IBehaviorCatalog? behaviorCatalog)
+    {
         ArgumentNullException.ThrowIfNull(args);
         ArgumentNullException.ThrowIfNull(output);
         ArgumentNullException.ThrowIfNull(error);
+
+        if (args.Length > 0 && args[0] == "ai-tactics")
+        {
+            return RunAiTactics(args, output, error);
+        }
+
+        if (args.Length > 0 && args[0] == "ai-benchmark")
+        {
+            return RunAiBenchmark(args, output, error);
+        }
+
+        if (args.Length > 0 && args[0] == "fuzz")
+        {
+            return RunFuzz(args, output, error);
+        }
+
+        if (args.Length > 0 && args[0] == "presentation-audit")
+        {
+            return RunPresentationAudit(args, output, error);
+        }
+
+        if (args.Length > 0 && args[0] == "fuzz-repro")
+        {
+            return RunFuzzRepro(args, output, error);
+        }
+
+        if (args.Length > 0 && args[0] == "engine-bench")
+        {
+            return RunEngineBench(args, output, error);
+        }
+
+        if (args.Length > 0 && args[0] == "ai-fit-evaluation")
+        {
+            return RunAiFitEvaluation(args, output, error);
+        }
+
+        if (args.Length > 0 && args[0] == "ai-ladder")
+        {
+            return RunAiLadder(args, output, error);
+        }
+
+        if (args.Length > 0 && args[0] == "ai-selfplay")
+        {
+            return RunAiSelfPlay(args, output, error);
+        }
+
+        if (args.Length > 0 && args[0] == "playtest-summary")
+        {
+            return RunPlaytestSummary(args, output, error);
+        }
+
+        if (args.Length > 0 && args[0] == "ai-mcp-game")
+        {
+            return RunAiMcpGame(args, output, error);
+        }
+
+        if (args.Length > 0 && args[0] == "ai-codex-play")
+        {
+            return RunAiCodexPlay(args, output, error);
+        }
+
+        if (args.Length > 0 && args[0] == "ai-codex-review")
+        {
+            return RunAiCodexReview(args, output, error);
+        }
+
+        if (args.Length > 0 && args[0] == "ai-llm-play")
+        {
+            return RunAiLlmPlay(args, output, error);
+        }
+
+        if (args.Length > 0 && args[0] == "ai-llm-review")
+        {
+            return RunAiLlmReview(args, output, error);
+        }
+
+        if (args.Length > 0 && args[0] == "ai-puzzles")
+        {
+            return RunAiPuzzles(args, output, error);
+        }
+
+        if (args.Length > 0 && args[0] == "ai-regret")
+        {
+            return RunAiRegret(args, output, error);
+        }
+
+        if (args.Length > 0 && args[0] == "ai-lint")
+        {
+            return RunAiLint(args, output, error);
+        }
+
+        if (args.Length > 0 && args[0] == "ai-style")
+        {
+            return RunAiStyle(args, output, error);
+        }
+
+        if (args.Length > 0 && args[0] == "ai-belief")
+        {
+            return RunAiBelief(args, output, error);
+        }
+
+        if (args.Length > 0 && args[0] == "ai-offers")
+        {
+            return RunAiOffers(args, output, error);
+        }
+
+        if (args.Length > 0 && args[0] == "ai-ladder-diff")
+        {
+            return RunAiLadderDiff(args, output, error);
+        }
+
+        if (args.Length > 0 && args[0] == "ai-runner-diagnosis")
+        {
+            return RunAiRunnerDiagnosis(args, output, error);
+        }
+
+        if (args.Length > 0 && args[0] == "card-fingerprints")
+        {
+            return RunCardFingerprints(args, output, error);
+        }
+
+        if (args.Length > 0 && args[0] == "card-vocabulary")
+        {
+            return RunCardVocabulary(args, output, error);
+        }
+
+        if (args.Length > 0 && args[0] == "ai-review")
+        {
+            return RunAiReview(args, output, error);
+        }
+
+        if (args.Length > 0 && args[0] == "ai-performance")
+        {
+            return RunPolicyPerformance(args, output, error);
+        }
+
+        if (args.Length > 0 && args[0] == "card-art")
+        {
+            return RunCardArtwork(args, output, error);
+        }
+
+        if (args.Length > 0 && args[0] == "session-recover")
+        {
+            return RunSessionRecover(args, output, error);
+        }
+
+        if (args.Length > 0 && args[0] == "save-validate")
+        {
+            return RunSaveValidate(args, output, error);
+        }
+
+        if (args.Length > 0 && args[0] == "snapshot")
+        {
+            return RunSnapshot(args, output, error);
+        }
+
+        if (args.Length > 0 && args[0] is "full-match" or "simulate")
+        {
+            return RunFullMatch(args, output, error);
+        }
 
         if (args is ["doctor"] or ["doctor", "--json"])
         {
@@ -76,14 +260,71 @@ public static class CliCommands
             return RunPlay(options!, output, error);
         }
 
+        if (args.Length > 0 && string.Equals(args[0], "m2-proof", StringComparison.Ordinal))
+        {
+            bool requestedJson = args.Skip(1).Any(static argument => argument == "--json");
+            if (!TryParseM2ProofCommand(args, out string? m2ScenarioPath, out bool m2Json, out string? m2ParseError))
+            {
+                WriteM2ProofFailure(
+                    requestedJson,
+                    2,
+                    m2ParseError ?? "The m2-proof command arguments are invalid.",
+                    output,
+                    error);
+                return 2;
+            }
+
+            return RunM2Proof(m2ScenarioPath!, m2Json, output, error, behaviorCatalog);
+        }
+
         error.WriteLine(
             "Usage: Netrunner.Cli doctor [--json] | self-test --seed <unsigned-integer> | "
             + "scenario <file> [--json] | replay <file> [--json] | "
+            + "session-recover <directory> [--at-action <sequence>] [--replay-out <file>] [--snapshot-out <file>] [--json] | "
+            + "save-validate <file> [--json] | "
+            + "snapshot <file> [--synthetic] [--side corp|runner] [--output <file>] [--raw] [--step [--action <id>] | --until human|outcome|turn:N] [--max-actions 1..10000] [--json] | "
+            + "full-match [--preset basic|expanded] [--seed <unsigned-integer>] [--json] [--replay-out <file>] | "
+            + "simulate <fixture-file> [--json] [--replay-out <file>] | "
+            + "ai-benchmark <manifest> --output <new directory> [--workers 1..64] [--policy-diagnostics] [--json] | "
+            + "ai-performance <manifest> --output <new directory> --hardware <description> [--json] | "
+            + "ai-benchmark init smoke|full|developer [--corp-profile standard|easy] [--runner-profile standard|easy] --output <new manifest> [--json] | "
+            + "ai-tactics init [--corp-profile standard|easy | --runner-profile standard|easy] --output <new manifest> [--json] | "
+            + "ai-tactics <manifest> --output <new directory> [--workers 1..64] [--verify-fixtures] [--json] | "
+            + "fuzz [--games 1..100000] [--seed <unsigned-integer>] [--content developer|official] [--action-cap N] "
+            + "[--workers 1..64] [--differential] [--output <new directory>] [--json] | "
+            + "fuzz-repro <failure-directory> [--json] | "
+            + "engine-bench [--content developer|official] [--games N] [--seed <unsigned-integer>] [--json] | "
+            + "engine-bench --profile-game [--content POOL] [--profile ENTRANT] [--games N] [--seed S] [--rollout-roots N] [--rollout-samples N] [--json] | "
+            + "engine-bench --profile-plan <games-dir> --sequence N [--profile ENTRANT] [--repeats N] [--rollout-samples N] [--json] | "
+            + "ai-regret roots <games-dir> --output <suite-dir> [--turn-roots N] [--run-roots N] [--labelled N] [--seed S] [--workers N] | "
+            + "ai-regret label <suite-dir> [--samples N] [--horizon game|TURNS] [--evaluation N] [--seed S] [--workers N] [--labels FILE] [--missing] [--repeat N --repeat-seed S] | "
+            + "ai-regret score <suite-dir> --version V[,V...] [--profile P] [--split all|held-out|train] [--labels FILE] [--label-missing] [--blunders N] [--bootstrap N] [--workers N] [--json] | "
+            + "ai-puzzles run <set-dir> [--corp V] [--runner V] [--profile P] [--split all|tuning|held-out] [--workers N] [--json] | "
+            + "ai-puzzles import <set-dir> <saved-game-file> --id ID [--source TEXT] | "
+            + "ai-puzzles show <set-dir> --game ID --sequence N [--teacher SAMPLES] [--horizon game|TURNS] | "
+            + "ai-regret findings <suite-dir> --manifest FILE --fixtures DIR --content POOL [--labelled N] | ai-regret dedupe <suite-dir> | ai-regret extend <suite-dir> [--labelled N] [--workers N] | "
+            + "ai-lint <games-dir> [--workers N] [--examples N] [--output file] [--json] | "
+            + "ai-style <games-dir> [--workers N] [--json] | "
+            + "ai-ladder-diff <games-dir> --baseline E --candidate E [--workers N] [--top N] [--examples N] [--reasons] | "
+            + "ai-offers <games-dir> [--entrant E] [--workers N] [--json] | "
+            + "ai-belief <games-dir> [--games N] [--json] | "
+            + "card-vocabulary [--json] | "
+            + "ai-codex-play --output new-dir [--side corp|runner|both] [--games N] [--seed S] [--model gpt-6.1-sol] [--print-deals] [--print-prompt corp|runner] | ai-mcp-game --content ID --side corp|runner --output new-dir | "
+            + "ai-codex-review <games-dir> --side corp|runner --output new-dir [--game ID]... [--games N] [--model gpt-6.1-sol] [--reasoning low|medium|high] | "
+            + "ai-llm-play --output new-dir [--side corp|runner|both] [--games N] [--seed S] [--opponent ENTRANT] [--reasoning low|medium|high] [--model NAME] | "
+            + "ai-llm-review <games-dir> --side corp|runner --output new-dir [--entrant NAME] [--game ID]... [--games N] [--skip N] [--temperature T] [--reasoning low|medium|high] [--min-tool-calls N] [--check] [--model NAME] [--logs-only] | "
+            + "ai-ladder [--content developer|official] [--entrants random,contract,easy,standard] [--seeds-per-pairing N] "
+            + "[--seed <unsigned-integer>] [--bootstrap N] [--action-cap N] [--workers 1..64] [--verify-replays-every N] [--output <new directory>] [--json] | "
+            + "playtest-summary <session-directory|zip> | "
+            + "ai-selfplay --content <corp~runner> --seed <n> [--corp <entrant>] [--runner <entrant>] --output <new dir> | "
+            + "ai-review <session-directory> [--profile standard|easy] [--side corp|runner] [--all] [--output <new file>] [--json] | "
             + "card-data normalize --upstream <file> --copyright <file> --commit <40-hex-sha> "
-            + "--retrieval-date YYYY-MM-DD --output-dir <directory> [--json] | "
-            + "card-data validate [--root <directory>] [--json] | "
+            + "--retrieval-date YYYY-MM-DD --output-dir <directory> [--pack <sg|elev|vp>] [--json] | "
+            + "card-data validate [--root <directory>] [--pack <sg|elev|vp>] [--json] | "
+            + "card-art fetch|validate|pack|unpack [options] [--json] | "
             + "play --seed <unsigned-integer> --goal corp-score|runner-steal|deck-out "
-            + "[--json] [--replay-out <file>]");
+            + "[--json] [--replay-out <file>] | "
+            + "m2-proof [scenarioPath] [--json]");
         return 2;
     }
 
@@ -143,13 +384,16 @@ public static class CliCommands
     {
         try
         {
+            OfficialCardPack pack = OfficialCardPacks.Get(options.PackCode);
             byte[] upstreamBytes = ReadUtf8File(options.UpstreamPath!, "upstream card data");
             IReadOnlyList<NormalizedCardDefinition> cards =
-                CardDataNormalizer.Normalize(upstreamBytes, CardDataValidator.OfficialPackCode);
-            if (cards.Count != CardDataValidator.OfficialCardCount)
+                CardDataNormalizer.Normalize(upstreamBytes, pack.PackCode);
+            if (cards.Count != pack.CardCount)
             {
                 throw new CardDataValidationException(
-                    $"Expected {CardDataValidator.OfficialCardCount} System Gateway records, found {cards.Count}.");
+                    pack == OfficialCardPacks.SystemGateway
+                        ? $"Expected {pack.CardCount} System Gateway records, found {cards.Count}."
+                        : $"Expected {pack.CardCount} {pack.PackName} records, found {cards.Count}.");
             }
 
             byte[] copyrightBytes = ReadNormalizedCopyright(options.CopyrightPath!);
@@ -164,9 +408,9 @@ public static class CliCommands
                 CardDataJson.ComputeSha256Hex(cardsBytes),
                 "COPYRIGHT.md",
                 "NOASSERTION",
-                "pack/sg.json",
-                CardDataValidator.OfficialPackCode,
-                CardDataValidator.OfficialPackName,
+                pack.SourcePackPath,
+                pack.PackCode,
+                pack.PackName,
                 cards.Count);
             CardDataValidator.Validate(cards, manifest, requireOfficialGateway: true);
             byte[] manifestBytes = CardDataJson.SerializeManifest(manifest);
@@ -201,10 +445,11 @@ public static class CliCommands
     {
         try
         {
-            CardDataSet data = CardDataLoader.LoadSystemGateway(options.RootDirectory);
+            OfficialCardPack pack = OfficialCardPacks.Get(options.PackCode);
+            CardDataSet data = CardDataLoader.LoadOfficialPack(pack, options.RootDirectory);
             string dataDirectory = Path.Combine(
                 Path.GetFullPath(options.RootDirectory ?? Directory.GetCurrentDirectory()),
-                CardDataLoader.DefaultRelativeDirectory);
+                pack.RelativeDirectory);
             string copyrightPath = Path.Combine(dataDirectory, "SOURCE_COPYRIGHT.md");
             CardDataCommandOutput result = CreateCardDataOutput(
                 "validate",
@@ -433,6 +678,7 @@ public static class CliCommands
         string? retrievalDate = null;
         string? outputDirectory = null;
         string? rootDirectory = null;
+        string packCode = OfficialCardPacks.SystemGatewayCode;
         bool json = false;
         var seen = new HashSet<string>(StringComparer.Ordinal);
         for (int index = 2; index < args.Length; index++)
@@ -450,7 +696,7 @@ public static class CliCommands
                 continue;
             }
 
-            if (argument is not ("--upstream" or "--copyright" or "--commit" or "--retrieval-date" or "--output-dir" or "--root"))
+            if (argument is not ("--upstream" or "--copyright" or "--commit" or "--retrieval-date" or "--output-dir" or "--root" or "--pack"))
             {
                 error = $"Unknown card-data option '{argument}'.";
                 return false;
@@ -535,6 +781,15 @@ public static class CliCommands
 
                     rootDirectory = value;
                     break;
+                case "--pack":
+                    if (OfficialCardPacks.Find(value) is null)
+                    {
+                        error = $"--pack must name an official pack ({string.Join(", ", OfficialCardPacks.All.Select(static pack => pack.PackCode))}).";
+                        return false;
+                    }
+
+                    packCode = value!;
+                    break;
             }
         }
 
@@ -556,7 +811,8 @@ public static class CliCommands
             commitSha,
             retrievalDate,
             outputDirectory,
-            rootDirectory);
+            rootDirectory,
+            packCode);
         return true;
     }
 
@@ -612,8 +868,29 @@ public static class CliCommands
     {
         try
         {
-            ReplayArtifact artifact = EngineJson.Deserialize<ReplayArtifact>(File.ReadAllText(path));
-            ReplayVerificationResult result = ReplayVerifier.Verify(artifact);
+            string contents = File.ReadAllText(path);
+            using JsonDocument header = JsonDocument.Parse(contents);
+            bool currentGateway = header.RootElement.TryGetProperty("behaviorRegistryVersion", out JsonElement version)
+                && version.GetString() == GatewayBehaviorCatalog.Version;
+            ReplayVerificationResult result;
+            if (currentGateway)
+            {
+                BehaviorCatalog behavior = GatewayBehaviorCatalog.Create();
+                RuntimeCardCatalog runtime = GatewayRuntimeCardCatalog.CreateEmbedded();
+                ReplayArtifact artifact = EngineJson.Deserialize<ReplayArtifact>(contents, behavior, runtime);
+                result = ReplayVerifier.Verify(artifact, behavior, runtime);
+            }
+            else if (version.ValueKind == JsonValueKind.String && version.GetString() == DeveloperMatchCards.BehaviorVersion)
+            {
+                DeveloperMatchCards cards = DeveloperMatchCards.Create();
+                ReplayArtifact artifact = EngineJson.Deserialize<ReplayArtifact>(contents, cards.Behavior, cards.Runtime);
+                result = ReplayVerifier.Verify(artifact, cards.Behavior, cards.Runtime);
+            }
+            else
+            {
+                ReplayArtifact artifact = EngineJson.Deserialize<ReplayArtifact>(contents);
+                result = ReplayVerifier.Verify(artifact);
+            }
             if (json)
             {
                 output.WriteLine(EngineJson.Serialize(new ReplayCommandOutput(
@@ -842,6 +1119,193 @@ public static class CliCommands
         return true;
     }
 
+    private static int RunM2Proof(
+        string scenarioPath,
+        bool json,
+        TextWriter output,
+        TextWriter error,
+        IBehaviorCatalog? suppliedCatalog)
+    {
+        M2ScenarioDocument document;
+        try
+        {
+            document = EngineJson.Deserialize<M2ScenarioDocument>(File.ReadAllText(scenarioPath));
+        }
+        catch (Exception exception) when (IsCommandFailure(exception))
+        {
+            WriteM2ProofFailure(json, 2, exception.Message, output, error);
+            return 2;
+        }
+
+        M2ScenarioRunSpec? runSpec = document.Run;
+        if (runSpec is null)
+        {
+            WriteM2ProofFailure(json, 2, $"scenario '{document.ScenarioId}' has no run contract.", output, error);
+            return 2;
+        }
+
+        if (string.IsNullOrWhiteSpace(runSpec.Breaker))
+        {
+            WriteM2ProofFailure(
+                json,
+                2,
+                $"scenario '{document.ScenarioId}' run contract does not name an icebreaker.",
+                output,
+                error);
+            return 2;
+        }
+
+        var contract = new RunPlayContract(runSpec.Server, runSpec.Source, runSpec.Breaker, runSpec.MaxPumps);
+        BehaviorCatalog scenarioCatalog;
+        M2ProofResult scripted;
+        M2ProofResult agent;
+        try
+        {
+            IBehaviorCatalog compositionCatalog = suppliedCatalog ?? GatewayBehaviorCatalog.Create();
+            scenarioCatalog = document.Validate(compositionCatalog);
+            scripted = M2ProofRunner.RunWithScenarioCatalog(
+                document,
+                new ScriptedHumanRunPolicy(contract),
+                "scripted-human",
+                scenarioCatalog);
+            agent = M2ProofRunner.RunWithScenarioCatalog(
+                document,
+                new RunContractAgent(contract),
+                "contract-agent",
+                scenarioCatalog);
+        }
+        // InvalidOperationException covers M2ProofException, resolution and
+        // state-invariant failures from the proof run, and scenario setup
+        // validation errors.
+        catch (Exception exception) when (exception is M2ProofException or M2ScenarioException or InvalidOperationException)
+        {
+            WriteM2ProofFailure(json, 1, exception.Message, output, error);
+            return 1;
+        }
+
+        if (!string.Equals(scripted.FinalStateHash, agent.FinalStateHash, StringComparison.Ordinal)
+            || !string.Equals(scripted.EventStreamHash, agent.EventStreamHash, StringComparison.Ordinal))
+        {
+            WriteM2ProofFailure(
+                json,
+                1,
+                "the policies diverged: scripted-human reached final state " + scripted.FinalStateHash
+                + " / event stream " + scripted.EventStreamHash
+                + " but contract-agent reached " + agent.FinalStateHash
+                + " / " + agent.EventStreamHash + ".",
+                output,
+                error);
+            return 1;
+        }
+
+        bool replayVerified = ReplayVerifier.Verify(
+            scripted.ReplayArtifact,
+            scenarioCatalog).Success;
+        if (json)
+        {
+            var policies = new Dictionary<string, M2ProofPolicyOutput>(StringComparer.Ordinal)
+            {
+                [scripted.PolicyName] = new M2ProofPolicyOutput(scripted.FinalStateHash, scripted.EventStreamHash),
+                [agent.PolicyName] = new M2ProofPolicyOutput(agent.FinalStateHash, agent.EventStreamHash),
+            };
+            output.WriteLine(EngineJson.Serialize(new M2ProofCommandOutput(
+                document.ScenarioId,
+                scripted.InitialStateHash,
+                scripted.FinalStateHash,
+                scripted.EventStreamHash,
+                scripted.Checkpoints.Count,
+                scripted.ReplayActions.Count,
+                replayVerified,
+                scripted.Trace.Problems,
+                policies)));
+        }
+        else
+        {
+            output.WriteLine("m2-proof=ok");
+            foreach (M2ProofResult result in (M2ProofResult[])[scripted, agent])
+            {
+                output.WriteLine(
+                    $"policy={result.PolicyName} final-state-hash={result.FinalStateHash} event-stream-hash={result.EventStreamHash}");
+            }
+
+            output.WriteLine($"checkpoints={scripted.Checkpoints.Count}");
+            output.WriteLine($"replay-actions={scripted.ReplayActions.Count}");
+            output.WriteLine($"replay-verified={replayVerified.ToString().ToLowerInvariant()}");
+            output.Write(scripted.Trace.RenderText());
+        }
+
+        return 0;
+    }
+
+    private static bool TryParseM2ProofCommand(
+        string[] args,
+        out string? path,
+        out bool json,
+        out string? error)
+    {
+        path = null;
+        json = false;
+        error = null;
+        if (args.Length == 0 || !string.Equals(args[0], "m2-proof", StringComparison.Ordinal))
+        {
+            error = "The m2-proof command must start with 'm2-proof'.";
+            return false;
+        }
+
+        string? scenarioPath = null;
+        bool jsonSeen = false;
+        for (int index = 1; index < args.Length; index++)
+        {
+            string argument = args[index];
+            if (argument == "--json")
+            {
+                if (jsonSeen)
+                {
+                    error = "The --json option may be specified only once.";
+                    return false;
+                }
+
+                jsonSeen = true;
+                continue;
+            }
+
+            if (argument.StartsWith("--", StringComparison.Ordinal))
+            {
+                error = $"Unknown m2-proof option '{argument}'.";
+                return false;
+            }
+
+            if (scenarioPath is not null)
+            {
+                error = "The m2-proof command accepts at most one scenario path.";
+                return false;
+            }
+
+            scenarioPath = argument;
+        }
+
+        path = scenarioPath ?? "data/m2/representative-run.json";
+        json = jsonSeen;
+        return true;
+    }
+
+    private static void WriteM2ProofFailure(
+        bool json,
+        int exitCode,
+        string message,
+        TextWriter output,
+        TextWriter error)
+    {
+        if (json)
+        {
+            output.WriteLine(EngineJson.Serialize(new M2ProofFailureCommandOutput("failed", message)));
+        }
+        else
+        {
+            error.WriteLine($"m2-proof failed (exit {exitCode}): {message}");
+        }
+    }
+
     private static bool TryParseGoal(string value, out ToyGoal goal)
     {
         goal = value switch
@@ -1041,6 +1505,25 @@ public static class CliCommands
         string? ReplayPath,
         string? Message);
 
+    private sealed record M2ProofCommandOutput(
+        string ScenarioId,
+        string InitialStateHash,
+        string FinalStateHash,
+        string EventStreamHash,
+        int Checkpoints,
+        int ReplayActions,
+        bool ReplayVerified,
+        IReadOnlyList<string> TraceProblems,
+        Dictionary<string, M2ProofPolicyOutput> Policies);
+
+    private sealed record M2ProofPolicyOutput(
+        string FinalStateHash,
+        string EventStreamHash);
+
+    private sealed record M2ProofFailureCommandOutput(
+        string Status,
+        string Message);
+
     private enum CardDataOperation
     {
         Normalize = 1,
@@ -1055,7 +1538,8 @@ public static class CliCommands
         string? CommitSha,
         string? RetrievalDate,
         string? OutputDirectory,
-        string? RootDirectory);
+        string? RootDirectory,
+        string PackCode);
 
     private sealed record CardDataCommandOutput(
         string Status,

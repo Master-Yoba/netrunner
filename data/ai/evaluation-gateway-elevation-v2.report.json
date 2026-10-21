@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "featureVersion": 2,
+  "content": "gateway-elevation",
+  "games": 400,
+  "holdoutGames": 120,
+  "seed": 1,
+  "compare": "data/ai/evaluation-v2.json",
+  "sides": [
+    {
+      "side": "corp",
+      "train": 8492,
+      "holdout": 2574,
+      "fittedLoss": 0.5284974227312832,
+      "handLoss": 0.6059311368022551,
+      "baseLoss": 0.6739141795610741,
+      "accuracy": 0.7494172494172494,
+      "comparedLoss": 0.5581068126631843
+    },
+    {
+      "side": "runner",
+      "train": 8492,
+      "holdout": 2574,
+      "fittedLoss": 0.5346219926464304,
+      "handLoss": 0.5913914725427667,
+      "baseLoss": 0.6739141795610741,
+      "accuracy": 0.7432012432012433,
+      "comparedLoss": 0.5609767231794137
+    }
+  ]
+}

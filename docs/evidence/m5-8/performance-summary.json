@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "kind": "m5-policy-performance-summary",
+  "hardware": "Apple M5; 24 GiB RAM; macOS 27.0 (26A428)",
+  "manifestHash": "5db57e006879cddd3a2943c2dbb26ad0b5dbebbcc351a4b128252a38f9c760a2",
+  "buildRevision": "0.1.0-dev+6c406881231dc72f4530c77c57bb720086e5ad31",
+  "runtime": ".NET 8.0.30",
+  "operatingSystem": "Darwin 27.0.0 Darwin Kernel Version 27.0.0: Tue Aug 11 21:02:59 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T8142",
+  "architecture": "Arm64",
+  "assemblyHashes": {
+    "netrunner.AI": "a4ad8499d6b785bc1eec15749805de918d7016c6d631bcb383bc5f5cf21399f0",
+    "netrunner.Cards": "c4c9b346a021e159cb10530935f3ab68f3bcc3aa859e8b0d54aef55207101322",
+    "netrunner.Cli": "979cae2629580b176cc57c4647a93422c47cd7be6532885b36106446e941e355",
+    "netrunner.Core": "6c051ae9bf547a856fe83d2945855334e43a51828dc37821f0f22cb737b5bc16",
+    "netrunner.Match": "29ebba89dcb5c070239fb1624c63c2eb2b12300a0fe7573f2cea175b25ba0ab5"
+  },
+  "diagnosticsEnabled": false,
+  "groups": [
+    {
+      "side": "corp",
+      "category": "ordinary",
+      "samples": 5166,
+      "minimumLegalActions": 1,
+      "p95LegalActions": 26,
+      "maximumLegalActions": 59,
+      "medianMilliseconds": 0.1784,
+      "p95Milliseconds": 0.7832,
+      "maximumMilliseconds": 5.4272,
+      "budgetMilliseconds": 50
+    },
+    {
+      "side": "corp",
+      "category": "tactical",
+      "samples": 1170,
+      "minimumLegalActions": 1,
+      "p95LegalActions": 4,
+      "maximumLegalActions": 16,
+      "medianMilliseconds": 0.1873,
+      "p95Milliseconds": 0.5497,
+      "maximumMilliseconds": 4.5993,
+      "budgetMilliseconds": 200
+    },
+    {
+      "side": "runner",
+      "category": "ordinary",
+      "samples": 5278,
+      "minimumLegalActions": 1,
+      "p95LegalActions": 18,
+      "maximumLegalActions": 27,
+      "medianMilliseconds": 0.1428,
+      "p95Milliseconds": 0.4764,
+      "maximumMilliseconds": 3.6114,
+      "budgetMilliseconds": 50
+    },
+    {
+      "side": "runner",
+      "category": "tactical",
+      "samples": 2214,
+      "minimumLegalActions": 1,
+      "p95LegalActions": 6,
+      "maximumLegalActions": 16,
+      "medianMilliseconds": 0.1604,
+      "p95Milliseconds": 0.5067,
+      "maximumMilliseconds": 2.9629,
+      "budgetMilliseconds": 200
+    }
+  ],
+  "passed": true,
+  "sourceReportSha256": "68cdb60b4c1fdc961c6aa7f8e173e5d7612c65e180570808c0a9f949320c7237",
+  "sampleCount": 13828,
+  "normalBenchmarkReplayHashesMatched": 20,
+  "concurrentBenchmarkBuildOrClientJobs": 0
+}

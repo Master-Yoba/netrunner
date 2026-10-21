@@ -12,9 +12,22 @@ public static class EngineArtifactKinds
 public static class EngineCompatibility
 {
     public const int ArtifactSchemaVersion = 1;
+    // Slice 4.6 persists damage subroutine continuations and run-scoped
+    // effects that survive source movement through the run-end checkpoint.
+    public const int StateSchemaVersion = 17;
     public const string RulesVersion = "26.03";
     public const string CardDataVersion = "fixture-1";
+    /// <summary>
+    /// Authenticated System Gateway metadata snapshot used by the provisioned
+    /// M2 client lane. This is deliberately a source commit pin, not a
+    /// behavior-registry version.
+    /// </summary>
+    public const string GatewayCardDataVersion = "236140cf84491c23995b028bc791281837520b97";
+    // M1 fixture states retain their fixture behavior identity. Gateway/M2
+    // composition opts into this explicit legacy behavior pin when reading
+    // the M2 scenario contract; it is not sourced from a process registry.
     public const string BehaviorRegistryVersion = "fixture-1";
+    public const string GatewayBehaviorRegistryVersion = "gateway-m2-3";
 }
 
 /// <summary>
@@ -85,7 +98,8 @@ public sealed class ReplayArtifact
         ulong seed,
         GameSnapshot initialSnapshot,
         IReadOnlyList<ReplayAction>? actions = null,
-        string? expectedFinalStateHash = null)
+        string? expectedFinalStateHash = null,
+        string? behaviorCatalogFingerprint = null)
     {
         ArgumentNullException.ThrowIfNull(artifactKind);
         ArgumentNullException.ThrowIfNull(rulesVersion);
@@ -99,6 +113,12 @@ public sealed class ReplayArtifact
             throw new ArgumentException("Expected final state hash must be lowercase SHA-256 hex.", nameof(expectedFinalStateHash));
         }
 
+        if (behaviorCatalogFingerprint is not null
+            && !DeterministicHash.IsSha256Hex(behaviorCatalogFingerprint))
+        {
+            throw new ArgumentException("Behavior catalog fingerprints must be lowercase SHA-256 hex.", nameof(behaviorCatalogFingerprint));
+        }
+
         SchemaVersion = schemaVersion;
         ArtifactKind = artifactKind;
         RulesVersion = rulesVersion;
@@ -108,6 +128,7 @@ public sealed class ReplayArtifact
         InitialSnapshot = initialSnapshot;
         Actions = new ReadOnlyCollection<ReplayAction>(actions.Select(CloneAction).ToArray());
         ExpectedFinalStateHash = expectedFinalStateHash;
+        BehaviorCatalogFingerprint = behaviorCatalogFingerprint;
     }
 
     public ReplayArtifact(
@@ -117,17 +138,19 @@ public sealed class ReplayArtifact
         string? rulesVersion = null,
         string? cardDataVersion = null,
         string? behaviorRegistryVersion = null,
-        string? expectedFinalStateHash = null)
+        string? expectedFinalStateHash = null,
+        string? behaviorCatalogFingerprint = null)
         : this(
             EngineCompatibility.ArtifactSchemaVersion,
             EngineArtifactKinds.Replay,
             rulesVersion ?? initialSnapshot.RulesVersion,
             cardDataVersion ?? initialSnapshot.CardDataVersion,
-            behaviorRegistryVersion ?? EngineCompatibility.BehaviorRegistryVersion,
+            behaviorRegistryVersion ?? initialSnapshot.BehaviorRegistryVersion,
             seed,
             initialSnapshot,
             actions ?? [],
-            expectedFinalStateHash)
+            expectedFinalStateHash,
+            behaviorCatalogFingerprint ?? initialSnapshot.BehaviorCatalogFingerprint)
     {
     }
 
@@ -152,6 +175,10 @@ public sealed class ReplayArtifact
     public string BehaviorRegistryVersion { get; private set; }
 
     [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? BehaviorCatalogFingerprint { get; private set; }
+
+    [JsonInclude]
     [JsonRequired]
     public ulong Seed { get; private set; }
 
@@ -169,6 +196,16 @@ public sealed class ReplayArtifact
     public string? ExpectedFinalStateHash { get; }
 
     public IReadOnlyList<StateInvariantViolation> CollectViolations()
+    {
+        return CollectViolations(null);
+    }
+
+    public IReadOnlyList<StateInvariantViolation> CollectViolations(IBehaviorCatalog? behaviorCatalog)
+        => CollectViolations(behaviorCatalog, null);
+
+    public IReadOnlyList<StateInvariantViolation> CollectViolations(
+        IBehaviorCatalog? behaviorCatalog,
+        IRuntimeCardCatalog? runtimeCardCatalog)
     {
         var violations = new List<StateInvariantViolation>();
         if (SchemaVersion != EngineCompatibility.ArtifactSchemaVersion)
@@ -194,27 +231,65 @@ public sealed class ReplayArtifact
                 $"Rules version '{RulesVersion}' is not supported; expected '{EngineCompatibility.RulesVersion}'.");
         }
 
-        if (!string.Equals(CardDataVersion, EngineCompatibility.CardDataVersion, StringComparison.Ordinal))
+        if ((behaviorCatalog is null || runtimeCardCatalog is null)
+            && !string.Equals(CardDataVersion, EngineCompatibility.CardDataVersion, StringComparison.Ordinal)
+            && !string.Equals(CardDataVersion, EngineCompatibility.GatewayCardDataVersion, StringComparison.Ordinal)
+            // Read the pre-D-401 M2 artifact while requiring new artifacts to
+            // carry the authenticated metadata commit above.
+            && !string.Equals(CardDataVersion, "gateway-m2-3", StringComparison.Ordinal))
         {
             Add(
                 violations,
                 "artifact.unsupported-card-data",
                 "cardDataVersion",
-                $"Card-data version '{CardDataVersion}' is not supported; expected '{EngineCompatibility.CardDataVersion}'.");
+                $"Card-data version '{CardDataVersion}' is not supported; expected '{EngineCompatibility.CardDataVersion}' or '{EngineCompatibility.GatewayCardDataVersion}'.");
         }
 
-        if (!string.Equals(BehaviorRegistryVersion, EngineCompatibility.BehaviorRegistryVersion, StringComparison.Ordinal))
+        if (behaviorCatalog is not null
+            ? !string.Equals(BehaviorRegistryVersion, behaviorCatalog.Version, StringComparison.Ordinal)
+            : !string.Equals(BehaviorRegistryVersion, EngineCompatibility.BehaviorRegistryVersion, StringComparison.Ordinal)
+                && !string.Equals(BehaviorRegistryVersion, EngineCompatibility.GatewayBehaviorRegistryVersion, StringComparison.Ordinal))
         {
             Add(
                 violations,
                 "artifact.unsupported-behaviors",
                 "behaviorRegistryVersion",
-                $"Behavior registry version '{BehaviorRegistryVersion}' is not supported; expected '{EngineCompatibility.BehaviorRegistryVersion}'.");
+                $"Behavior registry version '{BehaviorRegistryVersion}' is not supported; expected '{EngineCompatibility.BehaviorRegistryVersion}' or '{EngineCompatibility.GatewayBehaviorRegistryVersion}'.");
+        }
+
+        if (BehaviorCatalogFingerprint is not null
+            && !DeterministicHash.IsSha256Hex(BehaviorCatalogFingerprint))
+        {
+            Add(
+                violations,
+                "artifact.invalid-behavior-fingerprint",
+                "behaviorCatalogFingerprint",
+                "Behavior catalog fingerprints must be lowercase SHA-256 hex.");
+        }
+
+        if (!string.Equals(BehaviorRegistryVersion, InitialSnapshot.BehaviorRegistryVersion, StringComparison.Ordinal))
+        {
+            Add(
+                violations,
+                "artifact.behavior-version-mismatch",
+                "behaviorRegistryVersion",
+                "Replay behavior registry version must match the initial snapshot behavior registry version.");
+        }
+
+        if (BehaviorCatalogFingerprint is not null
+            && InitialSnapshot.BehaviorCatalogFingerprint is not null
+            && !string.Equals(BehaviorCatalogFingerprint, InitialSnapshot.BehaviorCatalogFingerprint, StringComparison.Ordinal))
+        {
+            Add(
+                violations,
+                "artifact.behavior-fingerprint-mismatch",
+                "behaviorCatalogFingerprint",
+                "Replay behavior catalog fingerprint must match the initial snapshot fingerprint.");
         }
 
         try
         {
-            StateInvariantValidator.Validate(InitialSnapshot.ToState());
+            StateInvariantValidator.Validate(InitialSnapshot.ToState(), behaviorCatalog, runtimeCardCatalog);
         }
         catch (StateInvariantException exception)
         {
@@ -316,7 +391,15 @@ public sealed class ReplayArtifact
 
     public void Validate()
     {
-        IReadOnlyList<StateInvariantViolation> violations = CollectViolations();
+        Validate(null);
+    }
+
+    public void Validate(IBehaviorCatalog? behaviorCatalog)
+        => Validate(behaviorCatalog, null);
+
+    public void Validate(IBehaviorCatalog? behaviorCatalog, IRuntimeCardCatalog? runtimeCardCatalog)
+    {
+        IReadOnlyList<StateInvariantViolation> violations = CollectViolations(behaviorCatalog, runtimeCardCatalog);
         if (violations.Count > 0)
         {
             throw new StateInvariantException(violations);
@@ -404,14 +487,54 @@ public static class ReplayVerifier
 {
     public static ReplayVerificationResult Verify(ReplayArtifact artifact)
     {
+        return Verify(artifact, BehaviorCatalog.Empty, enforceCatalogCompatibility: false);
+    }
+
+    /// <summary>
+    /// Verifies a replay against the explicitly composed immutable behavior
+    /// catalog captured by a match/session.
+    /// </summary>
+    public static ReplayVerificationResult Verify(
+        ReplayArtifact artifact,
+        IBehaviorCatalog behaviorCatalog)
+    {
+        return Verify(artifact, behaviorCatalog, enforceCatalogCompatibility: true);
+    }
+
+    public static ReplayVerificationResult Verify(
+        ReplayArtifact artifact,
+        IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog runtimeCardCatalog)
+    {
+        ArgumentNullException.ThrowIfNull(runtimeCardCatalog);
+        return Verify(artifact, behaviorCatalog, true, runtimeCardCatalog);
+    }
+
+    private static ReplayVerificationResult Verify(
+        ReplayArtifact artifact,
+        IBehaviorCatalog behaviorCatalog,
+        bool enforceCatalogCompatibility,
+        IRuntimeCardCatalog? runtimeCardCatalog = null)
+    {
         ArgumentNullException.ThrowIfNull(artifact);
-        IReadOnlyList<StateInvariantViolation> violations = artifact.CollectViolations();
+        ArgumentNullException.ThrowIfNull(behaviorCatalog);
+        IReadOnlyList<StateInvariantViolation> violations = artifact.CollectViolations(
+            enforceCatalogCompatibility ? behaviorCatalog : null, runtimeCardCatalog);
         if (violations.Count > 0)
         {
             return ReplayVerificationResult.Invalid(string.Join("; ", violations.Select(static violation => violation.ToString())));
         }
 
         GameState current = artifact.InitialSnapshot.ToState();
+        if (enforceCatalogCompatibility
+            && (!string.Equals(current.BehaviorRegistryVersion, behaviorCatalog.Version, StringComparison.Ordinal)
+                || current.BehaviorCatalogFingerprint is not null
+                    && !string.Equals(current.BehaviorCatalogFingerprint, behaviorCatalog.Fingerprint, StringComparison.Ordinal)))
+        {
+            return ReplayVerificationResult.Invalid(
+                $"Replay behavior catalog does not match the injected catalog '{behaviorCatalog.Version}/{behaviorCatalog.Fingerprint}'.");
+        }
+
         if (artifact.Actions.Count > 0 && current.ActionSequence == long.MaxValue)
         {
             return ReplayVerificationResult.Invalid(
@@ -427,7 +550,11 @@ public static class ReplayVerifier
                     $"Replay action sequence {action.Sequence} does not follow expected sequence {expectedSequence}.");
             }
 
-            ApplyResult result = GameEngine.Apply(current, action.Submission);
+            ApplyResult result = runtimeCardCatalog is not null
+                ? GameEngine.Apply(current, action.Submission, behaviorCatalog, runtimeCardCatalog)
+                : enforceCatalogCompatibility
+                    ? GameEngine.Apply(current, action.Submission, behaviorCatalog)
+                    : GameEngine.Apply(current, action.Submission);
             if (!result.Accepted)
             {
                 return ReplayVerificationResult.Rejected(

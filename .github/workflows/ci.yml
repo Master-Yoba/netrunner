@@ -1,43 +1,112 @@
 name: CI
 
+# Actions minutes are limited, so CI runs in two tiers:
+# - fast (synthetic content, about 6 minutes): ready-for-review pull requests.
+# - full (official content: repository gate, Godot client smokes, benchmark
+#   smoke, save/resume): pushes to main or dev, and pull requests labelled
+#   `full-ci`. The full tier's `make m4-gate` already includes everything the
+#   fast tier runs, so the two never run for the same event.
+# Documentation-only changes and draft pull requests run nothing. Run the
+# gates locally before pushing; CI is the backstop, not the first check.
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
 
 permissions:
   contents: read
 
+# A newer push to the same PR or branch cancels the run it supersedes, so
+# merging a stack of PRs or force-pushing costs one run, not one per push.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Hosted runners are slower than the reference hardware the smoke
+  # wall-time limits are tuned to; see the README.
+  NETRUNNER_TIMEOUT_SCALE: 3
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  DOTNET_NOLOGO: 1
+  NUGET_XMLDOC_MODE: skip
+
 jobs:
-  build-and-test:
+  fast:
+    name: fast (synthetic)
+    # Pull requests only: not drafts, not the `labeled` event itself, and not
+    # when `full-ci` is set (the full tier covers everything here).
+    if: >-
+      github.event_name == 'pull_request'
+      && !github.event.pull_request.draft
+      && github.event.action != 'labeled'
+      && !contains(github.event.pull_request.labels.*.name, 'full-ci')
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    env:
-      DOTNET_CLI_TELEMETRY_OPTOUT: 1
-      DOTNET_NOLOGO: 1
-      NUGET_XMLDOC_MODE: skip
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
         with:
-          dotnet-version: |
-            8.0.x
-            10.0.x
-          cache: true
-          cache-dependency-path: |
-            Directory.Packages.props
-            **/*.csproj
-      - name: Restore
-        run: dotnet restore Netrunner.sln
-      - name: Build
-        run: dotnet build Netrunner.sln --no-restore --configuration Release
-      - name: Test
-        run: dotnet test Netrunner.sln --no-build --configuration Release
-      - name: Check formatting
-        run: dotnet format Netrunner.sln --no-restore --verify-no-changes
-      - name: Install secret scan dependency
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes ripgrep
-      - name: Check committed secrets
-        run: ./scripts/check-secrets.sh
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', '**/*.csproj', 'global.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+      - name: Check cross-platform executable discovery
+        run: bash scripts/test-env.sh
+      - name: Provision SDK, Godot .NET, and secret scanner
+        run: ./scripts/bootstrap.sh
+      - name: Repository gate on synthetic content
+        run: make verify
+      - name: Developer benchmark harness
+        run: make ai-benchmark-developer
+
+  full:
+    name: full (official)
+    # Pushes to main/dev, and pull requests carrying the `full-ci` label
+    # (when the label is added, or on later pushes while it is set).
+    if: >-
+      github.event_name == 'push'
+      || (!github.event.pull_request.draft
+          && contains(github.event.pull_request.labels.*.name, 'full-ci')
+          && (github.event.action != 'labeled' || github.event.label.name == 'full-ci'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      NETRUNNER_M5_GATE_OUTPUT: artifacts/m5/ci-gate
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', '**/*.csproj', 'global.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+      - name: Check cross-platform executable discovery
+        run: bash scripts/test-env.sh
+      - name: Provision SDK, Godot .NET, and secret scanner
+        run: ./scripts/bootstrap.sh
+      - name: Provision pinned official card data
+        run: ./scripts/update-card-data.sh --commit 236140cf84491c23995b028bc791281837520b97 --retrieval-date 2026-08-28
+      - name: Complete repository gate (includes the synthetic verify)
+        run: make m4-gate
+      - name: Offline benchmark smoke
+        run: make m5-quick
+      - name: Frozen official tactical fixture and replay proof
+        run: make ai-tactics-verify TACTICAL_ARGS='--workers 4'
+      - name: Native developer workflow
+        run: make m5-developer-smoke
+      - name: Native saved-game restart flow
+        run: bash scripts/m5-client-smoke.sh --quick
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: m5-quick-summary
+          path: artifacts/m5/ci-gate/*-summary.json
+          if-no-files-found: warn
+          retention-days: 14

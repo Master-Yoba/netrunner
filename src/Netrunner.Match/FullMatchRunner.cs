@@ -1,0 +1,120 @@
+using Netrunner.AI;
+using Netrunner.Cards;
+using Netrunner.Core;
+
+namespace Netrunner.Match;
+
+public sealed record FullMatchResult(GameOutcome Outcome, int ActionCount, string FinalStateHash, ReplayArtifact Replay);
+
+/// <summary>Bounded observation-only agent driver over the same setup and reducer as the client.</summary>
+public static class FullMatchRunner
+{
+    public static Task<FullMatchResult> RunAsync(FullMatchDefinition definition, int actionCap = 1000,
+        IGameAgent? corpAgent = null, IGameAgent? runnerAgent = null, CancellationToken cancellationToken = default) =>
+        RunAsync(definition, actionCap, corpAgent, runnerAgent, true, cancellationToken);
+
+    /// <param name="verify">
+    /// Whether to check the game as it is played: a save-and-reload of the state before every action, and the finished
+    /// replay's round trip and verification. Off only for ladder games that a sibling verified game vouches for (bot plan
+    /// S0.2, <c>ai-ladder --verify-replays-every</c>); the game itself is the same either way.
+    /// </param>
+    public static async Task<FullMatchResult> RunAsync(FullMatchDefinition definition, int actionCap, IGameAgent? corpAgent,
+        IGameAgent? runnerAgent, bool verify, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        if (actionCap <= 0 || actionCap > SimulationFixtureDocument.MaximumActionCap)
+        {
+            throw new ArgumentOutOfRangeException(nameof(actionCap));
+        }
+        corpAgent ??= new FullGameContractAgent(new FullGameContractPolicy(PlayerSide.Corp), definition.Runtime);
+        runnerAgent ??= new FullGameContractAgent(new FullGameContractPolicy(PlayerSide.Runner), definition.Runtime);
+        AgentLifecycleHost.ValidateSeat(corpAgent, PlayerSide.Corp);
+        AgentLifecycleHost.ValidateSeat(runnerAgent, PlayerSide.Runner);
+        GameState state = definition.Start().State;
+        GameSnapshot initial = state.CreateSnapshot(definition.Behavior, definition.Runtime);
+        var actions = new List<ReplayAction>();
+        AgentLifecycleHost.Observe(corpAgent, state, definition.Behavior);
+        AgentLifecycleHost.Observe(runnerAgent, state, definition.Behavior);
+        while (state.Outcome.Kind == GameOutcomeKind.Ongoing && actions.Count < actionCap)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            PendingDecision pending = state.PendingDecision ?? throw Stall("Full match stalled without a decision.");
+            PlayerSide side = state.GetPlayer(pending.Owner).Side;
+            long started = ProfileTimings.Start();
+            Observation observation = ObservationBuilder.Build(state, side, definition.Behavior, definition.Runtime);
+            ProfileTimings.Stop("match.observation", started);
+            IGameAgent activeAgent = side == PlayerSide.Corp ? corpAgent : runnerAgent;
+            ActionId action;
+            started = ProfileTimings.Start();
+            try
+            {
+                action = await activeAgent.ChooseActionAsync(observation, cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+            catch { AgentLifecycleHost.Discard(activeAgent); throw; }
+            ProfileTimings.Stop("match.decide", started);
+            // Every yield is a persistence boundary, including setup, nested effects,
+            // paid windows, and forced discards. Restore with both frozen catalogs.
+            if (verify)
+            {
+                started = ProfileTimings.Start();
+                state = EngineJson.DeserializeState(EngineJson.Serialize(state), definition.Behavior, definition.Runtime);
+                ProfileTimings.Stop("match.round-trip", started);
+            }
+            var submission = new ActionSubmission(pending.Owner, pending.Id, pending.Revision, action);
+            started = ProfileTimings.Start();
+            ApplyResult result = GameEngine.Apply(state, submission, definition.Behavior, definition.Runtime);
+            ProfileTimings.Stop("match.apply", started);
+            if (!result.Accepted)
+            {
+                AgentLifecycleHost.Discard(activeAgent);
+                throw new InvalidOperationException($"Full match rejected an agent action: {result.Rejection?.Message}");
+            }
+            state = result.State;
+            actions.Add(ReplayAction.From(result.AcceptedAction!));
+            AgentLifecycleHost.Accepted(corpAgent, submission, state, definition.Behavior);
+            AgentLifecycleHost.Accepted(runnerAgent, submission, state, definition.Behavior);
+        }
+        if (state.Outcome.Kind != GameOutcomeKind.Won)
+        {
+            throw Stall($"Full match exceeded the {actionCap}-action cap.");
+        }
+        string finalHash = DeterministicHash.ForState(state);
+        ReplayArtifact replay = new(initial, state.InitialSeed, actions, expectedFinalStateHash: finalHash);
+        if (!verify) return new FullMatchResult(state.Outcome, actions.Count, finalHash, replay);
+        long finishing = ProfileTimings.Start();
+        replay = EngineJson.Deserialize<ReplayArtifact>(EngineJson.Serialize(replay), definition.Behavior, definition.Runtime);
+        ProfileTimings.Stop("match.replay-round-trip", finishing);
+        finishing = ProfileTimings.Start();
+        ReplayVerificationResult verified = ReplayVerifier.Verify(replay, definition.Behavior, definition.Runtime);
+        ProfileTimings.Stop("match.replay-verify", finishing);
+        if (!verified.Success)
+        {
+            throw new InvalidOperationException($"Full match replay failed: {verified.Message}");
+        }
+        return new FullMatchResult(state.Outcome, actions.Count, finalHash, replay);
+
+        FullMatchStallException Stall(string reason) => new(reason, actionCap,
+            state.CreateSnapshot(definition.Behavior, definition.Runtime),
+            new ReplayArtifact(initial, state.InitialSeed, actions.ToArray(),
+                expectedFinalStateHash: DeterministicHash.ForState(state)));
+    }
+
+    public static async Task<FullMatchResult> RunSimulationAsync(SimulationFixtureDocument fixture, CardDataSet data,
+        IBehaviorCatalog behavior, CancellationToken cancellationToken = default)
+    {
+        FullMatchDefinition definition = FullMatchDefinition.FromSimulation(fixture, data, behavior);
+        if (fixture.Policy is { } policy && (policy.CorpActionOrder.Count > 0 || policy.RunnerActionOrder.Count > 0))
+        {
+            throw new InvalidOperationException("Opaque simulation action-order overrides are not executable full-game policies.");
+        }
+        FullMatchResult result = await RunAsync(definition, fixture.ActionCap, cancellationToken: cancellationToken).ConfigureAwait(false);
+        SimulationOutcomeExpectation expected = fixture.ExpectedOutcome;
+        if (expected.Kind != "won" || result.Outcome.Winner != expected.Winner
+            || !string.Equals(result.Outcome.Reason?.ToString(), expected.Reason, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Simulation terminal outcome does not match its declared expectation.");
+        }
+        return result;
+    }
+}

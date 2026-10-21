@@ -1,0 +1,272 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scenes/GameSymbolLabel.cs" id="symbols"]
+[ext_resource type="Script" path="res://scenes/components/BoardFitViewport.cs" id="fit"]
+
+[ext_resource type="Script" path="res://scenes/GameTableControl.cs" id="1_board_script"]
+[ext_resource type="Resource" path="res://themes/BoardLayout.tres" id="2_board_layout"]
+[ext_resource type="PackedScene" path="res://scenes/components/PlayerArea.tscn" id="3_player_area"]
+[ext_resource type="PackedScene" path="res://scenes/components/PileView.tscn" id="4_pile"]
+[ext_resource type="PackedScene" path="res://scenes/components/BoardPile.tscn" id="score_pile"]
+[ext_resource type="Theme" path="res://themes/M4Theme.tres" id="5_theme"]
+
+[ext_resource type="PackedScene" path="res://scenes/components/CreditIndicator.tscn" id="credits"]
+
+[ext_resource type="PackedScene" path="res://scenes/components/HandView.tscn" id="hand"]
+[ext_resource type="Script" path="res://scenes/TableBackdrop.cs" id="backdrop"]
+[ext_resource type="Script" path="res://scenes/FactionEmblem.cs" id="emblem"]
+[ext_resource type="Script" path="res://scenes/OpponentHandFan.cs" id="opponent_hand"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_board"]
+content_margin_left = 8.0
+content_margin_top = 6.0
+content_margin_right = 8.0
+content_margin_bottom = 6.0
+bg_color = Color(0, 0, 0, 0)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_surface"]
+content_margin_left = 8.0
+content_margin_top = 6.0
+content_margin_right = 8.0
+content_margin_bottom = 6.0
+bg_color = Color(0.035, 0.12, 0.12, 0.35)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_field"]
+content_margin_left = 8.0
+content_margin_top = 6.0
+content_margin_right = 8.0
+content_margin_bottom = 6.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_corp_plate"]
+content_margin_left = 8.0
+content_margin_top = 5.0
+content_margin_right = 8.0
+content_margin_bottom = 5.0
+bg_color = Color(1, 1, 1, 0.035)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.24, 0.27, 0.26, 1)
+corner_radius_top_left = 2
+corner_radius_top_right = 2
+corner_radius_bottom_right = 2
+corner_radius_bottom_left = 2
+
+[node name="GameTableControl" type="Control"]
+custom_minimum_size = Vector2(760, 0)
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+clip_contents = true
+theme = ExtResource("5_theme")
+script = ExtResource("1_board_script")
+BoardLayout = ExtResource("2_board_layout")
+PreviewMode = 2
+PreviewSeat = 1
+
+[node name="Background" type="Control" parent="."]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+script = ExtResource("backdrop")
+
+[node name="Surface" type="PanelContainer" parent="."]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = 30.0
+offset_bottom = -196.0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_board")
+
+[node name="Margins" type="MarginContainer" parent="Surface"]
+layout_mode = 2
+
+[node name="Layout" type="VBoxContainer" parent="Surface/Margins"]
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+theme_override_constants/separation = 4
+
+[node name="ServerField" type="PanelContainer" parent="Surface/Margins/Layout"]
+custom_minimum_size = Vector2(0, 150)
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxEmpty_field")
+
+[node name="Content" type="HBoxContainer" parent="Surface/Margins/Layout/ServerField"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="Summary" type="PanelContainer" parent="Surface/Margins/Layout/ServerField/Content"]
+custom_minimum_size = Vector2(174, 0)
+layout_mode = 2
+size_flags_vertical = 0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_corp_plate")
+
+[node name="Content" type="VBoxContainer" parent="Surface/Margins/Layout/ServerField/Content/Summary"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_constants/separation = 3
+
+[node name="Plate" type="HBoxContainer" parent="Surface/Margins/Layout/ServerField/Content/Summary/Content"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 6
+
+[node name="Emblem" type="Control" parent="Surface/Margins/Layout/ServerField/Content/Summary/Content/Plate"]
+custom_minimum_size = Vector2(22, 22)
+layout_mode = 2
+mouse_filter = 2
+script = ExtResource("emblem")
+
+[node name="Side" type="Label" parent="Surface/Margins/Layout/ServerField/Content/Summary/Content/Plate"]
+custom_minimum_size = Vector2(48, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_type_variation = &"DisplayLabel"
+theme_override_colors/font_color = Color(0.62, 0.71, 0.78, 1)
+theme_override_font_sizes/font_size = 15
+text = "CORP"
+vertical_alignment = 1
+text_overrun_behavior = 3
+
+[node name="Credits" parent="Surface/Margins/Layout/ServerField/Content/Summary/Content" instance=ExtResource("credits")]
+layout_mode = 2
+
+[node name="Resources" type="RichTextLabel" parent="Surface/Margins/Layout/ServerField/Content/Summary/Content"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_font_sizes/normal_font_size = 14
+script = ExtResource("symbols")
+SymbolText = "[click] 0 · [agenda point] 0"
+vertical_alignment = 1
+fit_content = true
+scroll_active = false
+
+[node name="Score" type="Label" parent="Surface/Margins/Layout/ServerField/Content/Summary/Content"]
+visible = false
+custom_minimum_size = Vector2(92, 0)
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.62, 0.76, 0.75, 1)
+theme_override_font_sizes/font_size = 10
+text = "Score pile · 0"
+vertical_alignment = 1
+text_overrun_behavior = 3
+
+[node name="CorpScored" parent="Surface/Margins/Layout/ServerField/Content/Summary/Content" instance=ExtResource("score_pile")]
+layout_mode = 2
+size_flags_horizontal = 0
+text = "Score\n—"
+tooltip_text = "Corp score area · scored agendas"
+
+[node name="HQ" type="Label" parent="Surface/Margins/Layout/ServerField/Content/Summary/Content"]
+custom_minimum_size = Vector2(150, 0)
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.62, 0.76, 0.75, 1)
+theme_override_font_sizes/font_size = 10
+text = "HQ · hand"
+vertical_alignment = 1
+text_overrun_behavior = 3
+
+[node name="Network" type="VBoxContainer" parent="Surface/Margins/Layout/ServerField/Content"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+mouse_filter = 2
+theme_override_constants/separation = 4
+
+[node name="Situation" type="HBoxContainer" parent="Surface/Margins/Layout/ServerField/Content/Network"]
+visible = false
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Turn" type="Label" parent="Surface/Margins/Layout/ServerField/Content/Network/Situation"]
+size_flags_horizontal = 3
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.43, 0.94, 0.72, 1)
+theme_override_font_sizes/font_size = 10
+text = "Turn · phase"
+horizontal_alignment = 0
+vertical_alignment = 1
+text_overrun_behavior = 3
+
+[node name="Run" type="Label" parent="Surface/Margins/Layout/ServerField/Content/Network/Situation"]
+size_flags_horizontal = 3
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.98, 0.76, 0.37, 1)
+theme_override_font_sizes/font_size = 10
+text = "No active run"
+horizontal_alignment = 0
+vertical_alignment = 1
+text_overrun_behavior = 3
+
+[node name="Viewport" type="Control" parent="Surface/Margins/Layout/ServerField/Content/Network"]
+custom_minimum_size = Vector2(0, 100)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+mouse_filter = 2
+clip_contents = true
+script = ExtResource("fit")
+
+[node name="Lanes" type="HBoxContainer" parent="Surface/Margins/Layout/ServerField/Content/Network/Viewport"]
+layout_mode = 0
+mouse_filter = 2
+theme_override_constants/separation = 9
+
+[node name="RunnerField" parent="Surface/Margins/Layout" instance=ExtResource("3_player_area")]
+layout_mode = 2
+
+[node name="Hint" type="Label" parent="Surface/Margins/Layout"]
+visible = false
+custom_minimum_size = Vector2(0, 12)
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.62, 0.76, 0.75, 1)
+theme_override_font_sizes/font_size = 11
+text = "Select a card or lane to stage a contextual action · Escape cancels local staging"
+horizontal_alignment = 1
+text_overrun_behavior = 3
+
+[node name="LocalHand" parent="." instance=ExtResource("hand")]
+layout_mode = 1
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -720.0
+offset_top = -190.0
+offset_right = -8.0
+grow_horizontal = 0
+grow_vertical = 0
+z_index = 35
+
+[node name="OpponentHand" type="Control" parent="."]
+layout_mode = 0
+anchor_right = 1.0
+offset_bottom = 30.0
+mouse_filter = 2
+z_index = 30
+script = ExtResource("opponent_hand")

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "nsg-core-sets",
+  "name": "NSG Core Sets (System Gateway + Elevation)",
+  "effectiveDate": "2025-04-24",
+  "complete": true,
+  "cardPool": "gateway-elevation",
+  "legalPacks": ["sg", "elev"],
+  "missingPacks": [],
+  "restriction": null,
+  "deckRules": {
+    "maxCopiesByName": 3,
+    "highValueAgendaLimit": null
+  },
+  "source": {
+    "note": "The NSG Core Sets, System Gateway and Elevation, with no ban list: the pool Null Signal Games' Core Sets sample decks are built for. The bans of the Startup and Standard formats don't apply."
+  }
+}

@@ -1,0 +1,670 @@
+{
+  "schemaVersion": 1,
+  "retrievedDate": "2026-10-03",
+  "publishedSourceUrl": "https://cardgamer.com/features/introducing-the-netrunner-core-battle-box/",
+  "metadataCommitSha": "236140cf84491c23995b028bc791281837520b97",
+  "provenanceNote": "The Core Battle Box by lunari (published on NetrunnerDB and featured on CardGamer): seven System Gateway + Elevation decks designed to be played against each other, retrieved from NetrunnerDB on 2026-10-03. The decks of the gateway-elevation format (D-EL-10). The lists and names are lunari's; the summaries and archetypes are ours.",
+  "decks": [
+    {
+      "presetId": "elevation-box-nebula-fast-advance",
+      "name": "Nebula Fast Advance",
+      "summary": "Nebula: no remote at all; score agendas straight from hand with Nanomanagement and the flipped identity's extra clicks.",
+      "archetypes": [
+        "fast-advance",
+        "rush"
+      ],
+      "side": "corp",
+      "identityCode": "35057",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/54463504-6d0d-4ce2-9212-f1eb99659abf",
+      "cards": [
+        {
+          "code": "30052",
+          "quantity": 1
+        },
+        {
+          "code": "30053",
+          "quantity": 3
+        },
+        {
+          "code": "30054",
+          "quantity": 3
+        },
+        {
+          "code": "30055",
+          "quantity": 3
+        },
+        {
+          "code": "30056",
+          "quantity": 3
+        },
+        {
+          "code": "30064",
+          "quantity": 3
+        },
+        {
+          "code": "30070",
+          "quantity": 3
+        },
+        {
+          "code": "30071",
+          "quantity": 3
+        },
+        {
+          "code": "30074",
+          "quantity": 1
+        },
+        {
+          "code": "30075",
+          "quantity": 3
+        },
+        {
+          "code": "35043",
+          "quantity": 3
+        },
+        {
+          "code": "35059",
+          "quantity": 3
+        },
+        {
+          "code": "35060",
+          "quantity": 3
+        },
+        {
+          "code": "35063",
+          "quantity": 3
+        },
+        {
+          "code": "35064",
+          "quantity": 3
+        },
+        {
+          "code": "35065",
+          "quantity": 1
+        },
+        {
+          "code": "35066",
+          "quantity": 1
+        },
+        {
+          "code": "35079",
+          "quantity": 1
+        },
+        {
+          "code": "35081",
+          "quantity": 3
+        },
+        {
+          "code": "35082",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "presetId": "elevation-box-untaian-shell-game",
+      "name": "PT Untaian Shell Game",
+      "summary": "PT Untaian: a board of advanced assets and agendas the Runner has to guess between.",
+      "archetypes": [
+        "shell-game",
+        "horizontal"
+      ],
+      "side": "corp",
+      "identityCode": "35047",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/b9141c0f-3b6e-45e8-afae-044148583674",
+      "cards": [
+        {
+          "code": "30044",
+          "quantity": 1
+        },
+        {
+          "code": "30045",
+          "quantity": 3
+        },
+        {
+          "code": "30047",
+          "quantity": 2
+        },
+        {
+          "code": "30048",
+          "quantity": 3
+        },
+        {
+          "code": "30049",
+          "quantity": 1
+        },
+        {
+          "code": "30053",
+          "quantity": 3
+        },
+        {
+          "code": "30061",
+          "quantity": 1
+        },
+        {
+          "code": "30068",
+          "quantity": 3
+        },
+        {
+          "code": "30071",
+          "quantity": 2
+        },
+        {
+          "code": "30074",
+          "quantity": 3
+        },
+        {
+          "code": "30075",
+          "quantity": 3
+        },
+        {
+          "code": "35048",
+          "quantity": 3
+        },
+        {
+          "code": "35049",
+          "quantity": 3
+        },
+        {
+          "code": "35050",
+          "quantity": 3
+        },
+        {
+          "code": "35051",
+          "quantity": 3
+        },
+        {
+          "code": "35052",
+          "quantity": 3
+        },
+        {
+          "code": "35054",
+          "quantity": 3
+        },
+        {
+          "code": "35078",
+          "quantity": 2
+        },
+        {
+          "code": "35079",
+          "quantity": 1
+        },
+        {
+          "code": "35081",
+          "quantity": 3
+        }
+      ]
+    },
+    {
+      "presetId": "elevation-box-zwicky-supermodernism",
+      "name": "Zwicky Supermodernism",
+      "summary": "The Zwicky Group: credit-gaining operations and agendas draw the cards that keep the scoring going.",
+      "archetypes": [
+        "rush",
+        "glacier"
+      ],
+      "side": "corp",
+      "identityCode": "35069",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/1077e934-c9f7-4447-834b-2bebd38b916c",
+      "cards": [
+        {
+          "code": "30039",
+          "quantity": 3
+        },
+        {
+          "code": "30053",
+          "quantity": 3
+        },
+        {
+          "code": "30060",
+          "quantity": 1
+        },
+        {
+          "code": "30064",
+          "quantity": 3
+        },
+        {
+          "code": "30067",
+          "quantity": 3
+        },
+        {
+          "code": "30069",
+          "quantity": 1
+        },
+        {
+          "code": "30072",
+          "quantity": 1
+        },
+        {
+          "code": "30075",
+          "quantity": 3
+        },
+        {
+          "code": "35039",
+          "quantity": 3
+        },
+        {
+          "code": "35070",
+          "quantity": 3
+        },
+        {
+          "code": "35071",
+          "quantity": 3
+        },
+        {
+          "code": "35072",
+          "quantity": 3
+        },
+        {
+          "code": "35074",
+          "quantity": 3
+        },
+        {
+          "code": "35075",
+          "quantity": 3
+        },
+        {
+          "code": "35076",
+          "quantity": 2
+        },
+        {
+          "code": "35077",
+          "quantity": 3
+        },
+        {
+          "code": "35078",
+          "quantity": 3
+        },
+        {
+          "code": "35079",
+          "quantity": 2
+        },
+        {
+          "code": "35081",
+          "quantity": 3
+        }
+      ]
+    },
+    {
+      "presetId": "elevation-box-leo-glacier",
+      "name": "LEO Glacier",
+      "summary": "LEO Construction: layers of bioroid ice tax the Runner's clicks before a remote scores.",
+      "archetypes": [
+        "glacier"
+      ],
+      "side": "corp",
+      "identityCode": "35035",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/ead1cbf0-44eb-4601-8af4-6860a394a108",
+      "cards": [
+        {
+          "code": "30036",
+          "quantity": 1
+        },
+        {
+          "code": "30038",
+          "quantity": 1
+        },
+        {
+          "code": "30039",
+          "quantity": 3
+        },
+        {
+          "code": "30040",
+          "quantity": 3
+        },
+        {
+          "code": "30042",
+          "quantity": 2
+        },
+        {
+          "code": "30048",
+          "quantity": 2
+        },
+        {
+          "code": "30050",
+          "quantity": 1
+        },
+        {
+          "code": "30053",
+          "quantity": 3
+        },
+        {
+          "code": "30056",
+          "quantity": 2
+        },
+        {
+          "code": "30067",
+          "quantity": 3
+        },
+        {
+          "code": "30069",
+          "quantity": 2
+        },
+        {
+          "code": "30072",
+          "quantity": 3
+        },
+        {
+          "code": "30073",
+          "quantity": 2
+        },
+        {
+          "code": "30075",
+          "quantity": 3
+        },
+        {
+          "code": "35038",
+          "quantity": 3
+        },
+        {
+          "code": "35039",
+          "quantity": 3
+        },
+        {
+          "code": "35041",
+          "quantity": 3
+        },
+        {
+          "code": "35045",
+          "quantity": 3
+        },
+        {
+          "code": "35064",
+          "quantity": 2
+        },
+        {
+          "code": "35079",
+          "quantity": 2
+        },
+        {
+          "code": "35081",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "presetId": "elevation-box-topan",
+      "name": "Topan",
+      "summary": "Topan: cheap installs paid for in meat damage build an anarch rig fast.",
+      "archetypes": [
+        "big-rig",
+        "virus"
+      ],
+      "side": "runner",
+      "identityCode": "35002",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/540f02fd-fbe3-4eae-bcff-1e0dd1a58a7a",
+      "cards": [
+        {
+          "code": "30002",
+          "quantity": 3
+        },
+        {
+          "code": "30004",
+          "quantity": 3
+        },
+        {
+          "code": "30005",
+          "quantity": 3
+        },
+        {
+          "code": "30007",
+          "quantity": 3
+        },
+        {
+          "code": "30008",
+          "quantity": 3
+        },
+        {
+          "code": "30013",
+          "quantity": 1
+        },
+        {
+          "code": "30020",
+          "quantity": 3
+        },
+        {
+          "code": "30025",
+          "quantity": 3
+        },
+        {
+          "code": "30028",
+          "quantity": 3
+        },
+        {
+          "code": "30030",
+          "quantity": 3
+        },
+        {
+          "code": "30031",
+          "quantity": 3
+        },
+        {
+          "code": "30034",
+          "quantity": 3
+        },
+        {
+          "code": "35004",
+          "quantity": 2
+        },
+        {
+          "code": "35006",
+          "quantity": 3
+        },
+        {
+          "code": "35007",
+          "quantity": 3
+        },
+        {
+          "code": "35009",
+          "quantity": 3
+        },
+        {
+          "code": "35014",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "presetId": "elevation-box-muslihat",
+      "name": "MuslihaT",
+      "summary": "MuslihaT: breakers and run events off the top of the stack fuel a run every turn.",
+      "archetypes": [
+        "aggro",
+        "central-pressure"
+      ],
+      "side": "runner",
+      "identityCode": "35013",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/8618b0f4-4ea2-4328-9fe9-ed0fa7ea83e1",
+      "cards": [
+        {
+          "code": "30002",
+          "quantity": 1
+        },
+        {
+          "code": "30008",
+          "quantity": 2
+        },
+        {
+          "code": "30011",
+          "quantity": 2
+        },
+        {
+          "code": "30012",
+          "quantity": 1
+        },
+        {
+          "code": "30013",
+          "quantity": 1
+        },
+        {
+          "code": "30014",
+          "quantity": 2
+        },
+        {
+          "code": "30015",
+          "quantity": 2
+        },
+        {
+          "code": "30016",
+          "quantity": 3
+        },
+        {
+          "code": "30018",
+          "quantity": 3
+        },
+        {
+          "code": "30020",
+          "quantity": 3
+        },
+        {
+          "code": "30028",
+          "quantity": 3
+        },
+        {
+          "code": "30029",
+          "quantity": 2
+        },
+        {
+          "code": "30030",
+          "quantity": 3
+        },
+        {
+          "code": "35009",
+          "quantity": 1
+        },
+        {
+          "code": "35014",
+          "quantity": 3
+        },
+        {
+          "code": "35015",
+          "quantity": 1
+        },
+        {
+          "code": "35016",
+          "quantity": 3
+        },
+        {
+          "code": "35017",
+          "quantity": 3
+        },
+        {
+          "code": "35019",
+          "quantity": 2
+        },
+        {
+          "code": "35020",
+          "quantity": 2
+        },
+        {
+          "code": "35022",
+          "quantity": 3
+        },
+        {
+          "code": "35026",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "presetId": "elevation-box-magdalene",
+      "name": "Magdalene",
+      "summary": "Magdalene Keino-Chemutai: overdraw, then install programs and hardware from the stack.",
+      "archetypes": [
+        "big-rig",
+        "central-pressure"
+      ],
+      "side": "runner",
+      "identityCode": "35024",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/6ac61c92-81f9-4eb0-9df3-828529fd208f",
+      "cards": [
+        {
+          "code": "30004",
+          "quantity": 1
+        },
+        {
+          "code": "30007",
+          "quantity": 2
+        },
+        {
+          "code": "30013",
+          "quantity": 1
+        },
+        {
+          "code": "30020",
+          "quantity": 3
+        },
+        {
+          "code": "30022",
+          "quantity": 3
+        },
+        {
+          "code": "30024",
+          "quantity": 1
+        },
+        {
+          "code": "30025",
+          "quantity": 2
+        },
+        {
+          "code": "30026",
+          "quantity": 2
+        },
+        {
+          "code": "30027",
+          "quantity": 3
+        },
+        {
+          "code": "30030",
+          "quantity": 3
+        },
+        {
+          "code": "30032",
+          "quantity": 1
+        },
+        {
+          "code": "30034",
+          "quantity": 3
+        },
+        {
+          "code": "35004",
+          "quantity": 3
+        },
+        {
+          "code": "35009",
+          "quantity": 1
+        },
+        {
+          "code": "35026",
+          "quantity": 3
+        },
+        {
+          "code": "35027",
+          "quantity": 1
+        },
+        {
+          "code": "35028",
+          "quantity": 3
+        },
+        {
+          "code": "35029",
+          "quantity": 1
+        },
+        {
+          "code": "35030",
+          "quantity": 1
+        },
+        {
+          "code": "35031",
+          "quantity": 1
+        },
+        {
+          "code": "35032",
+          "quantity": 3
+        },
+        {
+          "code": "35033",
+          "quantity": 3
+        }
+      ]
+    }
+  ]
+}

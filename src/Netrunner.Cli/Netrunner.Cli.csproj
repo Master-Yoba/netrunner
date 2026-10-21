@@ -1,11 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
+    <!-- Fuzz, ladder, fit and belief runs play many games on parallel workers; the
+         server GC roughly halves their wall time (EL.9 profile: 96 games, 12 workers). -->
+    <ServerGarbageCollection>true</ServerGarbageCollection>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Netrunner.Core/Netrunner.Core.csproj" />
     <ProjectReference Include="../Netrunner.Cards/Netrunner.Cards.csproj" />
     <ProjectReference Include="../Netrunner.AI/Netrunner.AI.csproj" />
+    <ProjectReference Include="../Netrunner.Match/Netrunner.Match.csproj" />
   </ItemGroup>
 </Project>
-

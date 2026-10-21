@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "kind": "m5-final-validation-summary",
+  "date": "2026-09-23",
+  "implementationCommits": [
+    "90457ea",
+    "6c40688",
+    "a6f9300"
+  ],
+  "officialSolutionTests": 2043,
+  "officialTestCounts": {
+    "core": 819,
+    "cards": 331,
+    "ai": 95,
+    "cli": 139,
+    "match": 659
+  },
+  "repositoryGatePassed": true,
+  "gatewayCoverage": 77,
+  "gateValidationTests": 8,
+  "frozenPreviousPolicySourcesVerified": true,
+  "previousComparisonReplaysEqualToSmoke": 40,
+  "humanAcceptance": false,
+  "renderer": {
+    "adapter": "Apple M5",
+    "isolated": true,
+    "frames": 120,
+    "medianMilliseconds": 2.91,
+    "p95Milliseconds": 3.05,
+    "p95BudgetMilliseconds": 16.666666666666668,
+    "idleBytesPerFrame": 410,
+    "seatResolutionCases": 4
+  },
+  "logSha256": {
+    "officialSolutionTests": "9f54f0d2ac877dd8564cc47a3cffcf1f2abba127786ae472df27b4642fd31594",
+    "repositoryGate": "c43d866b16aa220eeb83cbedb560eff9a275753826029749c6f0adb795492765",
+    "headlessGate": "411b722a93b9499ec70f28dfc5e123ee6af514242dd0916f07565f3919e45e57",
+    "releasePackage": "3f3246bff6c0198f385b69147dc07bfb031f55e07e90814e05ad2f7c33ab1074",
+    "offlineRestartMatrix": "12247940ac817792489f3b6dc7d9940c0e4feefc91b1e8e6c7494b28c9955739",
+    "offlineRendererCaptures": "55b226b8282a12e85a463a292d7d173494991050bbe18d78f925ef498bb5b3cf",
+    "isolatedPolicyTimings": "5cd0eb462f3e81388e2c34ef926bbf60113fcd17b16da2fd91351bd3d90bb413",
+    "isolatedRendererBudget": "7b4b590c3d6c76972a7b77709a11bd043a8a6e466bfa50d57e2fc6ff445a9aaf",
+    "formatting": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "memoryRegressionBeforeFix": "b794889711115c6500b9107c3b6906b51a90f90b25f766b245391c675a99c7f8",
+    "memoryRegressionAfterFix": "a3572ac570928997a29c12d50290d723e0391b097bd212a8b653370e2c219db8",
+    "preservedPositionAfterFix": "a3ca0949eb966b622a9e6a7c75fe2e2a3d451d8f0e69d8bfda0749625c1420bd"
+  }
+}

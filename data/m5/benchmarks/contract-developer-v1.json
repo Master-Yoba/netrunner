@@ -1,0 +1,589 @@
+{
+  "schemaVersion": 1,
+  "kind": "m5-ai-benchmark",
+  "suiteId": "contract-developer-v1",
+  "contentMode": "developer",
+  "pins": {
+    "rulesVersion": "26.03",
+    "stateSchemaVersion": 17,
+    "cardDataVersion": "43d3ae119ca580267a52d17c4eab9576f92b1438",
+    "cardDataSha256": "43d3ae119ca580267a52d17c4eab9576f92b1438004cd5cb6b85b99325e43298",
+    "behaviorVersion": "developer-match-v1",
+    "behaviorFingerprint": "ee2d6f1207ca0f7376b4816a8103183e2198a70f399e4c455e1cd8607a111703",
+    "runtimeVersion": "gateway-runtime-v1-43d3ae119ca580267a52d17c4eab9576f92b1438",
+    "runtimeFingerprint": "742d3cc1efbafc09c4890187fe4caf49d0ff8ae7f2e7936fc22da199b6194f01",
+    "evaluationVersion": "gateway-evaluation-v1",
+    "evaluationFingerprint": "c417011553e9b4587fc4b45ca79896f6ccac950aa0f12d423893ce47e18fa669",
+    "presetSha256": "1cca3597bc1897935f1ba11e04fd2af20fe7b25912dfa5ce209944b59bdcd5af"
+  },
+  "limits": {
+    "turnPairs": 100,
+    "actions": 20000,
+    "repetitionCount": 8,
+    "progressWindow": 256,
+    "watchdogSeconds": 180,
+    "replayWatchdogSeconds": 180
+  },
+  "games": [
+    {
+      "id": "developer-0001",
+      "corpPreset": "developer-corp",
+      "runnerPreset": "developer-runner",
+      "gameSeed": 1,
+      "corpDeckHash": "dfa7600c0b0570ba4b281c8f7bc2da10c54ecf3930a1560bf10daf175f1036a4",
+      "runnerDeckHash": "8795ad6899015ce626ccbbfbb8f6f59bffffad788e1bed8b080694bc83619a02",
+      "corp": {
+        "kind": "contract",
+        "side": "corp",
+        "agentVersion": "full-game-contract-agent-v6",
+        "policyVersion": "full-game-contract-policy-v6",
+        "profileId": "contract-baseline",
+        "policySeed": 1157279717900369738,
+        "configuration": null
+      },
+      "runner": {
+        "kind": "contract",
+        "side": "runner",
+        "agentVersion": "full-game-contract-agent-v6",
+        "policyVersion": "full-game-contract-policy-v6",
+        "profileId": "contract-baseline",
+        "policySeed": 12418003156655368758,
+        "configuration": null
+      },
+      "comparisonGroup": "baseline",
+      "split": "held-out"
+    },
+    {
+      "id": "developer-0002",
+      "corpPreset": "developer-corp",
+      "runnerPreset": "developer-runner",
+      "gameSeed": 2,
+      "corpDeckHash": "dfa7600c0b0570ba4b281c8f7bc2da10c54ecf3930a1560bf10daf175f1036a4",
+      "runnerDeckHash": "8795ad6899015ce626ccbbfbb8f6f59bffffad788e1bed8b080694bc83619a02",
+      "corp": {
+        "kind": "contract",
+        "side": "corp",
+        "agentVersion": "full-game-contract-agent-v6",
+        "policyVersion": "full-game-contract-policy-v6",
+        "profileId": "contract-baseline",
+        "policySeed": 7959559757359816419,
+        "configuration": null
+      },
+      "runner": {
+        "kind": "contract",
+        "side": "runner",
+        "agentVersion": "full-game-contract-agent-v6",
+        "policyVersion": "full-game-contract-policy-v6",
+        "profileId": "contract-baseline",
+        "policySeed": 11700082374416989702,
+        "configuration": null
+      },
+      "comparisonGroup": "baseline",
+      "split": "held-out"
+    },
+    {
+      "id": "developer-0003",
+      "corpPreset": "developer-corp",
+      "runnerPreset": "developer-runner",
+      "gameSeed": 3,
+      "corpDeckHash": "dfa7600c0b0570ba4b281c8f7bc2da10c54ecf3930a1560bf10daf175f1036a4",
+      "runnerDeckHash": "8795ad6899015ce626ccbbfbb8f6f59bffffad788e1bed8b080694bc83619a02",
+      "corp": {
+        "kind": "contract",
+        "side": "corp",
+        "agentVersion": "full-game-contract-agent-v6",
+        "policyVersion": "full-game-contract-policy-v6",
+        "profileId": "contract-baseline",
+        "policySeed": 6543622857477573952,
+        "configuration": null
+      },
+      "runner": {
+        "kind": "contract",
+        "side": "runner",
+        "agentVersion": "full-game-contract-agent-v6",
+        "policyVersion": "full-game-contract-policy-v6",
+        "profileId": "contract-baseline",
+        "policySeed": 1281217785002060481,
+        "configuration": null
+      },
+      "comparisonGroup": "baseline",
+      "split": "held-out"
+    },
+    {
+      "id": "developer-0004",
+      "corpPreset": "developer-corp",
+      "runnerPreset": "developer-runner",
+      "gameSeed": 4,
+      "corpDeckHash": "dfa7600c0b0570ba4b281c8f7bc2da10c54ecf3930a1560bf10daf175f1036a4",
+      "runnerDeckHash": "8795ad6899015ce626ccbbfbb8f6f59bffffad788e1bed8b080694bc83619a02",
+      "corp": {
+        "kind": "contract",
+        "side": "corp",
+        "agentVersion": "full-game-contract-agent-v6",
+        "policyVersion": "full-game-contract-policy-v6",
+        "profileId": "contract-baseline",
+        "policySeed": 1634542629726115526,
+        "configuration": null
+      },
+      "runner": {
+        "kind": "contract",
+        "side": "runner",
+        "agentVersion": "full-game-contract-agent-v6",
+        "policyVersion": "full-game-contract-policy-v6",
+        "profileId": "contract-baseline",
+        "policySeed": 8462291513387380497,
+        "configuration": null
+      },
+      "comparisonGroup": "baseline",
+      "split": "held-out"
+    },
+    {
+      "id": "developer-0005",
+      "corpPreset": "developer-corp",
+      "runnerPreset": "developer-runner",
+      "gameSeed": 5,
+      "corpDeckHash": "dfa7600c0b0570ba4b281c8f7bc2da10c54ecf3930a1560bf10daf175f1036a4",
+      "runnerDeckHash": "8795ad6899015ce626ccbbfbb8f6f59bffffad788e1bed8b080694bc83619a02",
+      "corp": {
+        "kind": "contract",
+        "side": "corp",
+        "agentVersion": "full-game-contract-agent-v6",
+        "policyVersion": "full-game-contract-policy-v6",
+        "profileId": "contract-baseline",
+        "policySeed": 10466374844080068039,
+        "configuration": null
+      },
+      "runner": {
+        "kind": "contract",
+        "side": "runner",
+        "agentVersion": "full-game-contract-agent-v6",
+        "policyVersion": "full-game-contract-policy-v6",
+        "profileId": "contract-baseline",
+        "policySeed": 14832023587659936858,
+        "configuration": null
+      },
+      "comparisonGroup": "baseline",
+      "split": "held-out"
+    },
+    {
+      "id": "developer-0006",
+      "corpPreset": "developer-corp",
+      "runnerPreset": "developer-runner",
+      "gameSeed": 6,
+      "corpDeckHash": "dfa7600c0b0570ba4b281c8f7bc2da10c54ecf3930a1560bf10daf175f1036a4",
+      "runnerDeckHash": "8795ad6899015ce626ccbbfbb8f6f59bffffad788e1bed8b080694bc83619a02",
+      "corp": {
+        "kind": "contract",
+        "side": "corp",
+        "agentVersion": "full-game-contract-agent-v6",
+        "policyVersion": "full-game-contract-policy-v6",
+        "profileId": "contract-baseline",
+        "policySeed": 8505731972445082896,
+        "configuration": null
+      },
+      "runner": {
+        "kind": "contract",
+        "side": "runner",
+        "agentVersion": "full-game-contract-agent-v6",
+        "policyVersion": "full-game-contract-policy-v6",
+        "profileId": "contract-baseline",
+        "policySeed": 7760021706486437002,
+        "configuration": null
+      },
+      "comparisonGroup": "baseline",
+      "split": "held-out"
+    },
+    {
+      "id": "developer-0007",
+      "corpPreset": "developer-corp",
+      "runnerPreset": "developer-runner",
+      "gameSeed": 7,
+      "corpDeckHash": "dfa7600c0b0570ba4b281c8f7bc2da10c54ecf3930a1560bf10daf175f1036a4",
+      "runnerDeckHash": "8795ad6899015ce626ccbbfbb8f6f59bffffad788e1bed8b080694bc83619a02",
+      "corp": {
+        "kind": "contract",
+        "side": "corp",
+        "agentVersion": "full-game-contract-agent-v6",
+        "policyVersion": "full-game-contract-policy-v6",
+        "profileId": "contract-baseline",
+        "policySeed": 10388688198812590931,
+        "configuration": null
+      },
+      "runner": {
+        "kind": "contract",
+        "side": "runner",
+        "agentVersion": "full-game-contract-agent-v6",
+        "policyVersion": "full-game-contract-policy-v6",
+        "profileId": "contract-baseline",
+        "policySeed": 5178834422524841882,
+        "configuration": null
+      },
+      "comparisonGroup": "baseline",
+      "split": "held-out"
+    },
+    {
+      "id": "developer-0008",
+      "corpPreset": "developer-corp",
+      "runnerPreset": "developer-runner",
+      "gameSeed": 8,
+      "corpDeckHash": "dfa7600c0b0570ba4b281c8f7bc2da10c54ecf3930a1560bf10daf175f1036a4",
+      "runnerDeckHash": "8795ad6899015ce626ccbbfbb8f6f59bffffad788e1bed8b080694bc83619a02",
+      "corp": {
+        "kind": "contract",
+        "side": "corp",
+        "agentVersion": "full-game-contract-agent-v6",
+        "policyVersion": "full-game-contract-policy-v6",
+        "profileId": "contract-baseline",
+        "policySeed": 4359304488615661565,
+        "configuration": null
+      },
+      "runner": {
+        "kind": "contract",
+        "side": "runner",
+        "agentVersion": "full-game-contract-agent-v6",
+        "policyVersion": "full-game-contract-policy-v6",
+        "profileId": "contract-baseline",
+        "policySeed": 7425222657502694188,
+        "configuration": null
+      },
+      "comparisonGroup": "baseline",
+      "split": "held-out"
+    },
+    {
+      "id": "developer-0009",
+      "corpPreset": "developer-corp",
+      "runnerPreset": "developer-runner",
+      "gameSeed": 9,
+      "corpDeckHash": "dfa7600c0b0570ba4b281c8f7bc2da10c54ecf3930a1560bf10daf175f1036a4",
+      "runnerDeckHash": "8795ad6899015ce626ccbbfbb8f6f59bffffad788e1bed8b080694bc83619a02",
+      "corp": {
+        "kind": "contract",
+        "side": "corp",
+        "agentVersion": "full-game-contract-agent-v6",
+        "policyVersion": "full-game-contract-policy-v6",
+        "profileId": "contract-baseline",
+        "policySeed": 10761122317221391979,
+        "configuration": null
+      },
+      "runner": {
+        "kind": "contract",
+        "side": "runner",
+        "agentVersion": "full-game-contract-agent-v6",
+        "policyVersion": "full-game-contract-policy-v6",
+        "profileId": "contract-baseline",
+        "policySeed": 7233701061150568095,
+        "configuration": null
+      },
+      "comparisonGroup": "baseline",
+      "split": "held-out"
+    },
+    {
+      "id": "developer-0010",
+      "corpPreset": "developer-corp",
+      "runnerPreset": "developer-runner",
+      "gameSeed": 10,
+      "corpDeckHash": "dfa7600c0b0570ba4b281c8f7bc2da10c54ecf3930a1560bf10daf175f1036a4",
+      "runnerDeckHash": "8795ad6899015ce626ccbbfbb8f6f59bffffad788e1bed8b080694bc83619a02",
+      "corp": {
+        "kind": "contract",
+        "side": "corp",
+        "agentVersion": "full-game-contract-agent-v6",
+        "policyVersion": "full-game-contract-policy-v6",
+        "profileId": "contract-baseline",
+        "policySeed": 3926309545290477757,
+        "configuration": null
+      },
+      "runner": {
+        "kind": "contract",
+        "side": "runner",
+        "agentVersion": "full-game-contract-agent-v6",
+        "policyVersion": "full-game-contract-policy-v6",
+        "profileId": "contract-baseline",
+        "policySeed": 12183851163563525801,
+        "configuration": null
+      },
+      "comparisonGroup": "baseline",
+      "split": "held-out"
+    },
+    {
+      "id": "developer-0011",
+      "corpPreset": "developer-corp",
+      "runnerPreset": "developer-runner",
+      "gameSeed": 11,
+      "corpDeckHash": "dfa7600c0b0570ba4b281c8f7bc2da10c54ecf3930a1560bf10daf175f1036a4",
+      "runnerDeckHash": "8795ad6899015ce626ccbbfbb8f6f59bffffad788e1bed8b080694bc83619a02",
+      "corp": {
+        "kind": "contract",
+        "side": "corp",
+        "agentVersion": "full-game-contract-agent-v6",
+        "policyVersion": "full-game-contract-policy-v6",
+        "profileId": "contract-baseline",
+        "policySeed": 7349631450913588207,
+        "configuration": null
+      },
+      "runner": {
+        "kind": "contract",
+        "side": "runner",
+        "agentVersion": "full-game-contract-agent-v6",
+        "policyVersion": "full-game-contract-policy-v6",
+        "profileId": "contract-baseline",
+        "policySeed": 13198677184673828945,
+        "configuration": null
+      },
+      "comparisonGroup": "baseline",
+      "split": "held-out"
+    },
+    {
+      "id": "developer-0012",
+      "corpPreset": "developer-corp",
+      "runnerPreset": "developer-runner",
+      "gameSeed": 12,
+      "corpDeckHash": "dfa7600c0b0570ba4b281c8f7bc2da10c54ecf3930a1560bf10daf175f1036a4",
+      "runnerDeckHash": "8795ad6899015ce626ccbbfbb8f6f59bffffad788e1bed8b080694bc83619a02",
+      "corp": {
+        "kind": "contract",
+        "side": "corp",
+        "agentVersion": "full-game-contract-agent-v6",
+        "policyVersion": "full-game-contract-policy-v6",
+        "profileId": "contract-baseline",
+        "policySeed": 7915448723176097445,
+        "configuration": null
+      },
+      "runner": {
+        "kind": "contract",
+        "side": "runner",
+        "agentVersion": "full-game-contract-agent-v6",
+        "policyVersion": "full-game-contract-policy-v6",
+        "profileId": "contract-baseline",
+        "policySeed": 3964634699538821387,
+        "configuration": null
+      },
+      "comparisonGroup": "baseline",
+      "split": "held-out"
+    },
+    {
+      "id": "developer-0013",
+      "corpPreset": "developer-corp",
+      "runnerPreset": "developer-runner",
+      "gameSeed": 13,
+      "corpDeckHash": "dfa7600c0b0570ba4b281c8f7bc2da10c54ecf3930a1560bf10daf175f1036a4",
+      "runnerDeckHash": "8795ad6899015ce626ccbbfbb8f6f59bffffad788e1bed8b080694bc83619a02",
+      "corp": {
+        "kind": "contract",
+        "side": "corp",
+        "agentVersion": "full-game-contract-agent-v6",
+        "policyVersion": "full-game-contract-policy-v6",
+        "profileId": "contract-baseline",
+        "policySeed": 17766949734220285330,
+        "configuration": null
+      },
+      "runner": {
+        "kind": "contract",
+        "side": "runner",
+        "agentVersion": "full-game-contract-agent-v6",
+        "policyVersion": "full-game-contract-policy-v6",
+        "profileId": "contract-baseline",
+        "policySeed": 12404693597135974119,
+        "configuration": null
+      },
+      "comparisonGroup": "baseline",
+      "split": "held-out"
+    },
+    {
+      "id": "developer-0014",
+      "corpPreset": "developer-corp",
+      "runnerPreset": "developer-runner",
+      "gameSeed": 14,
+      "corpDeckHash": "dfa7600c0b0570ba4b281c8f7bc2da10c54ecf3930a1560bf10daf175f1036a4",
+      "runnerDeckHash": "8795ad6899015ce626ccbbfbb8f6f59bffffad788e1bed8b080694bc83619a02",
+      "corp": {
+        "kind": "contract",
+        "side": "corp",
+        "agentVersion": "full-game-contract-agent-v6",
+        "policyVersion": "full-game-contract-policy-v6",
+        "profileId": "contract-baseline",
+        "policySeed": 7782154086324655256,
+        "configuration": null
+      },
+      "runner": {
+        "kind": "contract",
+        "side": "runner",
+        "agentVersion": "full-game-contract-agent-v6",
+        "policyVersion": "full-game-contract-policy-v6",
+        "profileId": "contract-baseline",
+        "policySeed": 1213629705908599991,
+        "configuration": null
+      },
+      "comparisonGroup": "baseline",
+      "split": "held-out"
+    },
+    {
+      "id": "developer-0015",
+      "corpPreset": "developer-corp",
+      "runnerPreset": "developer-runner",
+      "gameSeed": 15,
+      "corpDeckHash": "dfa7600c0b0570ba4b281c8f7bc2da10c54ecf3930a1560bf10daf175f1036a4",
+      "runnerDeckHash": "8795ad6899015ce626ccbbfbb8f6f59bffffad788e1bed8b080694bc83619a02",
+      "corp": {
+        "kind": "contract",
+        "side": "corp",
+        "agentVersion": "full-game-contract-agent-v6",
+        "policyVersion": "full-game-contract-policy-v6",
+        "profileId": "contract-baseline",
+        "policySeed": 14329282042966947169,
+        "configuration": null
+      },
+      "runner": {
+        "kind": "contract",
+        "side": "runner",
+        "agentVersion": "full-game-contract-agent-v6",
+        "policyVersion": "full-game-contract-policy-v6",
+        "profileId": "contract-baseline",
+        "policySeed": 15182922689994761418,
+        "configuration": null
+      },
+      "comparisonGroup": "baseline",
+      "split": "held-out"
+    },
+    {
+      "id": "developer-0016",
+      "corpPreset": "developer-corp",
+      "runnerPreset": "developer-runner",
+      "gameSeed": 16,
+      "corpDeckHash": "dfa7600c0b0570ba4b281c8f7bc2da10c54ecf3930a1560bf10daf175f1036a4",
+      "runnerDeckHash": "8795ad6899015ce626ccbbfbb8f6f59bffffad788e1bed8b080694bc83619a02",
+      "corp": {
+        "kind": "contract",
+        "side": "corp",
+        "agentVersion": "full-game-contract-agent-v6",
+        "policyVersion": "full-game-contract-policy-v6",
+        "profileId": "contract-baseline",
+        "policySeed": 6264007454986262389,
+        "configuration": null
+      },
+      "runner": {
+        "kind": "contract",
+        "side": "runner",
+        "agentVersion": "full-game-contract-agent-v6",
+        "policyVersion": "full-game-contract-policy-v6",
+        "profileId": "contract-baseline",
+        "policySeed": 9445374387592136365,
+        "configuration": null
+      },
+      "comparisonGroup": "baseline",
+      "split": "held-out"
+    },
+    {
+      "id": "developer-0017",
+      "corpPreset": "developer-corp",
+      "runnerPreset": "developer-runner",
+      "gameSeed": 17,
+      "corpDeckHash": "dfa7600c0b0570ba4b281c8f7bc2da10c54ecf3930a1560bf10daf175f1036a4",
+      "runnerDeckHash": "8795ad6899015ce626ccbbfbb8f6f59bffffad788e1bed8b080694bc83619a02",
+      "corp": {
+        "kind": "contract",
+        "side": "corp",
+        "agentVersion": "full-game-contract-agent-v6",
+        "policyVersion": "full-game-contract-policy-v6",
+        "profileId": "contract-baseline",
+        "policySeed": 487327919696901629,
+        "configuration": null
+      },
+      "runner": {
+        "kind": "contract",
+        "side": "runner",
+        "agentVersion": "full-game-contract-agent-v6",
+        "policyVersion": "full-game-contract-policy-v6",
+        "profileId": "contract-baseline",
+        "policySeed": 12438099733199096777,
+        "configuration": null
+      },
+      "comparisonGroup": "baseline",
+      "split": "held-out"
+    },
+    {
+      "id": "developer-0018",
+      "corpPreset": "developer-corp",
+      "runnerPreset": "developer-runner",
+      "gameSeed": 18,
+      "corpDeckHash": "dfa7600c0b0570ba4b281c8f7bc2da10c54ecf3930a1560bf10daf175f1036a4",
+      "runnerDeckHash": "8795ad6899015ce626ccbbfbb8f6f59bffffad788e1bed8b080694bc83619a02",
+      "corp": {
+        "kind": "contract",
+        "side": "corp",
+        "agentVersion": "full-game-contract-agent-v6",
+        "policyVersion": "full-game-contract-policy-v6",
+        "profileId": "contract-baseline",
+        "policySeed": 10588248574810951904,
+        "configuration": null
+      },
+      "runner": {
+        "kind": "contract",
+        "side": "runner",
+        "agentVersion": "full-game-contract-agent-v6",
+        "policyVersion": "full-game-contract-policy-v6",
+        "profileId": "contract-baseline",
+        "policySeed": 7200110651019557913,
+        "configuration": null
+      },
+      "comparisonGroup": "baseline",
+      "split": "held-out"
+    },
+    {
+      "id": "developer-0019",
+      "corpPreset": "developer-corp",
+      "runnerPreset": "developer-runner",
+      "gameSeed": 19,
+      "corpDeckHash": "dfa7600c0b0570ba4b281c8f7bc2da10c54ecf3930a1560bf10daf175f1036a4",
+      "runnerDeckHash": "8795ad6899015ce626ccbbfbb8f6f59bffffad788e1bed8b080694bc83619a02",
+      "corp": {
+        "kind": "contract",
+        "side": "corp",
+        "agentVersion": "full-game-contract-agent-v6",
+        "policyVersion": "full-game-contract-policy-v6",
+        "profileId": "contract-baseline",
+        "policySeed": 17692028099262030671,
+        "configuration": null
+      },
+      "runner": {
+        "kind": "contract",
+        "side": "runner",
+        "agentVersion": "full-game-contract-agent-v6",
+        "policyVersion": "full-game-contract-policy-v6",
+        "profileId": "contract-baseline",
+        "policySeed": 9663311211689900005,
+        "configuration": null
+      },
+      "comparisonGroup": "baseline",
+      "split": "held-out"
+    },
+    {
+      "id": "developer-0020",
+      "corpPreset": "developer-corp",
+      "runnerPreset": "developer-runner",
+      "gameSeed": 20,
+      "corpDeckHash": "dfa7600c0b0570ba4b281c8f7bc2da10c54ecf3930a1560bf10daf175f1036a4",
+      "runnerDeckHash": "8795ad6899015ce626ccbbfbb8f6f59bffffad788e1bed8b080694bc83619a02",
+      "corp": {
+        "kind": "contract",
+        "side": "corp",
+        "agentVersion": "full-game-contract-agent-v6",
+        "policyVersion": "full-game-contract-policy-v6",
+        "profileId": "contract-baseline",
+        "policySeed": 14798613022045302931,
+        "configuration": null
+      },
+      "runner": {
+        "kind": "contract",
+        "side": "runner",
+        "agentVersion": "full-game-contract-agent-v6",
+        "policyVersion": "full-game-contract-policy-v6",
+        "profileId": "contract-baseline",
+        "policySeed": 9988799873386863392,
+        "configuration": null
+      },
+      "comparisonGroup": "baseline",
+      "split": "held-out"
+    }
+  ]
+}

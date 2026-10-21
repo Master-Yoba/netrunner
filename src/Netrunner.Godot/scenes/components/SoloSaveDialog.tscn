@@ -1,0 +1,102 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scenes/SoloSaveDialog.cs" id="script"]
+[ext_resource type="Theme" path="res://themes/M4Theme.tres" id="theme"]
+
+[node name="SoloSaveDialog" type="Control"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("script")
+theme = ExtResource("theme")
+
+[node name="Backdrop" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0, 0, 0, 0.75)
+
+[node name="Panel" type="PanelContainer" parent="."]
+layout_mode = 1
+anchor_left = 0.2
+anchor_top = 0.16
+anchor_right = 0.8
+anchor_bottom = 0.84
+
+[node name="Margin" type="MarginContainer" parent="Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 20
+
+[node name="Content" type="VBoxContainer" parent="Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="Title" type="Label" parent="Panel/Margin/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "Resume a saved game"
+
+[node name="Message" type="Label" parent="Panel/Margin/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 3
+
+[node name="SaveName" type="LineEdit" parent="Panel/Margin/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+placeholder_text = "Save name"
+max_length = 120
+accessibility_name = "Save name"
+
+[node name="Scroll" type="ScrollContainer" parent="Panel/Margin/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="Rows" type="VBoxContainer" parent="Panel/Margin/Content/Scroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 16
+
+[node name="Spacer" type="Control" parent="Panel/Margin/Content"]
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+
+[node name="Buttons" type="HBoxContainer" parent="Panel/Margin/Content"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Confirm" type="Button" parent="Panel/Margin/Content/Buttons"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Save game"
+
+[node name="Refresh" type="Button" parent="Panel/Margin/Content/Buttons"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Refresh"
+
+[node name="OpenFolder" type="Button" parent="Panel/Margin/Content/Buttons"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Open save folder"
+
+[node name="Spacer" type="Control" parent="Panel/Margin/Content/Buttons"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="Close" type="Button" parent="Panel/Margin/Content/Buttons"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Close · Esc"

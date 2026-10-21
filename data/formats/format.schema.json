@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://netrunner.local/schema/format-snapshot-v1.json",
+  "title": "Format snapshot",
+  "description": "A versioned, data-only format: its legal packs, ban list and deck rules. Validated by Netrunner.Cards.CardFormatCatalog (FORMAT-401).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "name",
+    "effectiveDate",
+    "complete",
+    "cardPool",
+    "legalPacks",
+    "missingPacks",
+    "restriction",
+    "deckRules",
+    "source"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "id": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+    "name": { "type": "string", "minLength": 1 },
+    "effectiveDate": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+    "complete": {
+      "type": "boolean",
+      "description": "False when the format needs packs this build does not have; an incomplete format validates decks but is not offered for play."
+    },
+    "cardPool": {
+      "enum": ["gateway", "gateway-elevation", "startup"],
+      "description": "The card pool whose behaviour catalog plays the format."
+    },
+    "legalPacks": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Packs this build has whose cards are legal."
+    },
+    "missingPacks": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Upstream card sets the format includes that this build does not have."
+    },
+    "restriction": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["id", "banned", "restricted"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "banned": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[0-9]{5}$" }
+        },
+        "restricted": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[0-9]{5}$" }
+        }
+      }
+    },
+    "deckRules": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["maxCopiesByName", "highValueAgendaLimit"],
+      "properties": {
+        "maxCopiesByName": { "type": "integer", "minimum": 1 },
+        "highValueAgendaLimit": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["minimumPoints", "maximumCards"],
+          "properties": {
+            "minimumPoints": { "type": "integer", "minimum": 1 },
+            "maximumCards": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["note"],
+      "properties": {
+        "snapshotId": { "type": "string" },
+        "cardPoolId": { "type": "string" },
+        "note": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

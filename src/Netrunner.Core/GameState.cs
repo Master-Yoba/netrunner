@@ -11,11 +11,44 @@ public enum ZoneKind
     CorpScore,
     RunnerStack,
     RunnerGrip,
+    /// <summary>
+    /// The public play area for a Corp Operation while its generic ability is
+    /// resolving. This zone is created lazily at operation play so M1/default
+    /// states retain their canonical topology and hashes.
+    /// </summary>
+    CorpPlayArea,
+    /// <summary>
+    /// The public play area for a Runner event while its nested run ability is
+    /// resolving. This zone is created lazily at event play so M1/default
+    /// states retain their canonical topology and hashes.
+    /// </summary>
+    RunnerPlayArea,
     RunnerHeap,
     RunnerRig,
     RunnerScore,
     ServerIce,
     ServerRoot,
+    /// <summary>
+    /// Transient private zone owned by an active generic behavior. Cards are
+    /// physically removed from their source zone while a search/reveal
+    /// choice is pending, then returned or moved by the behavior cursor.
+    /// </summary>
+    BehaviorSetAside,
+    /// <summary>Lazy public Corp removed-from-game zone.</summary>
+    CorpRemovedFromGame,
+    /// <summary>Lazy public Runner removed-from-game zone.</summary>
+    RunnerRemovedFromGame,
+    CorpIdentity,
+    RunnerIdentity,
+
+    /// <summary>
+    /// EL-HOSTED-FACEUP: Runner cards hosted faceup on a card without being
+    /// installed (Bling, Madani). Lazy and public; each card names its host.
+    /// </summary>
+    RunnerHostedFaceUp,
+
+    /// <summary>EL-HOSTED-FACEUP: Corp cards hosted faceup on a Runner card (Detente). Lazy and public.</summary>
+    CorpHostedFaceUp,
 }
 
 /// <summary>The stable topology kind of a Corp server.</summary>
@@ -45,6 +78,7 @@ public enum GameWinReason
 {
     AgendaPoints,
     DeckOut,
+    Flatline,
 }
 
 public sealed record PlayerState
@@ -95,7 +129,8 @@ public sealed record CardInstanceState
         PlayerSide ownerSide,
         bool faceUp = false,
         bool rezzed = false,
-        int advancementCounters = 0)
+        int advancementCounters = 0,
+        CardInstanceId? hostCardId = null)
     {
         if (!Enum.IsDefined(ownerSide))
         {
@@ -109,6 +144,7 @@ public sealed record CardInstanceState
         FaceUp = faceUp;
         Rezzed = rezzed;
         AdvancementCounters = advancementCounters;
+        HostCardId = hostCardId;
     }
 
     [JsonInclude]
@@ -138,6 +174,10 @@ public sealed record CardInstanceState
     [JsonInclude]
     [JsonRequired]
     public int AdvancementCounters { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public CardInstanceId? HostCardId { get; private set; }
 }
 
 public sealed record ZoneState
@@ -184,6 +224,13 @@ public sealed record ZoneState
         new ReadOnlyCollection<CardInstanceId>((values ?? []).ToArray());
 }
 
+public enum ServerLifecycle
+{
+    Active,
+    EmptyPendingCheckpoint,
+    Destroyed,
+}
+
 public sealed record ServerState
 {
     [JsonConstructor]
@@ -191,12 +238,14 @@ public sealed record ServerState
         ServerId id,
         ServerKind kind,
         ZoneId iceZoneId,
-        ZoneId rootZoneId)
+        ZoneId rootZoneId,
+        ServerLifecycle lifecycle = ServerLifecycle.Active)
     {
         Id = id;
         Kind = kind;
         IceZoneId = iceZoneId;
         RootZoneId = rootZoneId;
+        Lifecycle = lifecycle;
     }
 
     [JsonInclude]
@@ -214,6 +263,13 @@ public sealed record ServerState
     [JsonInclude]
     [JsonRequired]
     public ZoneId RootZoneId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public ServerLifecycle Lifecycle { get; private set; }
+
+    [JsonIgnore]
+    public bool Exists => Lifecycle != ServerLifecycle.Destroyed;
 }
 
 public sealed record TurnState
@@ -222,11 +278,15 @@ public sealed record TurnState
     public TurnState(
         PlayerSide activeSide,
         TurnPhase phase = TurnPhase.Setup,
-        int turnNumber = 1)
+        int turnNumber = 1,
+        TurnStep step = TurnStep.None,
+        TurnHistoryState? history = null)
     {
         ActiveSide = activeSide;
         Phase = phase;
         TurnNumber = turnNumber;
+        Step = step;
+        History = history;
     }
 
     [JsonInclude]
@@ -240,6 +300,31 @@ public sealed record TurnState
     [JsonInclude]
     [JsonRequired]
     public int TurnNumber { get; private set; }
+
+    /// <summary>
+    /// Fine-grained CR 5 step for real turns. The default None value is omitted
+    /// from legacy M1/M2 JSON; real-turn states always populate it.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public TurnStep Step { get; private set; }
+
+    /// <summary>
+    /// Explicit current/last-turn facts. Null is retained only by the M1/M2
+    /// compatibility projection; a real turn frame requires this aggregate.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public TurnHistoryState? History { get; private set; }
+
+    [JsonIgnore]
+    public TurnStep CurrentStep => Step;
+
+    [JsonIgnore]
+    public TurnFactsState? ThisTurnFacts => History?.ThisTurn(ActiveSide);
+
+    [JsonIgnore]
+    public TurnFactsState? LastTurnFacts => History?.LastTurn(ActiveSide);
 }
 
 public sealed record GameOutcome
@@ -276,7 +361,9 @@ public sealed record GameOutcome
 /// </summary>
 public sealed class GameState
 {
-    public const int CurrentSchemaVersion = 1;
+    // M4-4.1 migration: behavior registry identity is now explicit state
+    // metadata, so schema 1 states are intentionally not forward-loadable.
+    public const int CurrentSchemaVersion = EngineCompatibility.StateSchemaVersion;
 
     [JsonConstructor]
     public GameState(
@@ -297,7 +384,13 @@ public sealed class GameState
         IReadOnlyList<ResolutionFrame>? resolutionStack = null,
         PendingDecision? pendingDecision = null,
         long actionSequence = 0,
-        ulong initialSeed = 0)
+        ulong initialSeed = 0,
+        RunState? runState = null,
+        RulesState? rulesState = null,
+        string? behaviorRegistryVersion = null,
+        string? behaviorCatalogFingerprint = null,
+        string? runtimeCardCatalogVersion = null,
+        string? runtimeCardCatalogFingerprint = null)
     {
         ArgumentNullException.ThrowIfNull(rulesVersion);
         ArgumentNullException.ThrowIfNull(cardDataVersion);
@@ -313,6 +406,10 @@ public sealed class GameState
         GameId = gameId;
         RulesVersion = rulesVersion;
         CardDataVersion = cardDataVersion;
+        BehaviorRegistryVersion = behaviorRegistryVersion ?? EngineCompatibility.BehaviorRegistryVersion;
+        BehaviorCatalogFingerprint = behaviorCatalogFingerprint;
+        RuntimeCardCatalogVersion = runtimeCardCatalogVersion;
+        RuntimeCardCatalogFingerprint = runtimeCardCatalogFingerprint;
         Players = FreezeSorted(players, static player => player.Id.Value);
         Cards = FreezeSorted(cards, static card => card.Id.Value);
         Zones = FreezeSorted(zones, static zone => zone.Id.Value);
@@ -329,6 +426,8 @@ public sealed class GameState
         ActionSequence = actionSequence;
         ResolutionStack = Freeze(resolutionStack);
         PendingDecision = pendingDecision?.Copy();
+        RunState = runState?.Copy();
+        RulesState = rulesState?.Copy();
     }
 
     /// <summary>
@@ -353,7 +452,13 @@ public sealed class GameState
         IEnumerable<ResolutionFrame>? resolutionStack = null,
         PendingDecision? pendingDecision = null,
         long actionSequence = 0,
-        ulong? initialSeed = null)
+        ulong? initialSeed = null,
+        RunState? runState = null,
+        RulesState? rulesState = null,
+        string? behaviorRegistryVersion = null,
+        string? behaviorCatalogFingerprint = null,
+        string? runtimeCardCatalogVersion = null,
+        string? runtimeCardCatalogFingerprint = null)
         : this(
             schemaVersion,
             gameId,
@@ -372,7 +477,13 @@ public sealed class GameState
             resolutionStack?.ToArray() ?? [],
             pendingDecision,
             actionSequence,
-            initialSeed ?? randomState)
+            initialSeed ?? randomState,
+            runState,
+            rulesState,
+            behaviorRegistryVersion,
+            behaviorCatalogFingerprint,
+            runtimeCardCatalogVersion,
+            runtimeCardCatalogFingerprint)
     {
     }
 
@@ -391,6 +502,38 @@ public sealed class GameState
     [JsonInclude]
     [JsonRequired]
     public string CardDataVersion { get; private set; }
+
+    /// <summary>
+    /// Version of the compiled behavior registry used to create this state.
+    /// It is deliberately distinct from <see cref="CardDataVersion"/>.
+    /// </summary>
+    [JsonInclude]
+    [JsonRequired]
+    public string BehaviorRegistryVersion { get; private set; }
+
+    /// <summary>
+    /// Optional content fingerprint for catalogs that share a version label.
+    /// Null is retained for legacy fixture constructors; content-enabled
+    /// composition supplies the deterministic SHA-256 fingerprint.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? BehaviorCatalogFingerprint { get; private set; }
+
+    /// <summary>
+    /// Optional identity of the immutable printed-card metadata catalog used
+    /// by real card actions. It is omitted for M1/M2-compatible states.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? RuntimeCardCatalogVersion { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? RuntimeCardCatalogFingerprint { get; private set; }
+
+    [JsonIgnore]
+    public string? BehaviorRegistryFingerprint => BehaviorCatalogFingerprint;
 
     [JsonInclude]
     [JsonRequired]
@@ -450,7 +593,55 @@ public sealed class GameState
     [JsonRequired]
     public PendingDecision? PendingDecision { get; private set; }
 
+    /// <summary>Live CR 6.9 run state; omitted from JSON when no run is active.</summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public RunState? RunState { get; private set; }
+
+    /// <summary>Optional M2 rules-backed resources; omitted for M1-compatible states.</summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public RulesState? RulesState { get; private set; }
+
+    /// <summary>
+    /// True for a state produced by <see cref="ApplyMode.Simulation"/>. Such a
+    /// state skipped invariant validation, so it can't be serialized, hashed,
+    /// snapshotted or applied authoritatively. Not part of the saved form.
+    /// </summary>
+    [JsonIgnore]
+    public bool IsSimulated { get; internal set; }
+
+    internal GameState MarkSimulated()
+    {
+        IsSimulated = true;
+        return this;
+    }
+
+    // The catalogs the engine validated this exact (immutable) state against when it produced it, so the
+    // next action needn't validate it again as its input. A restored or hand-built state never carries it.
+    private (IBehaviorCatalog? Behavior, IRuntimeCardCatalog? Runtime)? _validatedWith;
+
+    internal void MarkValidated(IBehaviorCatalog? behaviorCatalog, IRuntimeCardCatalog? runtimeCardCatalog) =>
+        _validatedWith = (behaviorCatalog, runtimeCardCatalog);
+
+    internal bool WasValidatedWith(IBehaviorCatalog? behaviorCatalog, IRuntimeCardCatalog? runtimeCardCatalog) =>
+        !IsSimulated
+        && _validatedWith is { } validated
+        && ReferenceEquals(validated.Behavior, behaviorCatalog)
+        && ReferenceEquals(validated.Runtime, runtimeCardCatalog);
+
     public GameSnapshot CreateSnapshot() => GameSnapshot.From(this);
+
+    public GameSnapshot CreateSnapshot(IBehaviorCatalog behaviorCatalog) =>
+        GameSnapshot.From(this, behaviorCatalog);
+
+    public GameSnapshot CreateSnapshot(IRuntimeCardCatalog runtimeCardCatalog) =>
+        GameSnapshot.From(this, null, runtimeCardCatalog);
+
+    public GameSnapshot CreateSnapshot(
+        IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog runtimeCardCatalog) =>
+        GameSnapshot.From(this, behaviorCatalog, runtimeCardCatalog);
 
     [JsonIgnore]
     public GameSnapshot Snapshot => CreateSnapshot();
@@ -478,7 +669,11 @@ public sealed class GameState
     public static GameState CreateNew(
         ulong seed,
         string rulesVersion = "26.03",
-        string cardDataVersion = "fixture-1")
+        string cardDataVersion = "fixture-1",
+        string? behaviorRegistryVersion = null,
+        string? behaviorCatalogFingerprint = null,
+        string? runtimeCardCatalogVersion = null,
+        string? runtimeCardCatalogFingerprint = null)
     {
         var allocator = new StableIdAllocator();
         GameId gameId = allocator.NextGameId();
@@ -517,7 +712,11 @@ public sealed class GameState
             new GameOutcome(),
             seed,
             allocator.State,
-            initialSeed: seed);
+            initialSeed: seed,
+            behaviorRegistryVersion: behaviorRegistryVersion,
+            behaviorCatalogFingerprint: behaviorCatalogFingerprint,
+            runtimeCardCatalogVersion: runtimeCardCatalogVersion,
+            runtimeCardCatalogFingerprint: runtimeCardCatalogFingerprint);
 
         StateInvariantValidator.Validate(state);
         return state;
@@ -535,9 +734,27 @@ public sealed class GameState
 
     public static GameState FromSnapshot(GameSnapshot snapshot)
     {
+        return FromSnapshot(snapshot, (IBehaviorCatalog?)null, null);
+    }
+
+    public static GameState FromSnapshot(GameSnapshot snapshot, IBehaviorCatalog? behaviorCatalog)
+    {
+        return FromSnapshot(snapshot, behaviorCatalog, null);
+    }
+
+    public static GameState FromSnapshot(GameSnapshot snapshot, IRuntimeCardCatalog runtimeCardCatalog)
+    {
+        return FromSnapshot(snapshot, null, runtimeCardCatalog);
+    }
+
+    public static GameState FromSnapshot(
+        GameSnapshot snapshot,
+        IBehaviorCatalog? behaviorCatalog,
+        IRuntimeCardCatalog? runtimeCardCatalog)
+    {
         ArgumentNullException.ThrowIfNull(snapshot);
         GameState state = snapshot.ToState();
-        StateInvariantValidator.Validate(state);
+        StateInvariantValidator.Validate(state, behaviorCatalog, runtimeCardCatalog);
         return state;
     }
 
@@ -550,12 +767,40 @@ public sealed class GameState
             throw new ArgumentException("State collections must not contain null entries.", nameof(values));
         }
 
-        Array.Sort(copy, (left, right) =>
+        // A state built from another is already in order: skip the sort when the keys strictly increase, where the
+        // sorted order is the only one (S5.0).
+        if (!StrictlyIncreasing(copy, key))
         {
-            int result = StringComparer.Ordinal.Compare(key(left), key(right));
-            return result != 0 ? result : 0;
-        });
+            Array.Sort(copy, (left, right) =>
+            {
+                int result = StringComparer.Ordinal.Compare(key(left), key(right));
+                return result != 0 ? result : 0;
+            });
+        }
+
         return new ReadOnlyCollection<T>(copy);
+    }
+
+    private static bool StrictlyIncreasing<T>(T[] values, Func<T, string> key)
+    {
+        if (values.Length < 2)
+        {
+            return true;
+        }
+
+        string previous = key(values[0]);
+        for (int index = 1; index < values.Length; index++)
+        {
+            string current = key(values[index]);
+            if (StringComparer.Ordinal.Compare(previous, current) >= 0)
+            {
+                return false;
+            }
+
+            previous = current;
+        }
+
+        return true;
     }
 
     private static ReadOnlyCollection<T> Freeze<T>(IEnumerable<T>? values)
@@ -592,7 +837,13 @@ public sealed class GameSnapshot
         IReadOnlyList<ResolutionFrame>? resolutionStack = null,
         PendingDecision? pendingDecision = null,
         long actionSequence = 0,
-        ulong initialSeed = 0)
+        ulong initialSeed = 0,
+        RunState? runState = null,
+        RulesState? rulesState = null,
+        string? behaviorRegistryVersion = null,
+        string? behaviorCatalogFingerprint = null,
+        string? runtimeCardCatalogVersion = null,
+        string? runtimeCardCatalogFingerprint = null)
     {
         ArgumentNullException.ThrowIfNull(rulesVersion);
         ArgumentNullException.ThrowIfNull(cardDataVersion);
@@ -608,11 +859,15 @@ public sealed class GameSnapshot
         GameId = gameId;
         RulesVersion = rulesVersion;
         CardDataVersion = cardDataVersion;
+        BehaviorRegistryVersion = behaviorRegistryVersion ?? EngineCompatibility.BehaviorRegistryVersion;
+        BehaviorCatalogFingerprint = behaviorCatalogFingerprint;
+        RuntimeCardCatalogVersion = runtimeCardCatalogVersion;
+        RuntimeCardCatalogFingerprint = runtimeCardCatalogFingerprint;
         Players = CopyPlayers(players);
         Cards = CopyCards(cards);
         Zones = CopyZones(zones);
         Servers = CopyServers(servers);
-        Turn = new TurnState(turn.ActiveSide, turn.Phase, turn.TurnNumber);
+        Turn = new TurnState(turn.ActiveSide, turn.Phase, turn.TurnNumber, turn.Step, turn.History);
         Outcome = new GameOutcome(outcome.Kind, outcome.Winner, outcome.Reason);
         InitialSeed = initialSeed;
         RandomState = randomState;
@@ -622,6 +877,8 @@ public sealed class GameSnapshot
         ActionSequence = actionSequence;
         ResolutionStack = CopyFrames(resolutionStack);
         PendingDecision = pendingDecision?.Copy();
+        RunState = runState?.Copy();
+        RulesState = rulesState?.Copy();
     }
 
     [JsonInclude]
@@ -639,6 +896,25 @@ public sealed class GameSnapshot
     [JsonInclude]
     [JsonRequired]
     public string CardDataVersion { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string BehaviorRegistryVersion { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? BehaviorCatalogFingerprint { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? RuntimeCardCatalogVersion { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? RuntimeCardCatalogFingerprint { get; private set; }
+
+    [JsonIgnore]
+    public string? BehaviorRegistryFingerprint => BehaviorCatalogFingerprint;
 
     [JsonInclude]
     [JsonRequired]
@@ -696,10 +972,37 @@ public sealed class GameSnapshot
     [JsonRequired]
     public PendingDecision? PendingDecision { get; private set; }
 
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public RunState? RunState { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public RulesState? RulesState { get; private set; }
+
     public static GameSnapshot From(GameState state)
     {
+        return From(state, (IBehaviorCatalog?)null, null);
+    }
+
+    public static GameSnapshot From(GameState state, IBehaviorCatalog? behaviorCatalog)
+    {
+        return From(state, behaviorCatalog, null);
+    }
+
+    public static GameSnapshot From(GameState state, IRuntimeCardCatalog runtimeCardCatalog)
+    {
+        return From(state, null, runtimeCardCatalog);
+    }
+
+    public static GameSnapshot From(
+        GameState state,
+        IBehaviorCatalog? behaviorCatalog,
+        IRuntimeCardCatalog? runtimeCardCatalog)
+    {
         ArgumentNullException.ThrowIfNull(state);
-        StateInvariantValidator.Validate(state);
+        GameEngine.ThrowIfSimulated(state);
+        StateInvariantValidator.Validate(state, behaviorCatalog, runtimeCardCatalog);
         return new GameSnapshot(
             state.SchemaVersion,
             state.GameId,
@@ -718,7 +1021,13 @@ public sealed class GameSnapshot
             state.ResolutionStack,
             state.PendingDecision,
             state.ActionSequence,
-            state.InitialSeed);
+            state.InitialSeed,
+            state.RunState,
+            state.RulesState,
+            state.BehaviorRegistryVersion,
+            state.BehaviorCatalogFingerprint,
+            state.RuntimeCardCatalogVersion,
+            state.RuntimeCardCatalogFingerprint);
     }
 
     public GameState ToState() => new(
@@ -739,7 +1048,13 @@ public sealed class GameSnapshot
         ResolutionStack,
         PendingDecision,
         ActionSequence,
-        InitialSeed);
+        InitialSeed,
+        RunState,
+        RulesState,
+        BehaviorRegistryVersion,
+        BehaviorCatalogFingerprint,
+        RuntimeCardCatalogVersion,
+        RuntimeCardCatalogFingerprint);
 
     private static ReadOnlyCollection<PlayerState> CopyPlayers(IEnumerable<PlayerState>? values) =>
         new ReadOnlyCollection<PlayerState>((values ?? [])
@@ -791,7 +1106,7 @@ public sealed class GameSnapshot
             card.OwnerSide,
             card.FaceUp,
             card.Rezzed,
-            card.AdvancementCounters);
+            card.AdvancementCounters, card.HostCardId);
     }
 
     private static ZoneState CopyZone(ZoneState? zone)
@@ -803,6 +1118,6 @@ public sealed class GameSnapshot
     private static ServerState CopyServer(ServerState? server)
     {
         ArgumentNullException.ThrowIfNull(server);
-        return new ServerState(server.Id, server.Kind, server.IceZoneId, server.RootZoneId);
+        return new ServerState(server.Id, server.Kind, server.IceZoneId, server.RootZoneId, server.Lifecycle);
     }
 }
