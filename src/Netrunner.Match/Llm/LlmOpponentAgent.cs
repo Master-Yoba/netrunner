@@ -45,8 +45,8 @@ public sealed class LlmOpponentAgent : IAgentLifecycle
 
     /// <summary>The LLM opponent for one seat, asking a model over an OpenAI-compatible chat.</summary>
     public static LlmOpponentAgent Create(PlayerSide side, FullMatchDefinition definition, ILlmChatClient client, LlmSampling sampling,
-        RulesIndex? rules = null, int maxToolCalls = 3) =>
-        Create(side, definition, new ModelDecider(client, sampling, rules, maxToolCalls));
+        RulesIndex? rules = null, ModelDeciderSettings? settings = null) =>
+        Create(side, definition, new ModelDecider(client, sampling, rules, settings));
 
     /// <summary>The opponent for one seat around the standard heuristic of that seat (with its scores kept).</summary>
     public static LlmOpponentAgent Create(PlayerSide side, FullMatchDefinition definition, IStrategicDecider decider)

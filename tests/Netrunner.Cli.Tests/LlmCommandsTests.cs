@@ -12,6 +12,8 @@ public sealed class LlmCommandsTests
     [InlineData("ai-llm-play")]
     [InlineData("ai-llm-play", "--output", "x", "--side", "left")]
     [InlineData("ai-llm-play", "--output", "x", "--opponent", "nobody")]
+    [InlineData("ai-llm-play", "--output", "x", "--tools", "cards")]
+    [InlineData("ai-llm-play", "--output", "x", "--parallel", "0")]
     [InlineData("ai-codex-play", "--print-prompt", "dealer")]
     public void InvalidArgumentsExitWithTwo(params string[] args)
     {

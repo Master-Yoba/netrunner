@@ -19,52 +19,80 @@ public interface IStrategicDecider
     Task<StrategicVerdict> DecideAsync(PlayerSide side, string request, int options, CancellationToken cancellationToken);
 }
 
-/// <summary>
-/// Asks a model over an OpenAI-compatible chat, one conversation per decision, with card and rules tools. An
-/// answer that isn't one of the options gets one retry; then the verdict has no option and the heuristic's stands.
-/// </summary>
-public sealed class ModelDecider(ILlmChatClient client, LlmSampling sampling, RulesIndex? rules = null, int maxToolCalls = 3) : IStrategicDecider
-{
-    private readonly int _maxToolCalls = maxToolCalls;
+/// <summary>How a <see cref="ModelDecider"/> asks for a decision.</summary>
+/// <param name="MaxToolCalls">Lookups per decision; 0 offers none.</param>
+/// <param name="CardText">Whether to offer the card text lookup; the request already holds every card in view.</param>
+/// <param name="StructuredAnswer">
+/// Constrains every answer with a JSON schema: {"option", "reason"}, or a lookup while lookups remain. Lookups are
+/// then answers rather than tool calls, since llama.cpp can't constrain an answer and offer tools in one request,
+/// and a model whose thinking budget runs out can't go on thinking in its answer.
+/// </param>
+/// <param name="Deadline">The longest a decision may take; past it the decision fails and the heuristic's choice stands.</param>
+public sealed record ModelDeciderSettings(int MaxToolCalls = 3, bool CardText = true, bool StructuredAnswer = false, TimeSpan? Deadline = null);
 
-    public static IReadOnlyList<LlmTool> Tools { get; } =
-    [
-        new("card_text", "The printed text of any card by title: type, costs, strength, points, rules text.",
-            ToolSchema("title", "The card's title.")),
-        new("rules_lookup", "Searches the Netrunner comprehensive rules by rule number or a few words.",
-            ToolSchema("query", "A rule number or a few words.")),
-    ];
+/// <summary>
+/// Asks a model over an OpenAI-compatible chat, one conversation per decision, with a rules summary, the rules for
+/// mechanics in view, and card and rules lookups. An answer that isn't one of the options gets one retry; then the
+/// verdict has no option and the heuristic's stands.
+/// </summary>
+public sealed class ModelDecider(ILlmChatClient client, LlmSampling sampling, RulesIndex? rules = null, ModelDeciderSettings? settings = null)
+    : IStrategicDecider
+{
+    private static readonly LlmTool CardTextTool = new("card_text",
+        "The printed text of any card by title: type, costs, strength, points, rules text.", ToolSchema("title", "The card's title."));
+
+    private static readonly LlmTool RulesTool = new("rules_lookup",
+        "Searches the Netrunner comprehensive rules by rule number or a few words.", ToolSchema("query", "A rule number or a few words."));
+
+    private readonly ModelDeciderSettings _settings = settings ?? new();
+
+    /// <summary>The lookups offered: card text unless turned off, and the rules when there are rules to search.</summary>
+    public IReadOnlyList<LlmTool> Tools { get; } = (settings ?? new()).MaxToolCalls == 0 ? []
+        : [.. new[] { (settings ?? new()).CardText ? CardTextTool : null, rules is null ? null : RulesTool }.OfType<LlmTool>()];
 
     public async Task<StrategicVerdict> DecideAsync(PlayerSide side, string request, int options, CancellationToken cancellationToken)
     {
         var messages = new List<LlmChatMessage>
         {
-            LlmChatMessage.System(SystemPrompt(side)),
-            LlmChatMessage.User(request + "Answer with {\"option\": <number>, \"reason\": \"one sentence\"}."),
+            LlmChatMessage.System(SystemPrompt(side, Lookups())),
+            LlmChatMessage.User(request + LlmRulesPrimer.RulesFor(request, rules) + "Answer with {\"option\": <number>, \"reason\": \"one sentence\"}."),
         };
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        if (_settings.Deadline is { } limit) deadline.CancelAfter(limit);
         int toolCalls = 0;
-        for (int attempt = 0; attempt < 2; attempt++)
+        try
         {
-            (string? answer, int used, string? error) = await ConverseAsync(messages, cancellationToken).ConfigureAwait(false);
-            toolCalls += used;
-            if (error is not null) return new StrategicVerdict(null, null, error, toolCalls);
-            (int? choice, string? reason) = Parse(answer, options);
-            if (choice is not null) return new StrategicVerdict(choice, reason, null, toolCalls);
-            messages.Add(LlmChatMessage.User($"That wasn't a valid answer. Reply with only {{\"option\": <a number from 1 to {options}>, \"reason\": \"...\"}}."));
+            for (int attempt = 0; attempt < 2; attempt++)
+            {
+                (string? answer, int used, string? error) = await ConverseAsync(messages, options, deadline.Token).ConfigureAwait(false);
+                toolCalls += used;
+                if (error is not null) return new StrategicVerdict(null, null, error, toolCalls);
+                (int? choice, string? reason) = Parse(answer, options);
+                if (choice is not null) return new StrategicVerdict(choice, reason, null, toolCalls);
+                messages.Add(LlmChatMessage.User($"That wasn't a valid answer. Reply with only {{\"option\": <a number from 1 to {options}>, \"reason\": \"...\"}}."));
+            }
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && _settings.Deadline is { } passed)
+        {
+            return new StrategicVerdict(null, null, FormattableString.Invariant($"No answer within {passed.TotalSeconds:0} s."), toolCalls);
         }
         return new StrategicVerdict(null, null, null, toolCalls);
     }
 
-    private async Task<(string? Answer, int ToolCalls, string? Failure)> ConverseAsync(List<LlmChatMessage> messages, CancellationToken cancellationToken)
+    private async Task<(string? Answer, int ToolCalls, string? Failure)> ConverseAsync(List<LlmChatMessage> messages, int options,
+        CancellationToken cancellationToken)
     {
         int toolCalls = 0;
-        for (int round = 0; round <= _maxToolCalls; round++)
+        for (int round = 0; round <= _settings.MaxToolCalls; round++)
         {
+            IReadOnlyList<LlmTool> offered = toolCalls < _settings.MaxToolCalls ? Tools : [];
+            LlmChatRequest chat = _settings.StructuredAnswer
+                ? new LlmChatRequest(messages, [], sampling, AnswerSchema(options, offered))
+                : new LlmChatRequest(messages, offered, sampling);
             LlmChatResponse response;
             try
             {
-                response = await client.CompleteAsync(new LlmChatRequest(messages, toolCalls < _maxToolCalls ? Tools : [], sampling), cancellationToken)
-                    .ConfigureAwait(false);
+                response = await client.CompleteAsync(chat, cancellationToken).ConfigureAwait(false);
             }
             catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or InvalidDataException)
             {
@@ -72,6 +100,13 @@ public sealed class ModelDecider(ILlmChatClient client, LlmSampling sampling, Ru
                 return (null, toolCalls, exception.Message);
             }
             messages.Add(response.Message);
+            if (_settings.StructuredAnswer)
+            {
+                if (Lookup(response.Message.Content, offered) is not { } lookup) return (response.Message.Content, toolCalls, null);
+                toolCalls++;
+                messages.Add(LlmChatMessage.User($"{lookup.Name}: {Answer(lookup)}"));
+                continue;
+            }
             if (response.Message.ToolCalls is not { Count: > 0 } calls) return (response.Message.Content, toolCalls, null);
             foreach (LlmToolCall call in calls)
             {
@@ -80,6 +115,50 @@ public sealed class ModelDecider(ILlmChatClient client, LlmSampling sampling, Ru
             }
         }
         return (null, toolCalls, "The model never answered.");
+    }
+
+    /// <summary>A lookup asked for in a structured answer, as {"rules_lookup": "..."}, if one was offered.</summary>
+    private static LlmToolCall? Lookup(string? content, IReadOnlyList<LlmTool> offered)
+    {
+        if (offered.Count == 0 || string.IsNullOrWhiteSpace(content)) return null;
+        try
+        {
+            if (JsonNode.Parse(content) is not JsonObject answer) return null;
+            return offered.FirstOrDefault(tool => answer[tool.Name] is JsonValue) is { } asked
+                ? new LlmToolCall(asked.Name, asked.Name, new JsonObject { ["value"] = answer[asked.Name]!.DeepClone() }.ToJsonString())
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>The answer's shape: an option and a reason, or one of the lookups still offered.</summary>
+    private static JsonObject AnswerSchema(int options, IReadOnlyList<LlmTool> lookups)
+    {
+        var choice = new JsonObject
+        {
+            ["type"] = "object",
+            ["properties"] = new JsonObject
+            {
+                ["option"] = new JsonObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = options },
+                ["reason"] = new JsonObject { ["type"] = "string" },
+            },
+            ["required"] = new JsonArray("option", "reason"),
+            ["additionalProperties"] = false,
+        };
+        if (lookups.Count == 0) return choice;
+        return new JsonObject
+        {
+            ["anyOf"] = new JsonArray([choice, .. lookups.Select(tool => (JsonNode)new JsonObject
+            {
+                ["type"] = "object",
+                ["properties"] = new JsonObject { [tool.Name] = new JsonObject { ["type"] = "string", ["description"] = tool.Description } },
+                ["required"] = new JsonArray(tool.Name),
+                ["additionalProperties"] = false,
+            })]),
+        };
     }
 
     private string Answer(LlmToolCall call)
@@ -106,19 +185,29 @@ public sealed class ModelDecider(ILlmChatClient client, LlmSampling sampling, Ru
         };
     }
 
-    private static string SystemPrompt(PlayerSide side) => $$"""
+    /// <summary>How the system prompt offers lookups: none, as tools, or as answers when answers are structured.</summary>
+    private string Lookups() => Tools.Count == 0 ? ""
+        : _settings.StructuredAnswer
+            ? "When the summary below and the cards in view don't settle a rule or a card, answer "
+              + string.Join(" or ", Tools.Select(tool => $"{{\"{tool.Name}\": \"...\"}}"))
+              + " instead; every lookup keeps your opponent waiting.\n"
+            : "Look up a card or a rule with the tools only when the summary below and the cards in view don't settle it; "
+              + "every lookup keeps your opponent waiting.\n";
+
+    private static string SystemPrompt(PlayerSide side, string lookups) => $$"""
         You play Android: Netrunner (Null Signal Games' comprehensive rules) as the {{side}}, against a bot. The Corp
         wins with 7 agenda points scored, or when the Runner can't take damage; the Runner wins with 7 agenda points
         stolen, or when R&D is empty when the Corp must draw.
         Each message shows the board as you see it, the cards in view, and your legal options for the next click.
         A heuristic bot scored the options; it is a fair baseline that makes known mistakes. Take its choice when it
         is right, and another option when you see a better plan. Think about the whole turn, not only this click.
-        You may look up cards and rules with the tools.
-        - Corp: protect HQ and R&D early; put agendas only where the Runner can't break in this turn; keep credits
+        {{lookups}}- Corp: protect HQ and R&D early; put agendas only where the Runner can't break in this turn; keep credits
           to rez the ICE that matters; score when you can; a remote is for an agenda or an asset.
         - Runner: build economy and breakers; run where agendas are likely and you can get in; don't run into ICE
           you can't break with the credits you have; trash assets that pay the Corp when it's worth it.
         Answer with one JSON object and nothing else: {"option": <number>, "reason": "one sentence"}.
+
+        {{LlmRulesPrimer.Text}}
         """;
 
     private static JsonObject ToolSchema(string name, string description) => new()

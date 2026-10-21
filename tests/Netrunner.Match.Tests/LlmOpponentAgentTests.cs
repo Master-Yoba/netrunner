@@ -49,7 +49,7 @@ public sealed class LlmOpponentAgentTests
     public async Task ToolArgumentsThatArentAnObjectGetAToolErrorAndTheDecisionGoesOn()
     {
         var model = new ToolCallingModel("[]", "\"Hedge Fund\"", "42", "{not json", "null");
-        StrategicVerdict verdict = await new ModelDecider(model, new LlmSampling(), maxToolCalls: 5)
+        StrategicVerdict verdict = await new ModelDecider(model, new LlmSampling(), settings: new ModelDeciderSettings(MaxToolCalls: 5))
             .DecideAsync(Netrunner.Core.PlayerSide.Corp, "Options:\n1. Click for a credit\n", 1, CancellationToken.None);
 
         Assert.Equal(1, verdict.Option);
