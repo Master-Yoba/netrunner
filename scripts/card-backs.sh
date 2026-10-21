@@ -8,17 +8,24 @@ set -euo pipefail
 backs_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 backs_url="https://chiriboga.cronbach.com/images/images.zip"
 backs_dir="${NETRUNNER_CARD_BACK_DIRECTORY:-$backs_root/.tools/card-backs}"
-declare -A backs_members=(
-  [corp.png]="images/Corp_back.png 1b9ac73029558ff7f695d483941c71acbf02a3f791fb2fda7d3c8b7b5cf7c155"
-  [runner.png]="images/Runner_back.png 7ca7086e60bd70dbd5be799ad0a5c876860e0a82d5e0ed569c2862682474b797"
-)
+# "installed-name zip-member sha256" per line; plain lines rather than an
+# associative array keep this working in macOS bash 3.2.
+backs_members="corp.png images/Corp_back.png 1b9ac73029558ff7f695d483941c71acbf02a3f791fb2fda7d3c8b7b5cf7c155
+runner.png images/Runner_back.png 7ca7086e60bd70dbd5be799ad0a5c876860e0a82d5e0ed569c2862682474b797"
+
+backs_sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
 
 backs_have_all() {
   local name member sha
-  for name in "${!backs_members[@]}"; do
-    read -r member sha <<<"${backs_members[$name]}"
-    [[ -f "$backs_dir/$name" ]] && echo "$sha  $backs_dir/$name" | sha256sum --check --status || return 1
-  done
+  while read -r name member sha; do
+    [[ -f "$backs_dir/$name" && "$(backs_sha256 "$backs_dir/$name")" == "$sha" ]] || return 1
+  done <<<"$backs_members"
 }
 
 if [[ "${1:-}" != "--refresh" ]] && backs_have_all; then
@@ -31,13 +38,12 @@ trap 'rm -rf "$backs_tmp"' EXIT
 echo "Downloading $backs_url (about 150 MB) for the two card backs..."
 curl -fL --retry 3 --progress-bar -o "$backs_tmp/images.zip" "$backs_url"
 mkdir -p "$backs_dir"
-for name in "${!backs_members[@]}"; do
-  read -r member sha <<<"${backs_members[$name]}"
+while read -r name member sha; do
   unzip -p "$backs_tmp/images.zip" "$member" >"$backs_tmp/$name"
-  if ! echo "$sha  $backs_tmp/$name" | sha256sum --check --status; then
+  if [[ "$(backs_sha256 "$backs_tmp/$name")" != "$sha" ]]; then
     echo "$member does not match the pinned SHA256 $sha; upstream changed." >&2
     exit 1
   fi
   mv "$backs_tmp/$name" "$backs_dir/$name"
-done
+done <<<"$backs_members"
 echo "Installed NSG card backs into $backs_dir."
