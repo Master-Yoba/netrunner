@@ -174,42 +174,54 @@ public partial class TableCardControl : Control
 	public void SetBackSide(PlayerSide side)
 	{
 		_backSide = side;
-		if (!BackTextures.TryGetValue(side, out _backTexture))
-		{
-			string filename = side == PlayerSide.Corp ? "corp.png" : "runner.png";
-			string? directory = System.Environment.GetEnvironmentVariable("NETRUNNER_CARD_BACK_DIRECTORY");
-			string[] candidates = string.IsNullOrWhiteSpace(directory)
-				? new[] { $"user://card-backs/{filename}", $"res://card-backs/{filename}" }
-				: new[] { System.IO.Path.Combine(directory, filename), $"user://card-backs/{filename}", $"res://card-backs/{filename}" };
-			foreach (string path in candidates)
-			{
-				if (path.StartsWith("res://", StringComparison.Ordinal))
-				{
-					// Release presets omit development-only card backs.
-					if (!ResourceLoader.Exists(path)) continue;
-					_backTexture = GD.Load<Texture2D>(path);
-					if (_backTexture is not null)
-					{
-						break;
-					}
-
-					continue;
-				}
-
-				if (Godot.FileAccess.FileExists(path))
-				{
-					using Image image = Image.LoadFromFile(path);
-					if (!image.IsEmpty())
-					{
-						_backTexture = ImageTexture.CreateFromImage(image);
-						break;
-					}
-				}
-			}
-			BackTextures[side] = _backTexture;
-		}
+		_backTexture = LoadBackTexture(side);
 		RefreshDynamicPresentation();
 		QueueRedraw();
+	}
+
+	/// <summary>
+	/// Loads a side's card back: a provisioned local copy (the official NSG backs from
+	/// <c>scripts/card-backs.sh</c>) first, then <c>user://</c>, then the committed original backs.
+	/// </summary>
+	internal static Texture2D? LoadBackTexture(PlayerSide side)
+	{
+		if (BackTextures.TryGetValue(side, out Texture2D? cached))
+		{
+			return cached;
+		}
+
+		Texture2D? texture = null;
+		string filename = side == PlayerSide.Corp ? "corp.png" : "runner.png";
+		string? directory = System.Environment.GetEnvironmentVariable("NETRUNNER_CARD_BACK_DIRECTORY");
+		string[] candidates = string.IsNullOrWhiteSpace(directory)
+			? new[] { $"user://card-backs/{filename}", $"res://card-backs/{filename}" }
+			: new[] { System.IO.Path.Combine(directory, filename), $"user://card-backs/{filename}", $"res://card-backs/{filename}" };
+		foreach (string path in candidates)
+		{
+			if (path.StartsWith("res://", StringComparison.Ordinal))
+			{
+				if (!ResourceLoader.Exists(path)) continue;
+				texture = GD.Load<Texture2D>(path);
+				if (texture is not null)
+				{
+					break;
+				}
+
+				continue;
+			}
+
+			if (Godot.FileAccess.FileExists(path))
+			{
+				using Image image = Image.LoadFromFile(path);
+				if (!image.IsEmpty())
+				{
+					texture = ImageTexture.CreateFromImage(image);
+					break;
+				}
+			}
+		}
+		BackTextures[side] = texture;
+		return texture;
 	}
 	private Label? _title;
 	private Label? _type;

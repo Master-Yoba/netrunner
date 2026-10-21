@@ -121,6 +121,13 @@ interaction-lab:
 .PHONY: card-art-fetch card-art-validate card-art-pack card-art-unpack
 card-art-fetch card-art-validate card-art-pack card-art-unpack:
 	@./scripts/card-art.sh $(patsubst card-art-%,%,$@) $(ART_ARGS)
+card-art-fetch: card-backs-fetch
+
+.PHONY: card-backs-fetch card-backs-render
+card-backs-fetch:
+	@./scripts/card-backs.sh
+card-backs-render:
+	@./scripts/render-card-backs.sh
 
 m5-client-smoke:
 	bash scripts/m5-client-smoke.sh

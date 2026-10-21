@@ -43,8 +43,7 @@ public partial class OpponentHandFan : Control
 		if (side != _side || _back is null)
 		{
 			_side = side;
-			string path = side == PlayerSide.Corp ? "res://card-backs/corp.png" : "res://card-backs/runner.png";
-			_back = ResourceLoader.Exists(path) ? GD.Load<Texture2D>(path) : null;
+			_back = TableCardControl.LoadBackTexture(side);
 		}
 		_accent = accent;
 		QueueRedraw();

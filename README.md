@@ -108,7 +108,9 @@ match log. Hover/focus inspects a card, and the Inspect button opens full text.
 Escape closes the topmost inspection or pile panel, cancels local staging, or
 clears the selected card/server when back on the board.
 “Skip animation” preserves history. Use “Copy log” for a filtered playtest report.
-Official full card faces can be provisioned explicitly with `make card-art-fetch`.
+Official full card faces can be provisioned explicitly with `make card-art-fetch`,
+which also fetches the official NSG card backs (`make card-backs-fetch` alone)
+over the repository's own original backs.
 Board resources, hover rules, and full card inspection use bundled
 [Null Signal game symbols](src/Netrunner.Godot/icons/SOURCE.md), including clicks,
 credits, memory, link, recurring credits, and subroutines. They work offline in
