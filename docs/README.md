@@ -18,6 +18,7 @@ records are kept unchanged in [`history/`](history/) as design history and evide
 ## Reference and how-to
 
 - [AI benchmarks](M5_BENCHMARKS.md): `ai-benchmark`, `ai-tactics` and their reports
+- [The local LLM opponent](LLM_OPPONENT.md): `ai-llm-play`, its player-facing settings and the sweeps that chose them
 - [Developer engine sessions](M5_DEVELOPER.md): `make play-dev` and the developer tools
 - [Solo saves](M5_SAVES.md): the save format, formats in saves and policy recovery
 - [Session diagnostics](SESSION_DIAGNOSTICS.md): recoverable playtest sessions and what `ai-review` reads

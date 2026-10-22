@@ -12,21 +12,25 @@ public static partial class CliCommands
 {
     /// <summary>
     /// ai-llm-play --output new-dir [--side corp|runner|both] [--games N] [--seed S] [--opponent ENTRANT]
-    /// [--temperature T] [--top-p P] [--top-k K] [--reasoning low|medium|xhigh] [--max-tool-calls N]
-    /// [--tools none|rules|all] [--thinking-budget TOKENS] [--structured-answer] [--deadline-seconds S] [--defer] [--shortlist N]
+    /// [--temperature T] [--top-p P] [--top-k K] [--reasoning low|medium|xhigh] [--tools none|rules|all]
+    /// [--max-tool-calls N] [--thinking-budget TOKENS] [--free-answer] [--no-defer] [--shortlist N] [--deadline-seconds S]
     /// [--parallel N] [--model NAME] [--rules-root DIR]. The LLM opponent (Wave 4.5, P3) plays Gateway games
-    /// against a bot, N at a time (one per server slot; one by default). Each game is saved as
-    /// <c>ai-ladder --save-games</c> saves it, with the LLM's decisions beside it, so ai-lint and ai-llm-review
-    /// read them. Exit 0 when every game finished without a stall or an error, 1 otherwise, 2 for invalid arguments.
+    /// against a bot, N at a time (one per server slot; one by default). The defaults are the player-facing settings
+    /// of docs/LLM_OPPONENT.md: no lookups, a 400-token thinking budget, structured answers, deferring to the heuristic
+    /// among its best 3 options, and a 30 s deadline; 0 turns off a budget, a shortlist or the deadline. Each game is
+    /// saved as <c>ai-ladder --save-games</c> saves it, with the LLM's decisions beside it, so ai-lint and
+    /// ai-llm-review read them. Exit 0 when every game finished without a stall or an error, 1 otherwise, 2 for invalid arguments.
     /// </summary>
     private static int RunAiLlmPlay(string[] args, TextWriter output, TextWriter error)
     {
         string destination = "", opponent = "standard", rulesRoot = Path.Combine("data", "vendor", "rules");
-        string? sides = "both", model = null, reasoning = "low";
-        int games = 2, maxToolCalls = 3, firstGame = 0, parallel = 1;
-        int? thinkingBudget = null, shortlist = null;
-        bool cardText = true, structured = false, defer = false;
-        TimeSpan? deadline = null;
+        string? sides = "both", model = null, reasoning = "low", tools = "none";
+        // The defaults are the settings the latency and override sweeps chose for a player-facing opponent
+        // (docs/LLM_OPPONENT.md); each flag turns one of them off.
+        int games = 2, firstGame = 0, parallel = 1;
+        int? thinkingBudget = 400, shortlist = 3, maxToolCalls = null;
+        bool structured = true, defer = true;
+        TimeSpan? deadline = TimeSpan.FromSeconds(30);
         ulong seed = 1;
         double? temperature = 0.6, topP = 0.95;
         int? topK = 20;
@@ -52,20 +56,20 @@ public static partial class CliCommands
                     case "--reasoning": reasoning = Next(); break;
                     case "--max-tool-calls": maxToolCalls = int.Parse(Next(), NumberStyles.None, CultureInfo.InvariantCulture); break;
                     case "--tools":
-                        switch (Next())
-                        {
-                            case "none": maxToolCalls = 0; break;
-                            case "rules": cardText = false; break;
-                            case "all": cardText = true; break;
-                            default: throw new ArgumentException("--tools requires none, rules or all.");
-                        }
+                        tools = Next();
+                        if (tools is not ("none" or "rules" or "all")) throw new ArgumentException("--tools requires none, rules or all.");
                         break;
-                    case "--thinking-budget": thinkingBudget = int.Parse(Next(), NumberStyles.None, CultureInfo.InvariantCulture); break;
-                    case "--structured-answer": structured = true; break;
-                    case "--defer": defer = true; break;
-                    case "--shortlist": shortlist = int.Parse(Next(), NumberStyles.None, CultureInfo.InvariantCulture); break;
+                    case "--thinking-budget":
+                        thinkingBudget = int.Parse(Next(), NumberStyles.None, CultureInfo.InvariantCulture) is var budget and > 0 ? budget : null;
+                        break;
+                    case "--free-answer": structured = false; break;
+                    case "--no-defer": defer = false; break;
+                    case "--shortlist":
+                        shortlist = int.Parse(Next(), NumberStyles.None, CultureInfo.InvariantCulture) is var size and > 0 ? size : null;
+                        break;
                     case "--deadline-seconds":
-                        deadline = TimeSpan.FromSeconds(double.Parse(Next(), NumberStyles.Float, CultureInfo.InvariantCulture));
+                        double limit = double.Parse(Next(), NumberStyles.Float, CultureInfo.InvariantCulture);
+                        deadline = limit > 0 ? TimeSpan.FromSeconds(limit) : null;
                         break;
                     case "--parallel": parallel = int.Parse(Next(), NumberStyles.None, CultureInfo.InvariantCulture); break;
                     case "--model": model = Next(); break;
@@ -80,7 +84,7 @@ public static partial class CliCommands
             if (destination.Length == 0) throw new ArgumentException("ai-llm-play requires --output <new directory>.");
             if (games is < 1 or > 1000) throw new ArgumentException("--games requires 1 to 1000.");
             if (parallel is < 1 or > 16) throw new ArgumentException("--parallel requires 1 to 16.");
-            if (shortlist is < 2) throw new ArgumentException("--shortlist requires at least 2 options.");
+            if (shortlist is 1) throw new ArgumentException("--shortlist requires 0 (every option) or at least 2.");
             if (!RatingLadder.EntrantOrder.Contains(opponent)) throw new ArgumentException($"Unknown opponent entrant '{opponent}'.");
             if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode)
                 throw new ArgumentException("ai-llm-play needs previously provisioned official content embedded at build time.");
@@ -96,7 +100,7 @@ public static partial class CliCommands
 
         Directory.CreateDirectory(destination);
         var sampling = new LlmSampling(temperature, topP, topK, null, reasoning, ThinkingBudget: thinkingBudget);
-        var settings = new ModelDeciderSettings(maxToolCalls, cardText, structured, deadline, defer);
+        var settings = new ModelDeciderSettings(tools == "none" ? 0 : maxToolCalls ?? 3, tools == "all", structured, deadline, defer);
         RulesIndex? rules = File.Exists(Path.Combine(rulesRoot, "index.json")) ? RulesIndex.Load(rulesRoot) : null;
         using var client = new OpenAiCompatibleChatClient(options);
         IReadOnlyList<string> contents = RulesFuzzRunner.ContentIds("gateway");
