@@ -27,9 +27,11 @@ public sealed class TriggerAutomationAuditTests
     [Fact]
     public void EveryCardTriggerHasAReviewedVerdict()
     {
-        string[] actual = [.. GatewayBehaviorCatalog.Create().GenericSpecs
+        // Every card set's catalog: the Elevation and Vantage Point cards play in the client too.
+        string[] actual = [.. new[] { GatewayBehaviorCatalog.Create(), ElevationBehaviorCatalog.Create(), VantagePointBehaviorCatalog.Create() }
+            .SelectMany(catalog => catalog.GenericSpecs)
             .SelectMany(card => card.Triggers.Select(trigger => BeneficialTriggers.Describe(card, trigger)))
-            .Order(StringComparer.Ordinal)];
+            .Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)];
         string[] reviewed = File.Exists(FixturePath)
             ? [.. File.ReadAllLines(FixturePath).Where(line => line.Length > 0 && !line.StartsWith('#'))]
             : [];
