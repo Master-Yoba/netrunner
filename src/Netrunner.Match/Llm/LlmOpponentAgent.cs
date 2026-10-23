@@ -50,18 +50,28 @@ public sealed class LlmOpponentAgent : IAgentLifecycle
         Create(side, definition, new ModelDecider(client, sampling, rules, settings), shortlist);
 
     /// <summary>The opponent for one seat around the standard heuristic of that seat (with its scores kept).</summary>
-    public static LlmOpponentAgent Create(PlayerSide side, FullMatchDefinition definition, IStrategicDecider decider, int? shortlist = null)
+    public static LlmOpponentAgent Create(PlayerSide side, FullMatchDefinition definition, IStrategicDecider decider, int? shortlist = null) =>
+        Wrap((OfflineAgent)RatingLadder.CreateAgent("standard", side, definition), definition, decider, shortlist);
+
+    /// <summary>
+    /// The opponent around a given bot, such as a player's opponent or one restored from a save: its configuration and
+    /// state carry over to a copy that keeps its scores for the model.
+    /// </summary>
+    public static LlmOpponentAgent Wrap(OfflineAgent bot, FullMatchDefinition definition, IStrategicDecider decider, int? shortlist = null)
     {
+        ArgumentNullException.ThrowIfNull(bot);
         ArgumentNullException.ThrowIfNull(definition);
-        var standard = (OfflineAgent)RatingLadder.CreateAgent("standard", side, definition);
-        var heuristic = new OfflineAgent(standard.Configuration, OfflinePolicies.Create(standard.Configuration),
-            new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior), null, captureDiagnostics: true);
+        var heuristic = new OfflineAgent(bot.Configuration, OfflinePolicies.Create(bot.Configuration),
+            new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior), bot.Checkpoint, captureDiagnostics: true);
         // The match's own metadata: on an Elevation pool the Gateway data alone left Elevation cards untitled in the
         // LLM's views (bot loop 1: Sonnet named them by code).
         return new LlmOpponentAgent(heuristic, decider, definition.Metadata, definition.Behavior) { Shortlist = shortlist };
     }
 
     public PlayerSide ControlledSide => _heuristic.ControlledSide;
+
+    /// <summary>The bot it wraps, in step with the game: what a save or a session trace keeps of this opponent.</summary>
+    public OfflineAgent Heuristic => _heuristic;
 
     /// <summary>
     /// When set, the model chooses among only the heuristic's best options, this many (ranked by its priority, then

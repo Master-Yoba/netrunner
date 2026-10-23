@@ -4,6 +4,7 @@ using System.Threading.Channels;
 using Netrunner.AI;
 using Netrunner.Cards;
 using Netrunner.Core;
+using Netrunner.Match.Llm;
 
 namespace Netrunner.Match;
 
@@ -78,6 +79,12 @@ public sealed record MatchSubmissionResult(
 public sealed class MatchCoordinatorOptions
 {
     public bool EnableDeveloperTools { get; init; }
+
+    /// <summary>
+    /// Wraps a bot restored from an LLM opponent's save in the LLM opponent again (a save keeps only the bot); null, or a
+    /// null result, plays on with the bot.
+    /// </summary>
+    public Func<OfflineAgent, FullMatchDefinition, IGameAgent?>? RestoreLlmOpponent { get; init; }
 
     public TimeSpan AgentDelay { get; init; } = TimeSpan.Zero;
 
@@ -669,8 +676,8 @@ public sealed partial class MatchCoordinator : IAsyncDisposable, IDisposable
             _fullMatch?.Request,
             _document?.ScenarioId,
             DescribeAgent(_corpAgent),
-            _corpAgent is OfflineAgent ? _committedAgent : null,
-            _corpAgent is OfflineAgent && _replayInitial is not null
+            _corpAgent is OfflineAgent or LlmOpponentAgent ? _committedAgent : null,
+            (_corpAgent is OfflineAgent or LlmOpponentAgent) && _replayInitial is not null
                 ? new ReplayArtifact(_replayInitial, state.InitialSeed, _replayActions,
                     expectedFinalStateHash: DeterministicHash.ForState(state)) : null);
     }
