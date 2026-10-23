@@ -12,7 +12,8 @@ namespace Netrunner.Match.Llm;
 /// </summary>
 public static partial class LlmBoardText
 {
-    public static string Board(MatchViewModel view)
+    /// <param name="behavior">The match's cards, for each card's points in the score area it is in; without it, printed points.</param>
+    public static string Board(MatchViewModel view, IBehaviorCatalog? behavior = null)
     {
         ArgumentNullException.ThrowIfNull(view);
         var text = new StringBuilder();
@@ -32,7 +33,8 @@ public static partial class LlmBoardText
             text.AppendLine(CultureInfo.InvariantCulture,
                 $"  {name}: ICE [{string.Join(", ", server.Ice.Select((card, index) => Installed(view, card, ice[index], ice: true)))}] root [{string.Join(", ", server.Root.Select(card => Installed(view, card, card?.Id, ice: false)))}]");
         }
-        text.AppendLine(CultureInfo.InvariantCulture, $"Score areas: Corp {Scored(view.CorpScore)}; Runner {Scored(view.RunnerScore)}.");
+        text.AppendLine(CultureInfo.InvariantCulture,
+            $"Score areas: Corp {Scored(view.CorpScore, PlayerSide.Corp, behavior)}; Runner {Scored(view.RunnerScore, PlayerSide.Runner, behavior)}.");
         return text.ToString();
     }
 
@@ -190,11 +192,29 @@ public static partial class LlmBoardText
         _ => name,
     };
 
-    private static string Scored(IReadOnlyList<CardViewModel> cards) =>
+    private static string Scored(IReadOnlyList<CardViewModel> cards, PlayerSide area, IBehaviorCatalog? behavior) =>
         cards.Count > 0
-            ? $"[{string.Join(", ", cards.Select(card => string.Join(", ", new[] { card.AgendaPoints is { } points ? $"{points} points" : "", Counters(card) }
-                .Where(part => part.Length > 0)) is { Length: > 0 } details ? $"{card.Title} ({details})" : card.Title))}]"
+            ? $"[{string.Join(", ", cards.Select(card => string.Join(", ", new[]
+                {
+                    ScoreAreaPoints(card, area, behavior) is { } points ? $"{points} {(Math.Abs(points) == 1 ? "point" : "points")}" : "",
+                    Counters(card),
+                }.Where(part => part.Length > 0)) is { Length: > 0 } details ? $"{card.Title} ({details})" : card.Title))}]"
             : "empty";
+
+    /// <summary>
+    /// What a card adds to the score area it is in, as the engine counts it: an agenda's value there (Let Them Dream is
+    /// worth 1 to the Runner, 2 printed), or what a card added as an agenda is worth (Word on the Street, Myoshu).
+    /// </summary>
+    private static int? ScoreAreaPoints(CardViewModel card, PlayerSide area, IBehaviorCatalog? behavior)
+    {
+        if (behavior is null || card.DefinitionId is not { } code) return card.AgendaPoints;
+        var id = new CardDefinitionId(code);
+        if (behavior.TryGetAgenda(id, out AgendaBehaviorSpec agenda)) return agenda.PointsIn(area);
+        if (!behavior.TryGet(id, out CardBehaviorDefinition spec)) return card.AgendaPoints;
+        return spec.ScoreCostAsAgenda?.Points
+            ?? spec.Instructions.FirstOrDefault(instruction => instruction.Kind == BehaviorInstructionKind.AddSelfToScoreAreaAsAgenda)?.Amount
+            ?? card.AgendaPoints;
+    }
 
     private static string Hand(ZoneViewModel zone) =>
         zone.VisibleCards.Count > 0 ? $"[{string.Join(", ", zone.VisibleCards.Select(card => card.Title))}]" : $"{zone.Count} cards";

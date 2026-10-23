@@ -145,7 +145,7 @@ public sealed class LlmOpponentAgent : IAgentLifecycle
         Dictionary<ActionId, AgentUtility> scores, int advised)
     {
         var text = new StringBuilder();
-        text.Append(LlmBoardText.Board(view));
+        text.Append(LlmBoardText.Board(view, _behavior));
         text.AppendLine();
         text.AppendLine("Cards in view:");
         text.Append(LlmBoardText.Glossary(view));

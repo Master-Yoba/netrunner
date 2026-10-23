@@ -70,6 +70,21 @@ public sealed class LlmBoardTextTests
     }
 
     [Fact]
+    public void ScoreAreasShowWhatEachCardIsWorthThere()
+    {
+        // Codex review of #6: a stolen Let Them Dream read "2 points", printed, though it adds 1 to the Runner's score.
+        CardViewModel corpsDream = Card("card:1", "Let Them Dream", "Agenda") with { DefinitionId = "36066", AgendaPoints = 2 };
+        CardViewModel runnersDream = corpsDream with { Id = "card:2" };
+        CardViewModel word = Card("card:3", "Word on the Street", "Resource") with { DefinitionId = "36025" };
+        MatchViewModel view = View(PlayerSide.Runner, [], rig: [], corpScore: [corpsDream, word]) with { RunnerScore = [runnersDream] };
+
+        string board = LlmBoardText.Board(view, Netrunner.Cards.VantagePointBehaviorCatalog.Create());
+
+        Assert.Contains("Score areas: Corp [Let Them Dream (2 points), Word on the Street (-1 point)]; Runner [Let Them Dream (1 point)].",
+            board, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TheGlossaryNamesEachKindOfCost()
     {
         // Qwen read Ansel 1.0's "cost 6" as what installing it costs.
