@@ -9,7 +9,9 @@ namespace Netrunner.Match;
 /// credits, counters, clicks or cards, with nothing to pay, target or choose
 /// (Pennyshaver, Conduit, Zahya), is used; and when every trigger waiting to
 /// be ordered is such a trigger, their order can't matter and the first goes.
-/// A trigger with a cost, a choice or a target, or one that harms, stays the
+/// When only some are, the gains go first and the player then orders, or
+/// chooses in, the rest (MuslihaT's choice after Open Market's credit). A
+/// trigger with a cost, a choice or a target, or one that harms, stays the
 /// player's decision.
 /// </summary>
 public static class BeneficialTriggers
@@ -151,19 +153,32 @@ public static class BeneficialTriggers
             case DecisionKind.TriggerOrdering:
                 LegalAction[] orders = [.. pending.LegalActions.Where(action => action.Kind == ActionKind.OrderTriggers)];
                 if (orders.Length == 0 || orders.Length != pending.LegalActions.Count) return null;
-                return orders.All(action => action.Parameters is TriggerOrderParameters parameters
-                    && IsBeneficial(parameters.TriggerId.Value, features, catalog)) ? orders[0].Id : null;
+                if (orders.All(action => action.Parameters is TriggerOrderParameters parameters
+                    && IsBeneficial(parameters.TriggerId.Value, features, catalog))) return orders[0].Id;
+                // Gains before the player's decisions: they leave the player more to decide with (playtest, 23 October).
+                return orders.FirstOrDefault(action => action.Parameters is TriggerOrderParameters parameters
+                    && Gains(parameters.TriggerId.Value, features, catalog))?.Id;
             default:
                 return null;
         }
     }
 
-    public static bool IsBeneficial(string triggerId, AgentFeatures features, ICardEvaluationCatalog catalog)
+    /// <summary>Whether a trigger resolves for the player and gains them something, rather than only being harmless.</summary>
+    private static bool Gains(string triggerId, AgentFeatures features, ICardEvaluationCatalog catalog) =>
+        IsBeneficial(triggerId, features, catalog) && Declaration(triggerId, features, catalog) is { } declaration
+        && declaration.Instructions.Any(instruction => Verdict(instruction.Kind) is EffectVerdict.Gain
+            || Verdict(instruction.Kind) == EffectVerdict.Conditional && IsGainNow(instruction, features, features.Side));
+
+    private static BehaviorTrigger? Declaration(string triggerId, AgentFeatures features, ICardEvaluationCatalog catalog)
     {
         AgentTrigger? offered = features.PrivateCards.Triggers.FirstOrDefault(trigger => trigger.Id == triggerId);
-        if (offered is null || !catalog.TryGet(new CardDefinitionId(offered.Source.DefinitionId), out CardEvaluationDescriptor card))
-            return false;
-        BehaviorTrigger? declaration = card.Behavior?.Triggers.FirstOrDefault(trigger => trigger.Key == offered.Key);
+        return offered is not null && catalog.TryGet(new CardDefinitionId(offered.Source.DefinitionId), out CardEvaluationDescriptor card)
+            ? card.Behavior?.Triggers.FirstOrDefault(trigger => trigger.Key == offered.Key) : null;
+    }
+
+    public static bool IsBeneficial(string triggerId, AgentFeatures features, ICardEvaluationCatalog catalog)
+    {
+        BehaviorTrigger? declaration = Declaration(triggerId, features, catalog);
         if (declaration is null || Blocker(declaration) is not null) return false;
         if (declaration.Instructions.Any(instruction => Verdict(instruction.Kind) == EffectVerdict.Conditional
             && !IsGainNow(instruction, features, features.Side))) return false;
