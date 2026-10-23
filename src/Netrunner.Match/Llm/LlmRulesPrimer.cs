@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using Netrunner.Match.Review;
@@ -62,6 +61,8 @@ public static partial class LlmRulesPrimer
         - Programs use memory units (4 by default). Virus counters stay on their cards until the Corp purges.
         - Trace [N]: the Corp spends credits on top of N, then the Runner spends credits on top of their link; the
           trace succeeds if the Corp's total is higher.
+        - Card text symbols: [click] is a click, [subroutine] a subroutine, [trash] trashing the card itself as a cost,
+          and [interrupt] an ability that changes another effect just before it happens.
         """;
 
     /// <summary>
@@ -79,6 +80,9 @@ public static partial class LlmRulesPrimer
         (SabotageText(), ["10.12.1", "10.12.2"]),
         (RecurringText(), ["1.3.4"]),
         (ThreatText(), ["1.17.1"]),
+        (ForfeitText(), ["8.2.5"]),
+        (PersistentText(), ["9.12.5a", "9.12.5b"]),
+        (InterruptText(), ["9.9.1", "9.9.1a"]),
     ];
 
     /// <summary>The comprehensive rules for the mechanics <paramref name="request"/> shows, or "" for none.</summary>
@@ -91,9 +95,9 @@ public static partial class LlmRulesPrimer
         {
             if (!shows.IsMatch(request)) continue;
             foreach (string number in numbers)
-                if (rules.Rule(number) is { } rule) text.AppendLine(CultureInfo.InvariantCulture, $"{rule.Number} {rule.Text}");
+                if (rules.Rule(number) is { } rule) text.AppendLine(rule.Text.StartsWith(rule.Number, StringComparison.Ordinal) ? rule.Text : $"{rule.Number} {rule.Text}");
         }
-        return text.Length == 0 ? "" : "Rules for mechanics in view:\n" + text;
+        return text.Length == 0 ? "" : "\nRules for mechanics in view:\n" + text + "\n";
     }
 
     [GeneratedRegex(@"\btrace\b", RegexOptions.IgnoreCase)]
@@ -122,4 +126,13 @@ public static partial class LlmRulesPrimer
 
     [GeneratedRegex(@"\bthreat\b", RegexOptions.IgnoreCase)]
     private static partial Regex ThreatText();
+
+    [GeneratedRegex(@"\bforfeit", RegexOptions.IgnoreCase)]
+    private static partial Regex ForfeitText();
+
+    [GeneratedRegex(@"\bpersistent\b", RegexOptions.IgnoreCase)]
+    private static partial Regex PersistentText();
+
+    [GeneratedRegex(@"\[interrupt\]", RegexOptions.IgnoreCase)]
+    private static partial Regex InterruptText();
 }

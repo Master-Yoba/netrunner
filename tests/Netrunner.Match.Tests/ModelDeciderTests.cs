@@ -62,8 +62,8 @@ public sealed class ModelDeciderTests
 
         string user = model.Requests[0].Messages[1].Content!;
         Assert.Contains("Rules for mechanics in view:", user, StringComparison.Ordinal);
-        Assert.Contains("10.8.2 ", user, StringComparison.Ordinal);
-        Assert.DoesNotContain("10.12.1 ", user, StringComparison.Ordinal);
+        Assert.Contains("\n10.8.2. ", user, StringComparison.Ordinal);
+        Assert.DoesNotContain("10.12.1.", user, StringComparison.Ordinal);
         Assert.Equal("", LlmRulesPrimer.RulesFor("1. Gain 1 credit\n", RulesIndex.Load(RulesRoot)));
     }
 

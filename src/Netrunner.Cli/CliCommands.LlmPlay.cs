@@ -11,20 +11,21 @@ namespace Netrunner.Cli;
 public static partial class CliCommands
 {
     /// <summary>
-    /// ai-llm-play --output new-dir [--side corp|runner|both] [--games N] [--seed S] [--opponent ENTRANT]
+    /// ai-llm-play --output new-dir [--content POOL] [--side corp|runner|both] [--games N] [--seed S] [--opponent ENTRANT]
     /// [--temperature T] [--top-p P] [--top-k K] [--reasoning low|medium|xhigh] [--tools none|rules|all]
     /// [--max-tool-calls N] [--thinking-budget TOKENS] [--free-answer] [--no-defer] [--shortlist N] [--deadline-seconds S]
-    /// [--parallel N] [--model NAME] [--rules-root DIR]. The LLM opponent (Wave 4.5, P3) plays Gateway games
-    /// against a bot, N at a time (one per server slot; one by default). The defaults are the player-facing settings
-    /// of docs/LLM_OPPONENT.md: no lookups, a 400-token thinking budget, structured answers, deferring to the heuristic
-    /// among its best 3 options, and a 30 s deadline; 0 turns off a budget, a shortlist or the deadline. Each game is
-    /// saved as <c>ai-ladder --save-games</c> saves it, with the LLM's decisions beside it, so ai-lint and
-    /// ai-llm-review read them. Exit 0 when every game finished without a stall or an error, 1 otherwise, 2 for invalid arguments.
+    /// [--parallel N] [--model NAME] [--rules-root DIR]. The LLM opponent (Wave 4.5, P3) plays games of a deck pool
+    /// (<c>ai-ladder</c>'s <c>--content</c>, Gateway by default) against a bot, N at a time (one per server slot; one by
+    /// default). The defaults are the player-facing settings of docs/LLM_OPPONENT.md: no lookups, a 400-token thinking
+    /// budget, structured answers, deferring to the heuristic among its best 3 options, and a 30 s deadline; 0 turns off
+    /// a budget, a shortlist or the deadline. Each game is saved as <c>ai-ladder --save-games</c> saves it, with the
+    /// LLM's decisions beside it, so ai-lint and ai-llm-review read them. Exit 0 when every game finished without a
+    /// stall or an error, 1 otherwise, 2 for invalid arguments.
     /// </summary>
     private static int RunAiLlmPlay(string[] args, TextWriter output, TextWriter error)
     {
         string destination = "", opponent = "standard", rulesRoot = Path.Combine("data", "vendor", "rules");
-        string? sides = "both", model = null, reasoning = "low", tools = "none";
+        string? sides = "both", model = null, reasoning = "low", tools = "none", pool = "gateway";
         // The defaults are the settings the latency and override sweeps chose for a player-facing opponent
         // (docs/LLM_OPPONENT.md); each flag turns one of them off.
         int games = 2, firstGame = 0, parallel = 1;
@@ -50,6 +51,11 @@ public static partial class CliCommands
                     case "--first-game": firstGame = int.Parse(Next(), NumberStyles.None, CultureInfo.InvariantCulture); break;
                     case "--seed": seed = ulong.Parse(Next(), NumberStyles.None, CultureInfo.InvariantCulture); break;
                     case "--opponent": opponent = Next(); break;
+                    case "--content":
+                        pool = Next();
+                        if (pool == "developer" || !RulesFuzzRunner.ContentNames.Contains(pool, StringComparer.Ordinal))
+                            throw new ArgumentException($"--content requires one of {string.Join(", ", RulesFuzzRunner.ContentNames.Where(name => name != "developer"))}.");
+                        break;
                     case "--temperature": temperature = double.Parse(Next(), NumberStyles.Float, CultureInfo.InvariantCulture); break;
                     case "--top-p": topP = double.Parse(Next(), NumberStyles.Float, CultureInfo.InvariantCulture); break;
                     case "--top-k": topK = int.Parse(Next(), NumberStyles.None, CultureInfo.InvariantCulture); break;
@@ -103,13 +109,13 @@ public static partial class CliCommands
         var settings = new ModelDeciderSettings(tools == "none" ? 0 : maxToolCalls ?? 3, tools == "all", structured, deadline, defer);
         RulesIndex? rules = File.Exists(Path.Combine(rulesRoot, "index.json")) ? RulesIndex.Load(rulesRoot) : null;
         using var client = new OpenAiCompatibleChatClient(options);
-        IReadOnlyList<string> contents = RulesFuzzRunner.ContentIds("gateway");
+        IReadOnlyList<string> contents = RulesFuzzRunner.ContentIds(pool);
         TextWriter progress = TextWriter.Synchronized(error);
         var played = new (LadderGameResult Result, List<LlmOpponentDecision> Decisions, string Line)[games];
         Parallel.ForEachAsync(Enumerable.Range(0, games), new ParallelOptions { MaxDegreeOfParallelism = parallel }, async (slot, cancellationToken) =>
         {
             int number = firstGame + slot;
-            // Both sides alternate, and the deals walk the Gateway pairings.
+            // Both sides alternate, and the deals walk the pool's pairings.
             bool llmCorp = sides == "corp" || (sides == "both" && number % 2 == 0);
             string content = contents[number % contents.Count];
             ulong gameSeed = RulesFuzzRunner.DeriveGameSeed(seed, number);
