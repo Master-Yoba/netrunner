@@ -97,7 +97,7 @@ public sealed record SoloSaveDocument(int SchemaVersion, string ArtifactKind, So
         Payload.Opponent.Configuration?.ProfileId ?? "contract-baseline", Payload.Snapshot.Turn.TurnNumber,
         Payload.Snapshot.Turn.Phase.ToString(), Metadata.UpdatedUtc, Payload.Snapshot.Outcome.Kind != GameOutcomeKind.Ongoing,
         Payload.Opponent.Configuration is { } configuration ? AgentPersonalities.Of(configuration) : AgentPersonality.Balanced,
-        Metadata.FormatId);
+        Metadata.FormatId, Payload.Opponent.LlmOpponent);
 
     private static string Hash(int schema, string kind, SoloSaveMetadata metadata, SoloSavePayload payload,
         string engineStateHash, string policyStateHash) =>
@@ -106,4 +106,4 @@ public sealed record SoloSaveDocument(int SchemaVersion, string ArtifactKind, So
 
 public sealed record SoloSavePreview(string SaveId, string Name, PlayerSide HumanSide, ulong Seed,
     string CorpDeck, string RunnerDeck, string Difficulty, int Turn, string Phase, DateTimeOffset UpdatedUtc, bool IsTerminal,
-    AgentPersonality Personality = AgentPersonality.Balanced, string? FormatId = null);
+    AgentPersonality Personality = AgentPersonality.Balanced, string? FormatId = null, bool LlmOpponent = false);

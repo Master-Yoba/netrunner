@@ -34,6 +34,7 @@ public sealed class LlmOpponentAgent : IAgentLifecycle
     private readonly IBehaviorCatalog _behavior;
     private readonly List<(int Turn, string Choice, string Reason)> _recent = [];
     private ActionId? _advice;
+    private readonly int? _shortlist;
 
     public LlmOpponentAgent(OfflineAgent heuristic, IStrategicDecider decider, ICardMetadataResolver metadata, IBehaviorCatalog behavior)
     {
@@ -45,22 +46,42 @@ public sealed class LlmOpponentAgent : IAgentLifecycle
 
     /// <summary>The LLM opponent for one seat, asking a model over an OpenAI-compatible chat.</summary>
     public static LlmOpponentAgent Create(PlayerSide side, FullMatchDefinition definition, ILlmChatClient client, LlmSampling sampling,
-        RulesIndex? rules = null, int maxToolCalls = 3) =>
-        Create(side, definition, new ModelDecider(client, sampling, rules, maxToolCalls));
+        RulesIndex? rules = null, ModelDeciderSettings? settings = null, int? shortlist = null) =>
+        Create(side, definition, new ModelDecider(client, sampling, rules, settings), shortlist);
 
     /// <summary>The opponent for one seat around the standard heuristic of that seat (with its scores kept).</summary>
-    public static LlmOpponentAgent Create(PlayerSide side, FullMatchDefinition definition, IStrategicDecider decider)
+    public static LlmOpponentAgent Create(PlayerSide side, FullMatchDefinition definition, IStrategicDecider decider, int? shortlist = null) =>
+        Wrap((OfflineAgent)RatingLadder.CreateAgent("standard", side, definition), definition, decider, shortlist);
+
+    /// <summary>
+    /// The opponent around a given bot, such as a player's opponent or one restored from a save: its configuration and
+    /// state carry over to a copy that keeps its scores for the model.
+    /// </summary>
+    public static LlmOpponentAgent Wrap(OfflineAgent bot, FullMatchDefinition definition, IStrategicDecider decider, int? shortlist = null)
     {
+        ArgumentNullException.ThrowIfNull(bot);
         ArgumentNullException.ThrowIfNull(definition);
-        var standard = (OfflineAgent)RatingLadder.CreateAgent("standard", side, definition);
-        var heuristic = new OfflineAgent(standard.Configuration, OfflinePolicies.Create(standard.Configuration),
-            new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior), null, captureDiagnostics: true);
+        var heuristic = new OfflineAgent(bot.Configuration, OfflinePolicies.Create(bot.Configuration),
+            new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior), bot.Checkpoint, captureDiagnostics: true);
         // The match's own metadata: on an Elevation pool the Gateway data alone left Elevation cards untitled in the
         // LLM's views (bot loop 1: Sonnet named them by code).
-        return new LlmOpponentAgent(heuristic, decider, definition.Metadata, definition.Behavior);
+        return new LlmOpponentAgent(heuristic, decider, definition.Metadata, definition.Behavior) { Shortlist = shortlist };
     }
 
     public PlayerSide ControlledSide => _heuristic.ControlledSide;
+
+    /// <summary>The bot it wraps, in step with the game: what a save or a session trace keeps of this opponent.</summary>
+    public OfflineAgent Heuristic => _heuristic;
+
+    /// <summary>
+    /// When set, the model chooses among only the heuristic's best options, this many (ranked by its priority, then
+    /// score), and isn't asked when one remains; the heuristic's own choice is always among them.
+    /// </summary>
+    public int? Shortlist
+    {
+        get => _shortlist;
+        init => _shortlist = value is null or >= 2 ? value : throw new ArgumentOutOfRangeException(nameof(value), "A shortlist needs at least 2 options.");
+    }
 
     public List<LlmOpponentDecision> Decisions { get; } = [];
 
@@ -76,10 +97,12 @@ public sealed class LlmOpponentAgent : IAgentLifecycle
 
         MatchViewModel view = ObservationViewMapper.Build(observation, _metadata, _behavior);
         Func<LegalAction?, string?> describe = HumanGameReview.Describer(view);
-        IReadOnlyList<LegalAction> options = observation.LegalActions;
-        int advised = options.ToList().FindIndex(action => action.Id == advice) + 1;
+        IReadOnlyList<LegalAction> legal = observation.LegalActions;
         Dictionary<ActionId, AgentUtility> scores = _heuristic.LastEvaluation?.Candidates.ToDictionary(candidate => candidate.ActionId, candidate => candidate.Utility)
             ?? [];
+        IReadOnlyList<LegalAction> options = Shortlist is { } size && scores.Count == legal.Count ? Shortlisted(legal, scores, advice, size) : legal;
+        if (options.Count < 2) return advice;
+        int advised = options.ToList().FindIndex(action => action.Id == advice) + 1;
         string request = Request(view, options, describe, scores, advised);
 
         var watch = Stopwatch.StartNew();
@@ -90,8 +113,8 @@ public sealed class LlmOpponentAgent : IAgentLifecycle
 
         string outcome = choice is not null ? "model" : failure is not null ? "failed" : "invalid";
         int chosen = choice ?? advised;
-        var made = new LlmOpponentDecision(view.Turn.TurnNumber ?? 0, decision.Prompt, options.Count, advised, chosen, outcome,
-            reason ?? failure, toolCalls, watch.Elapsed.TotalSeconds);
+        var made = new LlmOpponentDecision(view.Turn.TurnNumber ?? 0, decision.Prompt, legal.Count, Position(legal, options[advised - 1]),
+            Position(legal, options[chosen - 1]), outcome, reason ?? failure, toolCalls, watch.Elapsed.TotalSeconds);
         Decisions.Add(made);
         Decided?.Invoke(made);
         if (choice is not null)
@@ -118,11 +141,21 @@ public sealed class LlmOpponentAgent : IAgentLifecycle
         _advice = null;
     }
 
+    /// <summary>The heuristic's best <paramref name="size"/> options and its own choice, in the engine's order.</summary>
+    private static List<LegalAction> Shortlisted(IReadOnlyList<LegalAction> legal, Dictionary<ActionId, AgentUtility> scores, ActionId advice, int size)
+    {
+        HashSet<ActionId> best = [.. legal.OrderByDescending(action => scores[action.Id].Priority).ThenByDescending(action => scores[action.Id].Score)
+            .Take(size).Select(action => action.Id), advice];
+        return [.. legal.Where(action => best.Contains(action.Id))];
+    }
+
+    private static int Position(IReadOnlyList<LegalAction> legal, LegalAction action) => legal.ToList().IndexOf(action) + 1;
+
     private string Request(MatchViewModel view, IReadOnlyList<LegalAction> options, Func<LegalAction?, string?> describe,
         Dictionary<ActionId, AgentUtility> scores, int advised)
     {
         var text = new StringBuilder();
-        text.Append(LlmBoardText.Board(view));
+        text.Append(LlmBoardText.Board(view, _behavior));
         text.AppendLine();
         text.AppendLine("Cards in view:");
         text.Append(LlmBoardText.Glossary(view));

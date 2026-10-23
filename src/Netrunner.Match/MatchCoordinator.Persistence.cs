@@ -1,5 +1,6 @@
 using Netrunner.AI;
 using Netrunner.Core;
+using Netrunner.Match.Llm;
 
 namespace Netrunner.Match;
 
@@ -12,9 +13,17 @@ public sealed partial class MatchCoordinator
     private IReadOnlyList<MatchHistoryEntry>? _restoredHistory;
 
     public MatchCoordinator(FullMatchDefinition definition, SoloSaveDocument save, MatchCoordinatorOptions? options = null)
-        : this(null, definition, save.Payload.Opponent.Restore(definition.Behavior, definition.Runtime),
+        : this(null, definition, RestoreOpponent(definition, save, options),
             options ?? new MatchCoordinatorOptions { HumanSide = save.Metadata.HumanSide }, save)
     {
+    }
+
+    /// <summary>The saved bot, wrapped again in the LLM opponent when the save was one's and the options can make one.</summary>
+    private static IGameAgent RestoreOpponent(FullMatchDefinition definition, SoloSaveDocument save, MatchCoordinatorOptions? options)
+    {
+        IGameAgent restored = save.Payload.Opponent.Restore(definition.Behavior, definition.Runtime);
+        return save.Payload.Opponent.LlmOpponent && restored is OfflineAgent bot
+            && options?.RestoreLlmOpponent?.Invoke(bot, definition) is { } llm ? llm : restored;
     }
 
     /// <summary>Captures a detached document and leaves the session paused at that exact boundary.</summary>
@@ -37,7 +46,7 @@ public sealed partial class MatchCoordinator
 
     private void CacheCommittedAgent()
     {
-        if (_corpAgent is OfflineAgent or FullGameContractAgent)
+        if (_corpAgent is OfflineAgent or FullGameContractAgent or LlmOpponentAgent)
             _committedAgent = SoloAgentState.Capture(_corpAgent);
     }
 

@@ -46,10 +46,34 @@ public sealed class LlmOpponentAgentTests
     }
 
     [Fact]
+    public async Task AShortlistOffersOnlyTheHeuristicsBestOptions()
+    {
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
+        var decider = new LastOptionDecider();
+        LlmOpponentAgent? runner = null;
+        var game = new LadderGame("standard-vs-llm-test", "gateway-quick-and-dirty~gateway-party-hard", 7UL, "standard", "llm");
+        LadderGameResult result = await RatingLadder.PlayAsync(game, RatingLadder.DefaultActionCap, _ => { },
+            (entrant, side, definition) => entrant == "llm"
+                ? runner = LlmOpponentAgent.Create(side, definition, decider, shortlist: 3)
+                : RatingLadder.CreateAgent(entrant, side, definition));
+
+        Assert.Null(result.Error);
+        Assert.NotNull(runner);
+        Assert.NotEmpty(decider.Offered);
+        Assert.All(decider.Offered, options => Assert.InRange(options, 2, 4));
+        // The decisions record positions among every legal option, as without a shortlist.
+        Assert.Contains(runner.Decisions, decision => decision.Options > 4);
+        Assert.All(runner.Decisions, decision => Assert.InRange(decision.Chosen, 1, decision.Options));
+        Assert.Contains(runner.Decisions, decision => decision.Chosen != decision.Advised);
+        Assert.Throws<ArgumentOutOfRangeException>(() => LlmOpponentAgent.Create(Netrunner.Core.PlayerSide.Runner,
+            RulesFuzzRunner.CreateDefinition("gateway-quick-and-dirty~gateway-party-hard", 7UL), decider, shortlist: 1));
+    }
+
+    [Fact]
     public async Task ToolArgumentsThatArentAnObjectGetAToolErrorAndTheDecisionGoesOn()
     {
         var model = new ToolCallingModel("[]", "\"Hedge Fund\"", "42", "{not json", "null");
-        StrategicVerdict verdict = await new ModelDecider(model, new LlmSampling(), maxToolCalls: 5)
+        StrategicVerdict verdict = await new ModelDecider(model, new LlmSampling(), settings: new ModelDeciderSettings(MaxToolCalls: 5))
             .DecideAsync(Netrunner.Core.PlayerSide.Corp, "Options:\n1. Click for a credit\n", 1, CancellationToken.None);
 
         Assert.Equal(1, verdict.Option);
@@ -59,6 +83,18 @@ public sealed class LlmOpponentAgentTests
             ["The arguments must be a JSON object.", "The arguments must be a JSON object.", "The arguments must be a JSON object.",
                 "The arguments weren't valid JSON.", "There is no tool called 'look'."],
             model.ToolReplies);
+    }
+
+    /// <summary>Always picks the last option offered, and keeps how many there were.</summary>
+    private sealed class LastOptionDecider : IStrategicDecider
+    {
+        public List<int> Offered { get; } = [];
+
+        public Task<StrategicVerdict> DecideAsync(Netrunner.Core.PlayerSide side, string request, int options, CancellationToken cancellationToken)
+        {
+            Offered.Add(options);
+            return Task.FromResult(new StrategicVerdict(options, "last", null));
+        }
     }
 
     /// <summary>Calls the tool "look" once with each given argument text, then answers option 1.</summary>

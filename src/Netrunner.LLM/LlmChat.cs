@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace Netrunner.LLM;
@@ -21,11 +22,19 @@ public sealed record LlmChatMessage(string Role, string? Content, IReadOnlyList<
     public static LlmChatMessage Tool(string callId, string content) => new("tool", content, ToolCallId: callId);
 }
 
-/// <summary>Sampling for one request; null leaves the server's default.</summary>
+/// <summary>
+/// Sampling for one request; null leaves the server's default. <see cref="ThinkingBudget"/> caps a reasoning
+/// model's thinking in tokens (llama.cpp's <c>thinking_budget_tokens</c>).
+/// </summary>
 public sealed record LlmSampling(double? Temperature = null, double? TopP = null, int? TopK = null, int? Seed = null,
-    string? ReasoningEffort = null, int? MaxTokens = null);
+    string? ReasoningEffort = null, int? MaxTokens = null, int? ThinkingBudget = null);
 
-public sealed record LlmChatRequest(IReadOnlyList<LlmChatMessage> Messages, IReadOnlyList<LlmTool> Tools, LlmSampling Sampling);
+/// <summary>
+/// One chat request. A <see cref="AnswerSchema"/> (a JSON schema) constrains the answer to that shape; after a
+/// thinking budget runs out, a model without one tends to keep thinking in its answer.
+/// </summary>
+public sealed record LlmChatRequest(IReadOnlyList<LlmChatMessage> Messages, IReadOnlyList<LlmTool> Tools, LlmSampling Sampling,
+    JsonObject? AnswerSchema = null);
 
 public sealed record LlmUsage(int PromptTokens, int CompletionTokens);
 
@@ -39,8 +48,8 @@ public interface ILlmChatClient
 
 /// <summary>
 /// A chat client for any server with an OpenAI-compatible <c>/chat/completions</c> API (llama.cpp,
-/// Ollama, vLLM, LM Studio). Sampling fields are sent only when set; <c>top_k</c> and
-/// <c>reasoning_effort</c> are extensions some servers read and others ignore.
+/// Ollama, vLLM, LM Studio). Sampling fields are sent only when set; <c>top_k</c>, <c>reasoning_effort</c> and
+/// <c>thinking_budget_tokens</c> are extensions some servers read and others ignore.
 /// </summary>
 public sealed class OpenAiCompatibleChatClient(OpenAiCompatibleOptions options, HttpClient? client = null) : ILlmChatClient, IDisposable
 {
@@ -73,6 +82,13 @@ public sealed class OpenAiCompatibleChatClient(OpenAiCompatibleOptions options, 
         if (sampling.Seed is { } seed) body["seed"] = seed;
         if (sampling.ReasoningEffort is { } effort) body["reasoning_effort"] = effort;
         if (sampling.MaxTokens is { } maxTokens) body["max_tokens"] = maxTokens;
+        if (sampling.ThinkingBudget is { } budget) body["thinking_budget_tokens"] = budget;
+        if (request.AnswerSchema is { } schema)
+            body["response_format"] = new JsonObject
+            {
+                ["type"] = "json_schema",
+                ["json_schema"] = new JsonObject { ["name"] = "answer", ["strict"] = true, ["schema"] = schema.DeepClone() },
+            };
 
         using var message = new HttpRequestMessage(HttpMethod.Post, new Uri(options.BaseUri.ToString().TrimEnd('/') + "/chat/completions"))
         {
@@ -123,6 +139,42 @@ public sealed class OpenAiCompatibleChatClient(OpenAiCompatibleOptions options, 
     public void Dispose()
     {
         if (_owns) _client.Dispose();
+    }
+
+    /// <summary>
+    /// Asks the server for its model list with these options' key, as a settings screen's connection test: whether it
+    /// answered, and a sentence for the player.
+    /// </summary>
+    public async Task<(bool Reachable, string Message)> CheckAsync(CancellationToken cancellationToken = default)
+    {
+        using var message = new HttpRequestMessage(HttpMethod.Get, new Uri(options.BaseUri.ToString().TrimEnd('/') + "/models"));
+        if (!string.IsNullOrEmpty(options.ApiKey)) message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", options.ApiKey);
+        try
+        {
+            using HttpResponseMessage response = await _client.SendAsync(message, cancellationToken).ConfigureAwait(false);
+            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized) return (false, "The server refused the API key.");
+            if (!response.IsSuccessStatusCode) return (false, $"The server answered {(int)response.StatusCode} {response.ReasonPhrase}.");
+            string[] models = [];
+            try
+            {
+                models = JsonNode.Parse(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false))?["data"] is JsonArray data
+                    ? [.. data.Select(model => (string?)model?["id"]).OfType<string>()] : [];
+            }
+            catch (JsonException)
+            {
+                // A server without a model list still answered.
+            }
+            return (true, models.Length == 0 || models.Contains(options.Model, StringComparer.Ordinal)
+                ? $"Connected to {options.BaseUri}." : $"Connected; the server lists {string.Join(", ", models)}, not {options.Model}.");
+        }
+        catch (HttpRequestException exception)
+        {
+            return (false, $"Could not reach the server: {exception.Message}");
+        }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return (false, "The server did not answer in time.");
+        }
     }
 
     /// <summary>

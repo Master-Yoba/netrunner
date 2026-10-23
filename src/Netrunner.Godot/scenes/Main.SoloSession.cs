@@ -88,6 +88,7 @@ public partial class Main
 		if (!HasAuthenticatedOfficialContent()) throw new InvalidOperationException("Installed official game content is required to load saves.");
 		// D-EL-8: each save loads with the content of the format it records.
 		_soloSession = _applicationSoloSession ??= new(PlayFormats.SaveContent, SoloSaveDirectory());
+		_soloSession.RestoreLlmOpponent = RestoreLlmOpponent;
 		if (_coordinator is not null) _soloSession.SetActiveSession(_coordinator);
 		return _soloSession;
 	}
@@ -312,7 +313,7 @@ public partial class Main
 			if (_runnerPresetIds.ContainsValue(preview.RunnerDeck)) SelectPresetById(_runnerPreset, _runnerPresetIds, preview.RunnerDeck);
 			_difficulty?.Select(DifficultyIndex(preview.Difficulty));
 			SelectPersonality(preview.Personality);
-			_matchHistory.ReportHeader = $"Netrunner · saved seed {preview.Seed} · {preview.HumanSide} · {preview.Difficulty}{(preview.Personality == AgentPersonality.Balanced ? "" : " " + AgentPersonalities.Key(preview.Personality))} · {preview.CorpDeck} / {preview.RunnerDeck}";
+			_matchHistory.ReportHeader = $"Netrunner · saved seed {preview.Seed} · {preview.HumanSide} · {(preview.LlmOpponent ? "local LLM" : preview.Difficulty)}{(preview.Personality == AgentPersonality.Balanced ? "" : " " + AgentPersonalities.Key(preview.Personality))} · {preview.CorpDeck} / {preview.RunnerDeck}";
 			_fullMatchSessionGlobalDirectory = trace;
 			_fullMatchDiagnosticsParentDirectory = trace;
 			OpenUiTrace(trace);
