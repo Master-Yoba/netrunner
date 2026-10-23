@@ -166,7 +166,7 @@ public partial class Main
 		BeginCardHoverPreviewSnapshot(snapshot);
 		_board.Visible = true;
 		_status.Text = snapshot.IsTerminal ? $"{snapshot.View.Outcome.Winner} wins · {snapshot.View.Outcome.Reason}"
-			: snapshot.IsOpponentThinking ? "Opponent is thinking" : $"Playing {snapshot.View.Viewer}";
+			: snapshot.IsOpponentThinking ? OpponentThinkingText().Status : $"Playing {snapshot.View.Viewer}";
 		_phase.Text = $"Turn {snapshot.View.Turn.TurnNumber} · {snapshot.View.Turn.ActiveSide}";
 		if (decisionChanged)
 		{
@@ -212,7 +212,7 @@ public partial class Main
 			_tableActionButtons.Clear();
 			RefreshAccessActions(snapshot);
 			DecisionViewModel? decision = snapshot.View.Decision;
-			_tablePrompt.Text = snapshot.IsOpponentThinking ? "Opponent is thinking. You can inspect cards and read history."
+			_tablePrompt.Text = snapshot.IsOpponentThinking ? OpponentThinkingText().Prompt
 				: snapshot.IsTerminal ? "Match complete."
 				: _fullMatchResumePaused ? $"Paused at action {snapshot.ActionCount}. Continue when ready."
 				: decision is null ? "Waiting for the next decision…"

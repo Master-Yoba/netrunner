@@ -97,6 +97,10 @@ public partial class Main
 		{
 			_ = RunSoloClientSmokeAsync(arguments);
 		}
+		else if (arguments.Contains("--llm-opponent-smoke", StringComparer.Ordinal))
+		{
+			_ = RunLlmOpponentSmokeAsync();
+		}
 		else if (arguments.Contains("--card-art-smoke", StringComparer.Ordinal) || arguments.Contains("--card-art-cache-smoke", StringComparer.Ordinal))
 		{
 			_ = RunCardArtworkSmokeAsync(arguments.Contains("--card-art-cache-smoke", StringComparer.Ordinal));

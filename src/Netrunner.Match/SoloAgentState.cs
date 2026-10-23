@@ -1,7 +1,9 @@
 using System.Collections.Immutable;
+using System.Text.Json.Serialization;
 using Netrunner.AI;
 using Netrunner.Cards;
 using Netrunner.Core;
+using Netrunner.Match.Llm;
 
 namespace Netrunner.Match;
 
@@ -9,8 +11,16 @@ namespace Netrunner.Match;
 public sealed record SoloAgentState(string Kind, string Version, PlayerSide Side,
     OfflineAgentConfiguration? Configuration, OfflineAgentCheckpoint? Checkpoint, SoloContractPolicy? ContractPolicy)
 {
+    /// <summary>
+    /// The bot was the LLM opponent's (its model isn't saved): a load wraps it again when a model server is set. Omitted
+    /// when false, so other saves and their hashes are unchanged.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool LlmOpponent { get; init; }
+
     public static SoloAgentState Capture(IGameAgent agent) => agent switch
     {
+        LlmOpponentAgent llm => Capture(llm.Heuristic) with { LlmOpponent = true },
         OfflineAgent offline => new("offline", OfflineAgentConfiguration.CurrentAgentVersion, offline.ControlledSide,
             offline.Configuration, offline.Checkpoint, null),
         FullGameContractAgent contract => new("contract", FullGameContractAgent.Version,

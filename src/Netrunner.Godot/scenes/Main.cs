@@ -172,6 +172,7 @@ public partial class Main : Control
 		}
 		else PollCoordinator();
 		ReportAutomaticSaveStatus(delta);
+		UpdateOpponentThinking();
 		if (_animationRunning)
 		{
 			_framesWhileAnimating++;

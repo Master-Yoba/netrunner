@@ -1,3 +1,4 @@
+using Netrunner.AI;
 using Netrunner.Core;
 
 namespace Netrunner.Match;
@@ -61,6 +62,9 @@ public sealed class SoloSessionService : IAsyncDisposable
         }
     }
 
+    /// <summary>Wraps the bot of a loaded LLM opponent's save in the LLM opponent again (see MatchCoordinatorOptions).</summary>
+    public Func<OfflineAgent, FullMatchDefinition, IGameAgent?>? RestoreLlmOpponent { get; set; }
+
     public Task<IReadOnlyList<SoloSaveBrowserEntry>> BrowseAsync(CancellationToken cancellationToken = default) =>
         _store.BrowseAsync(cancellationToken);
 
@@ -76,6 +80,7 @@ public sealed class SoloSessionService : IAsyncDisposable
                 AutoPassPriority = true,
                 AgentDelay = TimeSpan.FromMilliseconds(45),
                 SessionTraceDirectory = traceDirectory,
+                RestoreLlmOpponent = RestoreLlmOpponent,
             }), cancellationToken).ConfigureAwait(false);
         try
         {

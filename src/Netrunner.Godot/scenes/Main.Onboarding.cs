@@ -192,6 +192,7 @@ public partial class Main
 		_soundEnabled = (bool)config.GetValue("audio", "sound", true);
 		_autoBenefitsEnabled = (bool)config.GetValue("play", "auto_benefits", true);
 		_effectsLevel = Math.Clamp((float)config.GetValue("audio", "effects_volume", 0.7f), 0f, 1f);
+		LoadLlmPreferences(config);
 		foreach (string id in ((string)config.GetValue("onboarding", "seen_hints", "")).Split(',', StringSplitOptions.RemoveEmptyEntries))
 			_seenHints.Add(id);
 	}
@@ -207,6 +208,7 @@ public partial class Main
 		config.SetValue("audio", "sound", _soundEnabled);
 		config.SetValue("play", "auto_benefits", _autoBenefitsEnabled);
 		config.SetValue("audio", "effects_volume", _effectsLevel);
+		SaveLlmPreferences(config);
 		Error result = config.Save(PreferencesPath);
 		if (result != Error.Ok) GD.PushWarning($"Could not save preferences: {result}");
 	}

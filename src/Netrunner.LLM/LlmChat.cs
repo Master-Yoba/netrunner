@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace Netrunner.LLM;
@@ -138,6 +139,42 @@ public sealed class OpenAiCompatibleChatClient(OpenAiCompatibleOptions options, 
     public void Dispose()
     {
         if (_owns) _client.Dispose();
+    }
+
+    /// <summary>
+    /// Asks the server for its model list with these options' key, as a settings screen's connection test: whether it
+    /// answered, and a sentence for the player.
+    /// </summary>
+    public async Task<(bool Reachable, string Message)> CheckAsync(CancellationToken cancellationToken = default)
+    {
+        using var message = new HttpRequestMessage(HttpMethod.Get, new Uri(options.BaseUri.ToString().TrimEnd('/') + "/models"));
+        if (!string.IsNullOrEmpty(options.ApiKey)) message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", options.ApiKey);
+        try
+        {
+            using HttpResponseMessage response = await _client.SendAsync(message, cancellationToken).ConfigureAwait(false);
+            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized) return (false, "The server refused the API key.");
+            if (!response.IsSuccessStatusCode) return (false, $"The server answered {(int)response.StatusCode} {response.ReasonPhrase}.");
+            string[] models = [];
+            try
+            {
+                models = JsonNode.Parse(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false))?["data"] is JsonArray data
+                    ? [.. data.Select(model => (string?)model?["id"]).OfType<string>()] : [];
+            }
+            catch (JsonException)
+            {
+                // A server without a model list still answered.
+            }
+            return (true, models.Length == 0 || models.Contains(options.Model, StringComparer.Ordinal)
+                ? $"Connected to {options.BaseUri}." : $"Connected; the server lists {string.Join(", ", models)}, not {options.Model}.");
+        }
+        catch (HttpRequestException exception)
+        {
+            return (false, $"Could not reach the server: {exception.Message}");
+        }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return (false, "The server did not answer in time.");
+        }
     }
 
     /// <summary>
