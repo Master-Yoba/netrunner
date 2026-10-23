@@ -190,6 +190,7 @@ public partial class Main
 		_menuOpponentDecks.AddThemeConstantOverride("h_separation", 12);
 		_menuOpponentDecks.AddThemeConstantOverride("v_separation", 12);
 		view.AddChild(_menuOpponentDecks);
+		BuildMenuOpponentKinds(view);
 		// A6: the values are the setup form's difficulty items (Standard, Easy, Hard).
 		_menuDifficulties = MenuToggleRow(view, [("Easy opponent", "1"), ("Standard opponent", "0"), ("Hard opponent", "2")], "0",
 			value => _menuDifficulty = int.Parse(value, System.Globalization.CultureInfo.InvariantCulture));
@@ -352,7 +353,7 @@ public partial class Main
 	/// <summary>Starts the chosen game through the setup form: its decks, side, difficulty and a fresh seed.</summary>
 	private void StartMenuGame()
 	{
-		if (_officialPresetCatalog is null || _menuYourDeck is null || _menuOpponentDeck is null) return;
+		if (_officialPresetCatalog is null || _menuYourDeck is null || _menuOpponentDeck is null || LlmOpponentBlocksStart()) return;
 		string opponent = _menuOpponentDeck;
 		if (opponent == RandomOpponent)
 		{
@@ -368,6 +369,7 @@ public partial class Main
 		_humanSide.Select(_menuSeat == PlayerSide.Runner ? 0 : 1);
 		_difficulty?.Select(_menuDifficulty);
 		SelectPersonality(_menuPersonality);
+		_llmOpponentForNextGame = MenuPlaysLlmOpponent;
 		_seedInput.Text = BitConverter.ToUInt64(System.Security.Cryptography.RandomNumberGenerator.GetBytes(sizeof(ulong)))
 			.ToString(System.Globalization.CultureInfo.InvariantCulture);
 		_startButton.EmitSignal(BaseButton.SignalName.Pressed);
@@ -442,6 +444,7 @@ public partial class Main
 		}
 		_menuPersonalities.Visible = gateway;
 		if (!gateway) RefreshMenuPersonalities();
+		RefreshMenuLlmOpponent();
 	}
 
 	private static string PersonalityTitle(AgentPersonality personality) => personality switch

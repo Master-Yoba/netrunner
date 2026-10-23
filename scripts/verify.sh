@@ -509,8 +509,28 @@ if ((card_data_content_enabled == 1)); then
   fi
   grep -E "ONBOARDING" "$onboarding_log"
   echo "onboarding-smoke=PASS"
+  # The local LLM opponent against a stub model server inside the client: the menu, a game and a save.
+  llm_opponent_log="$coverage_report_dir/llm-opponent-smoke.log"
+  if ! run_with_timeout 240 env "${m49_ui_content_env[@]}" XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
+    NETRUNNER_SAVE_DIRECTORY="$coverage_report_dir/llm-opponent-saves" \
+    NETRUNNER_LLM_BASE_URL= NETRUNNER_LLM_MODEL= NETRUNNER_LLM_API_KEY= \
+    "$GODOT4" --headless --path "$verify_root/src/Netrunner.Godot" \
+    -- --llm-opponent-smoke >"$llm_opponent_log" 2>&1; then
+    echo "LLM opponent smoke failed or timed out; see $llm_opponent_log." >&2
+    cat "$llm_opponent_log" >&2
+    exit 1
+  fi
+  if ! grep -Eq "LLM_OPPONENT PASS" "$llm_opponent_log" \
+    || grep -Eq "LLM_OPPONENT FAIL|SCRIPT ERROR|ERROR:" "$llm_opponent_log"; then
+    echo "LLM opponent smoke did not pass; see $llm_opponent_log." >&2
+    cat "$llm_opponent_log" >&2
+    exit 1
+  fi
+  grep -E "LLM_OPPONENT" "$llm_opponent_log"
+  echo "llm-opponent-smoke=PASS"
 else
   echo "onboarding-smoke=SKIP official content absent"
+  echo "llm-opponent-smoke=SKIP official content absent"
 fi
 m410_ui_smoke_log="$coverage_report_dir/m410-editor-ui-smoke.log"
 if ! run_with_timeout 60 env XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \

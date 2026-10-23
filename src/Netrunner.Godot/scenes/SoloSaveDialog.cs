@@ -127,7 +127,7 @@ public partial class SoloSaveDialog : Control
 
 	private static Label Details(SoloSavePreview preview) => new()
 	{
-		Text = $"{preview.HumanSide} · {(preview.Difficulty == "contract-baseline" ? "Contract baseline" : preview.Difficulty.ToPascalCase())} · Seed {preview.Seed}\n"
+		Text = $"{preview.HumanSide} · {(preview.LlmOpponent ? "Local LLM" : preview.Difficulty == "contract-baseline" ? "Contract baseline" : preview.Difficulty.ToPascalCase())} · Seed {preview.Seed}\n"
 			+ $"Corp: {DeckLabel(preview.CorpDeck)} · Runner: {DeckLabel(preview.RunnerDeck)}\n"
 			+ $"{(preview.IsTerminal ? "Match complete" : $"Turn {preview.Turn} · {preview.Phase}")} · {preview.UpdatedUtc.ToLocalTime():g}",
 		AutowrapMode = TextServer.AutowrapMode.WordSmart,

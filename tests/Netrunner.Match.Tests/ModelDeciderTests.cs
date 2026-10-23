@@ -103,6 +103,34 @@ public sealed class ModelDeciderTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => decider.DecideAsync(PlayerSide.Corp, Request, 2, cancel.Token));
     }
 
+    [Fact]
+    public async Task TheConnectionCheckReportsTheServerKeyAndModel()
+    {
+        static async Task<(bool, string)> Check(HttpMessageHandler handler, string model = "qwen")
+        {
+            using var client = new OpenAiCompatibleChatClient(
+                new OpenAiCompatibleOptions(new Uri("http://model.test/v1"), model, "key", TimeSpan.FromSeconds(5)), new HttpClient(handler));
+            return await client.CheckAsync();
+        }
+        const string Models = """{"data":[{"id":"qwen"}]}""";
+
+        Assert.Equal((true, "Connected to http://model.test/v1."), await Check(new StatusHandler(HttpStatusCode.OK, Models)));
+        Assert.Equal((true, "Connected; the server lists qwen, not gemma."), await Check(new StatusHandler(HttpStatusCode.OK, Models), "gemma"));
+        Assert.Equal((false, "The server refused the API key."), await Check(new StatusHandler(HttpStatusCode.Unauthorized, "")));
+        (bool reachable, string message) = await Check(new StatusHandler(null, ""));
+        Assert.False(reachable);
+        Assert.StartsWith("Could not reach the server", message, StringComparison.Ordinal);
+    }
+
+    /// <summary>Answers every request with a status and body, or fails to connect when the status is null.</summary>
+    private sealed class StatusHandler(HttpStatusCode? status, string body) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            status is { } code
+                ? Task.FromResult(new HttpResponseMessage(code) { Content = new StringContent(body) })
+                : throw new HttpRequestException("Connection refused");
+    }
+
     /// <summary>Answers with the given contents in turn and keeps every request.</summary>
     private sealed class ScriptedModel(params string[] answers) : ILlmChatClient
     {
