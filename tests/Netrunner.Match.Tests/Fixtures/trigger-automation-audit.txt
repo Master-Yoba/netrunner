@@ -51,3 +51,171 @@
 30070 hub-score [Optional] → automatic when the draw leaves R&D a card
 30071 regolith-empty [Mandatory] → automatic
 30071 regolith-rez [Mandatory] → automatic
+35001 ryo-success [Mandatory] → player decides (Branch)
+35003 charm-offensive-run-end [Optional] → player decides (Choose)
+35006 bling-discard [Mandatory] → player decides (TrashCard)
+35006 bling-host [Optional] → player decides (HostFaceUp)
+35008 hantu-install [Mandatory] → automatic
+35010 cacophony-sabotage [Optional] → player decides (RemoveCounter)
+35010 cacophony-steal [Mandatory] → automatic
+35010 cacophony-trash [Mandatory] → automatic
+35012 barry-rez-install [Optional] → player decides (Install)
+35013 muslihat-turn-begin [Mandatory] → player decides (Choose)
+35014 clean-getaway-success [Mandatory] → automatic
+35017 transfer-of-wealth-success [Mandatory] → player decides (AddTags)
+35018 detente-host [Optional] → player decides (ChooseAtRandom)
+35019 maglectric-derez [Optional] → player decides (Choose)
+35021 fransofia-ward-bypass [Optional] → player decides (TrashSelf)
+35022 open-market-empty [Mandatory] → automatic
+35022 open-market-install [Mandatory] → automatic
+35022 open-market-turn-begin [Mandatory] → automatic
+35023 dewi-back-success [Optional] → player decides (FlipSelf)
+35023 dewi-front-success [Optional] → player decides (FlipSelf)
+35024 magdalene-discard [Mandatory] → player decides (Install)
+35025 illumination-success [Mandatory] → player decides (Install)
+35027 gamedragon-install-host [Optional] → player decides (Choose)
+35027 gamedragon-turn-host [Optional] → player decides (Choose)
+35029 azimat-install [Mandatory] → automatic
+35031 devadatta-breach [Optional] → player decides (RemoveCounter)
+35031 devadatta-install [Mandatory] → automatic
+35033 knickknack-run [Optional] → player decides (Choose)
+35034 side-hustle-install [Mandatory] → player decides (Branch)
+35034 side-hustle-run [Mandatory] → player decides (Branch)
+35036 poetri-score [Mandatory] → player decides (Install)
+35036 poetri-stolen [Mandatory] → player decides (Install)
+35037 aggressive-trendsetting-trash [Mandatory] → player decides (Choose)
+35038 project-ingatan-discard-phase [Optional] → player decides (RemoveCounter)
+35038 project-ingatan-dividends [Mandatory] → automatic
+35040 otto-empty [Mandatory] → automatic
+35040 otto-rez [Mandatory] → automatic
+35040 otto-turn-begin [Mandatory] → automatic
+35041 bumi-trash-trojan [Optional] → player decides (Choose)
+35045 mercia-install [Optional] → player decides (Install)
+35046 au-co-damage [Mandatory] → automatic
+35046 au-co-hq-trash [Mandatory] → automatic
+35046 au-co-turn-begin [Optional] → player decides (RemoveCounter)
+35047 pt-untaian-discard-phase [Optional] → player decides (Choose)
+35048 proprionegation-score [Mandatory] → automatic
+35049 sericulture-discard-phase [Optional] → player decides (RemoveCounter)
+35049 sericulture-dividends [Mandatory] → automatic
+35050 byte-ambush [Optional] → player decides (Choose)
+35050 byte-reveal-in-rd [Mandatory] → player decides (Reveal)
+35051 phat-agenda [Mandatory] → player decides (Choose)
+35051 phat-discard-phase [Mandatory] → automatic
+35052 empiricist-damage-tag [Mandatory] → player decides (DealDamage)
+35052 empiricist-draw [Mandatory] → player decides (Choose)
+35053 mycoweb-code-gate [Mandatory] → player decides (Choose)
+35053 mycoweb-install [Mandatory] → player decides (Install)
+35053 mycoweb-rez [Mandatory] → player decides (Choose)
+35053 mycoweb-sentry [Mandatory] → player decides (Choose)
+35054 semak-samun-damage-or-end [Mandatory] → player decides (Choose)
+35056 mitra-aman-swap [Optional] → player decides (TrashSelf)
+35057 nebula-action-phase-end [Mandatory] → player decides (FlipSelf)
+35057 nebula-first-operation [Mandatory] → automatic
+35057 nebula-hq-run [Mandatory] → player decides (FlipSelf)
+35057 nebula-rd-run [Mandatory] → player decides (FlipSelf)
+35058 synapse-first-tag-removed [Optional] → player decides (Install)
+35059 embedded-reporting-discard-phase [Optional] → player decides (RemoveCounter)
+35059 embedded-reporting-dividends [Mandatory] → automatic
+35060 next-big-thing-score [Mandatory] → automatic
+35061 idiosyncresis-turn-begin [Optional] → player decides (LoseCredits)
+35062 plaza-trashed [Mandatory] → player decides (AddTags)
+35062 plaza-turn-begin [Mandatory] → automatic
+35063 doomscroll-tagged-damage [Mandatory] → player decides (Branch)
+35064 npot-threat-2 [Mandatory] → player decides (Branch)
+35064 npot-threat-4 [Mandatory] → player decides (Branch)
+35068 bangun-access [Mandatory] → player decides (DealDamage)
+35068 bangun-faceup [Optional] → player decides (TurnFaceUp)
+35069 zwicky-first-card-credits [Optional] → automatic when the draw leaves R&D a card
+35070 greenmail-forfeit [Mandatory] → automatic
+35070 greenmail-score [Mandatory] → automatic
+35071 off-the-books-discard-phase [Optional] → player decides (RemoveCounter)
+35071 off-the-books-dividends [Mandatory] → automatic
+35072 anthill-empty [Mandatory] → automatic
+35072 anthill-rez [Mandatory] → automatic
+35072 anthill-turn-begin [Mandatory] → automatic when the draw leaves R&D a card
+35073 plutus-rez-cost [Mandatory] → player decides (Choose)
+35073 plutus-turn-begin [Optional] → player decides (Choose)
+35076 syailendra-advance [Mandatory] → player decides (Choose)
+35076 syailendra-encounter-advance [Optional] → player decides (Choose)
+35079 flyswatter-purge [Mandatory] → player decides (PurgeVirusCounters)
+35080 lamplighter-agenda-trash [Mandatory] → automatic
+35080 lamplighter-tagged-end-run [Mandatory] → player decides (Branch)
+35082 mahkota-rez [Mandatory] → automatic
+36002 take-a-dive-success [Mandatory] → player decides (TakeBadPublicity)
+36003 tungsten-tailor-broken [Mandatory] → automatic
+36005 lampades-install [Mandatory] → automatic
+36007 nurse-hanh-archives [Mandatory] → automatic
+36008 stick-and-poke-encounter [Mandatory] → player decides (EncounteredIceGainsSubroutine)
+36010 kompromat-run-end [Mandatory] → player decides (Choose)
+36013 borrowed-goods-install [Mandatory] → player decides (AddTags)
+36014 rotary-hq [Optional] → player decides (AddTags)
+36014 rotary-rd [Optional] → player decides (AddTags)
+36015 baker-redirect [Mandatory] → player decides (Choose)
+36016 underdome-action-phase-end [Mandatory] → player decides (Branch)
+36017 hiram-install [Mandatory] → player decides (Branch)
+36017 hiram-trash [Mandatory] → player decides (Branch)
+36018 aircheck-run-again [Optional] → player decides (Choose)
+36019 beta-build-install [Mandatory] → player decides (Install)
+36019 beta-build-return [Mandatory] → player decides (PlaceOnTopOfDeck)
+36020 methuselah-run-begin [Mandatory] → player decides (Choose)
+36021 touchstone-first-event [Mandatory] → automatic
+36022 read-write-share-install [Optional] → player decides (Branch)
+36022 read-write-share-turn [Optional] → player decides (Branch)
+36023 sipa-swap [Optional] → player decides (Choose)
+36024 stowaway-successful-run [Mandatory] → automatic
+36025 word-on-the-street-score [Mandatory] → automatic
+36026 melies-score [Mandatory] → automatic
+36028 ansel-2-heap [Mandatory] → player decides (Branch)
+36030 sleipnir-draw [Mandatory] → player decides (Choose)
+36030 sleipnir-shuffle [Mandatory] → player decides (Choose)
+36031 vertigo-lose-click [Mandatory] → player decides (LoseClicks)
+36031 vertigo-passed [Mandatory] → player decides (RestrictRun)
+36035 perfect-recall-agenda [Mandatory] → automatic
+36035 perfect-recall-rez [Mandatory] → automatic
+36036 melies-u-credit [Mandatory] → automatic
+36036 melies-u-flip-archives [Mandatory] → player decides (Branch)
+36036 melies-u-flip-back [Mandatory] → automatic
+36036 melies-u-flip-hq [Mandatory] → player decides (Branch)
+36036 melies-u-flip-rd [Mandatory] → player decides (Branch)
+36036 melies-u-set [Mandatory] → player decides (Choose)
+36037 lotus-haze-score [Mandatory] → automatic
+36038 esca-access [Mandatory] → player decides (LoseCredits)
+36038 esca-reveal-in-rd [Mandatory] → player decides (Reveal)
+36039 ezam-look [Mandatory] → player decides (Choose)
+36039 ezam-strength [Mandatory] → player decides (ModifyAllIceStrengthForRun)
+36040 knowledge-seeker-arrange [Mandatory] → player decides (Choose)
+36040 knowledge-seeker-ended [Mandatory] → player decides (PurgeVirusCounters)
+36040 knowledge-seeker-virus [Mandatory] → automatic
+36041 lionsmane-jack [Mandatory] → player decides (Choose)
+36041 lionsmane-pay [Mandatory] → player decides (Choose)
+36042 vicsek-tag-trash [Mandatory] → player decides (AddTags)
+36042 vicsek-x [Mandatory] → player decides (DealDamage)
+36045 red-room-agenda [Mandatory] → automatic
+36046 editorial-division-first-bad-publicity [Optional] → player decides (Choose)
+36047 witch-hunt-action-phase-end [Mandatory] → player decides (RemoveTags)
+36047 witch-hunt-bad-publicity [Mandatory] → player decides (TakeBadPublicity)
+36048 magistrate-score [Mandatory] → player decides (LoseCredits)
+36049 nihilo-discard-end [Mandatory] → player decides (AddTags)
+36049 nihilo-rez [Mandatory] → automatic
+36049 nihilo-turn-begin [Mandatory] → player decides (RemoveTags)
+36050 grubber-pay-or-end-1 [Mandatory] → player decides (Choose)
+36050 grubber-pay-or-end-2 [Mandatory] → player decides (Choose)
+36050 grubber-rez-archives [Mandatory] → player decides (TakeBadPublicity)
+36050 grubber-rez-hq [Mandatory] → player decides (TakeBadPublicity)
+36050 grubber-rez-rd [Mandatory] → player decides (TakeBadPublicity)
+36051 lethe-archives [Mandatory] → player decides (Choose)
+36051 lethe-bounce [Mandatory] → player decides (Choose)
+36051 lethe-broken [Mandatory] → player decides (AddTags)
+36051 lethe-bypassed [Mandatory] → player decides (AddTags)
+36052 paywall-encounter [Mandatory] → player decides (LoseCredits)
+36052 paywall-pay-or-end [Mandatory] → player decides (Choose)
+36056 sacrifice-zone-advanced [Mandatory] → automatic
+36056 sacrifice-zone-meat [Optional] → player decides (RemoveAdvancementCounters)
+36057 luana-turn-begin [Optional] → player decides (RemoveBadPublicity)
+36058 event-horizon-end [Mandatory] → player decides (Choose)
+36058 event-horizon-program [Mandatory] → player decides (Choose)
+36059 flywheel-1 [Mandatory] → player decides (Choose)
+36059 flywheel-2 [Mandatory] → player decides (Choose)
+36065 shackleton-grid-meat [Optional] → player decides (DealDamage)
+36066 let-them-dream-score [Optional] → player decides (Choose)

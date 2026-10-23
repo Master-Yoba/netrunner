@@ -55,6 +55,38 @@ public sealed class BeneficialTriggersTests
     }
 
     [Fact]
+    public void GainsResolveBeforeAChoiceWaitingToBeOrdered()
+    {
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
+        // Over 96 Startup, Vantage Point and Core Sets games, MuslihaT's choice and Open Market's credit waited to be ordered at
+        // the start of every Runner turn: the credit now goes first, and the player gets MuslihaT's choice.
+        (LadderSavedGame saved, FullMatchDefinition definition) = LadderGameArchive.ReadFile(Path.Combine(AppContext.BaseDirectory,
+            "..", "..", "..", "Fixtures", "startup-muslihat-open-market-game.json"));
+        var catalog = new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior);
+        GameState state = saved.Replay.InitialSnapshot.ToState();
+        int orderings = 0;
+        foreach (ReplayAction action in saved.Replay.Actions)
+        {
+            PendingDecision pending = state.PendingDecision!;
+            if (pending.Kind == DecisionKind.TriggerOrdering && state.GetPlayer(pending.Owner).Side == PlayerSide.Runner)
+            {
+                AgentFeatures features = ObservationReader.Read(ObservationBuilder.Build(state, PlayerSide.Runner, definition.Behavior, definition.Runtime),
+                    AgentFeatures.VersionWithHiddenAdvancements);
+                string[] keys = [.. features.PrivateCards.Triggers.Select(trigger => trigger.Key)];
+                if (keys.Contains("muslihat-turn-begin") && keys.Contains("open-market-turn-begin"))
+                {
+                    orderings++;
+                    LegalAction first = pending.LegalActions.Single(candidate => candidate.Id == BeneficialTriggers.AutoAction(pending, features, catalog));
+                    string trigger = ((TriggerOrderParameters)first.Parameters).TriggerId.Value;
+                    Assert.Equal("open-market-turn-begin", features.PrivateCards.Triggers.Single(offered => offered.Id == trigger).Key);
+                }
+            }
+            state = GameEngine.Apply(state, action.Submission, definition.Behavior, definition.Runtime).State;
+        }
+        Assert.True(orderings > 0, "The fixture has no MuslihaT and Open Market ordering.");
+    }
+
+    [Fact]
     public void ZahyaAndRedTeamAfterAnHqRunNeedNoOrderingFromThePlayer()
     {
         if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;

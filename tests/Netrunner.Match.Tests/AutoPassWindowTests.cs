@@ -44,6 +44,23 @@ public sealed class AutoPassWindowTests
     }
 
     [Fact]
+    public void APaidAbilityThatActsOnTheRunStopsThePlayerDuringARun()
+    {
+        // Post-Gateway Corp cards end the run with a paid ability (The Red Room, Event Horizon, LEO Construction): over 96
+        // Startup, Vantage Point and Core Sets games, auto-pass took nearly every run window that offered one.
+        BehaviorCatalog behavior = VantagePointBehaviorCatalog.Create();
+        LegalAction redRoom = Ability("36045", "red-room-end-run"), spinDoctor = Ability("30053", "spin-doctor-archives");
+        LegalAction[] endRun = [Action(ActionKind.PassPriority, 0), redRoom], shuffle = [Action(ActionKind.PassPriority, 0), spinDoctor];
+        PriorityWindow Window(bool inRun, LegalAction[] actions) =>
+            new(inRun, false) { RunAbilities = RunAbilityClassifier.Offered(behavior, actions.Select(action => action.Parameters)) };
+
+        Assert.False(AutoPassPolicy.OptionalWindow(endRun, Window(true, endRun)));
+        // Outside a run, and for an ability that leaves the run alone, the window passes as before.
+        Assert.True(AutoPassPolicy.OptionalWindow(endRun, Window(false, endRun)));
+        Assert.True(AutoPassPolicy.OptionalWindow(shuffle, Window(true, shuffle)));
+    }
+
+    [Fact]
     public void TheApproachedIcesRezWindowReachesThePlayer()
     {
         if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
@@ -190,4 +207,9 @@ public sealed class AutoPassWindowTests
 
     private static LegalAction Action(ActionKind kind, int index) =>
         new(new ActionId($"action:{index}"), kind, kind.ToString(), new NoActionParameters());
+
+    private static LegalAction Ability(string definition, string key) =>
+        new(new ActionId($"action:{key}"), ActionKind.UseAbility, key, new AbilityActionParameters(new CardInstanceId("card:9"),
+            new CardDefinitionId(definition), key, BehaviorAbilityTiming.AnyPaidWindow, BehaviorAbilityActivation.PaidAbility, [], [],
+            new(BehaviorAbilityUsageLimit.Unlimited, 0), new string('0', 64), new string('0', 64), new ZoneId("zone:root"), ZoneKind.ServerRoot));
 }

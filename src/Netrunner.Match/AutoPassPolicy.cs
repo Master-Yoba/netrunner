@@ -29,6 +29,9 @@ public sealed record PriorityWindow(bool InRun, bool Encountering)
     /// <summary>When the offered rezzes can matter, by card instance ID; a card not listed is <see cref="RezTiming.Anytime"/>.</summary>
     public IReadOnlyDictionary<string, RezTiming> RezTimings { get; init; } = new Dictionary<string, RezTiming>(StringComparer.Ordinal);
 
+    /// <summary>The offered paid abilities that act on a run (see <see cref="RunAbilityClassifier"/>), by ability key.</summary>
+    public IReadOnlySet<string> RunAbilities { get; init; } = new HashSet<string>(StringComparer.Ordinal);
+
     public static PriorityWindow From(GameState state, PlayerSide owner, IBehaviorCatalog? behavior = null)
     {
         ArgumentNullException.ThrowIfNull(state);
@@ -38,6 +41,8 @@ public sealed record PriorityWindow(bool InRun, bool Encountering)
                 timings[rez.CardId.Value] = RezTimingClassifier.Classify(behavior, state.GetCard(rez.CardId).DefinitionId);
         bool inRun = state.RunState is { EndReason: null };
         RunState? run = inRun ? state.RunState : null;
+        IReadOnlySet<string> runAbilities = RunAbilityClassifier.Offered(behavior,
+            (state.PendingDecision?.LegalActions ?? []).Select(action => action.Parameters));
         return new(inRun, run?.Encounter is { Status: RunEncounterStatus.Initialized })
         {
             PastIce = run?.CurrentIceIndex < 0,
@@ -52,6 +57,7 @@ public sealed record PriorityWindow(bool InRun, bool Encountering)
                 : state.Zones.Where(zone => zone.ServerId == run.AttackedServer && zone.Kind == ZoneKind.ServerIce)
                     .SelectMany(zone => zone.CardIds).Select(id => id.Value).ToHashSet(StringComparer.Ordinal),
             RezTimings = timings,
+            RunAbilities = runAbilities,
         };
     }
 
@@ -81,6 +87,7 @@ public sealed record PriorityWindow(bool InRun, bool Encountering)
                 .SelectMany(server => server.Ice).OfType<CardViewModel>().Select(card => card.Id)
                 .ToHashSet(StringComparer.Ordinal),
             RezTimings = timings,
+            RunAbilities = RunAbilityClassifier.Offered(behavior, view.LegalActions.Select(action => action.Parameters)),
         };
     }
 
@@ -98,9 +105,10 @@ public sealed record PriorityWindow(bool InRun, bool Encountering)
 /// shows those windows as part of the turn), in the last windows before their
 /// own turn (when assets are usually rezzed), for ICE the Runner approaches,
 /// and during a run once the Runner is past the ICE, for a card in the
-/// attacked server. Other rez windows, paid
-/// abilities and pumps outside an encounter pass; the player can still stop at
-/// the next window on request (playtests, 27 September).
+/// attacked server. A paid ability that acts on a run stops the window during
+/// a run. Other rez windows, paid abilities and pumps outside an encounter
+/// pass; the player can still stop at the next window on request (playtests,
+/// 27 September).
 /// </summary>
 public static class AutoPassPolicy
 {
@@ -119,7 +127,11 @@ public static class AutoPassPolicy
         return actions.Any(action => action.Kind == ActionKind.PassPriority)
             && actions.All(action => action.Kind switch
             {
-                ActionKind.PassPriority or ActionKind.UseAbility => true,
+                ActionKind.PassPriority => true,
+                // A paid ability that ends, moves or restricts the run is the reason its card is in the deck (The Red Room,
+                // Event Horizon, LEO Construction, Proprionegation, Perfect Recall); other paid abilities pass.
+                ActionKind.UseAbility => !(window.InRun && action.Parameters is AbilityActionParameters ability
+                    && window.RunAbilities.Contains(ability.AbilityKey)),
                 // Playtest, 29 September: once every subroutine is broken, the encounter has nothing left to decide.
                 ActionKind.PumpBreaker or ActionKind.BreakSubroutines or ActionKind.UseBioroidAbility => !window.Encountering || window.NothingToBreak,
                 ActionKind.RezCard => !RezMatters(action, window),
@@ -146,6 +158,38 @@ public static class AutoPassPolicy
         ArgumentNullException.ThrowIfNull(actions);
         return actions.First(action => action.Kind == ActionKind.PassPriority).Id;
     }
+}
+
+/// <summary>Which paid abilities act on a run: their effects end it, move the Runner, or change what the run can do.</summary>
+public static class RunAbilityClassifier
+{
+    private static readonly HashSet<BehaviorInstructionKind> RunEffects =
+    [
+        BehaviorInstructionKind.EndRun, BehaviorInstructionKind.JackOut, BehaviorInstructionKind.MoveRunnerToServer,
+        BehaviorInstructionKind.ChangeAttackedServer, BehaviorInstructionKind.RestrictRun, BehaviorInstructionKind.SwapApproachedIce,
+        BehaviorInstructionKind.BypassEncounteredIce, BehaviorInstructionKind.EncounteredIceGainsSubroutine,
+        BehaviorInstructionKind.ModifyAllIceStrengthForRun, BehaviorInstructionKind.AddBreachAccess,
+    ];
+
+    /// <summary>The ability keys among <paramref name="offered"/> that act on a run; none without a behavior catalog.</summary>
+    public static IReadOnlySet<string> Offered(IBehaviorCatalog? behavior, IEnumerable<ActionParameters> offered)
+    {
+        ArgumentNullException.ThrowIfNull(offered);
+        var keys = new HashSet<string>(StringComparer.Ordinal);
+        if (behavior is null) return keys;
+        foreach (AbilityActionParameters ability in offered.OfType<AbilityActionParameters>())
+        {
+            if (behavior.TryGet(ability.DefinitionId, out CardBehaviorDefinition spec)
+                && spec.PaidAbilities.FirstOrDefault(candidate => candidate.Key == ability.AbilityKey) is { } paid
+                && ActsOnRun(paid.Instructions))
+                keys.Add(ability.AbilityKey);
+        }
+        return keys;
+    }
+
+    private static bool ActsOnRun(IEnumerable<BehaviorInstruction> instructions) => instructions.Any(instruction =>
+        RunEffects.Contains(instruction.Kind)
+        || instruction.Branch is { } branch && (ActsOnRun(branch.WhenTrue) || ActsOnRun(branch.WhenFalse)));
 }
 
 /// <summary>When rezzing a card can matter to the player.</summary>
