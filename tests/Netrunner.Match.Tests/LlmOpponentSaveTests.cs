@@ -54,6 +54,45 @@ public sealed partial class LlmOpponentSaveTests
     }
 
     [Fact]
+    public async Task AnLlmOpponentsSessionTraceRecoversWithItsBot()
+    {
+        // Codex review of #7: the trace named the LLM opponent while recovery restores its bot, and the check between them threw.
+        FullMatchDefinition definition = FullMatchDefinition.Developer(174);
+        string trace = Path.Combine(Path.GetTempPath(), "netrunner-llm-trace-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var model = new HeuristicModel();
+            var human = new FullGameContractAgent(PlayerSide.Corp, definition.Runtime);
+            await using (var original = new MatchCoordinator(definition, LlmPlayerOpponent.Create(definition, PlayerSide.Corp, model),
+                new MatchCoordinatorOptions { HumanSide = PlayerSide.Corp, SessionTraceDirectory = trace }))
+            {
+                await original.StartAsync();
+                for (int step = 0; step < 200 && model.Asked == 0; step++)
+                {
+                    MatchSnapshot snapshot = await AtHuman(original);
+                    if (snapshot.IsTerminal) break;
+                    Assert.True((await original.SubmitHumanActionAsync(await human.ChooseActionAsync(snapshot.Observation))).Accepted);
+                }
+                Assert.True(model.Asked > 0, "The model was never asked.");
+                await AtHuman(original);
+            }
+
+            IGameAgent bot = OfflineMatchFactory.CreateTraceOpponent(definition, PlayerSide.Corp, trace);
+            Assert.IsType<OfflineAgent>(bot);
+            await using var recovered = new MatchCoordinator(definition, bot,
+                new MatchCoordinatorOptions { HumanSide = PlayerSide.Corp, ResumeTraceDirectory = trace, SessionTraceDirectory = trace + "-resumed" });
+            await recovered.StartAsync();
+            await recovered.ContinueAsync();
+            Assert.False((await AtHuman(recovered)).IsTerminal);
+        }
+        finally
+        {
+            foreach (string directory in new[] { trace, trace + "-resumed" })
+                if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task ABotsSaveHasNoLlmMark()
     {
         FullMatchDefinition definition = FullMatchDefinition.Developer(174);

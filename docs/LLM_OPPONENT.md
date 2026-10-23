@@ -19,8 +19,7 @@ API key in plain text.
   the server fails, plays the bot's choice and says so in the dock.
 - **Saves** keep the bot and mark the LLM opponent (`SoloAgentState.LlmOpponent`, omitted for other saves): a load
   wraps the bot in the LLM again, or, with no server set, plays on with the bot and says so. The save list shows
-  "Local LLM". A session trace records the bot's state too, so crash recovery should resume with the bot (not yet
-  covered by a test).
+  "Local LLM". A session trace records the bot too, and crash recovery resumes with the bot.
 - **The comprehensive rules** for mechanics in view come from `data/vendor/rules` when the checkout has it; without
   it the rules summary alone goes with each request.
 - `make verify` runs `--llm-opponent-smoke`, a game against a stub model server inside the client.

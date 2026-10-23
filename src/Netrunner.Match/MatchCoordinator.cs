@@ -684,6 +684,8 @@ public sealed partial class MatchCoordinator : IAsyncDisposable, IDisposable
 
     private static SessionTraceAgentInfo DescribeAgent(IGameAgent agent)
     {
+        // A trace keeps the LLM opponent's bot, and recovery restores the bot (Codex review of #7), so both name the bot.
+        if (agent is LlmOpponentAgent llm) agent = llm.Heuristic;
         Type type = agent.GetType();
         string typeName = type.FullName ?? type.Name;
         string version = type.GetProperty("AgentVersion")?.GetValue(agent) as string
