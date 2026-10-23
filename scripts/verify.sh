@@ -511,9 +511,10 @@ if ((card_data_content_enabled == 1)); then
   echo "onboarding-smoke=PASS"
   # The local LLM opponent against a stub model server inside the client: the menu, a game and a save.
   llm_opponent_log="$coverage_report_dir/llm-opponent-smoke.log"
-  if ! run_with_timeout 240 env "${m49_ui_content_env[@]}" XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
+  # Unset, a developer's own model server can't stand in for the stub.
+  if ! run_with_timeout 240 env -u NETRUNNER_LLM_BASE_URL -u NETRUNNER_LLM_MODEL -u NETRUNNER_LLM_API_KEY \
+    "${m49_ui_content_env[@]}" XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
     NETRUNNER_SAVE_DIRECTORY="$coverage_report_dir/llm-opponent-saves" \
-    NETRUNNER_LLM_BASE_URL= NETRUNNER_LLM_MODEL= NETRUNNER_LLM_API_KEY= \
     "$GODOT4" --headless --path "$verify_root/src/Netrunner.Godot" \
     -- --llm-opponent-smoke >"$llm_opponent_log" 2>&1; then
     echo "LLM opponent smoke failed or timed out; see $llm_opponent_log." >&2
