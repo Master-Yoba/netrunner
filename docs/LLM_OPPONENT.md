@@ -5,6 +5,25 @@ heuristic of a seat with a model making its strategic choices: the turn's instal
 draws and credits. This page covers the local model meant as a player-facing opponent: how to run it, the settings,
 and the sweeps that chose them. Sonnet and Codex remain the fast outside players for batches of bot games.
 
+## Playing it in the client
+
+New game offers **Heuristic bot** or **Local LLM** as the opponent (not in Tutorial). Choosing the LLM shows its
+server in place of the difficulty and style rows: a URL such as `http://localhost:8080/v1`, the model name, an API key
+if the server needs one, and **Test connection**. Empty fields fall back to `NETRUNNER_LLM_BASE_URL`,
+`NETRUNNER_LLM_MODEL` and `NETRUNNER_LLM_API_KEY`. The fields and the choice are kept in `user://preferences.cfg`, the
+API key in plain text.
+
+- **The opponent** is the player's Standard bot (with its deck archetypes) and the model, at the settings below
+  (`LlmPlayerOpponent`).
+- **While it thinks** the header reads "The local model is thinking · 12 s". A decision past the 30 s deadline, or one
+  the server fails, plays the bot's choice and says so in the dock.
+- **Saves** keep the bot and mark the LLM opponent (`SoloAgentState.LlmOpponent`, omitted for other saves): a load
+  wraps the bot in the LLM again, or, with no server set, plays on with the bot and says so. The save list shows
+  "Local LLM". A session trace records the bot too, and crash recovery resumes with the bot.
+- **The comprehensive rules** for mechanics in view come from `data/vendor/rules` when the checkout has it; without
+  it the rules summary alone goes with each request.
+- `make verify` runs `--llm-opponent-smoke`, a game against a stub model server inside the client.
+
 ## Running it
 
 `scripts/ai-llm-play.sh --output <new dir> [--content POOL] [--games N] [--side corp|runner|both] [--parallel N]` plays
@@ -128,8 +147,6 @@ a measure needs the 48-deal arms Gateway had.
 
 ## Next
 
-- The Godot client: the LLM opponent as a setup option, endpoint settings, decisions off the main thread, a
-  "thinking" indicator, and the deadline's fallback.
 - Kev ([jaredpalmer/kev](https://github.com/jaredpalmer/kev)), a single-pass choice-scoring model, as a faster
   decider: untested; its 27B needs more memory than a 4090, and fine-tuning one on the heuristic's or a teacher's
   choices would reopen the bot plan's closed apprentice.

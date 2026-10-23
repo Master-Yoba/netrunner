@@ -25,16 +25,15 @@ public static partial class CliCommands
     private static int RunAiLlmPlay(string[] args, TextWriter output, TextWriter error)
     {
         string destination = "", opponent = "standard", rulesRoot = Path.Combine("data", "vendor", "rules");
-        string? sides = "both", model = null, reasoning = "low", tools = "none", pool = "gateway";
-        // The defaults are the settings the latency and override sweeps chose for a player-facing opponent
-        // (docs/LLM_OPPONENT.md); each flag turns one of them off.
+        string? sides = "both", model = null, reasoning = LlmPlayerOpponent.Sampling.ReasoningEffort, tools = "none", pool = "gateway";
+        // The defaults are the client's opponent (LlmPlayerOpponent, docs/LLM_OPPONENT.md); each flag turns one off.
         int games = 2, firstGame = 0, parallel = 1;
-        int? thinkingBudget = 400, shortlist = 3, maxToolCalls = null;
-        bool structured = true, defer = true;
-        TimeSpan? deadline = TimeSpan.FromSeconds(30);
+        int? thinkingBudget = LlmPlayerOpponent.Sampling.ThinkingBudget, shortlist = LlmPlayerOpponent.Shortlist, maxToolCalls = null;
+        bool structured = LlmPlayerOpponent.Settings.StructuredAnswer, defer = LlmPlayerOpponent.Settings.Defer;
+        TimeSpan? deadline = LlmPlayerOpponent.Settings.Deadline;
         ulong seed = 1;
-        double? temperature = 0.6, topP = 0.95;
-        int? topK = 20;
+        double? temperature = LlmPlayerOpponent.Sampling.Temperature, topP = LlmPlayerOpponent.Sampling.TopP;
+        int? topK = LlmPlayerOpponent.Sampling.TopK;
         OpenAiCompatibleOptions options;
         try
         {
