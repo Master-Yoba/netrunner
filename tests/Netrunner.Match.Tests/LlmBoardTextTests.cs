@@ -69,6 +69,20 @@ public sealed class LlmBoardTextTests
         Assert.Contains("0 tags, 1 core damage, memory 2 of 4 used, maximum hand size 4;", board, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void TheGlossaryNamesEachKindOfCost()
+    {
+        // Qwen read Ansel 1.0's "cost 6" as what installing it costs.
+        CardViewModel ansel = Card("card:5", "Ansel 1.0", "ICE") with { Cost = 6, Rezzed = true };
+        CardViewModel carmen = Card("card:6", "Carmen", "Program") with { Cost = 5 };
+        MatchViewModel view = View(PlayerSide.Runner, [Server("hq", ServerKind.Headquarters, [ansel], [])], rig: [carmen], corpScore: []);
+
+        string glossary = LlmBoardText.Glossary(view);
+
+        Assert.Contains("- Ansel 1.0 (ICE, rez cost 6)", glossary, StringComparison.Ordinal);
+        Assert.Contains("- Carmen (Program, install cost 5)", glossary, StringComparison.Ordinal);
+    }
+
     private static CardViewModel Card(string id, string title, string type) =>
         new(id, "00000", title, type, true, false, 0, null, null, null, null, [], "");
 

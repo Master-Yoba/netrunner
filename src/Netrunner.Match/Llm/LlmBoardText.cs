@@ -49,7 +49,8 @@ public static partial class LlmBoardText
         {
             var facts = new List<string> { card.Type };
             if (card.Subtypes.Count > 0) facts.Add(string.Join(" ", card.Subtypes));
-            if (card.Cost is { } cost) facts.Add($"cost {cost}");
+            // Qwen read Ansel 1.0's "cost 6" as an install cost: name each kind of cost.
+            if (card.Cost is { } cost) facts.Add($"{CostName(card.Type)} {cost}");
             if (card.Strength is { } strength) facts.Add($"strength {strength}");
             if (card.AgendaPoints is { } points) facts.Add($"{points} points, advancement {card.AdvancementRequirement}");
             if (card.TrashCost is { } trash) facts.Add($"trash {trash}");
@@ -58,6 +59,14 @@ public static partial class LlmBoardText
         }
         return text.ToString();
     }
+
+    private static string CostName(string type) => type.ToLowerInvariant() switch
+    {
+        "ice" or "asset" or "upgrade" => "rez cost",
+        "operation" or "event" => "play cost",
+        "program" or "hardware" or "resource" => "install cost",
+        _ => "cost",
+    };
 
     /// <summary>Card text without markup: symbols as words, tags dropped.</summary>
     public static string Plain(string rulesText) =>
